@@ -19,6 +19,8 @@ from django.urls import path
 from animateurs.views import accueil
 from animateurs.views import documents
 from animateurs.views import planning, api_planning
+from animateurs.views import test
+from animateurs.views import api_animateurs
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -26,4 +28,6 @@ urlpatterns = [
     path("documents/", documents, name="documents"),
 	 path("planning/", planning, name="planning"),
     path("api/planning/", api_planning, name="api_planning"),
+    path("test/", test, name="test"),
+	path("api/animateurs/", api_animateurs, name="api_animateurs"),
 ]

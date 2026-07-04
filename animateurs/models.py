@@ -2,18 +2,25 @@ from django.db import models
 
 # Create your models here.
 
+class Qualification(models.Model):
+
+	nom = models.CharField(max_length=100)
+
+	def __str__(self):
+		return self.nom
+
 class Animateur(models.Model):
-    prenom = models.CharField(max_length=100)
-    nom = models.CharField(max_length=100)
+	prenom = models.CharField(max_length=100)
+	nom = models.CharField(max_length=100)
+	qualifications = models.ManyToManyField(Qualification, blank=True)
 
-
-    def __str__(self):
-        return f"{self.prenom} {self.nom}"
+	def __str__(self):
+		return f"{self.prenom} {self.nom}"
 
 class Document(models.Model):
-    titre = models.CharField(max_length=150)
-    fichier = models.FileField(upload_to="documents/")
-    date_ajout = models.DateTimeField(auto_now_add=True)
+	titre = models.CharField(max_length=150)
+	fichier = models.FileField(upload_to="documents/")
+	date_ajout = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return self.titre
+	def __str__(self):
+		return self.titre

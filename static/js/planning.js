@@ -2,53 +2,44 @@ document.addEventListener("DOMContentLoaded", function () {
     const calendarEl = document.getElementById("calendar");
     const animateursList = document.getElementById("animateurs-list");
 
-    new FullCalendar.Draggable(animateursList, {
+    new FullCalendar.Draggable(animateursList,
+	{
         itemSelector: ".animateur-draggable",
         eventData: function (eventEl) {
-            return {
-                title: eventEl.dataset.title,
-                duration: "08:00"
-            };
-        }
+    return {
+        title: eventEl.dataset.title,
+        allDay: true
+    };
+}
     });
 
-    const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: "timeGridWeek",
-        locale: "fr",
-        firstDay: 1,
-        editable: true,
-        droppable: true,
-        selectable: true,
-        height: "auto",
+	const calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: "dayGridMonth",
+    locale: "fr",
+    firstDay: 1,
 
-        headerToolbar: {
-            left: "prev,next today",
-            center: "title",
-            right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
-        },
+    editable: true,
+    droppable: true,
+    selectable: true,
 
-        drop: function (info) {
-            console.log("Animateur déposé le :", info.dateStr);
-        },
+    height: 600,
+	aspectRatio: 3,
+    contentHeight: 100,
+    fixedWeekCount: false,
+    dayMaxEventRows: 3,
+	eventClick: function (info)
+	{
+		const confirmation = confirm(`Supprimer "${info.event.title}" du planning ?`);
 
-        eventReceive: function (info) {
-            console.log("Créneau créé :", {
-                titre: info.event.title,
-                debut: info.event.start,
-                fin: info.event.end
-            });
+		if (confirmation)
+			info.event.remove();
+	},
 
-            // Ici ensuite on enverra à Django pour sauvegarder
-        },
-
-        eventDrop: function (info) {
-            console.log("Créneau déplacé :", info.event.id);
-        },
-
-        eventResize: function (info) {
-            console.log("Créneau modifié :", info.event.id);
-        }
-    });
-
+    headerToolbar: {
+        left: "prev,next today",
+        center: "title",
+        right: "dayGridMonth dayGridWeek"
+    }
+});
     calendar.render();
 });

@@ -1,0 +1,28 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Document</title>
+    <link rel="stylesheet" href="{% static 'css/test.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
+</head>
+<body>
+    <div id="layout">
+        <div id="animateurs-list"></div>
+
+        <div id="calendars-container">
+			<h3 class="centres">Pacaudière</h3>
+            <div class="calendar" id="calendar-1"></div>
+			<h3 class="centres">Saint-Forgeux</h3>
+            <div class="calendar" id="calendar-2"></div>
+			<h3 class="centres">Saint-Martin</h3>
+            <div class="calendar" id="calendar-3"></div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/test.js' %}"></script>
+</body>
+</html>

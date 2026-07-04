@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from .models import Document
+from .models import Animateur
 from django.http import JsonResponse
 # Create your views here.
 
@@ -8,6 +9,9 @@ def accueil(request):
 
 def planning(request):
     return render(request, "planning.html")
+
+def test(request):
+    return render(request, "test.html")
 
 def api_planning(request):
     events = [
@@ -24,6 +28,24 @@ def api_planning(request):
     ]
 
     return JsonResponse(events, safe=False)
+
+def api_animateurs(request):
+	animateurs = Animateur.objects.all()
+
+	data = []
+
+	for animateur in animateurs:
+		data.append({
+			"id": animateur.id,
+			"prenom": animateur.prenom,
+			"nom": animateur.nom,
+			"qualifications": [
+				qualification.nom
+				for qualification in animateur.qualifications.all()
+			],
+		})
+
+	return JsonResponse(data, safe=False)
 
 def documents(request):
 
