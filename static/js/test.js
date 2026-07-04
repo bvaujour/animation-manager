@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded", function ()
 			headerToolbar:
 			{
 				left: "prev,next today",
-				center: "title",
+				center: "",
 				right: "dayGridMonth dayGridWeek"
 			}
 		});
