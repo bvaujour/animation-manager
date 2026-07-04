@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", function ()
 		data.forEach((animateur) =>
 		{
 			const div = document.createElement("div");
-			div.textContent = animateur.prenom + " " + animateur.nom;
+			div.textContent = animateur.prenom + " ." + animateur.nom[0];
 			div.classList.add("animateur");
 			animList.appendChild(div);
 		});
