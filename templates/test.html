@@ -1,27 +1,44 @@
 {% load static %}
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Document</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planning équipe</title>
+
     <link rel="stylesheet" href="{% static 'css/test.css' %}">
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
 </head>
-<body>
-    <div id="layout">
-        <div id="animateurs-list"></div>
 
-        <div id="calendars-container">
-			<h3 class="centres">Pacaudière</h3>
-            <div class="calendar" id="calendar-1"></div>
-			<h3 class="centres">Saint-Forgeux</h3>
-            <div class="calendar" id="calendar-2"></div>
-			<h3 class="centres">Saint-Martin</h3>
-            <div class="calendar" id="calendar-3"></div>
-        </div>
-    </div>
+<body>
+    <main id="layout">
+
+        <aside id="animateurs-panel">
+            <h2>Animateurs</h2>
+            <div id="animateurs-list"></div>
+        </aside>
+
+        <section id="calendars-container">
+
+            <div class="calendar-card">
+                <h3>Pacaudière</h3>
+                <div class="calendar" id="calendar-1"></div>
+            </div>
+
+            <div class="calendar-card">
+                <h3>Saint-Forgeux</h3>
+                <div class="calendar" id="calendar-2"></div>
+            </div>
+
+            <div class="calendar-card">
+                <h3>Saint-Martin</h3>
+                <div class="calendar" id="calendar-3"></div>
+            </div>
+
+        </section>
+
+    </main>
 
     <script src="{% static 'js/test.js' %}"></script>
 </body>

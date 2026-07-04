@@ -1,100 +1,152 @@
-html, body
-{
-    height: 100%;
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    min-height: 100%;
     margin: 0;
 }
 
-body
-{
+body {
+    font-family: Arial, sans-serif;
+    background: #f3f4f6;
+    color: #111827;
+}
+
+#layout {
+    min-height: 100vh;
+    display: flex;
+    gap: 16px;
+    padding: 16px;
+}
+
+#animateurs-panel {
+    width: 220px;
+    background: white;
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+    overflow-y: auto;
+}
+
+#animateurs-panel h2 {
+    margin: 0 0 12px;
+    font-size: 18px;
+}
+
+#animateurs-list {
     display: flex;
     flex-direction: column;
+    gap: 8px;
 }
 
-#layout
-{
-    flex: 1;
-    display: flex;
-	gap: 10px;
-    box-sizing: border-box;
-    min-height: 0;
-	padding: 10px;
+.animateur {
+    background: #111827;
+    color: white;
+    padding: 10px 12px;
+    border-radius: 10px;
+    text-align: center;
+    cursor: grab;
+    font-size: 14px;
+    user-select: none;
 }
 
-#animateurs-list
-{
-    width: 10%;
-    border: 1px solid red;
-    overflow-y: auto;
+.animateur:active {
+    cursor: grabbing;
 }
 
 #calendars-container {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;
+    gap: 16px;
+    min-width: 0;
+}
+
+.calendar-card {
+    background: white;
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+}
+
+.calendar-card h3 {
+    margin: 0 0 8px;
+    text-align: center;
+    font-size: 17px;
 }
 
 .calendar {
-    flex: 1;
-    border: 1px solid black;
-    min-height: 0;
+    width: 100%;
 }
 
-.fc .fc-toolbar {
-    margin-bottom: 0;
-    padding: 0;
+/* FullCalendar compact */
+.fc .fc-toolbar.fc-header-toolbar {
+    margin-bottom: 6px;
+}
 
+.fc .fc-toolbar-title {
+    font-size: 15px;
+    font-weight: 700;
 }
 
 .fc .fc-button {
-    padding: 2px 6px;
+    padding: 3px 7px;
     font-size: 12px;
-
-}
-
-
-.fc .fc-toolbar-title {
-    font-size: 16px;
-
+    border-radius: 8px;
 }
 
 .fc .fc-col-header-cell-cushion {
     font-size: 12px;
     padding: 4px;
-
 }
 
-.fc .fc-daygrid-day-frame {
-    min-height: 60px;
-
+.fc .fc-daygrid-day-number {
+    font-size: 12px;
+    padding: 4px;
 }
 
 .fc-event {
     font-size: 11px;
-    padding: 1px 3px;
+    padding: 2px 4px;
+    border-radius: 6px;
 }
 
-.fc .fc-toolbar.fc-header-toolbar {
-    margin-bottom: 0px;
+/* Mobile */
+@media (max-width: 800px) {
+    #layout {
+        flex-direction: column;
+        padding: 10px;
+    }
 
-}
+    #animateurs-panel {
+        width: 100%;
+        max-height: 170px;
+    }
 
-.centres
-{
-	margin: 0;
-	text-align: center;
-}
+    #animateurs-list {
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 4px;
+    }
 
-.animateur
-{
-	background-color: black;
-	color: white;
-	text-align: center;
-	margin: 1px;
-	cursor: pointer;
-}
+    .animateur {
+        min-width: 120px;
+        white-space: nowrap;
+    }
 
-.animateur:active
-{
-    cursor: grabbing;
+    .calendar-card {
+        padding: 8px;
+        border-radius: 12px;
+    }
+
+    .fc .fc-toolbar {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .fc .fc-toolbar-title {
+        font-size: 14px;
+    }
 }
