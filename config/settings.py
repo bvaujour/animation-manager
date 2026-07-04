@@ -32,7 +32,9 @@ SECRET_KEY = 'django-insecure-%19prxn=azo*8zh9-&yao3s^4xies)q%ies8f_)tqejq9vl%@#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "animation-manager-ktew.onrender.com",
+]
 
 
 # Application definition
