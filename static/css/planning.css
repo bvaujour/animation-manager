@@ -1,0 +1,28 @@
+#planning-layout
+{
+	display: flex;
+	gap: 20px;
+}
+
+#animateurs-list
+{
+	width: 220px;
+	background: white;
+	padding: 15px;
+	border: 1px solid #ddd;
+}
+
+.animateur-draggable
+{
+	padding: 10px;
+	margin-bottom: 8px;
+	background: #222;
+	color: white;
+	cursor: grab;
+	border-radius: 6px;
+}
+
+#calendar
+{
+	flex: 1;
+}

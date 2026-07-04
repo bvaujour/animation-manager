@@ -18,9 +18,12 @@ from django.contrib import admin
 from django.urls import path
 from animateurs.views import accueil
 from animateurs.views import documents
+from animateurs.views import planning, api_planning
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("", accueil, name="accueil"),
     path("documents/", documents, name="documents"),
+	 path("planning/", planning, name="planning"),
+    path("api/planning/", api_planning, name="api_planning"),
 ]

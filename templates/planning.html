@@ -1,0 +1,31 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Planning</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
+
+    <link rel="stylesheet" href="{% static 'css/planning.css' %}">
+</head>
+<body>
+
+    <h1>Planning équipe</h1>
+
+    <div id="planning-layout">
+    <div id="animateurs-list">
+        <h2>Animateurs</h2>
+
+        <div class="animateur-draggable" data-title="Julie">Julie</div>
+        <div class="animateur-draggable" data-title="Lou-Anne">Lou-Anne</div>
+        <div class="animateur-draggable" data-title="Gaël">Gaël</div>
+    </div>
+
+    <div id="calendar"></div>
+</div>
+
+    <script src="{% static 'js/planning.js' %}"></script>
+</body>
+</html>
