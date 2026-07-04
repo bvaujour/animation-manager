@@ -33,6 +33,8 @@ SECRET_KEY = 'django-insecure-%19prxn=azo*8zh9-&yao3s^4xies)q%ies8f_)tqejq9vl%@#
 DEBUG = True
 
 ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
     "animation-manager-ktew.onrender.com",
 ]
 
