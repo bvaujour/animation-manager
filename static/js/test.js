@@ -8,22 +8,17 @@ document.addEventListener("DOMContentLoaded", function ()
 			initialView: "dayGridWeek",
 			locale: "fr",
 			firstDay: 1,
+
 			editable: true,
 			droppable: true,
 			selectable: true,
-			fixedWeekCount: false,
-			eventClick: function (info)
-			{
-				const confirmation = confirm(`Supprimer "${info.event.title}" du planning ?`);
-				if (confirmation)
-					info.event.remove();
-			},
-			headerToolbar:
-			{
-				left: "prev,next today",
-				center: "",
-				right: "dayGridMonth dayGridWeek"
-			}
+
+			height: "100%",
+			contentHeight: "auto",
+			expandRows: true,
+
+			headerToolbar: false,
+			footerToolbar: false,
 		});
 		return (calendar);
 	}
@@ -36,26 +31,28 @@ document.addEventListener("DOMContentLoaded", function ()
 
 	const animList = document.getElementById("animateurs-list");
 
-	fetch("/api/animateurs/").then(response => response.json()).then(data =>
-	{
-		data.forEach((animateur) =>
-		{
-			const div = document.createElement("div");
-			div.textContent = animateur.prenom + " ." + animateur.nom[0];
-			div.classList.add("animateur");
-			animList.appendChild(div);
-		});
-	});
+	fetch("/api/animateurs/")
+    .then(response => response.json())
+    .then(data => {
+        data.forEach((animateur) => {
+            const div = document.createElement("div");
 
-    new FullCalendar.Draggable(animList,
-	{
-        itemSelector: ".animateur",
-        eventData: function (eventEl)
-		{
-			return {
-				title: eventEl.textContent,
-				allDay: true
-			};
-		}
+            div.textContent = `${animateur.prenom} .${animateur.nom[1]}`;
+
+            div.classList.add("animateur");
+
+            animList.appendChild(div);
+        });
+
+        new FullCalendar.Draggable(animList, {
+            itemSelector: ".animateur",
+
+            eventData: function (eventEl) {
+                return {
+                    title: eventEl.textContent,
+                    allDay: true
+                };
+            }
+        });
     });
 })

@@ -1,152 +1,45 @@
-* {
-    box-sizing: border-box;
-}
-
 html,
 body {
-    min-height: 100%;
+    height: 100%;
     margin: 0;
-}
-
-body {
-    font-family: Arial, sans-serif;
-    background: #f3f4f6;
-    color: #111827;
+    overflow: hidden;
 }
 
 #layout {
-    min-height: 100vh;
+    height: 100vh;
     display: flex;
-    gap: 16px;
-    padding: 16px;
+    gap: 10px;
+    padding: 10px;
 }
 
 #animateurs-panel {
     width: 220px;
-    background: white;
-    border-radius: 16px;
-    padding: 14px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
     overflow-y: auto;
-}
-
-#animateurs-panel h2 {
-    margin: 0 0 12px;
-    font-size: 18px;
-}
-
-#animateurs-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.animateur {
-    background: #111827;
-    color: white;
-    padding: 10px 12px;
-    border-radius: 10px;
-    text-align: center;
-    cursor: grab;
-    font-size: 14px;
-    user-select: none;
-}
-
-.animateur:active {
-    cursor: grabbing;
 }
 
 #calendars-container {
     flex: 1;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    min-width: 0;
+    gap: 6px;
+    overflow: hidden;
 }
 
 .calendar-card {
-    background: white;
-    border-radius: 16px;
-    padding: 12px;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .calendar-card h3 {
-    margin: 0 0 8px;
+    margin: 0;
+    font-size: 13px;
     text-align: center;
-    font-size: 17px;
 }
 
 .calendar {
-    width: 100%;
-}
-
-/* FullCalendar compact */
-.fc .fc-toolbar.fc-header-toolbar {
-    margin-bottom: 6px;
-}
-
-.fc .fc-toolbar-title {
-    font-size: 15px;
-    font-weight: 700;
-}
-
-.fc .fc-button {
-    padding: 3px 7px;
-    font-size: 12px;
-    border-radius: 8px;
-}
-
-.fc .fc-col-header-cell-cushion {
-    font-size: 12px;
-    padding: 4px;
-}
-
-.fc .fc-daygrid-day-number {
-    font-size: 12px;
-    padding: 4px;
-}
-
-.fc-event {
-    font-size: 11px;
-    padding: 2px 4px;
-    border-radius: 6px;
-}
-
-/* Mobile */
-@media (max-width: 800px) {
-    #layout {
-        flex-direction: column;
-        padding: 10px;
-    }
-
-    #animateurs-panel {
-        width: 100%;
-        max-height: 170px;
-    }
-
-    #animateurs-list {
-        flex-direction: row;
-        overflow-x: auto;
-        padding-bottom: 4px;
-    }
-
-    .animateur {
-        min-width: 120px;
-        white-space: nowrap;
-    }
-
-    .calendar-card {
-        padding: 8px;
-        border-radius: 12px;
-    }
-
-    .fc .fc-toolbar {
-        flex-direction: column;
-        gap: 4px;
-    }
-
-    .fc .fc-toolbar-title {
-        font-size: 14px;
-    }
+    flex: 1;
+    min-height: 0;
 }
