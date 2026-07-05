@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", function ()
 			initialView: "dayGridWeek",
 			locale: "fr",
 			firstDay: 1,
-
+			overflow: false,
 			editable: true,
 			droppable: true,
 			selectable: true,
@@ -28,12 +28,6 @@ document.addEventListener("DOMContentLoaded", function ()
 		});
 		return (calendar);
 	}
-	const calendar1 = createCalendar("calendar-1");
-	const calendar2 = createCalendar("calendar-2");
-	const calendar3 = createCalendar("calendar-3");
-    calendar1.render();
-    calendar2.render();
-    calendar3.render();
 
 	const animList = document.getElementById("animateurs-list");
 
@@ -44,7 +38,10 @@ document.addEventListener("DOMContentLoaded", function ()
 			const div = document.createElement("div");
 			div.textContent = `${animateur.prenom} .${animateur.nom[0]}`;
 			div.classList.add("animateur");
-			div.addEventListener("click", () => {console.log(animateur)
+			div.addEventListener("click", () =>
+			{
+				selectedAnimateur = animateur;
+				console.log(selectedAnimateur);
 
 			});
 			animList.appendChild(div);
@@ -62,4 +59,10 @@ document.addEventListener("DOMContentLoaded", function ()
 			}
 		});
     });
+	const calendar1 = createCalendar("calendar-1");
+	const calendar2 = createCalendar("calendar-2");
+	const calendar3 = createCalendar("calendar-3");
+    calendar1.render();
+    calendar2.render();
+    calendar3.render();
 })
