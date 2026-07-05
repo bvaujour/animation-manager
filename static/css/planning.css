@@ -15,6 +15,7 @@ body
 	background-color: var(--color3);
 }
 
+
 #layout
 {
     height: 99%;
@@ -50,7 +51,7 @@ body
 
 .animateur
 {
-	background-color: aqua;
+	background-color: var(--color1);
 }
 
 .animateur:hover
