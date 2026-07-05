@@ -1,7 +1,8 @@
 :root
 {
-  --color1: #ccd1ba;
-  --color2: #7e665d;
+  --color1: #757575;
+  --color2: #e03c00;
+  --color3: rgb(70, 70, 70);
 }
 
 
@@ -11,6 +12,7 @@ body
     height: 100%;
     margin: 0;
     overflow: hidden;
+	background-color: var(--color3);
 }
 
 #layout
@@ -23,7 +25,7 @@ body
 
 #animateurs-panel
 {
-    width: 220px;
+    width: 10%;
     overflow-y: auto;
 	border-radius: 7px;
 	text-align: center;
