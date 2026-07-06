@@ -1,5 +1,31 @@
+// ===========================================================================
+// gestion.js
+// ---------------------------------------------------------------------------
+// Module CRUD partagé pour les 3 entités "simples" de l'app : Animateur,
+// Centre, Qualification. Chaque mount*(container, options) :
+//   - injecte son propre HTML (liste existante + formulaire d'ajout) dans
+//     l'élément `container` fourni ;
+//   - se recharge lui-même après chaque création/suppression réussie ;
+//   - appelle `options.onChange(objetCree)` après un ajout ou une
+//     suppression, pour que la page qui l'a monté puisse réagir (ex:
+//     rafraîchir un autre affichage qui dépend de ces données).
+//
+// Ce même module est utilisé à deux endroits SANS AUCUNE DUPLICATION :
+//   - la page dédiée /gestion/ (templates/gestion.html, un mount par onglet) ;
+//   - la popup d'ajout rapide du planning (templates/planning.html), montée
+//     paresseusement (au 1er clic sur le bouton "+") dans les mêmes onglets.
+//
+// Exposé globalement via `GestionApp` (objet retourné par la fonction
+// auto-exécutée ci-dessous), pour rester simple sans système de modules
+// JS (pas de bundler dans ce projet).
+// ===========================================================================
+
 const GestionApp = (function ()
 {
+	// Construit une ligne "liste" générique : contenu à gauche (HTML libre,
+	// ex: un badge de couleur + un nom), bouton Supprimer à droite. Utilisée
+	// par les 3 fonctions mount* ci-dessous pour éviter de dupliquer le
+	// même balisage 3 fois.
 	function ligneEntite(labelHtml, onDelete)
 	{
 		const row = document.createElement("div");
@@ -22,6 +48,9 @@ const GestionApp = (function ()
 	// ------------------------------------------------------------------
 	// Qualifications
 	// ------------------------------------------------------------------
+	// options.onChange(nouvelleQualification | undefined) est appelé après
+	// un ajout OU une suppression. Utilisé par mountAnimateurs (voir plus
+	// bas) pour garder ses cases à cocher de qualifications à jour.
 
 	function mountQualifications(container, options = {})
 	{
@@ -104,6 +133,9 @@ const GestionApp = (function ()
 	// ------------------------------------------------------------------
 	// Centres
 	// ------------------------------------------------------------------
+	// options.onChange(nouveauCentre | undefined) : dans planning.js, sert
+	// à ajouter tout de suite le calendrier du nouveau centre sans recharger
+	// la page.
 
 	function mountCentres(container, options = {})
 	{
@@ -123,6 +155,10 @@ const GestionApp = (function ()
 				<label for="centre-couleur">Couleur</label>
 				<input type="color" id="centre-couleur" value="#1f6f54">
 			</div>
+			<div class="field">
+				<label for="centre-effectif">Animateurs par jour souhaités</label>
+				<input type="number" id="centre-effectif" value="1" min="1" step="1">
+			</div>
 			<p class="form-error" id="centre-error"></p>
 			<button class="btn btn-primary" id="centre-submit" type="button">Ajouter</button>
 		`;
@@ -131,6 +167,7 @@ const GestionApp = (function ()
 		const nomEl = container.querySelector("#centre-nom");
 		const codeEl = container.querySelector("#centre-code");
 		const couleurEl = container.querySelector("#centre-couleur");
+		const effectifEl = container.querySelector("#centre-effectif");
 		const errorEl = container.querySelector("#centre-error");
 
 		function charger()
@@ -147,8 +184,44 @@ const GestionApp = (function ()
 
 				data.forEach((c) =>
 				{
-					const label = `<span class="swatch" style="background:${c.couleur}"></span><span class="truncate">${c.nom} (${c.code})</span>`;
-					const row = ligneEntite(label, () =>
+					// Ligne "sur mesure" (pas ligneEntite()) car on a besoin
+					// d'un contrôle en plus : l'effectif souhaité, modifiable
+					// directement ici sans passer par un formulaire séparé.
+					const row = document.createElement("div");
+					row.classList.add("entity-row");
+
+					row.innerHTML = `
+						<div class="entity-main">
+							<span class="swatch" style="background:${c.couleur}"></span>
+							<span class="truncate">${c.nom} (${c.code})</span>
+						</div>
+						<div class="entity-actions">
+							<label class="effectif-inline">
+								<span>par jour</span>
+								<input type="number" class="effectif-input" value="${c.effectif_cible}" min="1" step="1">
+							</label>
+							<button class="btn btn-ghost btn-save-effectif" type="button">Enregistrer</button>
+							<button class="btn btn-danger" type="button">&times; Supprimer</button>
+						</div>
+					`;
+
+					const effectifInput = row.querySelector(".effectif-input");
+
+					row.querySelector(".btn-save-effectif").addEventListener("click", () =>
+					{
+						const valeur = parseInt(effectifInput.value, 10);
+
+						apiFetch(`/api/centres/${c.id}/`, {
+							method: "PATCH",
+							body: JSON.stringify({ effectif_cible: valeur }),
+						}).then(() =>
+						{
+							afficherToast(`Effectif souhaité mis à jour pour ${c.nom}.`);
+							if (options.onChange) options.onChange();
+						}).catch((err) => afficherToast(erreurMessage(err, "Mise à jour impossible."), true));
+					});
+
+					row.querySelector(".btn-danger").addEventListener("click", () =>
 					{
 						if (!confirm(`Supprimer le centre "${c.nom}" ? Ses affectations et disponibilités liées seront aussi supprimées.`)) return;
 
@@ -161,6 +234,7 @@ const GestionApp = (function ()
 							})
 							.catch((err) => afficherToast(erreurMessage(err, "Suppression impossible."), true));
 					});
+
 					list.appendChild(row);
 				});
 
@@ -174,6 +248,7 @@ const GestionApp = (function ()
 			const nom = nomEl.value.trim();
 			const code = codeEl.value.trim();
 			const couleur = couleurEl.value;
+			const effectif_cible = parseInt(effectifEl.value, 10) || 1;
 
 			if (!nom || !code)
 			{
@@ -181,11 +256,12 @@ const GestionApp = (function ()
 				return;
 			}
 
-			apiFetch("/api/centres/", { method: "POST", body: JSON.stringify({ nom, code, couleur }) })
+			apiFetch("/api/centres/", { method: "POST", body: JSON.stringify({ nom, code, couleur, effectif_cible }) })
 				.then((nouveau) =>
 				{
 					nomEl.value = "";
 					codeEl.value = "";
+					effectifEl.value = "1";
 					afficherToast("Centre ajouté.");
 					charger();
 					if (options.onChange) options.onChange(nouveau);
@@ -200,6 +276,11 @@ const GestionApp = (function ()
 	// ------------------------------------------------------------------
 	// Animateurs
 	// ------------------------------------------------------------------
+	// Formulaire un peu plus riche que les deux précédents : les
+	// qualifications disponibles sont chargées à part (chargerCheckboxesQualifs)
+	// pour pouvoir être rafraîchies indépendamment quand la liste des
+	// qualifications change ailleurs (voir le `options.onChange` de
+	// mountQualifications, câblé dans planning.js et gestion.html).
 
 	function mountAnimateurs(container, options = {})
 	{

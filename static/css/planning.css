@@ -1,3 +1,15 @@
+/* ===========================================================================
+   planning.css
+   ---------------------------------------------------------------------------
+   Mise en page propre à /planning/ : barre latérale des animateurs (badges
+   "de colo"), barre d'outils commune (navigation/vue/actions), et les
+   calendriers empilés les uns sous les autres.
+
+   S'appuie sur les variables et composants génériques de base.css
+   (--color-*, .btn, .modal-*, .tabs...) : pas de couleurs ou de tailles de
+   police codées en dur ici, tout part des tokens de base.css.
+   =========================================================================== */
+
 html, body {
     height: 100%;
     background-color: var(--color-bg);
@@ -172,6 +184,12 @@ html, body {
 
 .toolbar-views .btn {
     padding: 6px 12px;
+}
+
+.toolbar-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .view-btn.active {

@@ -1,3 +1,11 @@
+/* ===========================================================================
+   gestion.css
+   ---------------------------------------------------------------------------
+   Mise en page de la page /gestion/ (les 3 onglets Animateurs/Centres/
+   Qualifications). Le HTML de chaque onglet est injecté par gestion.js ;
+   ce fichier ne gère que le conteneur général et la largeur de page.
+   =========================================================================== */
+
 .gestion-page {
     max-width: 720px;
     margin: 0 auto;

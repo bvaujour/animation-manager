@@ -9,20 +9,33 @@
     <title>Documents</title>
 
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'css/documents.css' %}">
 </head>
 <body>
+    {% csrf_token %}
     {% include "partials/_nav.html" with active="documents" %}
 
-    <main class="page-content">
+    <main class="documents-page">
         <h1>Documents</h1>
+        <p class="page-intro">Contrats, plannings imprimés, fiches diverses... Ajoute un fichier ci-dessous, il sera visible par toute l'équipe.</p>
 
-        {{ documents|json_script:"documents-data" }}
+        <form id="form-upload" class="upload-form">
+            <div class="field">
+                <label for="doc-titre">Titre</label>
+                <input type="text" id="doc-titre" placeholder="ex : Contrat type animateur" required>
+            </div>
+            <div class="field">
+                <label for="doc-fichier">Fichier</label>
+                <input type="file" id="doc-fichier" required>
+            </div>
+            <p class="form-error" id="doc-error"></p>
+            <button class="btn btn-primary" type="submit">Ajouter le document</button>
+        </form>
 
-        <div id="documents-container"></div>
+        <div id="documents-grid" class="documents-grid"></div>
     </main>
 
+    <script src="{% static 'js/ui.js' %}"></script>
     <script src="{% static 'js/documents.js' %}"></script>
-
 </body>
 </html>

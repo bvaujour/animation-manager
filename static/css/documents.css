@@ -1,0 +1,120 @@
+/* ===========================================================================
+   documents.css
+   ---------------------------------------------------------------------------
+   Mise en page de /documents/ : formulaire d'ajout en haut, grille de
+   cartes en dessous (une par document, avec aperçu adapté au type de
+   fichier).
+   =========================================================================== */
+
+.documents-page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+}
+
+.documents-page h1 {
+    font-size: 1.6rem;
+}
+
+.page-intro {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+
+/* --- Formulaire d'upload --- */
+
+.upload-form {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 28px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
+}
+
+.upload-form .field {
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 200px;
+}
+
+.upload-form .form-error {
+    flex-basis: 100%;
+    margin: 0;
+}
+
+/* --- Grille de documents --- */
+
+.documents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.document-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-sm);
+}
+
+.document-apercu {
+    height: 160px;
+    background-color: var(--color-surface-sunken);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.document-apercu iframe,
+.document-apercu img {
+    width: 100%;
+    height: 100%;
+    border: none;
+    object-fit: cover;
+}
+
+.document-icon {
+    font-size: 2.6rem;
+}
+
+.document-info {
+    padding: 10px 12px 4px;
+}
+
+.document-info h3 {
+    font-size: 0.95rem;
+    margin: 0 0 4px;
+}
+
+.document-date {
+    font-size: 0.76rem;
+    color: var(--color-text-muted);
+}
+
+.document-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px 12px;
+    margin-top: auto;
+}
+
+@media (max-width: 600px) {
+    .documents-page {
+        padding: 20px 14px 60px;
+    }
+
+    .upload-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

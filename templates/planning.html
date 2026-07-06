@@ -38,6 +38,10 @@
                     <button class="btn btn-ghost view-btn active" data-view="dayGridWeek" type="button">Semaine</button>
                     <button class="btn btn-ghost view-btn" data-view="dayGridMonth" type="button">Mois</button>
                 </div>
+                <div class="toolbar-actions">
+                    <button id="btn-auto-placement" class="btn btn-accent" type="button">Placer automatiquement</button>
+                    <button id="btn-vider-semaine" class="btn btn-danger-solid" type="button">Vider la semaine</button>
+                </div>
             </div>
 
             <div id="calendars-container"></div>
@@ -47,6 +51,20 @@
     </main>
 
     <button class="btn-fab" id="btn-ajout-rapide" type="button" title="Ajouter un animateur, un centre ou une qualification" aria-label="Ajout rapide">+</button>
+
+    <div class="modal-backdrop" id="modal-auto" hidden>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>Placement automatique</h2>
+                <button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="empty-note">Du lundi au vendredi de la semaine affichée. Les créneaux déjà remplis manuellement ne sont jamais modifiés.</p>
+                <div id="modal-auto-centres"></div>
+                <button class="btn btn-accent" id="btn-auto-confirmer" type="button">Lancer le placement</button>
+            </div>
+        </div>
+    </div>
 
     <div class="modal-backdrop" id="modal-ajout" hidden>
         <div class="modal-box">

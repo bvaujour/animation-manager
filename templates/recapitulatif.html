@@ -1,0 +1,94 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Récapitulatif</title>
+
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}">
+</head>
+<body>
+    {% csrf_token %}
+    {% include "partials/_nav.html" with active="recapitulatif" %}
+
+    <main class="recap-page">
+        <h1>Récapitulatif de l'équipe</h1>
+        <p class="page-intro">Jours travaillés par animateur et par centre, et quelques points à surveiller.</p>
+
+        <!-- Filtre de période : change les colonnes "jours" des deux tableaux
+             ci-dessous. Les alertes plus bas ne sont PAS affectées par ce
+             filtre (elles portent toujours sur l'ensemble des données). -->
+        <div class="filtre-periode">
+            <label for="filtre-periode">Période</label>
+            <select id="filtre-periode">
+                <option value="toute-periode">Toute la période</option>
+                <option value="cette-semaine">Cette semaine</option>
+                <option value="ce-mois">Ce mois-ci</option>
+                <option value="personnalise">Personnalisée</option>
+            </select>
+
+            <span id="plage-personnalisee" hidden>
+                <input type="date" id="filtre-debut" aria-label="Date de début">
+                <input type="date" id="filtre-fin" aria-label="Date de fin">
+                <button id="btn-appliquer-filtre" class="btn btn-ghost" type="button">Appliquer</button>
+            </span>
+        </div>
+
+        <div id="compteurs" class="stat-grid"></div>
+
+        <h2>Jours travaillés par animateur</h2>
+        <table class="recap-table" id="table-animateurs">
+            <thead>
+                <tr>
+                    <th>Animateur</th>
+                    <th>Jours</th>
+                    <th>Centres différents</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <h2>Jours couverts par centre</h2>
+        <table class="recap-table" id="table-centres">
+            <thead>
+                <tr>
+                    <th>Centre</th>
+                    <th>Jours</th>
+                    <th>Animateurs distincts</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <h2>À surveiller</h2>
+        <p class="page-intro">Ces listes portent toujours sur l'ensemble des données, indépendamment du filtre de période ci-dessus.</p>
+
+        <div class="alerte-bloc" hidden>
+            <h3>Sans centre préféré renseigné</h3>
+            <ul id="alerte-sans-preference"></ul>
+        </div>
+        <div class="alerte-bloc" hidden>
+            <h3>Sans disponibilité renseignée</h3>
+            <ul id="alerte-sans-disponibilite"></ul>
+        </div>
+        <div class="alerte-bloc" hidden>
+            <h3>Jamais affectés</h3>
+            <ul id="alerte-jamais-affectes"></ul>
+        </div>
+        <div class="alerte-bloc" hidden>
+            <h3>Centres jamais utilisés</h3>
+            <ul id="alerte-centres-inutilises"></ul>
+        </div>
+        <div class="alerte-bloc" hidden>
+            <h3>Qualifications jamais attribuées</h3>
+            <ul id="alerte-qualifs-inutilisees"></ul>
+        </div>
+    </main>
+
+    <script src="{% static 'js/ui.js' %}"></script>
+    <script src="{% static 'js/recapitulatif.js' %}"></script>
+</body>
+</html>
