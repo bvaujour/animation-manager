@@ -462,3 +462,130 @@ html, body {
         max-height: 180px;
     }
 }
+
+/* --- Fiche animateur sélectionné --- */
+.selected-animateur-card {
+    background: linear-gradient(135deg, var(--color-surface-sunken), var(--color-surface));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-sm);
+}
+
+.selected-animateur-card.empty {
+    background: var(--color-surface-sunken);
+}
+
+.selected-title,
+.selected-kicker,
+.selected-help {
+    margin: 0;
+}
+
+.selected-title {
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.selected-kicker {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+}
+
+.selected-help {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    margin-top: 8px;
+}
+
+.selected-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.selected-header h2 {
+    margin: 2px 0 0;
+    font-size: 1.05rem;
+}
+
+.selected-age {
+    background: var(--color-primary);
+    color: #fff;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.selected-details {
+    display: grid;
+    gap: 7px;
+    font-size: 0.82rem;
+}
+
+.selected-details p {
+    margin: 0;
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 8px;
+}
+
+.selected-details strong {
+    color: var(--color-text-muted);
+}
+
+.selected-details span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.selected-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.selected-actions .btn {
+    flex: 1 1 120px;
+    justify-content: center;
+}
+
+.modal-box-small {
+    max-width: 460px;
+}
+
+.selected-edit-form,
+.selected-dispo-form {
+    margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+    .selected-details p {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+}
+
+/* Fiche animateur sélectionné placée au-dessus des calendriers */
+.selected-animateur-card-wide {
+    margin-bottom: 0;
+}
+
+.selected-animateur-card-wide:not(.empty) .selected-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+    .selected-animateur-card-wide:not(.empty) .selected-details {
+        grid-template-columns: 1fr;
+    }
+}

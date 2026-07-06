@@ -114,6 +114,11 @@ function fermerModal(backdropEl) {
 // Branche les différentes façons de fermer une modal : clic sur le fond
 // sombre, clic sur un bouton marqué [data-modal-close], ou touche Échap.
 function initFermetureModal(backdropEl) {
+	// Sécurité : si la page n'a pas cette modal, on ne bloque pas tout le JS.
+	if (!backdropEl) {
+		return;
+	}
+
 	backdropEl.addEventListener("click", (event) => {
 		if (event.target === backdropEl) {
 			fermerModal(backdropEl);

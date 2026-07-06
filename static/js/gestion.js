@@ -59,6 +59,7 @@ const GestionApp = (function ()
 		form.querySelector("#anim-email").value = "";
 		form.querySelector("#anim-date-naissance").value = "";
 		form.querySelectorAll("#anim-qualifs input:checked").forEach((el) => { el.checked = false; });
+		form.querySelectorAll("#anim-preferences select").forEach((el) => { el.value = ""; });
 	}
 
 	function qualificationCheckboxes(qualifications, cochees = [])
@@ -76,6 +77,40 @@ const GestionApp = (function ()
 				${escapeHtml(q.nom)}
 			</label>
 		`).join("");
+	}
+
+
+	function preferencesInputs(centres, preferences = [])
+	{
+		if (!centres.length)
+		{
+			return '<p class="empty-note">Ajoute d\'abord des centres pour pouvoir définir des préférences.</p>';
+		}
+
+		const ordreParCentre = new Map((preferences || []).map((pref) => [Number(pref.id), pref.ordre]));
+
+		return centres.map((centre) => `
+			<label class="preference-row">
+				<span><span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>${escapeHtml(centre.nom)}</span>
+				<select data-centre-id="${escapeHtml(centre.id)}">
+					<option value="">Pas de préférence</option>
+					${centres.map((_, index) => {
+						const ordre = index + 1;
+						return `<option value="${ordre}" ${ordreParCentre.get(Number(centre.id)) === ordre ? "selected" : ""}>${ordre}</option>`;
+					}).join("")}
+				</select>
+			</label>
+		`).join("");
+	}
+
+	function preferencesDepuisForm(root)
+	{
+		return Array.from(root.querySelectorAll("select[data-centre-id]"))
+			.filter((select) => select.value !== "")
+			.map((select) => ({
+				centre_id: parseInt(select.dataset.centreId, 10),
+				ordre: parseInt(select.value, 10),
+			}));
 	}
 
 	// ------------------------------------------------------------------
@@ -383,6 +418,7 @@ const GestionApp = (function ()
 	function mountAnimateurs(container, options = {})
 	{
 		let qualificationsCache = [];
+		let centresCache = [];
 
 		container.innerHTML = `
 			<p class="section-title">Animateurs existants</p>
@@ -413,6 +449,11 @@ const GestionApp = (function ()
 					<label>Qualifications</label>
 					<div class="checkbox-grid" id="anim-qualifs"></div>
 				</div>
+				<div class="field field-wide">
+					<label>Centres préférés</label>
+					<div class="preferences-grid" id="anim-preferences"></div>
+					<small class="entity-muted">Choisis 1 pour le centre préféré, 2 pour le second, etc. Chaque rang ne peut être utilisé qu'une fois.</small>
+				</div>
 				<p class="form-error" id="anim-error"></p>
 				<button class="btn btn-primary" id="anim-submit" type="button">Ajouter</button>
 			</div>
@@ -426,6 +467,7 @@ const GestionApp = (function ()
 		const emailEl = container.querySelector("#anim-email");
 		const dateNaissanceEl = container.querySelector("#anim-date-naissance");
 		const qualifsEl = container.querySelector("#anim-qualifs");
+		const preferencesEl = container.querySelector("#anim-preferences");
 		const errorEl = container.querySelector("#anim-error");
 
 		function chargerCheckboxesQualifs()
@@ -434,6 +476,16 @@ const GestionApp = (function ()
 			{
 				qualificationsCache = data;
 				qualifsEl.innerHTML = qualificationCheckboxes(data);
+				return data;
+			});
+		}
+
+		function chargerPreferencesCentres()
+		{
+			return apiFetch("/api/centres/").then((data) =>
+			{
+				centresCache = data;
+				preferencesEl.innerHTML = preferencesInputs(data);
 				return data;
 			});
 		}
@@ -469,6 +521,12 @@ const GestionApp = (function ()
 							${qualificationCheckboxes(qualificationsCache, a.qualification_ids || [])}
 						</div>
 					</div>
+					<div class="field edit-qualifs-field">
+						<label>Centres préférés</label>
+						<div class="preferences-grid edit-anim-preferences">
+							${preferencesInputs(centresCache, a.centres_preferes || [])}
+						</div>
+					</div>
 					<p class="form-error edit-error"></p>
 				</div>
 			`;
@@ -483,6 +541,7 @@ const GestionApp = (function ()
 				const email = champValeur(row, ".edit-anim-email");
 				const date_naissance = row.querySelector(".edit-anim-date-naissance").value || null;
 				const qualifications = idsCheckboxesCochees(row.querySelector(".edit-anim-qualifs"));
+				const preferences = preferencesDepuisForm(row.querySelector(".edit-anim-preferences"));
 
 				if (!prenom || !nom)
 				{
@@ -492,7 +551,7 @@ const GestionApp = (function ()
 
 				apiFetch(`/api/animateurs/${a.id}/`, {
 					method: "PATCH",
-					body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications }),
+					body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications, preferences }),
 				}).then(() =>
 				{
 					afficherToast("Animateur modifié.");
@@ -500,6 +559,82 @@ const GestionApp = (function ()
 					if (options.onChange) options.onChange();
 				}).catch((err) => { error.textContent = erreurMessage(err, "Modification impossible."); });
 			}, charger));
+		}
+
+
+		function ouvrirDisponibilites(a, row)
+		{
+			row.classList.add("entity-row-editing");
+			row.innerHTML = `
+				<div class="entity-main entity-main-stack">
+					<strong>Disponibilités de ${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}</strong>
+					<small class="entity-muted">Ajoute une plage rapidement. Si aucune disponibilité n'est renseignée, l'animateur est considéré disponible par défaut.</small>
+				</div>
+				<div class="dispos-list" id="edit-dispos-list"></div>
+				<div class="edit-grid">
+					<div class="field">
+						<label>Début</label>
+						<input type="date" class="edit-dispo-debut">
+					</div>
+					<div class="field">
+						<label>Fin incluse</label>
+						<input type="date" class="edit-dispo-fin">
+					</div>
+					<p class="form-error edit-error"></p>
+				</div>
+			`;
+
+			const listDispos = row.querySelector("#edit-dispos-list");
+			const debutEl = row.querySelector(".edit-dispo-debut");
+			const finEl = row.querySelector(".edit-dispo-fin");
+			const error = row.querySelector(".edit-error");
+
+			function afficherDispos(plages)
+			{
+				if (!plages || plages.length === 0)
+				{
+					listDispos.innerHTML = '<p class="empty-note">Aucune disponibilité renseignée.</p>';
+					return;
+				}
+
+				listDispos.innerHTML = plages.map((plage) => `
+					<span class="dispo-chip">${escapeHtml(plage.debut)} → ${escapeHtml(plage.fin)}</span>
+				`).join("");
+			}
+
+			function rechargerDispos()
+			{
+				return apiFetch(`/api/animateurs/${a.id}/disponibilites/`)
+					.then((data) => afficherDispos(data.disponibilites));
+			}
+
+			row.appendChild(creerFormActions(() =>
+			{
+				error.textContent = "";
+				const debut = debutEl.value;
+				const fin = finEl.value || debut;
+
+				if (!debut || !fin)
+				{
+					error.textContent = "Les dates sont obligatoires.";
+					return;
+				}
+
+				apiFetch(`/api/animateurs/${a.id}/disponibilites/`, {
+					method: "POST",
+					body: JSON.stringify({ debut, fin }),
+				}).then(() =>
+				{
+					debutEl.value = "";
+					finEl.value = "";
+					afficherToast("Disponibilité ajoutée.");
+					rechargerDispos();
+					charger();
+					if (options.onChange) options.onChange();
+				}).catch((err) => { error.textContent = erreurMessage(err, "Impossible d'ajouter cette disponibilité."); });
+			}, charger));
+
+			rechargerDispos();
 		}
 
 		function charger()
@@ -521,6 +656,7 @@ const GestionApp = (function ()
 						a.telephone || null,
 						a.email || null,
 						a.qualifications && a.qualifications.length ? a.qualifications.join(", ") : null,
+					a.centres_preferes && a.centres_preferes.length ? `Préférences : ${a.centres_preferes.map((p) => `${p.ordre}. ${p.code}`).join(" / ")}` : null,
 					].filter(Boolean).join(" · ");
 
 					const row = document.createElement("div");
@@ -535,6 +671,7 @@ const GestionApp = (function ()
 
 					const actions = row.querySelector(".entity-actions");
 					actions.appendChild(bouton("Modifier", "btn btn-ghost", () => ouvrirEdition(a, row)));
+					actions.appendChild(bouton("Dispos", "btn btn-ghost", () => ouvrirDisponibilites(a, row)));
 					actions.appendChild(bouton("&times; Supprimer", "btn-danger", () =>
 					{
 						if (!confirm(`Supprimer l'animateur "${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}" ? Son planning et ses disponibilités seront aussi supprimés.`)) return;
@@ -565,6 +702,7 @@ const GestionApp = (function ()
 			const email = emailEl.value.trim();
 			const date_naissance = dateNaissanceEl.value || null;
 			const qualifications = idsCheckboxesCochees(qualifsEl);
+			const preferences = preferencesDepuisForm(preferencesEl);
 
 			if (!prenom || !nom)
 			{
@@ -574,7 +712,7 @@ const GestionApp = (function ()
 
 			apiFetch("/api/animateurs/", {
 				method: "POST",
-				body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications }),
+				body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications, preferences }),
 			})
 				.then((nouveau) =>
 				{
@@ -586,8 +724,8 @@ const GestionApp = (function ()
 				.catch((err) => { errorEl.textContent = erreurMessage(err, "Impossible d'ajouter cet animateur."); });
 		});
 
-		chargerCheckboxesQualifs().then(charger);
-		return { charger, chargerCheckboxesQualifs };
+		Promise.all([chargerCheckboxesQualifs(), chargerPreferencesCentres()]).then(charger);
+		return { charger, chargerCheckboxesQualifs, chargerPreferencesCentres };
 	}
 
 	return { mountAnimateurs, mountCentres, mountQualifications };

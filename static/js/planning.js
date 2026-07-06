@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", function ()
 	// -- Références DOM utilisées à plusieurs endroits --
 	const calendarsContainer = document.getElementById("calendars-container");
 	const animList = document.getElementById("animateurs-list");
-	const dispoInfo = document.getElementById("dispo-info");
+	const selectedCard = document.getElementById("selected-animateur-card");
 	const toolbarLabel = document.getElementById("toolbar-label");
 
 	// Un FullCalendar.Calendar par centre, dans le même ordre que les
@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", function ()
 	// chargerCentres() et chargerAnimateurs().
 	let centresPlanning = [];
 	let animateursPlanning = [];
+	let qualificationsPlanning = [];
 
 	// Identifiant de la "source d'évènements" utilisée pour afficher les
 	// disponibilités en fond de calendrier (voir afficherDisponibilites).
@@ -39,6 +40,140 @@ document.addEventListener("DOMContentLoaded", function ()
 	//   - permettre de l'affecter en cliquant sur un jour (alternative au
 	//     glisser-déposer, plus fiable au doigt sur téléphone).
 	let animateurActif = null;
+
+
+	function escapeHtml(value)
+	{
+		return String(value ?? "")
+			.replaceAll("&", "&amp;")
+			.replaceAll("<", "&lt;")
+			.replaceAll(">", "&gt;")
+			.replaceAll("\"", "&quot;")
+			.replaceAll("'", "&#039;");
+	}
+
+	function libelleDate(dateStr)
+	{
+		return parseLocalDate(dateStr).toLocaleDateString("fr-FR");
+	}
+
+	function idsCheckboxesCochees(root)
+	{
+		return Array.from(root.querySelectorAll("input:checked")).map((input) => parseInt(input.value, 10));
+	}
+
+	function qualificationCheckboxes(cochees = [])
+	{
+		if (qualificationsPlanning.length === 0)
+		{
+			return '<p class="empty-note">Aucune qualification disponible.</p>';
+		}
+
+		const cocheesSet = new Set((cochees || []).map(Number));
+		return qualificationsPlanning.map((qualification) => `
+			<label class="checkbox-chip">
+				<input type="checkbox" value="${escapeHtml(qualification.id)}" ${cocheesSet.has(qualification.id) ? "checked" : ""}>
+				${escapeHtml(qualification.nom)}
+			</label>
+		`).join("");
+	}
+
+	function preferencesInputs(preferences = [])
+	{
+		if (centresPlanning.length === 0)
+		{
+			return '<p class="empty-note">Ajoute d\'abord des centres pour pouvoir définir des préférences.</p>';
+		}
+
+		const ordreParCentre = new Map((preferences || []).map((pref) => [Number(pref.id), pref.ordre]));
+
+		return centresPlanning.map((centre) => `
+			<label class="preference-row">
+				<span><span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>${escapeHtml(centre.nom)}</span>
+				<select data-centre-id="${escapeHtml(centre.id)}">
+					<option value="">Pas de préférence</option>
+					${centresPlanning.map((_, index) => {
+						const ordre = index + 1;
+						return `<option value="${ordre}" ${ordreParCentre.get(Number(centre.id)) === ordre ? "selected" : ""}>${ordre}</option>`;
+					}).join("")}
+				</select>
+			</label>
+		`).join("");
+	}
+
+	function preferencesDepuisForm(root)
+	{
+		return Array.from(root.querySelectorAll("select[data-centre-id]"))
+			.filter((select) => select.value !== "")
+			.map((select) => ({
+				centre_id: parseInt(select.dataset.centreId, 10),
+				ordre: parseInt(select.value, 10),
+			}));
+	}
+
+	function disponibilitesTexte(disponibilites)
+	{
+		if (!disponibilites || disponibilites.length === 0)
+		{
+			return "Aucune disponibilité renseignée";
+		}
+
+		return disponibilites.map((plage) => `${libelleDate(plage.debut)} → ${libelleDate(plage.fin)}`).join(" · ");
+	}
+
+	function preferencesTexte(animateur)
+	{
+		if (!animateur.centres_preferes || animateur.centres_preferes.length === 0)
+		{
+			return "Aucun centre préféré";
+		}
+
+		return animateur.centres_preferes.map((pref) => `${pref.ordre}. ${pref.nom}`).join(" · ");
+	}
+
+	function rendreFicheAnimateurSelectionne(disponibilites = null)
+	{
+		if (!animateurActif)
+		{
+			selectedCard.classList.add("empty");
+			selectedCard.innerHTML = `
+				<p class="selected-title">Aucun animateur sélectionné</p>
+				<p class="selected-help">Clique sur un animateur pour voir ses infos, modifier sa fiche ou ajouter une disponibilité.</p>
+			`;
+			return;
+		}
+
+		const animateur = animateurActif;
+		const plages = disponibilites || animateur.disponibilites || [];
+		const age = animateur.age !== null && animateur.age !== undefined ? `${animateur.age} ans` : "Âge non renseigné";
+		const qualifications = animateur.qualifications && animateur.qualifications.length ? animateur.qualifications.join(", ") : "Aucune qualification";
+
+		selectedCard.classList.remove("empty");
+		selectedCard.innerHTML = `
+			<div class="selected-header">
+				<div>
+					<p class="selected-kicker">Animateur sélectionné</p>
+					<h2>${escapeHtml(animateur.prenom)} ${escapeHtml(animateur.nom)}</h2>
+				</div>
+				<span class="selected-age">${escapeHtml(age)}</span>
+			</div>
+			<div class="selected-details">
+				<p><strong>Tél.</strong><span>${escapeHtml(animateur.telephone || "Non renseigné")}</span></p>
+				<p><strong>Email</strong><span>${escapeHtml(animateur.email || "Non renseigné")}</span></p>
+				<p><strong>Qualifications</strong><span>${escapeHtml(qualifications)}</span></p>
+				<p><strong>Préférences</strong><span>${escapeHtml(preferencesTexte(animateur))}</span></p>
+				<p><strong>Disponibilités</strong><span>${escapeHtml(disponibilitesTexte(plages))}</span></p>
+			</div>
+			<div class="selected-actions">
+				<button class="btn btn-primary" id="btn-edit-selected" type="button">Modifier la fiche</button>
+				<button class="btn btn-accent" id="btn-dispo-selected" type="button">Ajouter une dispo</button>
+			</div>
+			<p class="selected-help">Clique sur un jour d'un calendrier pour affecter ${escapeHtml(animateur.prenom)}.</p>
+		`;
+
+		selectedCard.querySelector("#btn-edit-selected").addEventListener("click", ouvrirModalEditionAnimateur);
+		selectedCard.querySelector("#btn-dispo-selected").addEventListener("click", ouvrirModalDispoAnimateur);
+	}
 
 	// -----------------------------------------------------------------
 	// Calendriers (un par centre)
@@ -503,6 +638,10 @@ document.addEventListener("DOMContentLoaded", function ()
 			calendars.forEach((c) => c.refetchEvents());
 
 			let message = `${data.creees.length} affectation(s) créée(s) automatiquement.`;
+			if (data.supprimees && data.supprimees > 0)
+			{
+				message = `${data.supprimees} ancienne(s) affectation(s) supprimée(s), puis ${data.creees.length} créée(s) automatiquement.`;
+			}
 			if (data.non_couverts.length > 0)
 			{
 				message += ` ${data.non_couverts.length} place(s) restent vides.`;
@@ -591,7 +730,17 @@ document.addEventListener("DOMContentLoaded", function ()
 				return;
 			}
 
-			animateurs.forEach((animateur) => animList.appendChild(creerChipAnimateur(animateur)));
+			animateurs.forEach((animateur) =>
+			{
+				const chip = creerChipAnimateur(animateur);
+				if (animateurActif && animateurActif.id === animateur.id)
+				{
+					animateurActif = animateur;
+					chip.classList.add("selected");
+					rendreFicheAnimateurSelectionne(animateur.disponibilites || []);
+				}
+				animList.appendChild(chip);
+			});
 		});
 	}
 
@@ -614,24 +763,12 @@ document.addEventListener("DOMContentLoaded", function ()
 	// de l'animateur sélectionné + un message texte au-dessus de la liste.
 	function afficherDisponibilites(animateur, plages)
 	{
-		dispoInfo.innerHTML = "";
-
-		const consigne = "Clique sur un jour d'un calendrier pour l'y affecter.";
-
-		if (plages.length === 0)
+		animateur.disponibilites = plages;
+		if (animateurActif && animateurActif.id === animateur.id)
 		{
-			dispoInfo.textContent = `${animateur.prenom} : aucune disponibilité renseignée. ${consigne}`;
-			return;
+			animateurActif.disponibilites = plages;
+			rendreFicheAnimateurSelectionne(plages);
 		}
-
-		const periodes = plages.map((plage) =>
-		{
-			const debutStr = parseLocalDate(plage.debut).toLocaleDateString("fr-FR");
-			const finStr = parseLocalDate(plage.fin).toLocaleDateString("fr-FR");
-			return `${debutStr} → ${finStr}`;
-		}).join(", ");
-
-		dispoInfo.textContent = `${animateur.prenom} disponible : ${periodes}. ${consigne}`;
 
 		// FullCalendar affiche les évènements "display: background" comme
 		// une simple teinte de fond, sans les traiter comme de vraies
@@ -657,14 +794,15 @@ document.addEventListener("DOMContentLoaded", function ()
 
 		document.querySelectorAll(".animateur.selected").forEach((el) => el.classList.remove("selected"));
 		effacerDisponibilitesAffichees();
-		dispoInfo.textContent = "";
 		animateurActif = null;
+		rendreFicheAnimateurSelectionne();
 
 		// Un second clic sur le même animateur = désélectionner et s'arrêter là.
 		if (dejaSelectionne) return;
 
 		chip.classList.add("selected");
 		animateurActif = animateur;
+		rendreFicheAnimateurSelectionne(animateur.disponibilites || []);
 
 		apiFetch(`/api/animateurs/${animateur.id}/disponibilites/`)
 			.then((data) => afficherDisponibilites(animateur, data.disponibilites));
@@ -708,51 +846,175 @@ document.addEventListener("DOMContentLoaded", function ()
 	}
 
 	// -----------------------------------------------------------------
-	// Modal d'ajout rapide (animateur / centre / qualification)
-	// Réutilise le module partagé gestion.js (même code que la page
-	// /gestion/ dédiée), juste monté dans une popup au lieu d'une page.
+	// Actions sur l'animateur sélectionné : modifier sa fiche ou ajouter
+	// rapidement une disponibilité depuis la page planning.
 	// -----------------------------------------------------------------
 
-	const modal = document.getElementById("modal-ajout");
-	let modalInitialisee = false; // on ne construit le contenu qu'à la 1ère ouverture
+	const modalEditAnimateur = document.getElementById("modal-edit-animateur");
+	const modalDispoAnimateur = document.getElementById("modal-dispo-animateur");
+	const modalEditContent = document.getElementById("modal-edit-animateur-content");
+	const modalDispoContent = document.getElementById("modal-dispo-animateur-content");
 
-	initFermetureModal(modal);
+	initFermetureModal(modalEditAnimateur);
+	initFermetureModal(modalDispoAnimateur);
 
-	document.getElementById("btn-ajout-rapide").addEventListener("click", () =>
+	function chargerReferentielsEdition()
 	{
-		if (!modalInitialisee)
+		return Promise.all([
+			apiFetch("/api/centres/").then((centres) => { centresPlanning = centres; }),
+			apiFetch("/api/qualifications/").then((qualifications) => { qualificationsPlanning = qualifications; }),
+		]);
+	}
+
+	function ouvrirModalEditionAnimateur()
+	{
+		if (!animateurActif)
 		{
-			// Chaque mount*() renvoie un petit objet avec une fonction
-			// `charger()` (recharge sa propre liste) et parfois
-			// `chargerCheckboxesQualifs()` (pour les animateurs). On les
-			// relie entre eux via `onChange` pour que tout reste à jour
-			// sans recharger la page :
-			//   - ajouter un centre -> il apparaît tout de suite dans le planning ;
-			//   - ajouter/supprimer un animateur -> la liste latérale se met à jour ;
-			//   - ajouter/supprimer une qualification -> les cases à cocher
-			//     du formulaire "ajouter un animateur" se mettent à jour.
-			const animateursModal = GestionApp.mountAnimateurs(document.getElementById("modal-panel-animateurs"), {
-				onChange: () => chargerAnimateurs(),
-			});
-
-			GestionApp.mountCentres(document.getElementById("modal-panel-centres"), {
-				onChange: (nouveauCentre) =>
-				{
-					if (nouveauCentre) ajouterCentreAuPlanning(nouveauCentre);
-				},
-			});
-
-			GestionApp.mountQualifications(document.getElementById("modal-panel-qualifications"), {
-				onChange: () => animateursModal.chargerCheckboxesQualifs(),
-			});
-
-			initTabs(document.getElementById("modal-tabs").closest(".modal-body"));
-
-			modalInitialisee = true;
+			afficherToast("Sélectionne d'abord un animateur.", true);
+			return;
 		}
 
-		ouvrirModal(modal);
-	});
+		chargerReferentielsEdition().then(() =>
+		{
+			const a = animateurActif;
+			modalEditContent.innerHTML = `
+				<div class="gestion-form selected-edit-form">
+					<div class="field">
+						<label>Prénom</label>
+						<input type="text" id="edit-selected-prenom" value="${escapeHtml(a.prenom)}">
+					</div>
+					<div class="field">
+						<label>Nom</label>
+						<input type="text" id="edit-selected-nom" value="${escapeHtml(a.nom)}">
+					</div>
+					<div class="field">
+						<label>Téléphone</label>
+						<input type="tel" id="edit-selected-telephone" value="${escapeHtml(a.telephone || "")}">
+					</div>
+					<div class="field">
+						<label>Email</label>
+						<input type="email" id="edit-selected-email" value="${escapeHtml(a.email || "")}">
+					</div>
+					<div class="field">
+						<label>Date de naissance</label>
+						<input type="date" id="edit-selected-date-naissance" value="${a.date_naissance || ""}">
+					</div>
+					<div class="field field-wide">
+						<label>Qualifications</label>
+						<div class="checkbox-grid" id="edit-selected-qualifs">${qualificationCheckboxes(a.qualification_ids || [])}</div>
+					</div>
+					<div class="field field-wide">
+						<label>Centres préférés</label>
+						<div class="preferences-grid" id="edit-selected-preferences">${preferencesInputs(a.centres_preferes || [])}</div>
+						<small class="entity-muted">Choisis 1 pour le centre préféré, 2 pour le second, etc.</small>
+					</div>
+					<p class="form-error" id="edit-selected-error"></p>
+					<div class="edit-actions">
+						<button class="btn btn-primary" id="edit-selected-save" type="button">Enregistrer</button>
+						<button class="btn btn-ghost" data-modal-close type="button">Annuler</button>
+					</div>
+				</div>
+			`;
+
+			modalEditContent.querySelector("#edit-selected-save").addEventListener("click", () =>
+			{
+				const error = modalEditContent.querySelector("#edit-selected-error");
+				error.textContent = "";
+
+				const payload = {
+					prenom: modalEditContent.querySelector("#edit-selected-prenom").value.trim(),
+					nom: modalEditContent.querySelector("#edit-selected-nom").value.trim(),
+					telephone: modalEditContent.querySelector("#edit-selected-telephone").value.trim(),
+					email: modalEditContent.querySelector("#edit-selected-email").value.trim(),
+					date_naissance: modalEditContent.querySelector("#edit-selected-date-naissance").value || null,
+					qualifications: idsCheckboxesCochees(modalEditContent.querySelector("#edit-selected-qualifs")),
+					preferences: preferencesDepuisForm(modalEditContent.querySelector("#edit-selected-preferences")),
+				};
+
+				if (!payload.prenom || !payload.nom)
+				{
+					error.textContent = "Le prénom et le nom sont obligatoires.";
+					return;
+				}
+
+				apiFetch(`/api/animateurs/${a.id}/`, {
+					method: "PATCH",
+					body: JSON.stringify(payload),
+				}).then((animateurModifie) =>
+				{
+					animateurActif = animateurModifie;
+					rendreFicheAnimateurSelectionne(animateurModifie.disponibilites || []);
+					chargerAnimateurs();
+					calendars.forEach((calendar) => calendar.refetchEvents());
+					fermerModal(modalEditAnimateur);
+					afficherToast("Animateur modifié.");
+				}).catch((err) =>
+				{
+					error.textContent = erreurMessage(err, "Modification impossible.");
+				});
+			});
+
+			ouvrirModal(modalEditAnimateur);
+		}).catch((err) => afficherToast(erreurMessage(err, "Impossible de préparer le formulaire."), true));
+	}
+
+	function ouvrirModalDispoAnimateur()
+	{
+		if (!animateurActif)
+		{
+			afficherToast("Sélectionne d'abord un animateur.", true);
+			return;
+		}
+
+		const aujourdHui = formatDateLocal(new Date());
+		modalDispoContent.innerHTML = `
+			<div class="gestion-form selected-dispo-form">
+				<p class="empty-note">Ajouter une plage de disponibilité pour <strong>${escapeHtml(animateurActif.prenom)} ${escapeHtml(animateurActif.nom)}</strong>.</p>
+				<div class="field">
+					<label>Début</label>
+					<input type="date" id="dispo-selected-debut" value="${aujourdHui}">
+				</div>
+				<div class="field">
+					<label>Fin incluse</label>
+					<input type="date" id="dispo-selected-fin" value="${aujourdHui}">
+				</div>
+				<p class="form-error" id="dispo-selected-error"></p>
+				<div class="edit-actions">
+					<button class="btn btn-primary" id="dispo-selected-save" type="button">Ajouter la disponibilité</button>
+					<button class="btn btn-ghost" data-modal-close type="button">Annuler</button>
+				</div>
+			</div>
+		`;
+
+		modalDispoContent.querySelector("#dispo-selected-save").addEventListener("click", () =>
+		{
+			const debut = modalDispoContent.querySelector("#dispo-selected-debut").value;
+			const fin = modalDispoContent.querySelector("#dispo-selected-fin").value;
+			const error = modalDispoContent.querySelector("#dispo-selected-error");
+			error.textContent = "";
+
+			if (!debut || !fin)
+			{
+				error.textContent = "Les deux dates sont obligatoires.";
+				return;
+			}
+
+			apiFetch(`/api/animateurs/${animateurActif.id}/disponibilites/`, {
+				method: "POST",
+				body: JSON.stringify({ debut, fin }),
+			}).then((data) =>
+			{
+				afficherDisponibilites(animateurActif, data.disponibilites);
+				fermerModal(modalDispoAnimateur);
+				afficherToast("Disponibilité ajoutée.");
+			}).catch((err) =>
+			{
+				error.textContent = erreurMessage(err, "Impossible d'ajouter cette disponibilité.");
+			});
+		});
+
+		ouvrirModal(modalDispoAnimateur);
+	}
 
 	// -----------------------------------------------------------------
 	// Chargement initial
