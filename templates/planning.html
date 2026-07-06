@@ -8,37 +8,74 @@
     <title>Planning équipe</title>
 
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/planning.css' %}">
 </head>
 
 <body>
+    {% csrf_token %}
+    {% include "partials/_nav.html" with active="planning" %}
+
     <main id="layout">
 
-        <div id="animateurs-panel">
+        <aside id="animateurs-panel">
+            <h2 class="section-title">Équipe</h2>
             <div id="animateurs-list"></div>
-        </div>
+            <div id="dispo-info"></div>
+        </aside>
 
-        <div id="calendars-container">
+        <section id="calendars-section">
 
-            <div class="calendar-card">
-                <h3>Pacaudière</h3>
-                <div class="calendar" id="calendar-1"></div>
+            <div id="planning-toolbar">
+                <div class="toolbar-nav">
+                    <button id="btn-prev" class="btn btn-ghost" type="button" aria-label="Période précédente">‹</button>
+                    <button id="btn-today" class="btn btn-ghost" type="button">Aujourd'hui</button>
+                    <button id="btn-next" class="btn btn-ghost" type="button" aria-label="Période suivante">›</button>
+                    <span id="toolbar-label" class="toolbar-label"></span>
+                </div>
+                <div class="toolbar-views" role="group" aria-label="Changer de vue">
+                    <button class="btn btn-ghost view-btn" data-view="dayGridDay" type="button">Jour</button>
+                    <button class="btn btn-ghost view-btn active" data-view="dayGridWeek" type="button">Semaine</button>
+                    <button class="btn btn-ghost view-btn" data-view="dayGridMonth" type="button">Mois</button>
+                </div>
             </div>
 
-            <div class="calendar-card">
-                <h3>Saint-Forgeux</h3>
-                <div class="calendar" id="calendar-2"></div>
-            </div>
+            <div id="calendars-container"></div>
 
-            <div class="calendar-card">
-                <h3>Saint-Martin</h3>
-                <div class="calendar" id="calendar-3"></div>
-            </div>
-
-        </div>
+        </section>
 
     </main>
 
+    <button class="btn-fab" id="btn-ajout-rapide" type="button" title="Ajouter un animateur, un centre ou une qualification" aria-label="Ajout rapide">+</button>
+
+    <div class="modal-backdrop" id="modal-ajout" hidden>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h2>Ajout rapide</h2>
+                <button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="tabs" id="modal-tabs">
+                    <button class="tab-btn active" data-tab="animateurs" type="button">Animateur</button>
+                    <button class="tab-btn" data-tab="centres" type="button">Centre</button>
+                    <button class="tab-btn" data-tab="qualifications" type="button">Qualification</button>
+                </div>
+                <div class="tab-panel" data-panel="animateurs">
+                    <div id="modal-panel-animateurs"></div>
+                </div>
+                <div class="tab-panel" data-panel="centres" hidden>
+                    <div id="modal-panel-centres"></div>
+                </div>
+                <div class="tab-panel" data-panel="qualifications" hidden>
+                    <div id="modal-panel-qualifications"></div>
+                </div>
+                <p class="empty-note">Besoin de gérer les disponibilités ou l'ordre des centres préférés ? Rendez-vous sur la page <a href="{% url 'gestion' %}">Gestion</a> ou dans l'<a href="/admin/">administration</a>.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/ui.js' %}"></script>
+    <script src="{% static 'js/gestion.js' %}"></script>
     <script src="{% static 'js/planning.js' %}"></script>
 </body>
 </html>

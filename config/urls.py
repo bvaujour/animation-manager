@@ -20,14 +20,32 @@ from animateurs.views import accueil
 from animateurs.views import documents
 from animateurs.views import planning, api_planning
 from animateurs.views import test
-from animateurs.views import api_animateurs
+from animateurs.views import gestion
+from animateurs.views import api_animateurs, api_animateur_detail, api_disponibilites
+from animateurs.views import api_affectation_create, api_affectation_detail
+from animateurs.views import api_centres, api_centre_detail
+from animateurs.views import api_qualifications, api_qualification_detail
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("", accueil, name="accueil"),
     path("documents/", documents, name="documents"),
-	 path("planning/", planning, name="planning"),
-    path("api/planning/", api_planning, name="api_planning"),
+    path("planning/", planning, name="planning"),
+    path("gestion/", gestion, name="gestion"),
     path("test/", test, name="test"),
-	path("api/animateurs/", api_animateurs, name="api_animateurs"),
+
+    path("api/planning/", api_planning, name="api_planning"),
+
+    path("api/animateurs/", api_animateurs, name="api_animateurs"),
+    path("api/animateurs/<int:animateur_id>/", api_animateur_detail, name="api_animateur_detail"),
+    path("api/animateurs/<int:animateur_id>/disponibilites/", api_disponibilites, name="api_disponibilites"),
+
+    path("api/centres/", api_centres, name="api_centres"),
+    path("api/centres/<int:centre_id>/", api_centre_detail, name="api_centre_detail"),
+
+    path("api/qualifications/", api_qualifications, name="api_qualifications"),
+    path("api/qualifications/<int:qualification_id>/", api_qualification_detail, name="api_qualification_detail"),
+
+    path("api/affectations/", api_affectation_create, name="api_affectation_create"),
+    path("api/affectations/<int:affectation_id>/", api_affectation_detail, name="api_affectation_detail"),
 ]

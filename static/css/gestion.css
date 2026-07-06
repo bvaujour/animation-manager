@@ -1,0 +1,30 @@
+.gestion-page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+}
+
+.gestion-page h1 {
+    font-size: 1.6rem;
+}
+
+.page-intro {
+    color: var(--color-text-muted);
+    font-size: 0.92rem;
+    margin-bottom: 22px;
+}
+
+@media (max-width: 600px) {
+    .gestion-page {
+        padding: 20px 14px 60px;
+    }
+
+    .tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+    }
+
+    .tab-btn {
+        white-space: nowrap;
+    }
+}

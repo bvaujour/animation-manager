@@ -1,0 +1,14 @@
+{% load static %}
+<header class="top-nav">
+    <a href="{% url 'accueil' %}" class="brand">
+        <span class="brand-mark">GA</span>
+        Gestion animation
+    </a>
+    <nav>
+        <a href="{% url 'accueil' %}" class="{% if active == 'accueil' %}active{% endif %}">Accueil</a>
+        <a href="{% url 'planning' %}" class="{% if active == 'planning' %}active{% endif %}">Planning</a>
+        <a href="{% url 'gestion' %}" class="{% if active == 'gestion' %}active{% endif %}">Gestion</a>
+        <a href="{% url 'documents' %}" class="{% if active == 'documents' %}active{% endif %}">Documents</a>
+        <a href="/admin/">Administration</a>
+    </nav>
+</header>

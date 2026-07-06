@@ -4,14 +4,19 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestion équipe animation</title>
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
 </head>
 <body>
-    <h1 id="Title">Gestion équipe animation</h1>
-    <a href="/admin">Administration</a>
-    <a href="/documents">Documents</a>
-    <a href="/planning">Planning</a>
+    {% include "partials/_nav.html" with active="accueil" %}
+
+    <main class="page-hero">
+        <h1 id="Title">Gestion équipe animation</h1>
+        <p>Planning des animateurs, centres, qualifications et documents de l'équipe.</p>
+    </main>
+
     <script src="{% static 'js/accueil.js' %}"></script>
 </body>
 </html>

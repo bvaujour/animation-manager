@@ -1,97 +1,255 @@
-:root
-{
-  --color1: #757575;
-  --color2: #e03c00;
-  --color3: rgb(70, 70, 70);
-}
-
-
-html,
-body
-{
+html, body {
     height: 100%;
-    margin: 0;
-    overflow: hidden;
-	background-color: var(--color3);
+    background-color: var(--color-bg);
 }
 
-
-#layout
-{
-    height: 99%;
+#layout {
     display: flex;
-	flex-direction: column;
-    gap: 10px;
-	padding: 2px;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px;
+    min-height: calc(100vh - 58px);
 }
+
+/* --- Panneau animateurs --- */
 
 #animateurs-panel {
-    width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 14px 14px 10px;
+}
+
+#animateurs-panel .section-title {
+    margin-bottom: 10px;
 }
 
 #animateurs-list {
-    display: grid;
-
-    grid-auto-flow: column;
-
-    grid-template-rows: repeat(3, auto);
-
-    gap: 6px;
-
-    width: fit-content;
+    display: flex;
+    gap: 10px 12px;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding: 12px 4px 6px;
 }
+
+#dispo-info {
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+    min-height: 18px;
+    padding: 8px 4px 2px;
+    border-top: 1px dashed var(--color-border);
+    margin-top: 6px;
+}
+
+/* Badge "de colo" : ruban de couleur + oeillet en haut */
 
 .animateur {
-    background-color: var(--color1);
-
-    padding: 4px 10px;
-
-    border-radius: 999px;
-
+    position: relative;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px 9px 16px;
     white-space: nowrap;
-
-    width: fit-content;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    transition: opacity 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
 
-.animateur:hover
-{
-	background-color: rgb(39, 48, 48);
+.animateur::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background: var(--ruban, var(--color-border));
+    border-top-left-radius: var(--radius-sm);
+    border-bottom-left-radius: var(--radius-sm);
 }
 
-#calendars-container
-{
+.animateur::after {
+    content: "";
+    position: absolute;
+    top: -9px;
+    left: 16px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--color-bg);
+    border: 2px solid var(--color-border);
+}
+
+.animateur:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.animateur.selected {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
+.animateur.dimmed {
+    opacity: 0.32;
+}
+
+.anim-name {
+    font-weight: 600;
+    font-size: 0.88rem;
+}
+
+.anim-prefs {
+    display: inline-flex;
+    gap: 3px;
+}
+
+.pref-dot {
+    background-color: var(--c, var(--color-accent));
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    font-size: 9px;
+    line-height: 15px;
+    text-align: center;
+    color: #fff;
+    opacity: 0.55;
+    transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pref-dot.active {
+    opacity: 1;
+    transform: scale(1.3);
+    box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--color-primary);
+}
+
+/* --- Calendriers --- */
+
+#calendars-section {
     flex: 1;
-    /*height: 100%;*/
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-	border: 3px solid rgb(0, 0, 0);
-	background-color: var(--color1);
-	padding: 10px;
-	border-radius: 10px;
+    gap: 12px;
 }
 
-#calendars-container h3
-{
-   background-color: var(--color2);
+#planning-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+}
+
+.toolbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.toolbar-nav .btn {
+    padding: 6px 11px;
+}
+
+.toolbar-label {
+    margin-left: 8px;
+    font-weight: 600;
+    font-size: 0.92rem;
+    text-transform: capitalize;
+}
+
+.toolbar-views {
+    display: flex;
+    gap: 4px;
+}
+
+.toolbar-views .btn {
+    padding: 6px 12px;
+}
+
+.view-btn.active {
+    background-color: var(--color-primary);
+    color: #fff;
+}
+
+#calendars-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .calendar-card {
-    flex: 1;
-    min-height: 0;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 10px 12px 12px;
     display: flex;
     flex-direction: column;
+    height: 320px;
+    box-shadow: var(--shadow-sm);
 }
 
 .calendar-card h3 {
-    margin: 0;
-    font-size: 13px;
-    text-align: center;
+    font-size: 0.95rem;
+    margin: 0 0 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background-color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 16%, white);
+    color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 70%, black);
+    border-left: 4px solid var(--centre-color, var(--color-primary));
 }
 
-.calendar {
+.calendar-card .calendar {
     flex: 1;
     min-height: 0;
+}
+
+/* --- Bouton d'ajout rapide --- */
+
+#btn-ajout-rapide {
+    font-family: var(--font-body);
+}
+
+/* --- Responsive --- */
+
+@media (min-width: 641px) {
+    #layout {
+        flex-direction: row;
+        padding: 18px;
+    }
+
+    #animateurs-panel {
+        width: 250px;
+        flex: 0 0 250px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #animateurs-list {
+        flex-direction: column;
+        align-items: stretch;
+        overflow-y: auto;
+        overflow-x: visible;
+        flex: 1;
+    }
+
+    .calendar-card {
+        height: 360px;
+    }
+}
+
+@media (max-width: 480px) {
+    .toolbar-label {
+        width: 100%;
+        order: 3;
+        margin-left: 0;
+        text-align: center;
+    }
 }

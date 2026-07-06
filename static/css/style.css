@@ -6,3 +6,21 @@ body {
 h1 {
     color: darkblue;
 }
+
+.page-hero {
+    max-width: 640px;
+    margin: 60px auto;
+    padding: 0 20px;
+    text-align: center;
+}
+
+.page-hero p {
+    color: #555;
+    font-size: 1rem;
+}
+
+.page-content {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px 20px 60px;
+}
