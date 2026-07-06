@@ -138,7 +138,7 @@ document.addEventListener("DOMContentLoaded", () =>
 				"Aucun centre."
 			);
 
-			afficherAlerte("alerte-sans-preference", data.alertes.animateurs_sans_preference);
+			afficherAlerte("alerte-sans-preference", data.alertes.animateurs_sans_centre_autorise);
 			afficherAlerte("alerte-sans-disponibilite", data.alertes.animateurs_sans_disponibilite);
 			afficherAlerte("alerte-jamais-affectes", data.alertes.animateurs_jamais_affectes);
 			afficherAlerte("alerte-centres-inutilises", data.alertes.centres_jamais_utilises);

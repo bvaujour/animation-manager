@@ -86,37 +86,27 @@ document.addEventListener("DOMContentLoaded", function ()
 		`).join("");
 	}
 
-	function preferencesInputs(preferences = [])
+	function centresAutorisesInputs(centresAutorises = [])
 	{
 		if (centresPlanning.length === 0)
 		{
-			return '<p class="empty-note">Ajoute d\'abord des centres pour pouvoir définir des préférences.</p>';
+			return '<p class="empty-note">Ajoute d\'abord des centres pour choisir où affecter l\'animateur.</p>';
 		}
 
-		const ordreParCentre = new Map((preferences || []).map((pref) => [Number(pref.id), pref.ordre]));
+		const centresSet = new Set((centresAutorises || []).map((centre) => Number(centre.id ?? centre)));
 
 		return centresPlanning.map((centre) => `
-			<label class="preference-row">
-				<span><span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>${escapeHtml(centre.nom)}</span>
-				<select data-centre-id="${escapeHtml(centre.id)}">
-					<option value="">Pas de préférence</option>
-					${centresPlanning.map((_, index) => {
-						const ordre = index + 1;
-						return `<option value="${ordre}" ${ordreParCentre.get(Number(centre.id)) === ordre ? "selected" : ""}>${ordre}</option>`;
-					}).join("")}
-				</select>
+			<label class="checkbox-chip centre-chip-option">
+				<input type="checkbox" value="${escapeHtml(centre.id)}" ${centresSet.has(Number(centre.id)) ? "checked" : ""}>
+				<span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>
+				${escapeHtml(centre.code || centre.nom)}
 			</label>
 		`).join("");
 	}
 
-	function preferencesDepuisForm(root)
+	function centresAutorisesDepuisForm(root)
 	{
-		return Array.from(root.querySelectorAll("select[data-centre-id]"))
-			.filter((select) => select.value !== "")
-			.map((select) => ({
-				centre_id: parseInt(select.dataset.centreId, 10),
-				ordre: parseInt(select.value, 10),
-			}));
+		return idsCheckboxesCochees(root);
 	}
 
 	function disponibilitesTexte(disponibilites)
@@ -129,14 +119,14 @@ document.addEventListener("DOMContentLoaded", function ()
 		return disponibilites.map((plage) => `${libelleDate(plage.debut)} → ${libelleDate(plage.fin)}`).join(" · ");
 	}
 
-	function preferencesTexte(animateur)
+	function centresAutorisesTexte(animateur)
 	{
-		if (!animateur.centres_preferes || animateur.centres_preferes.length === 0)
+		if (!animateur.centres_autorises || animateur.centres_autorises.length === 0)
 		{
-			return "Aucun centre préféré";
+			return "Aucun centre autorisé";
 		}
 
-		return animateur.centres_preferes.map((pref) => `${pref.ordre}. ${pref.nom}`).join(" · ");
+		return animateur.centres_autorises.map((centre) => centre.nom).join(" · ");
 	}
 
 	function retirerFicheAnimateurSelectionne()
@@ -182,7 +172,7 @@ document.addEventListener("DOMContentLoaded", function ()
 				<p><strong>Tél.</strong><span>${escapeHtml(animateur.telephone || "Non renseigné")}</span></p>
 				<p><strong>Email</strong><span>${escapeHtml(animateur.email || "Non renseigné")}</span></p>
 				<p><strong>Qualifications</strong><span>${escapeHtml(qualifications)}</span></p>
-				<p><strong>Préférences</strong><span>${escapeHtml(preferencesTexte(animateur))}</span></p>
+				<p><strong>Centres possibles</strong><span>${escapeHtml(centresAutorisesTexte(animateur))}</span></p>
 				<p><strong>Disponibilités</strong><span>${escapeHtml(disponibilitesTexte(plages))}</span></p>
 			</div>
 			<div class="selected-actions">
@@ -219,6 +209,11 @@ document.addEventListener("DOMContentLoaded", function ()
 		return animateur.disponibilites.some((plage) => dateDansPlage(dateStr, plage.debut, plage.fin));
 	}
 
+	function animateurAffectableSurCentre(animateur, centre)
+	{
+		return (animateur.centres_autorises || []).some((c) => Number(c.id) === Number(centre.id));
+	}
+
 	function evenementCouvreJour(event, dateStr)
 	{
 		const debut = event.start ? formatDateLocal(event.start) : event.startStr;
@@ -243,9 +238,10 @@ document.addEventListener("DOMContentLoaded", function ()
 		);
 	}
 
-	function animateurPlacableSurJour(animateur, dateStr)
+	function animateurPlacableSurJour(animateur, dateStr, centre = null)
 	{
 		return animateurDisponibleCeJour(animateur, dateStr)
+			&& (!centre || animateurAffectableSurCentre(animateur, centre))
 			&& !animateurDejaAffecteCeJour(animateur.id, dateStr);
 	}
 
@@ -270,7 +266,7 @@ document.addEventListener("DOMContentLoaded", function ()
 		});
 	}
 
-	function surlignerAnimateursDisponibles(dateStr)
+	function surlignerAnimateursDisponibles(dateStr, centre)
 	{
 		document.querySelectorAll(".animateur").forEach((chip) =>
 		{
@@ -278,8 +274,9 @@ document.addEventListener("DOMContentLoaded", function ()
 			if (!animateur) return;
 
 			const disponible = animateurDisponibleCeJour(animateur, dateStr);
+			const affectable = animateurAffectableSurCentre(animateur, centre);
 			const dejaPlace = animateurDejaAffecteCeJour(animateur.id, dateStr);
-			const placable = disponible && !dejaPlace;
+			const placable = disponible && affectable && !dejaPlace;
 
 			chip.classList.toggle("day-available", placable);
 			chip.classList.toggle("day-unavailable", !placable);
@@ -287,6 +284,10 @@ document.addEventListener("DOMContentLoaded", function ()
 			if (!disponible)
 			{
 				chip.dataset.dayHint = "Non disponible ce jour-là";
+			}
+			else if (!affectable)
+			{
+				chip.dataset.dayHint = "Non affectable sur ce centre";
 			}
 			else if (dejaPlace)
 			{
@@ -323,7 +324,7 @@ document.addEventListener("DOMContentLoaded", function ()
 		celluleJourSelectionnee.classList.add("jour-placement-selected");
 		info.dayEl.closest(".calendar-card")?.classList.add("day-pick-active");
 
-		surlignerAnimateursDisponibles(info.dateStr);
+		surlignerAnimateursDisponibles(info.dateStr, centre);
 		afficherToast(`Choisis un animateur disponible pour ${centre.nom} le ${libelleDate(info.dateStr)}.`);
 	}
 
@@ -363,11 +364,15 @@ document.addEventListener("DOMContentLoaded", function ()
 
 		const { date, centre, calendar } = jourSelectionnePourPlacement;
 
-		if (!animateurPlacableSurJour(animateur, date))
+		if (!animateurPlacableSurJour(animateur, date, centre))
 		{
 			if (!animateurDisponibleCeJour(animateur, date))
 			{
 				afficherToast(`${animateur.prenom} n'est pas disponible le ${libelleDate(date)}.`, true);
+			}
+			else if (!animateurAffectableSurCentre(animateur, centre))
+			{
+				afficherToast(`${animateur.prenom} n'est pas affectable sur ${centre.nom}.`, true);
 			}
 			else
 			{
@@ -646,17 +651,17 @@ document.addEventListener("DOMContentLoaded", function ()
 	// Liste des animateurs (badges de type "badge de colo")
 	// -----------------------------------------------------------------
 
-	// Construit le petit badge d'un animateur : ruban coloré = son
-	// centre préféré n°1, pastilles numérotées = tous ses centres
-	// préférés dans l'ordre (voir aussi attacherSurvolCentre).
+	// Construit le petit badge d'un animateur : ruban coloré et pastilles
+	// indiquent les centres où il peut être affecté.
 	function creerChipAnimateur(animateur)
 	{
 		const div = document.createElement("div");
 		div.classList.add("animateur");
 		div.dataset.animateurId = animateur.id;
 
-		const rubanCouleur = animateur.centres_preferes.length > 0
-			? animateur.centres_preferes[0].couleur
+		const centresAutorises = animateur.centres_autorises || [];
+		const rubanCouleur = centresAutorises.length > 0
+			? centresAutorises[0].couleur
 			: "var(--color-border)";
 		div.style.setProperty("--ruban", rubanCouleur);
 
@@ -665,36 +670,27 @@ document.addEventListener("DOMContentLoaded", function ()
 		name.textContent = `${animateur.prenom} ${animateur.nom[0]}.`;
 		div.appendChild(name);
 
-		if (animateur.age !== null && animateur.age !== undefined)
-		{
-			const age = document.createElement("span");
-			age.classList.add("anim-age");
-			age.textContent = `${animateur.age} ans`;
-			div.appendChild(age);
-		}
-
 		const infos = [
-			animateur.age !== null && animateur.age !== undefined ? `${animateur.age} ans` : null,
 			animateur.telephone || null,
 			animateur.email || null,
 		].filter(Boolean).join(" · ");
 		if (infos) div.title = infos;
 
-		const prefs = document.createElement("span");
-		prefs.classList.add("anim-prefs");
+		const centresBadges = document.createElement("span");
+		centresBadges.classList.add("anim-prefs");
 
-		animateur.centres_preferes.forEach((pref) =>
+		centresAutorises.forEach((centre) =>
 		{
 			const dot = document.createElement("span");
 			dot.classList.add("pref-dot");
-			dot.dataset.centre = pref.id;
-			dot.style.setProperty("--c", pref.couleur);
-			dot.title = `${pref.ordre}. ${pref.nom}`;
-			dot.textContent = pref.ordre;
-			prefs.appendChild(dot);
+			dot.dataset.centre = centre.id;
+			dot.style.setProperty("--c", centre.couleur);
+			dot.title = centre.nom;
+			dot.textContent = centre.code || "•";
+			centresBadges.appendChild(dot);
 		});
 
-		div.appendChild(prefs);
+		div.appendChild(centresBadges);
 
 		// Clic = sélectionner/désélectionner cet animateur (voir toggleSelection).
 		div.addEventListener("click", () => toggleSelection(div, animateur));
@@ -814,10 +810,8 @@ document.addEventListener("DOMContentLoaded", function ()
 	}
 
 	// -----------------------------------------------------------------
-	// Survol d'un calendrier : met en avant, pour chaque animateur, son
-	// classement de préférence pour ce centre (et estompe les autres).
-	// Aide visuelle pour savoir "qui préfère le plus ce centre" avant de
-	// le glisser-déposer ou de le sélectionner.
+	// Survol d'un calendrier : met en avant les animateurs affectables
+	// sur ce centre et estompe les autres.
 	// -----------------------------------------------------------------
 
 	function attacherSurvolCentre(card, centreId)
@@ -912,9 +906,9 @@ document.addEventListener("DOMContentLoaded", function ()
 						<div class="checkbox-grid" id="edit-selected-qualifs">${qualificationCheckboxes(a.qualification_ids || [])}</div>
 					</div>
 					<div class="field field-wide">
-						<label>Centres préférés</label>
-						<div class="preferences-grid" id="edit-selected-preferences">${preferencesInputs(a.centres_preferes || [])}</div>
-						<small class="entity-muted">Choisis 1 pour le centre préféré, 2 pour le second, etc.</small>
+						<label>Centres possibles</label>
+						<div class="checkbox-grid" id="edit-selected-centres">${centresAutorisesInputs(a.centres_autorises || [])}</div>
+						<small class="entity-muted">Coche les centres où cet animateur peut être affecté.</small>
 					</div>
 					<p class="form-error" id="edit-selected-error"></p>
 					<div class="edit-actions">
@@ -936,7 +930,7 @@ document.addEventListener("DOMContentLoaded", function ()
 					email: modalEditContent.querySelector("#edit-selected-email").value.trim(),
 					date_naissance: modalEditContent.querySelector("#edit-selected-date-naissance").value || null,
 					qualifications: idsCheckboxesCochees(modalEditContent.querySelector("#edit-selected-qualifs")),
-					preferences: preferencesDepuisForm(modalEditContent.querySelector("#edit-selected-preferences")),
+					centres_autorises: centresAutorisesDepuisForm(modalEditContent.querySelector("#edit-selected-centres")),
 				};
 
 				if (!payload.prenom || !payload.nom)
@@ -1054,7 +1048,7 @@ document.addEventListener("DOMContentLoaded", function ()
 	// Placement automatique de la semaine affichée (lundi -> vendredi).
 	// On ouvre d'abord une popup pour choisir le nombre d'animateurs par
 	// jour et par centre, puis le serveur vide la semaine et reconstruit
-	// les affectations en respectant disponibilités et préférences.
+	// les affectations en respectant disponibilités et centres autorisés.
 	const btnAutoSemaine = document.getElementById("btn-auto-semaine");
 
 	// Lance réellement le remplissage une fois les effectifs choisis.

@@ -186,10 +186,13 @@ def _animateur_en_conflit(animateur, debut, fin, exclude_id=None):
     return conflits.exists()
 
 
-def _valider_affectation(animateur, debut, fin, exclude_id=None):
+def _valider_affectation(animateur, debut, fin, centre=None, exclude_id=None):
     """Point d'entrée unique pour valider une affectation avant de
     l'enregistrer (création ou modification). Renvoie un message d'erreur
     (str) si l'affectation n'est pas valide, ou None si tout est ok."""
+
+    if centre is not None and not animateur.preferences.filter(centre=centre).exists():
+        return "Cet animateur n'est pas affectable sur ce centre."
 
     if _animateur_en_conflit(animateur, debut, fin, exclude_id=exclude_id):
         return "Cet animateur a déjà une affectation ce jour-là, dans un centre ou un autre."
@@ -206,8 +209,7 @@ def _valider_affectation(animateur, debut, fin, exclude_id=None):
 
 def _animateur_to_dict(animateur):
     """Sérialise un animateur avec ses qualifications et ses centres
-    préférés (triés par ordre de préférence grâce au Meta.ordering de
-    PreferenceCentre)."""
+    où il peut être affecté."""
 
     return {
         "id": animateur.id,
@@ -225,13 +227,12 @@ def _animateur_to_dict(animateur):
             qualification.nom
             for qualification in animateur.qualifications.all()
         ],
-        "centres_preferes": [
+        "centres_autorises": [
             {
                 "id": preference.centre_id,
                 "nom": preference.centre.nom,
                 "code": preference.centre.code,
                 "couleur": preference.centre.couleur,
-                "ordre": preference.ordre,
             }
             for preference in animateur.preferences.all()
         ],
@@ -312,64 +313,52 @@ def _nettoyer_disponibilites_tous_animateurs():
         _fusionner_et_nettoyer_disponibilites(animateur)
 
 
-def _normaliser_preferences(payload):
-    """Valide et normalise les centres préférés envoyés par le front.
+def _normaliser_centres_autorises(payload):
+    """Valide les centres où l'animateur peut être affecté.
 
-    Format attendu :
-        "preferences": [
-            {"centre_id": 1, "ordre": 1},
-            {"centre_id": 2, "ordre": 2}
-        ]
+    Format attendu côté front :
+        "centres_autorises": [1, 2, 3]
 
-    Renvoie None si le champ n'est pas présent dans la requête (donc ne
-    pas modifier les préférences en PATCH), ou une liste normalisée de
-    dictionnaires si le champ est présent.
+    Pour compatibilité avec d'anciennes versions du front, on accepte aussi
+    encore "preferences": [{"centre_id": 1}, ...], mais l'ordre est ignoré.
     """
 
-    if "preferences" not in payload:
+    if "centres_autorises" in payload:
+        centres_raw = payload.get("centres_autorises") or []
+    elif "preferences" in payload:
+        centres_raw = [item.get("centre_id") for item in (payload.get("preferences") or [])]
+    else:
         return None, None
 
-    preferences_raw = payload.get("preferences") or []
+    if not isinstance(centres_raw, list):
+        return None, "Les centres autorisés sont invalides."
 
-    if not isinstance(preferences_raw, list):
-        return None, "Les centres préférés sont invalides."
-
-    preferences = []
+    centres_ids = []
     centres_vus = set()
-    ordres_vus = set()
 
-    for item in preferences_raw:
+    for centre_raw in centres_raw:
         try:
-            centre_id = int(item["centre_id"])
-            ordre = int(item["ordre"])
-        except (KeyError, TypeError, ValueError):
-            return None, "Les centres préférés sont invalides."
-
-        if ordre < 1:
-            return None, "L'ordre d'un centre préféré doit être supérieur ou égal à 1."
+            centre_id = int(centre_raw)
+        except (TypeError, ValueError):
+            return None, "Les centres autorisés sont invalides."
 
         if centre_id in centres_vus:
-            return None, "Un même centre ne peut pas apparaître deux fois dans les préférences."
-
-        if ordre in ordres_vus:
-            return None, "Deux centres préférés ne peuvent pas avoir le même ordre."
+            return None, "Un même centre ne peut pas être ajouté deux fois."
 
         centres_vus.add(centre_id)
-        ordres_vus.add(ordre)
-        preferences.append({"centre_id": centre_id, "ordre": ordre})
+        centres_ids.append(centre_id)
 
     centres_existants = set(Centre.objects.filter(pk__in=centres_vus).values_list("id", flat=True))
     if centres_vus != centres_existants:
-        return None, "Un des centres préférés est introuvable."
+        return None, "Un des centres autorisés est introuvable."
 
-    preferences.sort(key=lambda pref: pref["ordre"])
-    return preferences, None
+    return centres_ids, None
 
 
-def _appliquer_preferences(animateur, preferences):
-    """Remplace entièrement l'ordre des centres préférés d'un animateur."""
+def _appliquer_centres_autorises(animateur, centres_ids):
+    """Remplace entièrement les centres où l'animateur peut être affecté."""
 
-    if preferences is None:
+    if centres_ids is None:
         return
 
     animateur.preferences.all().delete()
@@ -377,17 +366,16 @@ def _appliquer_preferences(animateur, preferences):
     PreferenceCentre.objects.bulk_create([
         PreferenceCentre(
             animateur=animateur,
-            centre_id=pref["centre_id"],
-            ordre=pref["ordre"],
+            centre_id=centre_id,
         )
-        for pref in preferences
+        for centre_id in centres_ids
     ])
 
 
 @require_http_methods(["GET", "POST"])
 def api_animateurs(request):
     """GET : liste tous les animateurs.
-    POST : crée un animateur ({"prenom", "nom", "telephone", "email", "date_naissance", "qualifications": [ids], "preferences": [{centre_id, ordre}]})."""
+    POST : crée un animateur ({"prenom", "nom", "telephone", "email", "date_naissance", "qualifications": [ids], "centres_autorises": [ids]})."""
 
     if request.method == "GET":
         # Nettoyage opportuniste : on supprime les anciennes disponibilités
@@ -396,7 +384,7 @@ def api_animateurs(request):
 
         # prefetch_related évite le classique problème "N+1 requêtes" :
         # sans ça, chaque animateur referait une requête pour ses
-        # qualifications et une pour ses préférences de centre.
+        # qualifications et une pour ses centres autorisés.
         animateurs = Animateur.objects.prefetch_related(
             "qualifications",
             "preferences__centre",
@@ -415,9 +403,9 @@ def api_animateurs(request):
         date_naissance_raw = payload.get("date_naissance") or None
         date_naissance = parse_date(date_naissance_raw) if date_naissance_raw else None
         qualification_ids = payload.get("qualifications", [])
-        preferences, erreur_preferences = _normaliser_preferences(payload)
-        if erreur_preferences:
-            return JsonResponse({"error": erreur_preferences}, status=400)
+        centres_autorises, erreur_centres = _normaliser_centres_autorises(payload)
+        if erreur_centres:
+            return JsonResponse({"error": erreur_centres}, status=400)
 
         if not prenom or not nom:
             return JsonResponse({"error": "Le prénom et le nom sont obligatoires."}, status=400)
@@ -443,7 +431,7 @@ def api_animateurs(request):
                 Qualification.objects.filter(pk__in=qualification_ids)
             )
 
-        _appliquer_preferences(animateur, preferences)
+        _appliquer_centres_autorises(animateur, centres_autorises)
 
     animateur = Animateur.objects.prefetch_related(
         "qualifications",
@@ -457,8 +445,8 @@ def api_animateurs(request):
 @require_http_methods(["GET", "PATCH", "DELETE"])
 def api_animateur_detail(request, animateur_id):
     """GET : renvoie un animateur.
-    PATCH : modifie un ou plusieurs champs de l'animateur, y compris ses qualifications et ses centres préférés.
-    DELETE : supprime l'animateur et, par cascade, son planning/disponibilités/préférences."""
+    PATCH : modifie un ou plusieurs champs de l'animateur, y compris ses qualifications et ses centres autorisés.
+    DELETE : supprime l'animateur et, par cascade, son planning/disponibilités/centres autorisés."""
 
     try:
         animateur = Animateur.objects.prefetch_related(
@@ -502,9 +490,9 @@ def api_animateur_detail(request, animateur_id):
             return JsonResponse({"error": "Le prénom et le nom sont obligatoires."}, status=400)
 
         qualification_ids = payload.get("qualifications", None)
-        preferences, erreur_preferences = _normaliser_preferences(payload)
-        if erreur_preferences:
-            return JsonResponse({"error": erreur_preferences}, status=400)
+        centres_autorises, erreur_centres = _normaliser_centres_autorises(payload)
+        if erreur_centres:
+            return JsonResponse({"error": erreur_centres}, status=400)
 
     except (TypeError, AttributeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
@@ -517,7 +505,7 @@ def api_animateur_detail(request, animateur_id):
                 Qualification.objects.filter(pk__in=qualification_ids)
             )
 
-        _appliquer_preferences(animateur, preferences)
+        _appliquer_centres_autorises(animateur, centres_autorises)
 
     animateur = Animateur.objects.prefetch_related(
         "qualifications",
@@ -621,7 +609,7 @@ def api_affectation_create(request):
     except (KeyError, ValueError, TypeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
-    erreur = _valider_affectation(animateur, debut, fin)
+    erreur = _valider_affectation(animateur, debut, fin, centre=centre)
 
     if erreur:
         return JsonResponse({"error": erreur}, status=409)
@@ -675,6 +663,7 @@ def api_affectation_detail(request, affectation_id):
         affectation.animateur,
         affectation.debut,
         affectation.fin,
+        centre=affectation.centre,
         exclude_id=affectation.id,
     )
 
@@ -784,7 +773,7 @@ def api_centres(request):
 def api_centre_detail(request, centre_id):
     """PATCH : met à jour un ou plusieurs champs d'un centre (utilisé pour
     ajuster l'effectif souhaité sans avoir à le recréer).
-    DELETE : supprime le centre (et, par cascade, ses préférences/
+    DELETE : supprime le centre (et, par cascade, ses centres autorisés/
     affectations liées)."""
 
     try:
@@ -1006,7 +995,7 @@ def api_recapitulatif(request):
 
     # --- Signaux à surveiller (toujours sur l'ensemble des données, sans
     # tenir compte du filtre de période choisi sur la page) ---
-    animateurs_sans_preference = [
+    animateurs_sans_centre_autorise = [
         f"{prenom} {nom}"
         for prenom, nom in Animateur.objects.filter(preferences__isnull=True).values_list("prenom", "nom")
     ]
@@ -1036,7 +1025,7 @@ def api_recapitulatif(request):
         "animateurs": animateurs_data,
         "centres": centres_data,
         "alertes": {
-            "animateurs_sans_preference": animateurs_sans_preference,
+            "animateurs_sans_centre_autorise": animateurs_sans_centre_autorise,
             "animateurs_sans_disponibilite": animateurs_sans_disponibilite,
             "animateurs_jamais_affectes": animateurs_jamais_affectes,
             "centres_jamais_utilises": centres_jamais_utilises,
@@ -1124,7 +1113,7 @@ def api_planning_auto(request):
       1. faire travailler un MAXIMUM d'animateurs différents (au moins une
          fois chacun quand c'est possible) ;
       2. équilibrer le nombre de jours travaillés entre les animateurs ;
-      3. respecter les centres préférés à effectif égal.
+      3. respecter les centres autorisés à effectif égal.
 
     Contraintes toujours respectées :
       - un animateur ne travaille que les jours où il est disponible (un
@@ -1175,18 +1164,16 @@ def api_planning_auto(request):
             valeur = centre.effectif_cible
         return max(0, valeur)
 
-    # --- Préférences : rang par (animateur, centre) ; 99 = pas de préférence ---
-    preference_rang = {
-        (pref.animateur_id, pref.centre_id): pref.ordre
-        for pref in PreferenceCentre.objects.filter(
-            animateur__in=animateurs,
-            centre__in=centres,
-        )
-    }
+    # --- Centres autorisés : un animateur ne peut être placé que sur ces centres ---
+    centres_autorises = {}
+    for pref in PreferenceCentre.objects.filter(
+        animateur__in=animateurs,
+        centre__in=centres,
+    ):
+        centres_autorises.setdefault(pref.animateur_id, set()).add(pref.centre_id)
 
-    def score_preference(animateur, centre):
-        """Plus le score est petit, meilleur est le centre pour cet animateur."""
-        return preference_rang.get((animateur.id, centre.id), 99)
+    def affectable_sur_centre(animateur, centre):
+        return centre.id in centres_autorises.get(animateur.id, set())
 
     # --- Disponibilité évaluée EN MÉMOIRE (grâce au prefetch), sans requête
     #     par jour. Règle : aucune plage renseignée => disponible partout. ---
@@ -1224,7 +1211,7 @@ def api_planning_auto(request):
         def peut_placer(animateur, slot):
             if animateur.id in occupe_ce_jour[slot["jour"]]:
                 return False
-            return disponible(animateur, slot["jour"])
+            return disponible(animateur, slot["jour"]) and affectable_sur_centre(animateur, slot["centre"])
 
         def placer(animateur, slot):
             slot["animateur"] = animateur
@@ -1242,8 +1229,8 @@ def api_planning_auto(request):
                 continue  # jamais disponible cette semaine : rien à faire
 
             meilleurs = [
-                # préférence, puis jour le moins rempli (pour étaler l'équipe)
-                (score_preference(animateur, slot["centre"]), len(occupe_ce_jour[slot["jour"]]), index)
+                # jour le moins rempli (pour étaler l'équipe)
+                (len(occupe_ce_jour[slot["jour"]]), index)
                 for index, slot in enumerate(slots)
                 if slot["animateur"] is None and peut_placer(animateur, slot)
             ]
@@ -1252,13 +1239,13 @@ def api_planning_auto(request):
                 placer(animateur, slots[meilleurs[0][2]])
 
         # --- Passe 2 : remplir les places restantes en équilibrant la charge
-        # (le moins de jours déjà travaillés d'abord), préférence en départage. ---
+        # (le moins de jours déjà travaillés d'abord), centre autorisé en départage. ---
         for slot in slots:
             if slot["animateur"] is not None:
                 continue
 
             candidats = [
-                (jours_travailles[a.id], score_preference(a, slot["centre"]), a.prenom, a.nom, a)
+                (jours_travailles[a.id], a.prenom, a.nom, a)
                 for a in animateurs
                 if peut_placer(a, slot)
             ]

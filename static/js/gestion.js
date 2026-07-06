@@ -59,7 +59,7 @@ const GestionApp = (function ()
 		form.querySelector("#anim-email").value = "";
 		form.querySelector("#anim-date-naissance").value = "";
 		form.querySelectorAll("#anim-qualifs input:checked").forEach((el) => { el.checked = false; });
-		form.querySelectorAll("#anim-preferences select").forEach((el) => { el.value = ""; });
+		form.querySelectorAll("#anim-centres input:checked").forEach((el) => { el.checked = false; });
 	}
 
 	function qualificationCheckboxes(qualifications, cochees = [])
@@ -80,37 +80,27 @@ const GestionApp = (function ()
 	}
 
 
-	function preferencesInputs(centres, preferences = [])
+	function centresAutorisesInputs(centres, centresAutorises = [])
 	{
 		if (!centres.length)
 		{
-			return '<p class="empty-note">Ajoute d\'abord des centres pour pouvoir définir des préférences.</p>';
+			return '<p class="empty-note">Ajoute d\'abord des centres pour pouvoir choisir où affecter l\'animateur.</p>';
 		}
 
-		const ordreParCentre = new Map((preferences || []).map((pref) => [Number(pref.id), pref.ordre]));
+		const centresSet = new Set((centresAutorises || []).map((centre) => Number(centre.id ?? centre)));
 
 		return centres.map((centre) => `
-			<label class="preference-row">
-				<span><span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>${escapeHtml(centre.nom)}</span>
-				<select data-centre-id="${escapeHtml(centre.id)}">
-					<option value="">Pas de préférence</option>
-					${centres.map((_, index) => {
-						const ordre = index + 1;
-						return `<option value="${ordre}" ${ordreParCentre.get(Number(centre.id)) === ordre ? "selected" : ""}>${ordre}</option>`;
-					}).join("")}
-				</select>
+			<label class="checkbox-chip centre-chip-option">
+				<input type="checkbox" value="${escapeHtml(centre.id)}" ${centresSet.has(Number(centre.id)) ? "checked" : ""}>
+				<span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>
+				${escapeHtml(centre.code || centre.nom)}
 			</label>
 		`).join("");
 	}
 
-	function preferencesDepuisForm(root)
+	function centresAutorisesDepuisForm(root)
 	{
-		return Array.from(root.querySelectorAll("select[data-centre-id]"))
-			.filter((select) => select.value !== "")
-			.map((select) => ({
-				centre_id: parseInt(select.dataset.centreId, 10),
-				ordre: parseInt(select.value, 10),
-			}));
+		return idsCheckboxesCochees(root);
 	}
 
 	// ------------------------------------------------------------------
@@ -362,7 +352,7 @@ const GestionApp = (function ()
 					actions.appendChild(bouton("Modifier", "btn btn-ghost", () => ouvrirEdition(c, row)));
 					actions.appendChild(bouton("&times; Supprimer", "btn-danger", () =>
 					{
-						if (!confirm(`Supprimer le centre "${c.nom}" ? Ses affectations et préférences liées seront aussi supprimées.`)) return;
+						if (!confirm(`Supprimer le centre "${c.nom}" ? Ses affectations et centres autorisés liés seront aussi supprimées.`)) return;
 
 						apiFetch(`/api/centres/${escapeHtml(c.id)}/`, { method: "DELETE" })
 							.then(() =>
@@ -450,9 +440,9 @@ const GestionApp = (function ()
 					<div class="checkbox-grid" id="anim-qualifs"></div>
 				</div>
 				<div class="field field-wide">
-					<label>Centres préférés</label>
-					<div class="preferences-grid" id="anim-preferences"></div>
-					<small class="entity-muted">Choisis 1 pour le centre préféré, 2 pour le second, etc. Chaque rang ne peut être utilisé qu'une fois.</small>
+					<label>Centres possibles</label>
+					<div class="checkbox-grid" id="anim-centres"></div>
+					<small class="entity-muted">Coche les centres où cet animateur peut être affecté.</small>
 				</div>
 				<p class="form-error" id="anim-error"></p>
 				<button class="btn btn-primary" id="anim-submit" type="button">Ajouter</button>
@@ -467,7 +457,7 @@ const GestionApp = (function ()
 		const emailEl = container.querySelector("#anim-email");
 		const dateNaissanceEl = container.querySelector("#anim-date-naissance");
 		const qualifsEl = container.querySelector("#anim-qualifs");
-		const preferencesEl = container.querySelector("#anim-preferences");
+		const centresEl = container.querySelector("#anim-centres");
 		const errorEl = container.querySelector("#anim-error");
 
 		function chargerCheckboxesQualifs()
@@ -480,12 +470,12 @@ const GestionApp = (function ()
 			});
 		}
 
-		function chargerPreferencesCentres()
+		function chargerCentresAutorises()
 		{
 			return apiFetch("/api/centres/").then((data) =>
 			{
 				centresCache = data;
-				preferencesEl.innerHTML = preferencesInputs(data);
+				centresEl.innerHTML = centresAutorisesInputs(data);
 				return data;
 			});
 		}
@@ -522,9 +512,9 @@ const GestionApp = (function ()
 						</div>
 					</div>
 					<div class="field edit-qualifs-field">
-						<label>Centres préférés</label>
-						<div class="preferences-grid edit-anim-preferences">
-							${preferencesInputs(centresCache, a.centres_preferes || [])}
+						<label>Centres possibles</label>
+						<div class="checkbox-grid edit-anim-centres">
+							${centresAutorisesInputs(centresCache, a.centres_autorises || [])}
 						</div>
 					</div>
 					<p class="form-error edit-error"></p>
@@ -541,7 +531,7 @@ const GestionApp = (function ()
 				const email = champValeur(row, ".edit-anim-email");
 				const date_naissance = row.querySelector(".edit-anim-date-naissance").value || null;
 				const qualifications = idsCheckboxesCochees(row.querySelector(".edit-anim-qualifs"));
-				const preferences = preferencesDepuisForm(row.querySelector(".edit-anim-preferences"));
+				const centres_autorises = centresAutorisesDepuisForm(row.querySelector(".edit-anim-centres"));
 
 				if (!prenom || !nom)
 				{
@@ -551,7 +541,7 @@ const GestionApp = (function ()
 
 				apiFetch(`/api/animateurs/${a.id}/`, {
 					method: "PATCH",
-					body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications, preferences }),
+					body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications, centres_autorises }),
 				}).then(() =>
 				{
 					afficherToast("Animateur modifié.");
@@ -656,7 +646,7 @@ const GestionApp = (function ()
 						a.telephone || null,
 						a.email || null,
 						a.qualifications && a.qualifications.length ? a.qualifications.join(", ") : null,
-					a.centres_preferes && a.centres_preferes.length ? `Préférences : ${a.centres_preferes.map((p) => `${p.ordre}. ${p.code}`).join(" / ")}` : null,
+					a.centres_autorises && a.centres_autorises.length ? `Centres : ${a.centres_autorises.map((c) => c.code).join(" / ")}` : null,
 					].filter(Boolean).join(" · ");
 
 					const row = document.createElement("div");
@@ -702,7 +692,7 @@ const GestionApp = (function ()
 			const email = emailEl.value.trim();
 			const date_naissance = dateNaissanceEl.value || null;
 			const qualifications = idsCheckboxesCochees(qualifsEl);
-			const preferences = preferencesDepuisForm(preferencesEl);
+			const centres_autorises = centresAutorisesDepuisForm(centresEl);
 
 			if (!prenom || !nom)
 			{
@@ -712,7 +702,7 @@ const GestionApp = (function ()
 
 			apiFetch("/api/animateurs/", {
 				method: "POST",
-				body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications, preferences }),
+				body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications, centres_autorises }),
 			})
 				.then((nouveau) =>
 				{
@@ -724,8 +714,8 @@ const GestionApp = (function ()
 				.catch((err) => { errorEl.textContent = erreurMessage(err, "Impossible d'ajouter cet animateur."); });
 		});
 
-		Promise.all([chargerCheckboxesQualifs(), chargerPreferencesCentres()]).then(charger);
-		return { charger, chargerCheckboxesQualifs, chargerPreferencesCentres };
+		Promise.all([chargerCheckboxesQualifs(), chargerCentresAutorises()]).then(charger);
+		return { charger, chargerCheckboxesQualifs, chargerCentresAutorises };
 	}
 
 	return { mountAnimateurs, mountCentres, mountQualifications };

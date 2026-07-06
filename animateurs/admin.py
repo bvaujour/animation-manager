@@ -4,9 +4,8 @@ Configuration de l'admin Django pour l'app "animateurs".
 La popup d'ajout rapide (planning) et la page /gestion/ couvrent les
 besoins courants (ajouter/supprimer un animateur, un centre, une
 qualification). Cet admin reste utile pour tout ce qu'elles ne
-couvrent pas encore : réordonner les préférences de centre d'un
-animateur, saisir ses disponibilités, ou consulter/filtrer l'historique
-des affectations.
+couvrent pas encore : saisir les centres autorisés, les disponibilités,
+ou consulter/filtrer l'historique des affectations.
 """
 
 from django.contrib import admin
@@ -35,14 +34,14 @@ class CentreAdmin(admin.ModelAdmin):
 
 # --- Inlines affichés directement sur la fiche d'un animateur ---
 # (plutôt que d'avoir à naviguer vers un autre écran pour chaque
-# préférence de centre ou chaque plage de disponibilité)
+# centre autorisé de centre ou chaque plage de disponibilité)
 
 class PreferenceCentreInline(admin.TabularInline):
-    """Permet d'ajouter/réordonner les centres préférés d'un animateur
+    """Permet d'ajouter les centres où l'animateur peut être affecté
     directement depuis sa fiche, sans passer par un écran séparé."""
     model = PreferenceCentre
     extra = 1
-    ordering = ["ordre"]
+    ordering = ["centre__nom"]
 
 
 class DisponibiliteInline(admin.TabularInline):

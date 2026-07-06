@@ -98,7 +98,7 @@
     }
 }
 
-/* --- Centres préférés dans les formulaires animateur --- */
+/* --- Centres possibles dans les formulaires animateur --- */
 .field-wide {
     grid-column: 1 / -1;
 }

@@ -12,9 +12,9 @@ Vue d'ensemble des tables et de leurs relations :
 - Un Animateur a des Qualifications (ManyToMany direct, pas de table
   intermédiaire explicite car on n'a pas besoin d'infos en plus comme
   une date d'obtention).
-- PreferenceCentre relie un Animateur à un Centre avec un ordre de
-  préférence (1 = préféré). Table intermédiaire explicite (et non un
-  simple ManyToMany) car on a besoin de stocker cet ordre.
+- PreferenceCentre relie un Animateur aux Centres où il peut être affecté.
+  Le nom historique du modèle est conservé pour éviter de casser les
+  migrations existantes, mais il ne s'agit plus d'un ordre de centre autorisé.
 - Disponibilite : plages de dates où un animateur est disponible pour
   travailler. Voir la docstring du modèle plus bas pour la règle
   "par défaut disponible" appliquée quand il n'y a aucune plage.
@@ -57,7 +57,7 @@ class Animateur(models.Model):
 
     # ManyToMany "simple" (pas de table intermédiaire personnalisée) car
     # on n'a besoin d'aucune information supplémentaire sur la relation
-    # elle-même (contrairement à PreferenceCentre qui a un `ordre`).
+    # elle-même.
     qualifications = models.ManyToManyField(Qualification, blank=True)
 
     @property
@@ -111,12 +111,12 @@ class Centre(models.Model):
 
 
 class PreferenceCentre(models.Model):
-    """Table intermédiaire explicite entre Animateur et Centre : indique
-    l'ordre de préférence d'un animateur pour un centre donné (1 =
-    centre préféré, 2 = deuxième choix, etc.).
+    """Centre dans lequel un animateur peut être affecté.
 
-    Utilisée pour afficher les badges numérotés à côté du nom de
-    l'animateur dans le planning et aider visuellement au choix manuel.
+    Le nom historique `PreferenceCentre` est conservé pour ne pas
+    renommer toute la table existante, mais fonctionnellement ce modèle
+    représente maintenant une simple autorisation : si une ligne existe,
+    l'animateur peut être placé sur ce centre.
     """
 
     animateur = models.ForeignKey(
@@ -129,29 +129,20 @@ class PreferenceCentre(models.Model):
         on_delete=models.CASCADE,
         related_name="preferences",
     )
-    ordre = models.PositiveSmallIntegerField(
-        help_text="1 = centre préféré",
-    )
 
     class Meta:
-        ordering = ["ordre"]
+        ordering = ["centre__nom"]
         constraints = [
             # Un animateur ne peut pas avoir deux fois le même centre
-            # dans ses préférences...
+            # dans ses centres autorisés.
             models.UniqueConstraint(
                 fields=["animateur", "centre"],
                 name="unique_animateur_centre",
             ),
-            # ... ni deux centres au même rang de préférence (ex: deux
-            # centres classés tous les deux "1").
-            models.UniqueConstraint(
-                fields=["animateur", "ordre"],
-                name="unique_animateur_ordre",
-            ),
         ]
 
     def __str__(self):
-        return f"{self.animateur} - {self.ordre}. {self.centre}"
+        return f"{self.animateur} peut être affecté à {self.centre}"
 
 
 class Disponibilite(models.Model):
