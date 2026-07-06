@@ -62,14 +62,24 @@ AWS_QUERYSTRING_AUTH = False
 AWS_S3_CUSTOM_DOMAIN = "qarqqpbstjhcjnmiyiye.supabase.co/storage/v1/object/public/Documents"
 AWS_LOCATION = ""
 
+# Stockage des documents uploadés : S3 (Supabase) si les clés sont
+# configurées, sinon stockage local dans MEDIA_ROOT pour pouvoir
+# travailler sans compte Supabase.
+if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+    _default_storage = {"BACKEND": "storages.backends.s3.S3Storage"}
+else:
+    _default_storage = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
+
 STORAGES = {
-    "default": {
-        "BACKEND": "storages.backends.s3.S3Storage",
-    },
+    "default": _default_storage,
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
+# Utilisé uniquement par le stockage local ci-dessus (ignoré avec S3).
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -105,19 +115,33 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT"),
-        "OPTIONS": {
-            "sslmode": "require",
-        },
+# Si les variables de connexion Postgres sont présentes (cas prod sur
+# Render, ou dev avec un .env valide), on les utilise. Sinon on retombe
+# automatiquement sur une base SQLite locale : ça permet de cloner le
+# projet et de lancer `runserver` sans avoir à configurer Supabase, et
+# ça évite le plantage au démarrage quand le .env est absent ou que le
+# projet Supabase (offre gratuite) est en pause.
+if os.getenv("DB_HOST"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST"),
+            "PORT": os.getenv("DB_PORT"),
+            "OPTIONS": {
+                "sslmode": "require",
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 
 # Password validation

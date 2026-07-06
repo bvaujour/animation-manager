@@ -79,7 +79,7 @@ function addDays(dateStr, days) {
 // fuseau horaire en avance sur UTC (la France en été, UTC+2), minuit
 // local devient 22h la veille en UTC : on obtient donc la date du
 // DIMANCHE au lieu du LUNDI. C'est exactement le bug qui empêchait le
-// vendredi d'être rempli par le placement automatique. Cette fonction
+// vendredi d'être décalé d'un jour. Cette fonction
 // est la version correcte à utiliser pour formater une date "calendaire"
 // construite/manipulée en heure locale (par opposition à addDays()
 // ci-dessus, qui part d'une chaîne et reste volontairement en UTC).

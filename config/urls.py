@@ -9,6 +9,8 @@ rester simple). Organisation :
     qualifications / planning / récapitulatif), dans le même ordre que
     dans animateurs/views.py pour s'y retrouver facilement.
 """
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
 
@@ -67,7 +69,7 @@ urlpatterns = [
     path("api/qualifications/", api_qualifications, name="api_qualifications"),
     path("api/qualifications/<int:qualification_id>/", api_qualification_detail, name="api_qualification_detail"),
 
-    # --- API : planning (lecture + actions groupées "vider"/"auto") ---
+    # --- API : planning (lecture + action groupée "vider" + auto) ---
     path("api/planning/", api_planning, name="api_planning"),
     path("api/planning/plage/", api_planning_plage, name="api_planning_plage"),
     path("api/planning/auto/", api_planning_auto, name="api_planning_auto"),
@@ -83,3 +85,9 @@ urlpatterns = [
     path("api/documents/", api_documents, name="api_documents"),
     path("api/documents/<int:document_id>/", api_document_detail, name="api_document_detail"),
 ]
+
+# En développement avec le stockage local (pas de S3 Supabase configuré),
+# Django doit servir lui-même les fichiers uploadés depuis MEDIA_ROOT.
+# En production (S3) ceci est sans effet car les URLs pointent vers S3.
+if settings.DEBUG and getattr(settings, "MEDIA_ROOT", None):
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

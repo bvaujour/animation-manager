@@ -38,38 +38,16 @@
                     <button class="btn btn-ghost view-btn" data-view="dayGridMonth" type="button">Mois</button>
                 </div>
                 <div class="toolbar-actions">
-                    <button id="btn-auto-placement" class="btn btn-accent" type="button">Placer automatiquement</button>
-                    <button id="btn-vider-semaine" class="btn btn-danger-solid" type="button">Vider la semaine</button>
+                    <button id="btn-auto-semaine" class="btn btn-primary" type="button">Remplir auto</button><button id="btn-vider-semaine" class="btn btn-danger-solid" type="button">Vider la semaine</button>
                 </div>
             </div>
 
-
-            <div id="selected-animateur-card" class="selected-animateur-card selected-animateur-card-wide empty">
-                <p class="selected-title">Aucun animateur sélectionné</p>
-                <p class="selected-help">Clique sur un animateur pour voir ses infos, modifier sa fiche ou ajouter une disponibilité.</p>
-            </div>
             <div id="calendars-container"></div>
 
         </section>
 
     </main>
 
-
-    <div class="modal-backdrop" id="modal-auto" hidden>
-        <div class="modal-box modal-box-large">
-            <div class="modal-header">
-                <h2>Placement automatique de la semaine</h2>
-                <button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div id="modal-auto-centres"></div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-ghost" data-modal-close type="button">Annuler</button>
-                <button id="btn-auto-confirmer" class="btn btn-accent" type="button">Lancer le placement</button>
-            </div>
-        </div>
-    </div>
 
     <div class="modal-backdrop" id="modal-edit-animateur" hidden>
         <div class="modal-box">
@@ -91,6 +69,18 @@
             </div>
             <div class="modal-body">
                 <div id="modal-dispo-animateur-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="modal-auto-remplissage" hidden>
+        <div class="modal-box modal-box-small">
+            <div class="modal-header">
+                <h2>Remplissage automatique</h2>
+                <button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="modal-auto-remplissage-content"></div>
             </div>
         </div>
     </div>

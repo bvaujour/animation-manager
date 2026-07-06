@@ -31,8 +31,7 @@ from django.utils import timezone
 
 class Qualification(models.Model):
     """Un diplôme/une compétence qu'un animateur peut avoir (ex: BAFA,
-    permis B, PSC1...). Purement déclaratif, pas encore utilisé pour
-    contraindre le placement automatique."""
+    permis B, PSC1...). Purement déclaratif pour l’instant."""
 
     nom = models.CharField(max_length=100)
 
@@ -101,7 +100,7 @@ class Centre(models.Model):
 
     effectif_cible = models.PositiveSmallIntegerField(
         default=1,
-        help_text="Nombre d'animateurs souhaités par jour dans ce centre (utilisé par le placement automatique)",
+        help_text="Nombre d'animateurs souhaités par jour dans ce centre",
     )
 
     class Meta:
@@ -116,12 +115,8 @@ class PreferenceCentre(models.Model):
     l'ordre de préférence d'un animateur pour un centre donné (1 =
     centre préféré, 2 = deuxième choix, etc.).
 
-    Utilisée pour :
-      - afficher les badges numérotés à côté du nom de l'animateur dans
-        le planning ;
-      - départager les candidats lors du placement automatique
-        (api_planning_auto), qui préfère toujours l'animateur classé le
-        plus haut pour un centre donné, à charge de travail égale.
+    Utilisée pour afficher les badges numérotés à côté du nom de
+    l'animateur dans le planning et aider visuellement au choix manuel.
     """
 
     animateur = models.ForeignKey(

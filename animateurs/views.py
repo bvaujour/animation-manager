@@ -139,26 +139,6 @@ def _jours_couverts(debut, fin):
     return jours or [debut.date()]
 
 
-def _jours_ouvres(date_debut, date_fin):
-    """Renvoie la liste des jours ouvrés (lundi à vendredi, on ignore
-    samedi et dimanche) entre deux dates incluses.
-
-    Utilisé par le placement automatique. `date_debut`/`date_fin` sont ici
-    des objets `date` (pas des datetimes) et les deux bornes sont incluses.
-    """
-
-    jours = []
-    jour = date_debut
-
-    while jour <= date_fin:
-        # weekday() renvoie 0 pour lundi ... 4 pour vendredi, 5=samedi, 6=dimanche
-        if jour.weekday() < 5:
-            jours.append(jour)
-        jour += datetime.timedelta(days=1)
-
-    return jours
-
-
 def _animateur_disponible(animateur, debut, fin):
     """Vérifie qu'un animateur est disponible sur tout l'intervalle
     [debut, fin) donné.
@@ -255,8 +235,8 @@ def _animateur_to_dict(animateur):
             }
             for preference in animateur.preferences.all()
         ],
-        # Utile côté planning automatique : si la liste est vide, on garde
-        # la règle métier existante "pas de contrainte renseignée".
+        # Si la liste est vide, on garde la règle métier existante
+        # "pas de contrainte renseignée".
         "disponibilites": [
             {
                 "debut": disponibilite.debut.isoformat(),
@@ -265,6 +245,71 @@ def _animateur_to_dict(animateur):
             for disponibilite in animateur.disponibilites.all()
         ],
     }
+
+
+def _fusionner_et_nettoyer_disponibilites(animateur):
+    """Nettoie les disponibilités d'un animateur.
+
+    Règles appliquées :
+      - les plages déjà entièrement passées sont supprimées ;
+      - les plages commencées dans le passé sont recoupées à aujourd'hui ;
+      - les plages qui se chevauchent ou se touchent sont fusionnées.
+
+    Exemple : 01/07→05/07 + 04/07→10/07 devient 01/07→10/07.
+    Cette fonction limite les doublons et garde une base plus lisible.
+    """
+
+    aujourd_hui = timezone.localdate()
+
+    # On supprime les disponibilités dont la fin est strictement avant aujourd'hui.
+    animateur.disponibilites.filter(fin__lt=aujourd_hui).delete()
+
+    plages = list(animateur.disponibilites.order_by("debut", "fin"))
+    if not plages:
+        return
+
+    # Si une plage a commencé dans le passé mais continue aujourd'hui ou plus tard,
+    # on coupe sa partie passée : hier n'a plus d'intérêt pour le planning à venir.
+    plages_normalisees = [
+        (max(plage.debut, aujourd_hui), plage.fin)
+        for plage in plages
+    ]
+
+    groupes = []
+    debut_courant, fin_courante = plages_normalisees[0]
+
+    for debut_plage, fin_plage in plages_normalisees[1:]:
+        # Fusion si les plages se chevauchent ou sont directement contiguës.
+        if debut_plage <= fin_courante + datetime.timedelta(days=1):
+            fin_courante = max(fin_courante, fin_plage)
+        else:
+            groupes.append((debut_courant, fin_courante))
+            debut_courant = debut_plage
+            fin_courante = fin_plage
+
+    groupes.append((debut_courant, fin_courante))
+
+    # On réécrit seulement si le nettoyage change réellement quelque chose.
+    etat_actuel = [(plage.debut, plage.fin) for plage in plages]
+    if etat_actuel == groupes:
+        return
+
+    animateur.disponibilites.all().delete()
+    Disponibilite.objects.bulk_create([
+        Disponibilite(animateur=animateur, debut=debut, fin=fin)
+        for debut, fin in groupes
+    ])
+
+
+def _nettoyer_disponibilites_tous_animateurs():
+    """Nettoyage léger appelé quand l'app charge les animateurs.
+
+    Cela évite d'accumuler des anciennes disponibilités inutiles en base
+    sans avoir à lancer une commande manuelle.
+    """
+
+    for animateur in Animateur.objects.prefetch_related("disponibilites"):
+        _fusionner_et_nettoyer_disponibilites(animateur)
 
 
 def _normaliser_preferences(payload):
@@ -345,6 +390,10 @@ def api_animateurs(request):
     POST : crée un animateur ({"prenom", "nom", "telephone", "email", "date_naissance", "qualifications": [ids], "preferences": [{centre_id, ordre}]})."""
 
     if request.method == "GET":
+        # Nettoyage opportuniste : on supprime les anciennes disponibilités
+        # et on fusionne celles qui se chevauchent avant de les renvoyer au front.
+        _nettoyer_disponibilites_tous_animateurs()
+
         # prefetch_related évite le classique problème "N+1 requêtes" :
         # sans ça, chaque animateur referait une requête pour ses
         # qualifications et une pour ses préférences de centre.
@@ -509,6 +558,8 @@ def api_disponibilites(request, animateur_id):
 
         Disponibilite.objects.create(animateur=animateur, debut=debut, fin=fin)
 
+    _fusionner_et_nettoyer_disponibilites(animateur)
+
     plages = [
         {
             "id": disponibilite.id,
@@ -555,9 +606,15 @@ def api_affectation_create(request):
         centre = Centre.objects.get(pk=payload["centre_id"])
 
         debut = _parse_to_aware_datetime(payload["debut"])
-        # Si "fin" n'est pas fourni, on suppose une affectation d'un seul jour.
-        fin_brute = payload.get("fin") or payload["debut"]
-        fin = _parse_to_aware_datetime(fin_brute)
+        # Si "fin" n'est pas fourni, on suppose une affectation d'un seul
+        # jour. ATTENTION : la convention "allDay" de FullCalendar veut une
+        # borne de fin EXCLUSIVE, donc une journée = debut + 1 jour. Mettre
+        # fin = debut donnerait un évènement de durée nulle (start == end)
+        # qui ne s'affiche pas dans le calendrier.
+        if payload.get("fin"):
+            fin = _parse_to_aware_datetime(payload["fin"])
+        else:
+            fin = debut + datetime.timedelta(days=1)
 
     except (Animateur.DoesNotExist, Centre.DoesNotExist):
         return JsonResponse({"error": "Animateur ou centre introuvable."}, status=404)
@@ -654,13 +711,14 @@ def api_planning_plage(request):
     except (TypeError, ValueError):
         return JsonResponse({"error": "Paramètres debut/fin invalides."}, status=400)
 
-    # On ne descend jamais avant "maintenant" : le passé n'est jamais
-    # touché par cette action groupée.
-    debut = max(debut_demande, timezone.now())
+    # Pour le bouton "Vider la semaine", on vide vraiment toute la
+    # semaine affichée, même si certains jours sont déjà passés.
+    # Sinon l'interface peut garder des affectations visibles et donner
+    # l'impression que le calendrier n'a pas été remis à zéro.
+    debut = debut_demande
 
     if debut >= fin:
-        # Toute la plage demandée est déjà dans le passé : rien à faire.
-        return JsonResponse({"supprimees": 0})
+        return JsonResponse({"error": "La date de début doit être avant la date de fin."}, status=400)
 
     # .delete() sur un queryset supprime tout en une seule requête SQL et
     # renvoie (nombre_total_supprime, détail_par_modèle).
@@ -671,320 +729,6 @@ def api_planning_plage(request):
 
     return JsonResponse({"supprimees": nb_supprimees})
 
-
-@require_POST
-def api_planning_auto(request):
-    """Placement automatique en deux passes avec diagnostic.
-
-    Principe :
-      1. on supprime d'abord les affectations existantes sur la semaine ;
-      2. on construit toutes les places à remplir (jour + centre, répétées
-         selon l'effectif demandé pour le centre) ;
-      3. passe 1 : on essaye d'utiliser au moins une fois chaque animateur
-         autorisé/éligible, en commençant par les plus difficiles à placer ;
-      4. passe 2 : on remplit toutes les places restantes en équilibrant la
-         charge et en respectant au mieux les préférences de centre.
-
-    Ce n'est pas une optimisation mathématique parfaite, mais c'est beaucoup
-    plus robuste qu'un simple parcours centre par centre : l'algo regarde les
-    contraintes globales avant de choisir une place.
-    """
-
-    try:
-        payload = json.loads(request.body)
-        date_debut = parse_date(payload["debut"])
-        date_fin = parse_date(payload["fin"])
-        effectifs_demandes = payload.get("effectifs") or {}
-        animateurs_par_jour_brut = payload.get("animateurs_par_jour") or {}
-
-        if date_debut is None or date_fin is None or date_debut > date_fin:
-            raise ValueError("dates invalides")
-
-        effectifs_demandes = {int(k): max(0, int(v)) for k, v in effectifs_demandes.items()}
-
-        animateurs_par_jour = {}
-        for date_str, ids in animateurs_par_jour_brut.items():
-            jour = parse_date(date_str)
-            if jour is None:
-                raise ValueError("date de sélection invalide")
-            animateurs_par_jour[jour] = {int(i) for i in ids}
-
-    except (KeyError, ValueError, TypeError, json.JSONDecodeError):
-        return JsonResponse({"error": "Requête invalide."}, status=400)
-
-    jours = _jours_ouvres(date_debut, date_fin)
-    centres = list(Centre.objects.all())
-    animateurs = list(Animateur.objects.prefetch_related("disponibilites", "preferences"))
-    animateurs_par_id = {animateur.id: animateur for animateur in animateurs}
-
-    if not jours or not centres or not animateurs:
-        return JsonResponse({
-            "creees": [],
-            "supprimees": 0,
-            "non_couverts": [],
-            "animateurs_utilises": [],
-            "animateurs_non_utilises": [],
-            "diagnostics": ["Aucun jour ouvré, aucun centre ou aucun animateur."],
-            "message": "Aucun placement possible.",
-        })
-
-    def jour_datetime(jour):
-        debut = timezone.make_aware(datetime.datetime.combine(jour, datetime.time.min))
-        fin = debut + datetime.timedelta(days=1)
-        return debut, fin
-
-    def est_autorise_par_modal(animateur, jour):
-        # Si la modal n'a pas envoyé de liste pour ce jour, on ne rajoute
-        # aucune contrainte côté modal.
-        if jour not in animateurs_par_jour:
-            return True
-        return animateur.id in animateurs_par_jour[jour]
-
-    def disponible_ce_jour(animateur, jour):
-        disponibilites = list(animateur.disponibilites.all())
-        if not disponibilites:
-            return True
-        return any(dispo.debut <= jour <= dispo.fin for dispo in disponibilites)
-
-    def ordre_preference(animateur, centre):
-        return next(
-            (preference.ordre for preference in animateur.preferences.all() if preference.centre_id == centre.id),
-            999,
-        )
-
-    def peut_prendre_slot(animateur, slot, pris_par_jour):
-        jour = slot["jour"]
-        if animateur.id in pris_par_jour[jour]:
-            return False
-        if not est_autorise_par_modal(animateur, jour):
-            return False
-        if not disponible_ce_jour(animateur, jour):
-            return False
-        return True
-
-    def slots_possibles_pour_animateur(animateur, slots_restants, pris_par_jour):
-        return [slot for slot in slots_restants if peut_prendre_slot(animateur, slot, pris_par_jour)]
-
-    def candidats_pour_slot(slot, pris_par_jour):
-        return [animateur for animateur in animateurs if peut_prendre_slot(animateur, slot, pris_par_jour)]
-
-    # Toutes les places à remplir, une entrée = une affectation attendue.
-    slots = []
-    for jour in jours:
-        for centre in centres:
-            effectif_vise = effectifs_demandes.get(centre.id, centre.effectif_cible)
-            for index in range(max(0, effectif_vise)):
-                slots.append({
-                    "jour": jour,
-                    "centre": centre,
-                    "rang": index + 1,
-                })
-
-    total_places = len(slots)
-
-    # Les animateurs concernés sont ceux cochés au moins une fois dans la
-    # modal. Si la modal n'a rien transmis, tout le monde est concerné.
-    if animateurs_par_jour:
-        concernes_ids = set().union(*animateurs_par_jour.values()) if animateurs_par_jour.values() else set()
-    else:
-        concernes_ids = set(animateurs_par_id.keys())
-
-    diagnostics = []
-    if len(concernes_ids) > total_places:
-        diagnostics.append(
-            f"Impossible d'utiliser tout le monde : {len(concernes_ids)} animateur(s) sélectionné(s) pour seulement {total_places} place(s)."
-        )
-
-    periode_debut = timezone.make_aware(datetime.datetime.combine(jours[0], datetime.time.min))
-    periode_fin = timezone.make_aware(datetime.datetime.combine(jours[-1] + datetime.timedelta(days=1), datetime.time.min))
-
-    creees = []
-    non_couverts = []
-    charge = {animateur.id: 0 for animateur in animateurs}
-    pris_par_jour = {jour: set() for jour in jours}
-    created_by_day = {jour: [] for jour in jours}
-
-    def retirer_slot(slots_restants, slot):
-        # On retire par identité d'objet : chaque slot est un dict unique,
-        # même si plusieurs places concernent le même centre/jour.
-        slots_restants.remove(slot)
-
-    def choisir_slot_pour_animateur(animateur, slots_restants):
-        possibles = slots_possibles_pour_animateur(animateur, slots_restants, pris_par_jour)
-        if not possibles:
-            return None
-
-        def score_slot(slot):
-            # Plus un slot a peu de candidats, plus il est urgent de le remplir.
-            nb_candidats = len(candidats_pour_slot(slot, pris_par_jour))
-            return (
-                ordre_preference(animateur, slot["centre"]),
-                nb_candidats,
-                slot["jour"].isoformat(),
-                slot["centre"].nom.lower(),
-                slot["rang"],
-            )
-
-        return min(possibles, key=score_slot)
-
-    def choisir_animateur_pour_slot(slot):
-        candidats = candidats_pour_slot(slot, pris_par_jour)
-        if not candidats:
-            return None
-
-        def score_animateur(animateur):
-            # On favorise :
-            # 1. les animateurs encore jamais utilisés ;
-            # 2. les moins chargés ;
-            # 3. ceux qui préfèrent ce centre ;
-            # 4. ceux qui ont peu d'autres possibilités restantes ;
-            # 5. ordre alphabétique stable.
-            nb_possibilites = len(slots_possibles_pour_animateur(animateur, slots_restants, pris_par_jour))
-            return (
-                0 if charge[animateur.id] == 0 else 1,
-                charge[animateur.id],
-                ordre_preference(animateur, slot["centre"]),
-                nb_possibilites,
-                animateur.nom.lower(),
-                animateur.prenom.lower(),
-                animateur.id,
-            )
-
-        return min(candidats, key=score_animateur)
-
-    def creer_affectation(animateur, slot):
-        debut_jour, fin_jour = jour_datetime(slot["jour"])
-        affectation = Affectation.objects.create(
-            animateur=animateur,
-            centre=slot["centre"],
-            debut=debut_jour,
-            fin=fin_jour,
-        )
-        creees.append(_affectation_to_event(affectation))
-        created_by_day[slot["jour"]].append(affectation)
-        charge[animateur.id] += 1
-        pris_par_jour[slot["jour"]].add(animateur.id)
-        retirer_slot(slots_restants, slot)
-
-    with transaction.atomic():
-        # Placement automatique = recalcul complet de la période.
-        nb_supprimees, _detail_supprimees = Affectation.objects.filter(
-            debut__lt=periode_fin,
-            fin__gt=periode_debut,
-        ).delete()
-
-        slots_restants = list(slots)
-
-        # ------------------------------------------------------------------
-        # Passe 1 : utiliser au moins une fois un maximum d'animateurs.
-        # On commence par les animateurs les plus difficiles à placer : ceux
-        # qui ont le moins de slots possibles sur la semaine.
-        # ------------------------------------------------------------------
-        def animateurs_a_placer_tries():
-            candidats = []
-            for animateur in animateurs:
-                if animateur.id not in concernes_ids:
-                    continue
-                if charge[animateur.id] > 0:
-                    continue
-                possibles = slots_possibles_pour_animateur(animateur, slots_restants, pris_par_jour)
-                if possibles:
-                    candidats.append((len(possibles), animateur.nom.lower(), animateur.prenom.lower(), animateur.id, animateur))
-            candidats.sort(key=lambda item: item[:4])
-            return [item[4] for item in candidats]
-
-        while slots_restants:
-            candidats_non_utilises = animateurs_a_placer_tries()
-            if not candidats_non_utilises:
-                break
-
-            animateur = candidats_non_utilises[0]
-            slot = choisir_slot_pour_animateur(animateur, slots_restants)
-            if slot is None:
-                break
-            creer_affectation(animateur, slot)
-
-            # Si on a déjà utilisé autant d'animateurs qu'il y a de places,
-            # inutile de continuer la passe 1.
-            if len([nb for nb in charge.values() if nb > 0]) >= total_places:
-                break
-
-        # ------------------------------------------------------------------
-        # Passe 2 : remplir toutes les places restantes.
-        # À chaque tour on remplit le slot le plus contraint (moins de
-        # candidats disponibles), puis on choisit le meilleur animateur.
-        # ------------------------------------------------------------------
-        while slots_restants:
-            slots_scores = []
-            for slot in slots_restants:
-                candidats = candidats_pour_slot(slot, pris_par_jour)
-                slots_scores.append((len(candidats), slot["jour"].isoformat(), slot["centre"].nom.lower(), slot["rang"], slot, candidats))
-
-            impossibles = [item for item in slots_scores if item[0] == 0]
-            if impossibles:
-                for _nb, _jour_key, _centre_key, _rang, slot, _candidats in impossibles:
-                    non_couverts.append({
-                        "centre": slot["centre"].nom,
-                        "centre_id": slot["centre"].id,
-                        "date": slot["jour"].isoformat(),
-                        "motif": "Aucun animateur disponible ou autorisé pour ce jour.",
-                    })
-                    if slot in slots_restants:
-                        retirer_slot(slots_restants, slot)
-                continue
-
-            _nb, _jour_key, _centre_key, _rang, slot, _candidats = min(slots_scores, key=lambda item: item[:4])
-            choisi = choisir_animateur_pour_slot(slot)
-            if choisi is None:
-                non_couverts.append({
-                    "centre": slot["centre"].nom,
-                    "centre_id": slot["centre"].id,
-                    "date": slot["jour"].isoformat(),
-                    "motif": "Aucun animateur disponible ou autorisé pour ce jour.",
-                })
-                retirer_slot(slots_restants, slot)
-                continue
-            creer_affectation(choisi, slot)
-
-    animateurs_utilises_ids = {animateur_id for animateur_id, nb in charge.items() if nb > 0}
-
-    animateurs_non_utilises = []
-    for animateur in animateurs:
-        if animateur.id not in concernes_ids or animateur.id in animateurs_utilises_ids:
-            continue
-        possibles_initiaux = [
-            slot for slot in slots
-            if est_autorise_par_modal(animateur, slot["jour"]) and disponible_ce_jour(animateur, slot["jour"])
-        ]
-        motif = "Aucune place compatible restante."
-        if not possibles_initiaux:
-            motif = "Aucune disponibilité ou autorisation sur la semaine."
-        animateurs_non_utilises.append({
-            "id": animateur.id,
-            "nom": f"{animateur.prenom} {animateur.nom}",
-            "motif": motif,
-        })
-
-    if non_couverts:
-        diagnostics.append(f"{len(non_couverts)} place(s) n'ont pas pu être couvertes faute de candidat compatible.")
-    if animateurs_non_utilises:
-        diagnostics.append(f"{len(animateurs_non_utilises)} animateur(s) sélectionné(s) n'ont pas pu être utilisés.")
-
-    return JsonResponse({
-        "creees": creees,
-        "supprimees": nb_supprimees,
-        "non_couverts": non_couverts,
-        "animateurs_utilises": sorted(animateurs_utilises_ids),
-        "animateurs_non_utilises": animateurs_non_utilises,
-        "diagnostics": diagnostics,
-        "resume_jours": [
-            {
-                "date": jour.isoformat(),
-                "creees": len(created_by_day[jour]),
-            }
-            for jour in jours
-        ],
-    })
 
 
 # ---------------------------------------------------------------------------
@@ -1356,3 +1100,207 @@ def api_document_detail(request, document_id):
     document.delete()
 
     return JsonResponse({"ok": True})
+
+
+@require_POST
+def api_planning_auto(request):
+    """Remplit automatiquement la semaine affichée, du LUNDI au VENDREDI.
+
+    Corps JSON attendu :
+        {
+          "debut": "2026-07-06",          # une date quelconque de la semaine
+          "effectifs": {"1": 2, "3": 1}   # nb d'animateurs/jour par centre (optionnel)
+        }
+
+    - "debut" est ramené au lundi de sa semaine ; seuls les 5 jours ouvrés
+      (lundi -> vendredi) sont remplis. Les éventuelles affectations du
+      week-end ne sont pas touchées.
+    - "effectifs" permet de choisir, depuis la popup du planning, combien
+      d'animateurs placer par jour dans chaque centre. Si un centre n'y
+      figure pas, on retombe sur son `effectif_cible`. Une valeur 0 exclut
+      le centre du remplissage.
+
+    Objectifs de l'algorithme (dans cet ordre) :
+      1. faire travailler un MAXIMUM d'animateurs différents (au moins une
+         fois chacun quand c'est possible) ;
+      2. équilibrer le nombre de jours travaillés entre les animateurs ;
+      3. respecter les centres préférés à effectif égal.
+
+    Contraintes toujours respectées :
+      - un animateur ne travaille que les jours où il est disponible (un
+        animateur sans aucune disponibilité renseignée est réputé
+        disponible en permanence) ;
+      - un animateur ne peut pas être placé deux fois le même jour.
+    """
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Requête invalide."}, status=400)
+
+    debut_date = parse_date(data.get("debut", ""))
+    if not debut_date:
+        return JsonResponse({"error": "Date de début invalide."}, status=400)
+
+    # Lundi de la semaine reçue, puis 5 jours ouvrés (lundi -> vendredi).
+    lundi = debut_date - datetime.timedelta(days=debut_date.weekday())
+    jours = [lundi + datetime.timedelta(days=i) for i in range(5)]
+    samedi = lundi + datetime.timedelta(days=5)  # borne exclusive (le week-end n'est pas rempli)
+
+    debut_dt = _parse_to_aware_datetime(lundi.isoformat())
+    fin_dt = _parse_to_aware_datetime(samedi.isoformat())
+
+    centres = list(Centre.objects.all().order_by("nom"))
+    animateurs = list(
+        Animateur.objects
+        .prefetch_related("disponibilites", "preferences")
+        .order_by("prenom", "nom")
+    )
+
+    if not centres:
+        return JsonResponse({"error": "Aucun centre n'est configuré."}, status=400)
+    if not animateurs:
+        return JsonResponse({"error": "Aucun animateur n'est configuré."}, status=400)
+
+    # --- Effectifs par centre (venus de la popup, sinon effectif_cible) ---
+    effectifs_recus = data.get("effectifs") or {}
+
+    def effectif_pour(centre):
+        brut = effectifs_recus.get(str(centre.id))
+        if brut is None:
+            brut = effectifs_recus.get(centre.id, centre.effectif_cible)
+        try:
+            valeur = int(brut)
+        except (TypeError, ValueError):
+            valeur = centre.effectif_cible
+        return max(0, valeur)
+
+    # --- Préférences : rang par (animateur, centre) ; 99 = pas de préférence ---
+    preference_rang = {
+        (pref.animateur_id, pref.centre_id): pref.ordre
+        for pref in PreferenceCentre.objects.filter(
+            animateur__in=animateurs,
+            centre__in=centres,
+        )
+    }
+
+    def score_preference(animateur, centre):
+        """Plus le score est petit, meilleur est le centre pour cet animateur."""
+        return preference_rang.get((animateur.id, centre.id), 99)
+
+    # --- Disponibilité évaluée EN MÉMOIRE (grâce au prefetch), sans requête
+    #     par jour. Règle : aucune plage renseignée => disponible partout. ---
+    def disponible(animateur, jour):
+        plages = list(animateur.disponibilites.all())
+        if not plages:
+            return True
+        return any(plage.debut <= jour <= plage.fin for plage in plages)
+
+    # Nombre de jours ouvrés où chaque animateur est disponible : on s'en
+    # sert pour traiter en priorité les profils les moins disponibles (les
+    # plus difficiles à caser), ce qui maximise le nombre de personnes utilisées.
+    jours_dispo = {
+        animateur.id: sum(1 for jour in jours if disponible(animateur, jour))
+        for animateur in animateurs
+    }
+
+    with transaction.atomic():
+        # On repart d'une semaine propre (lundi -> vendredi uniquement).
+        supprimees, _ = Affectation.objects.filter(
+            debut__lt=fin_dt,
+            fin__gt=debut_dt,
+        ).delete()
+
+        # Une "place" = un besoin d'un animateur sur (un jour, un centre).
+        slots = []
+        for jour in jours:
+            for centre in centres:
+                for _ in range(effectif_pour(centre)):
+                    slots.append({"jour": jour, "centre": centre, "animateur": None})
+
+        occupe_ce_jour = {jour: set() for jour in jours}   # jour -> {animateur_id}
+        jours_travailles = {animateur.id: 0 for animateur in animateurs}
+
+        def peut_placer(animateur, slot):
+            if animateur.id in occupe_ce_jour[slot["jour"]]:
+                return False
+            return disponible(animateur, slot["jour"])
+
+        def placer(animateur, slot):
+            slot["animateur"] = animateur
+            occupe_ce_jour[slot["jour"]].add(animateur.id)
+            jours_travailles[animateur.id] += 1
+
+        # --- Passe 1 : garantir qu'un MAXIMUM d'animateurs travaille au moins
+        # une fois. On commence par les moins disponibles (les plus rares). ---
+        animateurs_par_rarete = sorted(
+            animateurs,
+            key=lambda a: (jours_dispo[a.id], a.prenom, a.nom),
+        )
+        for animateur in animateurs_par_rarete:
+            if jours_dispo[animateur.id] == 0:
+                continue  # jamais disponible cette semaine : rien à faire
+
+            meilleurs = [
+                # préférence, puis jour le moins rempli (pour étaler l'équipe)
+                (score_preference(animateur, slot["centre"]), len(occupe_ce_jour[slot["jour"]]), index)
+                for index, slot in enumerate(slots)
+                if slot["animateur"] is None and peut_placer(animateur, slot)
+            ]
+            if meilleurs:
+                meilleurs.sort()
+                placer(animateur, slots[meilleurs[0][2]])
+
+        # --- Passe 2 : remplir les places restantes en équilibrant la charge
+        # (le moins de jours déjà travaillés d'abord), préférence en départage. ---
+        for slot in slots:
+            if slot["animateur"] is not None:
+                continue
+
+            candidats = [
+                (jours_travailles[a.id], score_preference(a, slot["centre"]), a.prenom, a.nom, a)
+                for a in animateurs
+                if peut_placer(a, slot)
+            ]
+            if not candidats:
+                continue
+
+            candidats.sort(key=lambda item: item[:-1])
+            placer(candidats[0][-1], slot)
+
+        # --- Création en base en une seule requête ---
+        a_creer = []
+        for slot in slots:
+            if slot["animateur"] is None:
+                continue
+            jour = slot["jour"]
+            a_creer.append(Affectation(
+                animateur=slot["animateur"],
+                centre=slot["centre"],
+                debut=_parse_to_aware_datetime(jour.isoformat()),
+                fin=_parse_to_aware_datetime((jour + datetime.timedelta(days=1)).isoformat()),
+            ))
+        Affectation.objects.bulk_create(a_creer)
+
+    total_places = len(slots)
+    creees = len(a_creer)
+    non_remplies = total_places - creees
+    animateurs_utilises = sum(1 for nb in jours_travailles.values() if nb > 0)
+
+    message = (
+        f"{creees} affectation(s) créée(s) du lundi au vendredi, "
+        f"{supprimees} ancienne(s) remplacée(s). "
+        f"{animateurs_utilises}/{len(animateurs)} animateur(s) utilisé(s)."
+    )
+    if non_remplies > 0:
+        message += f" {non_remplies} place(s) non remplie(s) faute d'animateur disponible."
+
+    return JsonResponse({
+        "ok": True,
+        "created": creees,
+        "deleted": supprimees,
+        "total_places": total_places,
+        "unfilled": non_remplies,
+        "animateurs_utilises": animateurs_utilises,
+        "message": message,
+    })
