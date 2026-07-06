@@ -126,8 +126,8 @@ document.addEventListener("DOMContentLoaded", () =>
 
 			remplirTableau(
 				"#table-animateurs tbody",
-				data.animateurs.map((a) => `<tr><td>${a.prenom} ${a.nom}</td><td>${a.jours}</td><td>${a.nb_centres}</td></tr>`),
-				3,
+				data.animateurs.map((a) => `<tr><td>${a.prenom} ${a.nom}</td><td>${a.age ?? "—"}</td><td>${a.jours}</td><td>${a.nb_centres}</td></tr>`),
+				4,
 				"Aucun animateur."
 			);
 

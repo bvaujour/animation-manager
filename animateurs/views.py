@@ -233,6 +233,14 @@ def _animateur_to_dict(animateur):
         "id": animateur.id,
         "prenom": animateur.prenom,
         "nom": animateur.nom,
+        "telephone": animateur.telephone,
+        "email": animateur.email,
+        "date_naissance": animateur.date_naissance.isoformat() if animateur.date_naissance else None,
+        "age": animateur.age,
+        "qualification_ids": [
+            qualification.id
+            for qualification in animateur.qualifications.all()
+        ],
         "qualifications": [
             qualification.nom
             for qualification in animateur.qualifications.all()
@@ -247,13 +255,22 @@ def _animateur_to_dict(animateur):
             }
             for preference in animateur.preferences.all()
         ],
+        # Utile côté planning automatique : si la liste est vide, on garde
+        # la règle métier existante "pas de contrainte renseignée".
+        "disponibilites": [
+            {
+                "debut": disponibilite.debut.isoformat(),
+                "fin": disponibilite.fin.isoformat(),
+            }
+            for disponibilite in animateur.disponibilites.all()
+        ],
     }
 
 
 @require_http_methods(["GET", "POST"])
 def api_animateurs(request):
     """GET : liste tous les animateurs.
-    POST : crée un animateur ({"prenom", "nom", "qualifications": [ids]})."""
+    POST : crée un animateur ({"prenom", "nom", "telephone", "email", "date_naissance", "qualifications": [ids]})."""
 
     if request.method == "GET":
         # prefetch_related évite le classique problème "N+1 requêtes" :
@@ -262,6 +279,7 @@ def api_animateurs(request):
         animateurs = Animateur.objects.prefetch_related(
             "qualifications",
             "preferences__centre",
+            "disponibilites",
         ).all()
 
         return JsonResponse([_animateur_to_dict(a) for a in animateurs], safe=False)
@@ -271,15 +289,28 @@ def api_animateurs(request):
 
         prenom = payload["prenom"].strip()
         nom = payload["nom"].strip()
+        telephone = payload.get("telephone", "").strip()
+        email = payload.get("email", "").strip()
+        date_naissance_raw = payload.get("date_naissance") or None
+        date_naissance = parse_date(date_naissance_raw) if date_naissance_raw else None
         qualification_ids = payload.get("qualifications", [])
 
         if not prenom or not nom:
             return JsonResponse({"error": "Le prénom et le nom sont obligatoires."}, status=400)
 
+        if date_naissance_raw and date_naissance is None:
+            return JsonResponse({"error": "La date de naissance est invalide."}, status=400)
+
     except (KeyError, TypeError, AttributeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
-    animateur = Animateur.objects.create(prenom=prenom, nom=nom)
+    animateur = Animateur.objects.create(
+        prenom=prenom,
+        nom=nom,
+        telephone=telephone,
+        email=email,
+        date_naissance=date_naissance,
+    )
 
     if qualification_ids:
         # .set() sur un ManyToMany remplace toute la liste en une requête.
@@ -290,19 +321,72 @@ def api_animateurs(request):
     return JsonResponse(_animateur_to_dict(animateur), status=201)
 
 
-@require_http_methods(["DELETE"])
+@require_http_methods(["GET", "PATCH", "DELETE"])
 def api_animateur_detail(request, animateur_id):
-    """Supprime un animateur. Grâce à on_delete=CASCADE sur les modèles
-    PreferenceCentre / Disponibilite / Affectation, tout ce qui lui est
-    lié est supprimé automatiquement avec lui."""
+    """GET : renvoie un animateur.
+    PATCH : modifie un ou plusieurs champs de l'animateur, y compris ses qualifications.
+    DELETE : supprime l'animateur et, par cascade, son planning/disponibilités/préférences."""
 
     try:
-        animateur = Animateur.objects.get(pk=animateur_id)
+        animateur = Animateur.objects.prefetch_related(
+            "qualifications",
+            "preferences__centre",
+            "disponibilites",
+        ).get(pk=animateur_id)
     except Animateur.DoesNotExist:
         return JsonResponse({"error": "Animateur introuvable."}, status=404)
 
-    animateur.delete()
-    return JsonResponse({"ok": True})
+    if request.method == "GET":
+        return JsonResponse(_animateur_to_dict(animateur))
+
+    if request.method == "DELETE":
+        animateur.delete()
+        return JsonResponse({"ok": True})
+
+    try:
+        payload = json.loads(request.body)
+
+        if "prenom" in payload:
+            animateur.prenom = payload["prenom"].strip()
+
+        if "nom" in payload:
+            animateur.nom = payload["nom"].strip()
+
+        if "telephone" in payload:
+            animateur.telephone = payload.get("telephone", "").strip()
+
+        if "email" in payload:
+            animateur.email = payload.get("email", "").strip()
+
+        if "date_naissance" in payload:
+            date_naissance_raw = payload.get("date_naissance") or None
+            date_naissance = parse_date(date_naissance_raw) if date_naissance_raw else None
+            if date_naissance_raw and date_naissance is None:
+                return JsonResponse({"error": "La date de naissance est invalide."}, status=400)
+            animateur.date_naissance = date_naissance
+
+        if not animateur.prenom or not animateur.nom:
+            return JsonResponse({"error": "Le prénom et le nom sont obligatoires."}, status=400)
+
+        qualification_ids = payload.get("qualifications", None)
+
+    except (TypeError, AttributeError, json.JSONDecodeError):
+        return JsonResponse({"error": "Requête invalide."}, status=400)
+
+    animateur.save()
+
+    if qualification_ids is not None:
+        animateur.qualifications.set(
+            Qualification.objects.filter(pk__in=qualification_ids)
+        )
+
+    animateur = Animateur.objects.prefetch_related(
+        "qualifications",
+        "preferences__centre",
+        "disponibilites",
+    ).get(pk=animateur.id)
+
+    return JsonResponse(_animateur_to_dict(animateur))
 
 
 def api_disponibilites(request, animateur_id):
@@ -479,38 +563,29 @@ def api_planning_plage(request):
 
 @require_POST
 def api_planning_auto(request):
-    """Placement automatique : remplit les créneaux encore vides (jusqu'à
-    l'effectif souhaité, par centre et par jour ouvré) sur la période
-    donnée, en respectant les règles habituelles (disponibilité, pas de
-    doublon).
+    """Placement automatique amélioré.
+
+    Objectif : remplir au maximum tous les besoins centre/jour, tout en
+    répartissant le travail. L'algorithme favorise d'abord les animateurs
+    qui n'ont encore aucune affectation sur la semaine (affectations déjà
+    existantes incluses), puis ceux qui sont le moins chargés, puis ceux
+    qui préfèrent le centre concerné.
 
     Payload attendu :
         {
-            "debut": "2026-07-06", "fin": "2026-07-10",
-            "effectifs": {"3": 2, "5": 1}   // optionnel, id de centre -> nb souhaité
+            "debut": "2026-07-06",
+            "fin": "2026-07-10",
+            "effectifs": {"3": 2, "5": 1},
+            "animateurs_par_jour": {
+                "2026-07-06": [1, 2, 4],
+                "2026-07-07": [1, 3, 4]
+            }
         }
-    (bornes incluses, on ignore automatiquement samedi/dimanche même si
-    elles sont comprises dans l'intervalle). Si "effectifs" est absent ou
-    ne mentionne pas un centre donné, on utilise Centre.effectif_cible
-    (réglable une fois pour toutes dans la page Gestion), ce qui permet
-    de relancer le placement sans avoir à ressaisir les effectifs à
-    chaque fois.
 
-    Algorithme (glouton, jour par jour puis centre par centre) :
-      1. Pour chaque jour ouvré, on regarde qui est déjà pris ce jour-là.
-      2. Pour chaque centre, on calcule combien d'animateurs lui
-         manquent encore ce jour-là (effectif souhaité moins ceux déjà
-         affectés, manuellement ou par un appel précédent).
-      3. Pour chaque place manquante, on cherche les animateurs
-         disponibles et pas déjà pris ce jour-là (dans CE centre ni dans
-         un autre). Parmi les candidats, on choisit en priorité celui
-         qui a le moins d'affectations posées durant CET appel (pour
-         répartir la charge entre plusieurs animateurs plutôt que de
-         toujours choisir le même), puis celui qui préfère le plus ce
-         centre (ordre de préférence le plus bas), puis n'importe lequel.
-      4. Si personne n'est disponible pour une place, elle reste vide et
-         remonte dans la liste "non_couverts" pour que l'utilisateur le
-         sache.
+    `animateurs_par_jour` est optionnel. S'il est fourni, il correspond
+    aux choix faits dans la modal : pour chaque date, seuls les animateurs
+    cochés peuvent être utilisés par l'auto-placement. Les règles serveur
+    restent prioritaires : disponibilité réelle et absence de conflit.
     """
 
     try:
@@ -518,13 +593,20 @@ def api_planning_auto(request):
         date_debut = parse_date(payload["debut"])
         date_fin = parse_date(payload["fin"])
         effectifs_demandes = payload.get("effectifs") or {}
+        animateurs_par_jour_brut = payload.get("animateurs_par_jour") or {}
 
-        if date_debut is None or date_fin is None:
+        if date_debut is None or date_fin is None or date_debut > date_fin:
             raise ValueError("dates invalides")
 
-        # Les clés JSON sont toujours des chaînes ; on les repasse en int
-        # pour pouvoir comparer avec centre.id.
-        effectifs_demandes = {int(k): int(v) for k, v in effectifs_demandes.items()}
+        # Les clés JSON sont toujours des chaînes ; on les repasse en int.
+        effectifs_demandes = {int(k): max(0, int(v)) for k, v in effectifs_demandes.items()}
+
+        animateurs_par_jour = {}
+        for date_str, ids in animateurs_par_jour_brut.items():
+            jour = parse_date(date_str)
+            if jour is None:
+                raise ValueError("date de sélection invalide")
+            animateurs_par_jour[jour] = {int(i) for i in ids}
 
     except (KeyError, ValueError, TypeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
@@ -532,87 +614,192 @@ def api_planning_auto(request):
     jours = _jours_ouvres(date_debut, date_fin)
     centres = list(Centre.objects.all())
 
-    # prefetch_related pour ne pas refaire une requête "disponibilites"
-    # et "preferences" par animateur et par jour dans la boucle ci-dessous.
     animateurs = list(
         Animateur.objects.prefetch_related("disponibilites", "preferences")
     )
 
-    # Compteur de charge posée pendant CET appel (sert à répartir le
-    # travail plutôt que de toujours choisir le même animateur en tête).
+    if not jours or not centres:
+        return JsonResponse({
+            "creees": [],
+            "non_couverts": [],
+            "animateurs_utilises": [],
+            "animateurs_non_utilises": [],
+            "message": "Aucun jour ouvré ou aucun centre à remplir.",
+        })
+
+    animateurs_par_id = {animateur.id: animateur for animateur in animateurs}
+
+    def jour_datetime(jour):
+        debut = timezone.make_aware(datetime.datetime.combine(jour, datetime.time.min))
+        fin = debut + datetime.timedelta(days=1)
+        return debut, fin
+
+    def est_autorise_par_modal(animateur, jour):
+        # Si aucune sélection n'est fournie pour ce jour, on autorise tout
+        # le monde puis les règles métier habituelles filtrent.
+        if jour not in animateurs_par_jour:
+            return True
+        return animateur.id in animateurs_par_jour[jour]
+
+    def disponible_ce_jour(animateur, jour):
+        disponibilites = list(animateur.disponibilites.all())
+        if not disponibilites:
+            return True
+        return any(dispo.debut <= jour <= dispo.fin for dispo in disponibilites)
+
+    def ordre_preference(animateur, centre):
+        return next(
+            (preference.ordre for preference in animateur.preferences.all() if preference.centre_id == centre.id),
+            999,
+        )
+
+    periode_debut = timezone.make_aware(datetime.datetime.combine(jours[0], datetime.time.min))
+    periode_fin = timezone.make_aware(datetime.datetime.combine(jours[-1] + datetime.timedelta(days=1), datetime.time.min))
+
+    affectations_existantes = list(
+        Affectation.objects.select_related("animateur", "centre").filter(
+            debut__lt=periode_fin,
+            fin__gt=periode_debut,
+        )
+    )
+
+    # charge = nombre d'affectations déjà existantes + créées pendant cet
+    # appel. Les affectations manuelles déjà présentes comptent donc dans
+    # l'équilibrage, ce qui évite de surcharger une personne déjà placée.
     charge = {animateur.id: 0 for animateur in animateurs}
+    deja_pris_par_jour = {jour: set() for jour in jours}
+    deja_presents_par_centre_jour = {(centre.id, jour): 0 for centre in centres for jour in jours}
+
+    for affectation in affectations_existantes:
+        if affectation.animateur_id in charge:
+            charge[affectation.animateur_id] += 1
+
+        for jour in _jours_couverts(affectation.debut, affectation.fin):
+            if jour not in deja_pris_par_jour:
+                continue
+            deja_pris_par_jour[jour].add(affectation.animateur_id)
+            cle = (affectation.centre_id, jour)
+            if cle in deja_presents_par_centre_jour:
+                deja_presents_par_centre_jour[cle] += 1
 
     creees = []
     non_couverts = []
+    created_by_day = {jour: [] for jour in jours}
+
+    def candidats_pour_slot(jour, centre):
+        candidats = []
+        deja_pris = deja_pris_par_jour[jour]
+
+        for animateur in animateurs:
+            if animateur.id in deja_pris:
+                continue
+            if not est_autorise_par_modal(animateur, jour):
+                continue
+            if not disponible_ce_jour(animateur, jour):
+                continue
+
+            pref = ordre_preference(animateur, centre)
+            # Score :
+            # 1. priorité à ceux qui n'ont encore rien cette semaine/appel ;
+            # 2. puis moins de charge globale ;
+            # 3. puis préférence centre ;
+            # 4. puis ordre alphabétique stable.
+            score = (
+                0 if charge[animateur.id] == 0 else 1,
+                charge[animateur.id],
+                pref,
+                animateur.nom.lower(),
+                animateur.prenom.lower(),
+                animateur.id,
+            )
+            candidats.append((score, animateur))
+
+        candidats.sort(key=lambda item: item[0])
+        return [animateur for _score, animateur in candidats]
 
     for jour in jours:
-        debut_jour = timezone.make_aware(datetime.datetime.combine(jour, datetime.time.min))
-        fin_jour = debut_jour + datetime.timedelta(days=1)
-
-        # Qui est déjà occupé ce jour-là, tous centres confondus (une
-        # seule requête par jour, plutôt qu'une par centre).
-        deja_pris_ids = set(
-            Affectation.objects.filter(
-                debut__lt=fin_jour,
-                fin__gt=debut_jour,
-            ).values_list("animateur_id", flat=True)
-        )
-
+        # On prépare toutes les places manquantes du jour, puis on remplit
+        # en priorité les centres qui ont le moins de candidats. Ça aide à
+        # remplir davantage de cases qu'un simple parcours centre par centre.
+        slots = []
         for centre in centres:
             effectif_vise = effectifs_demandes.get(centre.id, centre.effectif_cible)
-
-            deja_presents = Affectation.objects.filter(
-                centre=centre,
-                debut__lt=fin_jour,
-                fin__gt=debut_jour,
-            ).count()
-
-            places_a_pourvoir = effectif_vise - deja_presents
-
+            deja_presents = deja_presents_par_centre_jour[(centre.id, jour)]
+            places_a_pourvoir = max(0, effectif_vise - deja_presents)
             for _ in range(places_a_pourvoir):
-                candidats = []
+                slots.append(centre)
 
-                for animateur in animateurs:
-                    if animateur.id in deja_pris_ids:
-                        continue
+        while slots:
+            slots_avec_candidats = []
+            for index, centre in enumerate(slots):
+                candidats = candidats_pour_slot(jour, centre)
+                slots_avec_candidats.append((len(candidats), index, centre, candidats))
 
-                    # .all() sur une relation prefetch_related utilise le
-                    # cache déjà chargé, pas de nouvelle requête ici.
-                    disponibilites = list(animateur.disponibilites.all())
-                    if disponibilites and not any(d.debut <= jour <= d.fin for d in disponibilites):
-                        continue
+            # Les places impossibles sont signalées une fois et retirées.
+            impossibles = [item for item in slots_avec_candidats if item[0] == 0]
+            if impossibles:
+                for _nb, index, centre, _candidats in sorted(impossibles, reverse=True):
+                    non_couverts.append({
+                        "centre": centre.nom,
+                        "centre_id": centre.id,
+                        "date": jour.isoformat(),
+                        "motif": "Aucun animateur disponible ou autorisé pour ce jour.",
+                    })
+                    slots.pop(index)
+                continue
 
-                    # Ordre de préférence de l'animateur pour ce centre
-                    # (1 = préféré). 999 si le centre n'est pas dans ses
-                    # préférences, pour qu'il passe après ceux qui l'ont choisi.
-                    ordre_preference = next(
-                        (p.ordre for p in animateur.preferences.all() if p.centre_id == centre.id),
-                        999,
-                    )
+            # On choisit le slot le plus contraint (moins de candidats),
+            # puis on prend son meilleur candidat selon le score ci-dessus.
+            _nb, index, centre, candidats = min(slots_avec_candidats, key=lambda item: (item[0], item[2].nom))
+            choisi = candidats[0]
+            debut_jour, fin_jour = jour_datetime(jour)
 
-                    candidats.append((charge[animateur.id], ordre_preference, animateur))
+            affectation = Affectation.objects.create(
+                animateur=choisi,
+                centre=centre,
+                debut=debut_jour,
+                fin=fin_jour,
+            )
 
-                if not candidats:
-                    non_couverts.append({"centre": centre.nom, "date": jour.isoformat()})
-                    continue
+            creees.append(_affectation_to_event(affectation))
+            created_by_day[jour].append(affectation)
+            charge[choisi.id] += 1
+            deja_pris_par_jour[jour].add(choisi.id)
+            deja_presents_par_centre_jour[(centre.id, jour)] += 1
+            slots.pop(index)
 
-                # Tri : d'abord le moins chargé pendant cet appel, puis celui
-                # qui préfère le plus ce centre.
-                candidats.sort(key=lambda c: (c[0], c[1]))
-                _, _, choisi = candidats[0]
+    animateurs_utilises_ids = {animateur_id for animateur_id, nb in charge.items() if nb > 0}
 
-                affectation = Affectation.objects.create(
-                    animateur=choisi,
-                    centre=centre,
-                    debut=debut_jour,
-                    fin=fin_jour,
-                )
+    # Les animateurs "concernés" sont ceux que l'utilisateur a laissés
+    # cochés au moins un jour dans la modal, ou tous les animateurs si la
+    # modal n'a pas envoyé de restriction.
+    if animateurs_par_jour:
+        concernes_ids = set().union(*animateurs_par_jour.values()) if animateurs_par_jour.values() else set()
+    else:
+        concernes_ids = set(animateurs_par_id.keys())
 
-                creees.append(_affectation_to_event(affectation))
-                charge[choisi.id] += 1
-                deja_pris_ids.add(choisi.id)
+    animateurs_non_utilises = [
+        {
+            "id": animateur.id,
+            "nom": f"{animateur.prenom} {animateur.nom}",
+        }
+        for animateur in animateurs
+        if animateur.id in concernes_ids and animateur.id not in animateurs_utilises_ids
+    ]
 
-    return JsonResponse({"creees": creees, "non_couverts": non_couverts})
+    return JsonResponse({
+        "creees": creees,
+        "non_couverts": non_couverts,
+        "animateurs_utilises": sorted(animateurs_utilises_ids),
+        "animateurs_non_utilises": animateurs_non_utilises,
+        "resume_jours": [
+            {
+                "date": jour.isoformat(),
+                "creees": len(created_by_day[jour]),
+            }
+            for jour in jours
+        ],
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -736,9 +923,10 @@ def api_qualifications(request):
     return JsonResponse(_qualification_to_dict(qualification), status=201)
 
 
-@require_http_methods(["DELETE"])
+@require_http_methods(["GET", "PATCH", "DELETE"])
 def api_qualification_detail(request, qualification_id):
-    """Supprime une qualification (elle est simplement retirée de la liste
+    """GET : renvoie une qualification. PATCH : modifie son nom.
+    DELETE : supprime la qualification (elle est simplement retirée de la liste
     des animateurs qui l'avaient, grâce au comportement par défaut de
     Django sur les relations ManyToMany)."""
 
@@ -747,8 +935,27 @@ def api_qualification_detail(request, qualification_id):
     except Qualification.DoesNotExist:
         return JsonResponse({"error": "Qualification introuvable."}, status=404)
 
-    qualification.delete()
-    return JsonResponse({"ok": True})
+    if request.method == "GET":
+        return JsonResponse(_qualification_to_dict(qualification))
+
+    if request.method == "DELETE":
+        qualification.delete()
+        return JsonResponse({"ok": True})
+
+    try:
+        payload = json.loads(request.body)
+        nom = payload["nom"].strip()
+
+        if not nom:
+            return JsonResponse({"error": "Le nom est obligatoire."}, status=400)
+
+    except (KeyError, TypeError, AttributeError, json.JSONDecodeError):
+        return JsonResponse({"error": "Requête invalide."}, status=400)
+
+    qualification.nom = nom
+    qualification.save()
+
+    return JsonResponse(_qualification_to_dict(qualification))
 
 
 # ---------------------------------------------------------------------------
@@ -799,6 +1006,7 @@ def api_recapitulatif(request):
                 "id": affectation.animateur.id,
                 "prenom": affectation.animateur.prenom,
                 "nom": affectation.animateur.nom,
+                "age": affectation.animateur.age,
                 "jours": 0,
                 "centres": set(),
             }
@@ -824,6 +1032,7 @@ def api_recapitulatif(request):
             "id": animateur.id,
             "prenom": animateur.prenom,
             "nom": animateur.nom,
+            "age": animateur.age,
             "jours": 0,
             "centres": set(),
         })
@@ -843,6 +1052,7 @@ def api_recapitulatif(request):
                 "id": v["id"],
                 "prenom": v["prenom"],
                 "nom": v["nom"],
+                "age": v.get("age"),
                 "jours": v["jours"],
                 "nb_centres": len(v["centres"]),
             }

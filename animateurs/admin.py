@@ -56,6 +56,15 @@ class DisponibiliteInline(admin.TabularInline):
 @admin.register(Animateur)
 class AnimateurAdmin(admin.ModelAdmin):
 
+    list_display = (
+        "prenom",
+        "nom",
+        "telephone",
+        "email",
+        "date_naissance",
+        "age",
+    )
+    search_fields = ("prenom", "nom", "telephone", "email")
     inlines = [PreferenceCentreInline, DisponibiliteInline]
 
     def formfield_for_manytomany(

@@ -23,6 +23,12 @@ document.addEventListener("DOMContentLoaded", function ()
 	// navigation (prev/next/today/changeView) sur les 3 à la fois.
 	const calendars = [];
 
+	// Petits caches front : ils évitent de refaire des appels API quand on
+	// ouvre la modal de placement automatique. Ils sont mis à jour par
+	// chargerCentres() et chargerAnimateurs().
+	let centresPlanning = [];
+	let animateursPlanning = [];
+
 	// Identifiant de la "source d'évènements" utilisée pour afficher les
 	// disponibilités en fond de calendrier (voir afficherDisponibilites).
 	const DISPO_SOURCE_ID = "disponibilites";
@@ -211,6 +217,7 @@ document.addEventListener("DOMContentLoaded", function ()
 	{
 		return apiFetch("/api/centres/").then((centres) =>
 		{
+			centresPlanning = centres;
 			calendarsContainer.innerHTML = "";
 
 			if (centres.length === 0)
@@ -298,50 +305,182 @@ document.addEventListener("DOMContentLoaded", function ()
 	});
 
 	// -----------------------------------------------------------------
-	// Bouton "Placer automatiquement" : ouvre une petite modal listant
-	// chaque centre avec le nombre d'animateurs souhaités par jour
-	// (pré-rempli avec Centre.effectif_cible, modifiable juste pour ce
-	// lancement). Le formulaire se reconstruit à chaque ouverture pour
-	// refléter les centres/effectifs à jour.
+	// Bouton "Placer automatiquement" :
+	// 1. ouvre une modal plus complète ;
+	// 2. permet de choisir l'effectif voulu par centre ;
+	// 3. permet de cocher/décocher les animateurs autorisés jour par jour ;
+	// 4. envoie tout au serveur, qui cherche la meilleure combinaison.
+	//
+	// Important : la modal ne sauvegarde rien tant qu'on ne clique pas sur
+	// "Lancer le placement". Elle prépare seulement les contraintes.
 	// -----------------------------------------------------------------
 
 	const modalAuto = document.getElementById("modal-auto");
 	initFermetureModal(modalAuto);
 
-	document.getElementById("btn-auto-placement").addEventListener("click", () =>
+	function joursSemaineAffichee()
+	{
+		const lundi = lundiDeLaSemaine(calendars[0].getDate());
+		return [0, 1, 2, 3, 4].map((offset) =>
+		{
+			const date = new Date(lundi);
+			date.setDate(date.getDate() + offset);
+			return formatDateLocal(date);
+		});
+	}
+
+	function libelleJour(dateStr)
+	{
+		return parseLocalDate(dateStr).toLocaleDateString("fr-FR", {
+			weekday: "long",
+			day: "2-digit",
+			month: "2-digit",
+		});
+	}
+
+	function nomAnimateurCourt(animateur)
+	{
+		return `${animateur.prenom} ${animateur.nom[0]}.`;
+	}
+
+	function animateurDisponibleLeJour(animateur, dateStr)
+	{
+		// Même règle que côté serveur : aucune plage renseignée = pas de
+		// contrainte connue, donc l'animateur est proposé par défaut.
+		if (!animateur.disponibilites || animateur.disponibilites.length === 0)
+		{
+			return true;
+		}
+
+		return animateur.disponibilites.some((plage) => plage.debut <= dateStr && dateStr <= plage.fin);
+	}
+
+	function construireModalAuto()
 	{
 		const zone = document.getElementById("modal-auto-centres");
 
-		apiFetch("/api/centres/").then((centres) =>
+		if (centresPlanning.length === 0)
 		{
-			if (centres.length === 0)
-			{
-				zone.innerHTML = '<p class="empty-note">Ajoute d\'abord au moins un centre.</p>';
-			}
-			else
-			{
-				zone.innerHTML = centres.map((c) => `
-					<div class="auto-centre-row" data-centre-id="${c.id}">
-						<span><span class="swatch" style="background:${c.couleur}"></span>${c.nom}</span>
-						<input type="number" class="auto-effectif-input" value="${c.effectif_cible}" min="0" step="1">
-					</div>
-				`).join("");
-			}
+			zone.innerHTML = '<p class="empty-note">Ajoute d\'abord au moins un centre.</p>';
+			return;
+		}
 
+		if (animateursPlanning.length === 0)
+		{
+			zone.innerHTML = '<p class="empty-note">Ajoute d\'abord au moins un animateur.</p>';
+			return;
+		}
+
+		const jours = joursSemaineAffichee();
+		const totalPlacesParJour = centresPlanning.reduce((total, centre) => total + (parseInt(centre.effectif_cible, 10) || 0), 0);
+
+		zone.innerHTML = `
+			<div class="auto-summary">
+				<div>
+					<strong>Semaine affichée</strong>
+					<span>${libelleJour(jours[0])} → ${libelleJour(jours[4])}</span>
+				</div>
+				<div>
+					<strong>${animateursPlanning.length}</strong>
+					<span>animateur(s)</span>
+				</div>
+				<div>
+					<strong>${totalPlacesParJour}</strong>
+					<span>place(s) / jour</span>
+				</div>
+			</div>
+
+			<h3 class="auto-section-title">Besoin par centre</h3>
+			<div class="auto-centres-grid">
+				${centresPlanning.map((centre) => `
+					<label class="auto-centre-row" data-centre-id="${centre.id}">
+						<span class="auto-centre-name"><span class="swatch" style="background:${centre.couleur}"></span>${centre.nom}</span>
+						<input type="number" class="auto-effectif-input" value="${centre.effectif_cible}" min="0" step="1" aria-label="Effectif souhaité pour ${centre.nom}">
+					</label>
+				`).join("")}
+			</div>
+
+			<h3 class="auto-section-title">Animateurs autorisés par jour</h3>
+			<p class="empty-note auto-help">Décoche un animateur si tu ne veux pas que l'automatique l'utilise ce jour-là. Les personnes non disponibles sont grisées.</p>
+			<div class="auto-days-grid">
+				${jours.map((dateStr) => `
+					<section class="auto-day-card" data-date="${dateStr}">
+						<div class="auto-day-header">
+							<strong>${libelleJour(dateStr)}</strong>
+							<div class="auto-day-actions">
+								<button type="button" class="mini-link auto-day-check-all">Tout</button>
+								<button type="button" class="mini-link auto-day-check-available">Dispos</button>
+							</div>
+						</div>
+						<div class="auto-animateurs-grid">
+							${animateursPlanning.map((animateur) =>
+							{
+								const disponible = animateurDisponibleLeJour(animateur, dateStr);
+								const classes = disponible ? "" : " auto-unavailable";
+								const checked = disponible ? "checked" : "";
+								const disabled = disponible ? "" : "disabled";
+								const title = disponible ? "" : " title=\"Pas disponible selon les plages renseignées\"";
+								return `
+									<label class="auto-anim-chip${classes}"${title}>
+										<input type="checkbox" value="${animateur.id}" ${checked} ${disabled}>
+										<span>${nomAnimateurCourt(animateur)}</span>
+									</label>
+								`;
+							}).join("")}
+						</div>
+					</section>
+				`).join("")}
+			</div>
+		`;
+	}
+
+	document.getElementById("btn-auto-placement").addEventListener("click", () =>
+	{
+		if (calendars.length === 0) return;
+
+		// On recharge animateurs + centres avant d'ouvrir la modal pour être
+		// sûr d'avoir les derniers ajouts/modifications.
+		Promise.all([
+			apiFetch("/api/centres/").then((centres) => { centresPlanning = centres; }),
+			apiFetch("/api/animateurs/").then((animateurs) => { animateursPlanning = animateurs; }),
+		]).then(() =>
+		{
+			construireModalAuto();
 			ouvrirModal(modalAuto);
-		});
+		}).catch((err) => afficherToast(erreurMessage(err, "Impossible de préparer le placement automatique."), true));
+	});
+
+	// Petits boutons internes de la modal : "Tout" coche tous les
+	// disponibles du jour ; "Dispos" revient au choix conseillé par défaut.
+	document.getElementById("modal-auto-centres").addEventListener("click", (event) =>
+	{
+		const card = event.target.closest(".auto-day-card");
+		if (!card) return;
+
+		if (event.target.classList.contains("auto-day-check-all") || event.target.classList.contains("auto-day-check-available"))
+		{
+			card.querySelectorAll('.auto-anim-chip input[type="checkbox"]').forEach((input) =>
+			{
+				if (!input.disabled) input.checked = true;
+			});
+		}
 	});
 
 	document.getElementById("btn-auto-confirmer").addEventListener("click", () =>
 	{
 		if (calendars.length === 0) return;
 
-		// Construit {"<centre_id>": effectif, ...} à partir des champs
-		// affichés dans la modal.
 		const effectifs = {};
 		document.querySelectorAll("#modal-auto-centres .auto-centre-row").forEach((row) =>
 		{
 			effectifs[row.dataset.centreId] = parseInt(row.querySelector(".auto-effectif-input").value, 10) || 0;
+		});
+
+		const animateursParJour = {};
+		document.querySelectorAll("#modal-auto-centres .auto-day-card").forEach((card) =>
+		{
+			animateursParJour[card.dataset.date] = Array.from(card.querySelectorAll('.auto-anim-chip input[type="checkbox"]:checked'))
+				.map((input) => parseInt(input.value, 10));
 		});
 
 		const lundi = lundiDeLaSemaine(calendars[0].getDate());
@@ -357,6 +496,7 @@ document.addEventListener("DOMContentLoaded", function ()
 				debut: formatDateLocal(lundi),
 				fin: formatDateLocal(vendredi),
 				effectifs: effectifs,
+				animateurs_par_jour: animateursParJour,
 			}),
 		}).then((data) =>
 		{
@@ -365,9 +505,13 @@ document.addEventListener("DOMContentLoaded", function ()
 			let message = `${data.creees.length} affectation(s) créée(s) automatiquement.`;
 			if (data.non_couverts.length > 0)
 			{
-				message += ` ${data.non_couverts.length} créneau(x) restent sans animateur disponible.`;
+				message += ` ${data.non_couverts.length} place(s) restent vides.`;
 			}
-			afficherToast(message);
+			if (data.animateurs_non_utilises && data.animateurs_non_utilises.length > 0)
+			{
+				message += ` ${data.animateurs_non_utilises.length} animateur(s) sélectionné(s) n'ont pas pu être utilisés.`;
+			}
+			afficherToast(message, data.non_couverts.length > 0);
 		}).catch((err) => afficherToast(erreurMessage(err, "Le placement automatique a échoué."), true));
 	});
 
@@ -393,6 +537,21 @@ document.addEventListener("DOMContentLoaded", function ()
 		name.classList.add("anim-name");
 		name.textContent = `${animateur.prenom} ${animateur.nom[0]}.`;
 		div.appendChild(name);
+
+		if (animateur.age !== null && animateur.age !== undefined)
+		{
+			const age = document.createElement("span");
+			age.classList.add("anim-age");
+			age.textContent = `${animateur.age} ans`;
+			div.appendChild(age);
+		}
+
+		const infos = [
+			animateur.age !== null && animateur.age !== undefined ? `${animateur.age} ans` : null,
+			animateur.telephone || null,
+			animateur.email || null,
+		].filter(Boolean).join(" · ");
+		if (infos) div.title = infos;
 
 		const prefs = document.createElement("span");
 		prefs.classList.add("anim-prefs");
@@ -423,6 +582,7 @@ document.addEventListener("DOMContentLoaded", function ()
 	{
 		return apiFetch("/api/animateurs/").then((animateurs) =>
 		{
+			animateursPlanning = animateurs;
 			animList.innerHTML = "";
 
 			if (animateurs.length === 0)

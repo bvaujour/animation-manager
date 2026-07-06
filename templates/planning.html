@@ -58,10 +58,15 @@
                 <h2>Placement automatique</h2>
                 <button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button>
             </div>
-            <div class="modal-body">
-                <p class="empty-note">Du lundi au vendredi de la semaine affichée. Les créneaux déjà remplis manuellement ne sont jamais modifiés.</p>
+            <div class="modal-body modal-auto-body">
+                <p class="empty-note">
+                    L'automatique remplit les places manquantes du lundi au vendredi, sans modifier les affectations déjà posées.
+                    Il cherche à faire travailler le maximum d'animateurs possibles, tout en respectant les disponibilités et les préférences de centre.
+                </p>
                 <div id="modal-auto-centres"></div>
-                <button class="btn btn-accent" id="btn-auto-confirmer" type="button">Lancer le placement</button>
+                <div class="modal-actions-sticky">
+                    <button class="btn btn-accent" id="btn-auto-confirmer" type="button">Lancer le placement</button>
+                </div>
             </div>
         </div>
     </div>

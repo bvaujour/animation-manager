@@ -1,74 +1,142 @@
 // ===========================================================================
 // gestion.js
 // ---------------------------------------------------------------------------
-// Module CRUD partagé pour les 3 entités "simples" de l'app : Animateur,
-// Centre, Qualification. Chaque mount*(container, options) :
-//   - injecte son propre HTML (liste existante + formulaire d'ajout) dans
-//     l'élément `container` fourni ;
-//   - se recharge lui-même après chaque création/suppression réussie ;
-//   - appelle `options.onChange(objetCree)` après un ajout ou une
-//     suppression, pour que la page qui l'a monté puisse réagir (ex:
-//     rafraîchir un autre affichage qui dépend de ces données).
-//
-// Ce même module est utilisé à deux endroits SANS AUCUNE DUPLICATION :
-//   - la page dédiée /gestion/ (templates/gestion.html, un mount par onglet) ;
-//   - la popup d'ajout rapide du planning (templates/planning.html), montée
-//     paresseusement (au 1er clic sur le bouton "+") dans les mêmes onglets.
-//
-// Exposé globalement via `GestionApp` (objet retourné par la fonction
-// auto-exécutée ci-dessous), pour rester simple sans système de modules
-// JS (pas de bundler dans ce projet).
+// Module CRUD partagé pour la page /gestion/ et la modal d'ajout rapide du
+// planning. Cette version permet maintenant :
+//   - d'ajouter ;
+//   - de modifier les entrées existantes ;
+//   - de supprimer ;
+//   - de modifier tous les champs disponibles pour les 3 tables gérées ici :
+//     Animateur, Centre, Qualification.
 // ===========================================================================
 
 const GestionApp = (function ()
 {
-	// Construit une ligne "liste" générique : contenu à gauche (HTML libre,
-	// ex: un badge de couleur + un nom), bouton Supprimer à droite. Utilisée
-	// par les 3 fonctions mount* ci-dessous pour éviter de dupliquer le
-	// même balisage 3 fois.
-	function ligneEntite(labelHtml, onDelete)
+	function escapeHtml(value)
 	{
-		const row = document.createElement("div");
-		row.classList.add("entity-row");
+		return String(value ?? "")
+			.replaceAll("&", "&amp;")
+			.replaceAll("<", "&lt;")
+			.replaceAll(">", "&gt;")
+			.replaceAll("\"", "&quot;")
+			.replaceAll("'", "&#039;");
+	}
 
-		const main = document.createElement("div");
-		main.classList.add("entity-main");
-		main.innerHTML = labelHtml;
-		row.appendChild(main);
+	function champValeur(form, selector)
+	{
+		return form.querySelector(selector).value.trim();
+	}
 
-		const del = document.createElement("button");
-		del.classList.add("btn-danger");
-		del.innerHTML = "&times; Supprimer";
-		del.addEventListener("click", onDelete);
-		row.appendChild(del);
+	function idsCheckboxesCochees(root)
+	{
+		return Array.from(root.querySelectorAll("input:checked")).map((el) => parseInt(el.value, 10));
+	}
 
-		return row;
+	function bouton(label, classes, onClick)
+	{
+		const btn = document.createElement("button");
+		btn.type = "button";
+		btn.className = classes;
+		btn.innerHTML = label;
+		btn.addEventListener("click", onClick);
+		return btn;
+	}
+
+	function creerFormActions(onSave, onCancel)
+	{
+		const actions = document.createElement("div");
+		actions.classList.add("edit-actions");
+		actions.appendChild(bouton("Enregistrer", "btn btn-primary", onSave));
+		actions.appendChild(bouton("Annuler", "btn btn-ghost", onCancel));
+		return actions;
+	}
+
+	function resetFormAnimateur(form)
+	{
+		form.querySelector("#anim-prenom").value = "";
+		form.querySelector("#anim-nom").value = "";
+		form.querySelector("#anim-telephone").value = "";
+		form.querySelector("#anim-email").value = "";
+		form.querySelector("#anim-date-naissance").value = "";
+		form.querySelectorAll("#anim-qualifs input:checked").forEach((el) => { el.checked = false; });
+	}
+
+	function qualificationCheckboxes(qualifications, cochees = [])
+	{
+		if (!qualifications.length)
+		{
+			return '<p class="empty-note">Aucune qualification disponible.</p>';
+		}
+
+		const cocheesSet = new Set(cochees.map(Number));
+
+		return qualifications.map((q) => `
+			<label class="checkbox-chip">
+				<input type="checkbox" value="${escapeHtml(q.id)}" ${cocheesSet.has(q.id) ? "checked" : ""}>
+				${escapeHtml(q.nom)}
+			</label>
+		`).join("");
 	}
 
 	// ------------------------------------------------------------------
 	// Qualifications
 	// ------------------------------------------------------------------
-	// options.onChange(nouvelleQualification | undefined) est appelé après
-	// un ajout OU une suppression. Utilisé par mountAnimateurs (voir plus
-	// bas) pour garder ses cases à cocher de qualifications à jour.
-
 	function mountQualifications(container, options = {})
 	{
 		container.innerHTML = `
 			<p class="section-title">Qualifications existantes</p>
 			<div class="entity-list" id="qualifs-list"></div>
 			<p class="section-title">Ajouter une qualification</p>
-			<div class="field">
-				<label for="qualif-nom">Nom</label>
-				<input type="text" id="qualif-nom" placeholder="ex : BAFA">
+			<div class="gestion-form" id="qualif-form">
+				<div class="field">
+					<label for="qualif-nom">Nom</label>
+					<input type="text" id="qualif-nom" placeholder="ex : BAFA">
+				</div>
+				<p class="form-error" id="qualif-error"></p>
+				<button class="btn btn-primary" id="qualif-submit" type="button">Ajouter</button>
 			</div>
-			<p class="form-error" id="qualif-error"></p>
-			<button class="btn btn-primary" id="qualif-submit" type="button">Ajouter</button>
 		`;
 
 		const list = container.querySelector("#qualifs-list");
 		const input = container.querySelector("#qualif-nom");
 		const errorEl = container.querySelector("#qualif-error");
+
+		function ouvrirEdition(q, row)
+		{
+			row.classList.add("entity-row-editing");
+			row.innerHTML = `
+				<div class="edit-grid edit-grid-single">
+					<div class="field">
+						<label>Nom</label>
+						<input type="text" class="edit-qualif-nom" value="${escapeHtml(q.nom)}">
+					</div>
+					<p class="form-error edit-error"></p>
+				</div>
+			`;
+
+			const error = row.querySelector(".edit-error");
+			row.appendChild(creerFormActions(() =>
+			{
+				error.textContent = "";
+				const nom = champValeur(row, ".edit-qualif-nom");
+
+				if (!nom)
+				{
+					error.textContent = "Le nom est obligatoire.";
+					return;
+				}
+
+				apiFetch(`/api/qualifications/${escapeHtml(q.id)}/`, {
+					method: "PATCH",
+					body: JSON.stringify({ nom }),
+				}).then(() =>
+				{
+					afficherToast("Qualification modifiée.");
+					charger();
+					if (options.onChange) options.onChange();
+				}).catch((err) => { error.textContent = erreurMessage(err, "Modification impossible."); });
+			}, charger));
+		}
 
 		function charger()
 		{
@@ -84,11 +152,20 @@ const GestionApp = (function ()
 
 				data.forEach((q) =>
 				{
-					const row = ligneEntite(`<span class="truncate">${q.nom}</span>`, () =>
-					{
-						if (!confirm(`Supprimer la qualification "${q.nom}" ?`)) return;
+					const row = document.createElement("div");
+					row.classList.add("entity-row");
+					row.innerHTML = `
+						<div class="entity-main"><span class="truncate">${escapeHtml(q.nom)}</span></div>
+						<div class="entity-actions"></div>
+					`;
 
-						apiFetch(`/api/qualifications/${q.id}/`, { method: "DELETE" })
+					const actions = row.querySelector(".entity-actions");
+					actions.appendChild(bouton("Modifier", "btn btn-ghost", () => ouvrirEdition(q, row)));
+					actions.appendChild(bouton("&times; Supprimer", "btn-danger", () =>
+					{
+						if (!confirm(`Supprimer la qualification "${escapeHtml(q.nom)}" ?`)) return;
+
+						apiFetch(`/api/qualifications/${escapeHtml(q.id)}/`, { method: "DELETE" })
 							.then(() =>
 							{
 								afficherToast("Qualification supprimée.");
@@ -96,7 +173,8 @@ const GestionApp = (function ()
 								if (options.onChange) options.onChange();
 							})
 							.catch((err) => afficherToast(erreurMessage(err, "Suppression impossible."), true));
-					});
+					}));
+
 					list.appendChild(row);
 				});
 
@@ -133,34 +211,32 @@ const GestionApp = (function ()
 	// ------------------------------------------------------------------
 	// Centres
 	// ------------------------------------------------------------------
-	// options.onChange(nouveauCentre | undefined) : dans planning.js, sert
-	// à ajouter tout de suite le calendrier du nouveau centre sans recharger
-	// la page.
-
 	function mountCentres(container, options = {})
 	{
 		container.innerHTML = `
 			<p class="section-title">Centres existants</p>
 			<div class="entity-list" id="centres-list"></div>
 			<p class="section-title">Ajouter un centre</p>
-			<div class="field">
-				<label for="centre-nom">Nom</label>
-				<input type="text" id="centre-nom" placeholder="ex : Pacaudière">
+			<div class="gestion-form" id="centre-form">
+				<div class="field">
+					<label for="centre-nom">Nom</label>
+					<input type="text" id="centre-nom" placeholder="ex : Pacaudière">
+				</div>
+				<div class="field">
+					<label for="centre-code">Code</label>
+					<input type="text" id="centre-code" placeholder="ex : PAC" maxlength="10">
+				</div>
+				<div class="field">
+					<label for="centre-couleur">Couleur</label>
+					<input type="color" id="centre-couleur" value="#1f6f54">
+				</div>
+				<div class="field">
+					<label for="centre-effectif">Animateurs par jour souhaités</label>
+					<input type="number" id="centre-effectif" value="1" min="1" step="1">
+				</div>
+				<p class="form-error" id="centre-error"></p>
+				<button class="btn btn-primary" id="centre-submit" type="button">Ajouter</button>
 			</div>
-			<div class="field">
-				<label for="centre-code">Code (affiché dans les badges)</label>
-				<input type="text" id="centre-code" placeholder="ex : PAC" maxlength="10">
-			</div>
-			<div class="field">
-				<label for="centre-couleur">Couleur</label>
-				<input type="color" id="centre-couleur" value="#1f6f54">
-			</div>
-			<div class="field">
-				<label for="centre-effectif">Animateurs par jour souhaités</label>
-				<input type="number" id="centre-effectif" value="1" min="1" step="1">
-			</div>
-			<p class="form-error" id="centre-error"></p>
-			<button class="btn btn-primary" id="centre-submit" type="button">Ajouter</button>
 		`;
 
 		const list = container.querySelector("#centres-list");
@@ -169,6 +245,58 @@ const GestionApp = (function ()
 		const couleurEl = container.querySelector("#centre-couleur");
 		const effectifEl = container.querySelector("#centre-effectif");
 		const errorEl = container.querySelector("#centre-error");
+
+		function ouvrirEdition(c, row)
+		{
+			row.classList.add("entity-row-editing");
+			row.innerHTML = `
+				<div class="edit-grid">
+					<div class="field">
+						<label>Nom</label>
+						<input type="text" class="edit-centre-nom" value="${escapeHtml(c.nom)}">
+					</div>
+					<div class="field">
+						<label>Code</label>
+						<input type="text" class="edit-centre-code" value="${escapeHtml(c.code)}" maxlength="10">
+					</div>
+					<div class="field">
+						<label>Couleur</label>
+						<input type="color" class="edit-centre-couleur" value="${escapeHtml(c.couleur)}">
+					</div>
+					<div class="field">
+						<label>Animateurs par jour souhaités</label>
+						<input type="number" class="edit-centre-effectif" value="${c.effectif_cible}" min="1" step="1">
+					</div>
+					<p class="form-error edit-error"></p>
+				</div>
+			`;
+
+			const error = row.querySelector(".edit-error");
+			row.appendChild(creerFormActions(() =>
+			{
+				error.textContent = "";
+				const nom = champValeur(row, ".edit-centre-nom");
+				const code = champValeur(row, ".edit-centre-code");
+				const couleur = champValeur(row, ".edit-centre-couleur");
+				const effectif_cible = parseInt(champValeur(row, ".edit-centre-effectif"), 10) || 1;
+
+				if (!nom || !code)
+				{
+					error.textContent = "Le nom et le code sont obligatoires.";
+					return;
+				}
+
+				apiFetch(`/api/centres/${escapeHtml(c.id)}/`, {
+					method: "PATCH",
+					body: JSON.stringify({ nom, code, couleur, effectif_cible }),
+				}).then(() =>
+				{
+					afficherToast("Centre modifié.");
+					charger();
+					if (options.onChange) options.onChange();
+				}).catch((err) => { error.textContent = erreurMessage(err, "Modification impossible."); });
+			}, charger));
+		}
 
 		function charger()
 		{
@@ -184,48 +312,24 @@ const GestionApp = (function ()
 
 				data.forEach((c) =>
 				{
-					// Ligne "sur mesure" (pas ligneEntite()) car on a besoin
-					// d'un contrôle en plus : l'effectif souhaité, modifiable
-					// directement ici sans passer par un formulaire séparé.
 					const row = document.createElement("div");
 					row.classList.add("entity-row");
-
 					row.innerHTML = `
 						<div class="entity-main">
-							<span class="swatch" style="background:${c.couleur}"></span>
-							<span class="truncate">${c.nom} (${c.code})</span>
+							<span class="swatch" style="background:${escapeHtml(c.couleur)}"></span>
+							<span class="truncate">${escapeHtml(c.nom)} (${escapeHtml(c.code)})</span>
+							<small class="entity-muted">${escapeHtml(c.effectif_cible)} / jour</small>
 						</div>
-						<div class="entity-actions">
-							<label class="effectif-inline">
-								<span>par jour</span>
-								<input type="number" class="effectif-input" value="${c.effectif_cible}" min="1" step="1">
-							</label>
-							<button class="btn btn-ghost btn-save-effectif" type="button">Enregistrer</button>
-							<button class="btn btn-danger" type="button">&times; Supprimer</button>
-						</div>
+						<div class="entity-actions"></div>
 					`;
 
-					const effectifInput = row.querySelector(".effectif-input");
-
-					row.querySelector(".btn-save-effectif").addEventListener("click", () =>
+					const actions = row.querySelector(".entity-actions");
+					actions.appendChild(bouton("Modifier", "btn btn-ghost", () => ouvrirEdition(c, row)));
+					actions.appendChild(bouton("&times; Supprimer", "btn-danger", () =>
 					{
-						const valeur = parseInt(effectifInput.value, 10);
+						if (!confirm(`Supprimer le centre "${c.nom}" ? Ses affectations et préférences liées seront aussi supprimées.`)) return;
 
-						apiFetch(`/api/centres/${c.id}/`, {
-							method: "PATCH",
-							body: JSON.stringify({ effectif_cible: valeur }),
-						}).then(() =>
-						{
-							afficherToast(`Effectif souhaité mis à jour pour ${c.nom}.`);
-							if (options.onChange) options.onChange();
-						}).catch((err) => afficherToast(erreurMessage(err, "Mise à jour impossible."), true));
-					});
-
-					row.querySelector(".btn-danger").addEventListener("click", () =>
-					{
-						if (!confirm(`Supprimer le centre "${c.nom}" ? Ses affectations et disponibilités liées seront aussi supprimées.`)) return;
-
-						apiFetch(`/api/centres/${c.id}/`, { method: "DELETE" })
+						apiFetch(`/api/centres/${escapeHtml(c.id)}/`, { method: "DELETE" })
 							.then(() =>
 							{
 								afficherToast("Centre supprimé.");
@@ -233,7 +337,7 @@ const GestionApp = (function ()
 								if (options.onChange) options.onChange();
 							})
 							.catch((err) => afficherToast(erreurMessage(err, "Suppression impossible."), true));
-					});
+					}));
 
 					list.appendChild(row);
 				});
@@ -266,7 +370,7 @@ const GestionApp = (function ()
 					charger();
 					if (options.onChange) options.onChange(nouveau);
 				})
-				.catch((err) => { errorEl.textContent = erreurMessage(err, "Impossible d'ajouter ce centre (le code est peut-être déjà pris)."); });
+				.catch((err) => { errorEl.textContent = erreurMessage(err, "Impossible d'ajouter ce centre."); });
 		});
 
 		charger();
@@ -276,60 +380,126 @@ const GestionApp = (function ()
 	// ------------------------------------------------------------------
 	// Animateurs
 	// ------------------------------------------------------------------
-	// Formulaire un peu plus riche que les deux précédents : les
-	// qualifications disponibles sont chargées à part (chargerCheckboxesQualifs)
-	// pour pouvoir être rafraîchies indépendamment quand la liste des
-	// qualifications change ailleurs (voir le `options.onChange` de
-	// mountQualifications, câblé dans planning.js et gestion.html).
-
 	function mountAnimateurs(container, options = {})
 	{
+		let qualificationsCache = [];
+
 		container.innerHTML = `
 			<p class="section-title">Animateurs existants</p>
 			<div class="entity-list" id="anims-list"></div>
 			<p class="section-title">Ajouter un animateur</p>
-			<div class="field">
-				<label for="anim-prenom">Prénom</label>
-				<input type="text" id="anim-prenom">
+			<div class="gestion-form" id="anim-form">
+				<div class="field">
+					<label for="anim-prenom">Prénom</label>
+					<input type="text" id="anim-prenom">
+				</div>
+				<div class="field">
+					<label for="anim-nom">Nom</label>
+					<input type="text" id="anim-nom">
+				</div>
+				<div class="field">
+					<label for="anim-telephone">Téléphone</label>
+					<input type="tel" id="anim-telephone" placeholder="ex : 07 82 35 18 87">
+				</div>
+				<div class="field">
+					<label for="anim-email">Email</label>
+					<input type="email" id="anim-email" placeholder="ex : prenom.nom@mail.com">
+				</div>
+				<div class="field">
+					<label for="anim-date-naissance">Date de naissance</label>
+					<input type="date" id="anim-date-naissance">
+				</div>
+				<div class="field">
+					<label>Qualifications</label>
+					<div class="checkbox-grid" id="anim-qualifs"></div>
+				</div>
+				<p class="form-error" id="anim-error"></p>
+				<button class="btn btn-primary" id="anim-submit" type="button">Ajouter</button>
 			</div>
-			<div class="field">
-				<label for="anim-nom">Nom</label>
-				<input type="text" id="anim-nom">
-			</div>
-			<div class="field">
-				<label>Qualifications</label>
-				<div class="checkbox-grid" id="anim-qualifs"></div>
-			</div>
-			<p class="form-error" id="anim-error"></p>
-			<button class="btn btn-primary" id="anim-submit" type="button">Ajouter</button>
 		`;
 
 		const list = container.querySelector("#anims-list");
+		const form = container.querySelector("#anim-form");
 		const prenomEl = container.querySelector("#anim-prenom");
 		const nomEl = container.querySelector("#anim-nom");
+		const telephoneEl = container.querySelector("#anim-telephone");
+		const emailEl = container.querySelector("#anim-email");
+		const dateNaissanceEl = container.querySelector("#anim-date-naissance");
 		const qualifsEl = container.querySelector("#anim-qualifs");
 		const errorEl = container.querySelector("#anim-error");
 
 		function chargerCheckboxesQualifs()
 		{
-			apiFetch("/api/qualifications/").then((data) =>
+			return apiFetch("/api/qualifications/").then((data) =>
 			{
-				qualifsEl.innerHTML = "";
+				qualificationsCache = data;
+				qualifsEl.innerHTML = qualificationCheckboxes(data);
+				return data;
+			});
+		}
 
-				if (data.length === 0)
+		function ouvrirEdition(a, row)
+		{
+			row.classList.add("entity-row-editing");
+			row.innerHTML = `
+				<div class="edit-grid">
+					<div class="field">
+						<label>Prénom</label>
+						<input type="text" class="edit-anim-prenom" value="${escapeHtml(a.prenom)}">
+					</div>
+					<div class="field">
+						<label>Nom</label>
+						<input type="text" class="edit-anim-nom" value="${escapeHtml(a.nom)}">
+					</div>
+					<div class="field">
+						<label>Téléphone</label>
+						<input type="tel" class="edit-anim-telephone" value="${escapeHtml(a.telephone || "")}">
+					</div>
+					<div class="field">
+						<label>Email</label>
+						<input type="email" class="edit-anim-email" value="${escapeHtml(a.email || "")}">
+					</div>
+					<div class="field">
+						<label>Date de naissance</label>
+						<input type="date" class="edit-anim-date-naissance" value="${a.date_naissance || ""}">
+					</div>
+					<div class="field edit-qualifs-field">
+						<label>Qualifications</label>
+						<div class="checkbox-grid edit-anim-qualifs">
+							${qualificationCheckboxes(qualificationsCache, a.qualification_ids || [])}
+						</div>
+					</div>
+					<p class="form-error edit-error"></p>
+				</div>
+			`;
+
+			const error = row.querySelector(".edit-error");
+			row.appendChild(creerFormActions(() =>
+			{
+				error.textContent = "";
+				const prenom = champValeur(row, ".edit-anim-prenom");
+				const nom = champValeur(row, ".edit-anim-nom");
+				const telephone = champValeur(row, ".edit-anim-telephone");
+				const email = champValeur(row, ".edit-anim-email");
+				const date_naissance = row.querySelector(".edit-anim-date-naissance").value || null;
+				const qualifications = idsCheckboxesCochees(row.querySelector(".edit-anim-qualifs"));
+
+				if (!prenom || !nom)
 				{
-					qualifsEl.innerHTML = '<p class="empty-note">Ajoute d\'abord une qualification (onglet Qualifications).</p>';
+					error.textContent = "Le prénom et le nom sont obligatoires.";
 					return;
 				}
 
-				data.forEach((q) =>
+				apiFetch(`/api/animateurs/${a.id}/`, {
+					method: "PATCH",
+					body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications }),
+				}).then(() =>
 				{
-					const label = document.createElement("label");
-					label.classList.add("checkbox-chip");
-					label.innerHTML = `<input type="checkbox" value="${q.id}"> ${q.nom}`;
-					qualifsEl.appendChild(label);
-				});
-			});
+					afficherToast("Animateur modifié.");
+					charger();
+					if (options.onChange) options.onChange();
+				}).catch((err) => { error.textContent = erreurMessage(err, "Modification impossible."); });
+			}, charger));
 		}
 
 		function charger()
@@ -346,10 +516,28 @@ const GestionApp = (function ()
 
 				data.forEach((a) =>
 				{
-					const label = `<span class="truncate">${a.prenom} ${a.nom}</span>`;
-					const row = ligneEntite(label, () =>
+					const details = [
+						a.age ? `${a.age} ans` : null,
+						a.telephone || null,
+						a.email || null,
+						a.qualifications && a.qualifications.length ? a.qualifications.join(", ") : null,
+					].filter(Boolean).join(" · ");
+
+					const row = document.createElement("div");
+					row.classList.add("entity-row");
+					row.innerHTML = `
+						<div class="entity-main entity-main-stack">
+							<span class="truncate">${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}</span>
+							${details ? `<small class="entity-muted">${escapeHtml(details)}</small>` : ""}
+						</div>
+						<div class="entity-actions"></div>
+					`;
+
+					const actions = row.querySelector(".entity-actions");
+					actions.appendChild(bouton("Modifier", "btn btn-ghost", () => ouvrirEdition(a, row)));
+					actions.appendChild(bouton("&times; Supprimer", "btn-danger", () =>
 					{
-						if (!confirm(`Supprimer l'animateur "${a.prenom} ${a.nom}" ? Son planning et ses disponibilités seront aussi supprimés.`)) return;
+						if (!confirm(`Supprimer l'animateur "${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}" ? Son planning et ses disponibilités seront aussi supprimés.`)) return;
 
 						apiFetch(`/api/animateurs/${a.id}/`, { method: "DELETE" })
 							.then(() =>
@@ -359,7 +547,8 @@ const GestionApp = (function ()
 								if (options.onChange) options.onChange();
 							})
 							.catch((err) => afficherToast(erreurMessage(err, "Suppression impossible."), true));
-					});
+					}));
+
 					list.appendChild(row);
 				});
 
@@ -372,7 +561,10 @@ const GestionApp = (function ()
 			errorEl.textContent = "";
 			const prenom = prenomEl.value.trim();
 			const nom = nomEl.value.trim();
-			const qualifications = Array.from(qualifsEl.querySelectorAll("input:checked")).map((el) => parseInt(el.value, 10));
+			const telephone = telephoneEl.value.trim();
+			const email = emailEl.value.trim();
+			const date_naissance = dateNaissanceEl.value || null;
+			const qualifications = idsCheckboxesCochees(qualifsEl);
 
 			if (!prenom || !nom)
 			{
@@ -380,12 +572,13 @@ const GestionApp = (function ()
 				return;
 			}
 
-			apiFetch("/api/animateurs/", { method: "POST", body: JSON.stringify({ prenom, nom, qualifications }) })
+			apiFetch("/api/animateurs/", {
+				method: "POST",
+				body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications }),
+			})
 				.then((nouveau) =>
 				{
-					prenomEl.value = "";
-					nomEl.value = "";
-					qualifsEl.querySelectorAll("input:checked").forEach((el) => { el.checked = false; });
+					resetFormAnimateur(form);
 					afficherToast("Animateur ajouté.");
 					charger();
 					if (options.onChange) options.onChange(nouveau);
@@ -393,8 +586,7 @@ const GestionApp = (function ()
 				.catch((err) => { errorEl.textContent = erreurMessage(err, "Impossible d'ajouter cet animateur."); });
 		});
 
-		chargerCheckboxesQualifs();
-		charger();
+		chargerCheckboxesQualifs().then(charger);
 		return { charger, chargerCheckboxesQualifs };
 	}
 

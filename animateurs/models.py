@@ -26,6 +26,7 @@ Vue d'ensemble des tables et de leurs relations :
 """
 
 from django.db import models
+from django.utils import timezone
 
 
 class Qualification(models.Model):
@@ -40,15 +41,41 @@ class Qualification(models.Model):
 
 
 class Animateur(models.Model):
-    """Un membre de l'équipe d'animation."""
+    """Un membre de l'équipe d'animation.
+
+    Les coordonnées et la date de naissance sont optionnelles pour ne pas
+    bloquer les animateurs déjà créés avant l'ajout de ces champs. L'âge
+    n'est pas stocké en base : il est calculé à la volée depuis
+    `date_naissance`, ce qui évite d'avoir une valeur périmée chaque année.
+    """
 
     prenom = models.CharField(max_length=100)
     nom = models.CharField(max_length=100)
+
+    telephone = models.CharField(max_length=20, blank=True)
+    email = models.EmailField(blank=True)
+    date_naissance = models.DateField(null=True, blank=True)
 
     # ManyToMany "simple" (pas de table intermédiaire personnalisée) car
     # on n'a besoin d'aucune information supplémentaire sur la relation
     # elle-même (contrairement à PreferenceCentre qui a un `ordre`).
     qualifications = models.ManyToManyField(Qualification, blank=True)
+
+    @property
+    def age(self):
+        """Âge actuel de l'animateur, calculé depuis sa date de naissance."""
+
+        if not self.date_naissance:
+            return None
+
+        today = timezone.now().date()
+        age = today.year - self.date_naissance.year
+
+        # Si l'anniversaire n'est pas encore passé cette année, on retire 1.
+        if (today.month, today.day) < (self.date_naissance.month, self.date_naissance.day):
+            age -= 1
+
+        return age
 
     def __str__(self):
         return f"{self.prenom} {self.nom}"
