@@ -1236,7 +1236,7 @@ def api_planning_auto(request):
             ]
             if meilleurs:
                 meilleurs.sort()
-                placer(animateur, slots[meilleurs[0][2]])
+                placer(animateur, slots[meilleurs[0][1]])
 
         # --- Passe 2 : remplir les places restantes en équilibrant la charge
         # (le moins de jours déjà travaillés d'abord), centre autorisé en départage. ---
