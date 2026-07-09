@@ -6,15 +6,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestion équipe animation</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
 </head>
 <body>
     {% include "partials/_nav.html" with active="accueil" %}
 
-    <main class="page-hero">
-        <h1 id="Title">Gestion équipe animation</h1>
-        <p>Planning des animateurs, centres, qualifications et documents de l'équipe.</p>
+    <main class="home-page">
+        <section class="home-header">
+            <div>
+                <p class="eyebrow">Tableau de bord</p>
+                <h1 id="Title">Gestion équipe animation</h1>
+                <p>Vue rapide du planning et accès aux documents utiles.</p>
+            </div>
+            <a class="btn btn-primary" href="{% url 'planning' %}">Ouvrir le planning</a>
+        </section>
+
+        <section class="home-section">
+            <div class="section-heading">
+                <h2>Planning de la semaine</h2>
+                <span class="section-note">Lecture seule</span>
+            </div>
+            <div id="home-calendars" class="home-calendars"></div>
+        </section>
+
+        <section class="home-section">
+            <div class="section-heading">
+                <h2>Documents disponibles</h2>
+                <a class="btn btn-ghost" href="{% url 'documents' %}">Gérer les documents</a>
+            </div>
+            <div id="home-documents" class="home-documents"></div>
+        </section>
     </main>
 
     <script src="{% static 'js/accueil.js' %}"></script>

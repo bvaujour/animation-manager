@@ -1,26 +1,183 @@
-body {
-    background-color: #f5f5f5;
-    font-family: Arial, sans-serif;
+.home-page {
+    height: calc(100vh - 52px);
+    overflow-y: auto;
+    padding: 14px;
 }
 
-h1 {
-    color: darkblue;
+.home-header,
+.home-section {
+    max-width: 1180px;
+    margin: 0 auto 14px;
 }
 
-.page-hero {
-    max-width: 640px;
-    margin: 60px auto;
-    padding: 0 20px;
+.home-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    box-shadow: var(--shadow-sm);
+}
+
+.home-header h1 {
+    margin-bottom: 4px;
+    font-size: clamp(1.45rem, 3vw, 2rem);
+}
+
+.home-header p {
+    margin: 0;
+    color: var(--color-text-muted);
+}
+
+.eyebrow {
+    margin: 0 0 4px !important;
+    color: var(--color-primary-dark) !important;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.home-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    box-shadow: var(--shadow-sm);
+}
+
+.section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.section-heading h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.section-note {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.home-calendars {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.home-calendar-card {
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-sunken);
+    padding: 8px;
+}
+
+.home-calendar-card h3 {
+    margin: 0 0 6px;
+    font-size: 0.9rem;
     text-align: center;
 }
 
-.page-hero p {
-    color: #555;
-    font-size: 1rem;
+.home-calendar .fc {
+    font-size: 0.72rem;
 }
 
-.page-content {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 24px 20px 60px;
+.home-calendar .fc-col-header-cell-cushion,
+.home-calendar .fc-daygrid-day-number {
+    padding: 2px;
+    font-size: 0.7rem;
+}
+
+.home-calendar .fc-event {
+    font-size: 0.68rem;
+    padding: 0 2px;
+    border-radius: 5px;
+}
+
+.home-calendar .fc-daygrid-day-frame {
+    min-height: 56px;
+}
+
+.home-documents {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+}
+
+.home-document-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-sunken);
+}
+
+.home-document-icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: var(--color-primary);
+    color: white;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.home-document-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.home-document-info h3 {
+    margin: 0 0 2px;
+    font-size: 0.88rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.home-document-info span {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+}
+
+.empty-note {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+}
+
+@media (max-width: 900px) {
+    .home-page {
+        padding: 8px;
+    }
+
+    .home-header {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 12px;
+    }
+
+    .home-calendars {
+        grid-template-columns: 1fr;
+    }
+
+    .home-calendar .fc-daygrid-day-frame {
+        min-height: 48px;
+    }
 }
