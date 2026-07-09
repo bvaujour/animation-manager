@@ -1437,3 +1437,95 @@ html, body {
         max-width: none !important;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Correctif mobile : les actions Remplir/Vider doivent toujours rester visibles.
+   On force la page planning en 4 zones :
+   1. choix vue
+   2. période
+   3. calendriers scrollables
+   4. actions
+   Ainsi seuls les calendriers scrollent, pas les boutons.
+   --------------------------------------------------------------------------- */
+#calendars-section {
+    display: grid !important;
+    grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+#planning-view-switcher,
+#planning-period-nav,
+#planning-actions {
+    flex: 0 0 auto !important;
+    z-index: 5 !important;
+}
+
+#calendars-container {
+    min-height: 0 !important;
+    overflow: auto !important;
+    align-self: stretch !important;
+}
+
+#planning-actions {
+    position: sticky !important;
+    bottom: 0 !important;
+    background: var(--color-surface) !important;
+}
+
+@media (max-width: 640px) {
+    html,
+    body {
+        height: 100dvh !important;
+        overflow: hidden !important;
+    }
+
+    #layout {
+        height: calc(100dvh - 52px) !important;
+        overflow: hidden !important;
+        gap: 5px !important;
+        padding: 5px !important;
+    }
+
+    #animateurs-panel {
+        flex: 0 0 auto !important;
+        max-height: 118px !important;
+        overflow: hidden !important;
+    }
+
+    #animateurs-list {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        padding-bottom: 4px !important;
+    }
+
+    #calendars-section {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        gap: 5px !important;
+    }
+
+    #calendars-container {
+        flex: none !important;
+        height: auto !important;
+        max-height: none !important;
+        min-height: 0 !important;
+        overflow: auto !important;
+        padding-bottom: 4px !important;
+    }
+
+    #planning-actions {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 6px !important;
+        padding: 5px !important;
+        margin-bottom: 0 !important;
+    }
+
+    #planning-actions .btn {
+        min-width: 0 !important;
+        width: 100% !important;
+        font-size: 0.74rem !important;
+        padding: 6px 4px !important;
+    }
+}
