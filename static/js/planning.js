@@ -427,6 +427,7 @@ document.addEventListener("DOMContentLoaded", function ()
 			height: "100%",
 			locale: "fr",
 			firstDay: 1, // la semaine commence le lundi
+			weekends: false, // cache samedi/dimanche pour gagner de la place
 			editable: true,   // autorise glisser/redimensionner un évènement existant
 			droppable: true,  // autorise à recevoir un élément externe (la liste d'animateurs)
 			selectable: true,
@@ -434,7 +435,6 @@ document.addEventListener("DOMContentLoaded", function ()
 			expandRows: true,
 			headerToolbar: false, // on utilise notre propre barre d'outils commune
 			footerToolbar: false,
-			weekends: false,
 
 			// Chaque calendrier ne charge que les évènements de SON centre.
 			events: `/api/planning/?centre_id=${centre.id}`,
@@ -446,6 +446,13 @@ document.addEventListener("DOMContentLoaded", function ()
 			datesSet: function (info)
 			{
 				toolbarLabel.textContent = info.view.title;
+
+				// Si un animateur est sélectionné, on recalcule les zones
+				// de disponibilité quand on change de semaine/mois.
+				if (animateurActif)
+				{
+					afficherDisponibilites(animateurActif, animateurActif.disponibilites || []);
+				}
 			},
 
 			// Clic sur un jour du calendrier :
@@ -514,6 +521,10 @@ document.addEventListener("DOMContentLoaded", function ()
 				}
 			},
 		});
+
+		// On rattache le centre à l'instance FullCalendar pour pouvoir
+		// colorer les disponibilités différemment selon le centre.
+		calendar.centrePlanning = centre;
 
 		calendar.render();
 		return calendar;
@@ -727,10 +738,8 @@ document.addEventListener("DOMContentLoaded", function ()
 				animList.appendChild(chip);
 			});
 
-			if (animateurActif && selectedChip)
-			{
-				rendreFicheAnimateurSelectionne(animateurActif.disponibilites || []);
-			}
+			// Sur la page planning, on garde uniquement la sélection visuelle :
+			// pas de fiche détaillée sous l'étiquette, pour gagner de la place.
 		});
 	}
 
@@ -751,27 +760,68 @@ document.addEventListener("DOMContentLoaded", function ()
 
 	// Affiche, en fond de chaque calendrier, les plages de disponibilité
 	// de l'animateur sélectionné + un message texte au-dessus de la liste.
-	function afficherDisponibilites(animateur, plages)
+	function couleurDisponibilitePourCentre(animateur, centre)
 	{
-		animateur.disponibilites = plages;
-		if (animateurActif && animateurActif.id === animateur.id)
+		const centres = animateur.centres_autorises || [];
+		const index = centres.findIndex((c) => Number(c.id) === Number(centre.id));
+
+		// Pas de centre autorisé = on ne colore pas ce calendrier.
+		if (index === -1) return null;
+
+		// Le premier centre autorisé est affiché en vert, les suivants en orange.
+		// Comme on a supprimé l'ancien ordre de préférence, "premier" signifie
+		// ici le premier centre renvoyé par l'API.
+		return index === 0 ? "#3ba55c" : "#f59e0b";
+	}
+
+	function plagesDisponibilitesPourVue(calendar, plages)
+	{
+		// Règle métier existante : aucune disponibilité renseignée = pas de contrainte.
+		// Dans ce cas, on colore toute la période visible du calendrier.
+		if (!plages || plages.length === 0)
 		{
-			animateurActif.disponibilites = plages;
-			rendreFicheAnimateurSelectionne(plages);
+			return [{
+				debut: formatDateLocal(calendar.view.activeStart),
+				finExclusive: formatDateLocal(calendar.view.activeEnd),
+			}];
 		}
 
-		// FullCalendar affiche les évènements "display: background" comme
-		// une simple teinte de fond, sans les traiter comme de vraies
-		// affectations (pas cliquables, pas de titre affiché).
-		const events = plages.map((plage) => ({
-			start: plage.debut,
-			end: addDays(plage.fin, 1),
-			display: "background",
-			color: "#3ba55c",
+		return plages.map((plage) => ({
+			debut: plage.debut,
+			finExclusive: addDays(plage.fin, 1),
 		}));
+	}
+
+	function afficherDisponibilites(animateur, plages)
+	{
+		animateur.disponibilites = plages || [];
+		if (animateurActif && animateurActif.id === animateur.id)
+		{
+			animateurActif.disponibilites = animateur.disponibilites;
+		}
+
+		// On repart toujours de sources propres, sinon les fonds colorés
+		// s'empilent quand on change d'animateur ou de semaine.
+		effacerDisponibilitesAffichees();
 
 		calendars.forEach((calendar) =>
 		{
+			const centre = calendar.centrePlanning;
+			if (!centre) return;
+
+			const couleur = couleurDisponibilitePourCentre(animateur, centre);
+			if (!couleur) return;
+
+			// FullCalendar affiche les évènements "display: background" comme
+			// une simple teinte de fond, sans les traiter comme de vraies
+			// affectations (pas cliquables, pas de titre affiché).
+			const events = plagesDisponibilitesPourVue(calendar, animateur.disponibilites).map((plage) => ({
+				start: plage.debut,
+				end: plage.finExclusive,
+				display: "background",
+				color: couleur,
+			}));
+
 			calendar.addEventSource({ id: DISPO_SOURCE_ID, events: events });
 		});
 	}
@@ -795,7 +845,7 @@ document.addEventListener("DOMContentLoaded", function ()
 		effacerDisponibilitesAffichees();
 		animateurActif = null;
 		selectedChip = null;
-		rendreFicheAnimateurSelectionne();
+		retirerFicheAnimateurSelectionne();
 
 		// Un second clic sur le même animateur = désélectionner et s'arrêter là.
 		if (dejaSelectionne) return;
@@ -803,10 +853,14 @@ document.addEventListener("DOMContentLoaded", function ()
 		chip.classList.add("selected");
 		animateurActif = animateur;
 		selectedChip = chip;
-		rendreFicheAnimateurSelectionne(animateur.disponibilites || []);
+		afficherToast(`${animateur.prenom} sélectionné : clique sur un jour pour l'affecter.`);
 
-		apiFetch(`/api/animateurs/${animateur.id}/disponibilites/`)
-			.then((data) => afficherDisponibilites(animateur, data.disponibilites));
+		// Affiche immédiatement ses jours disponibles : vert sur son premier
+		// centre autorisé, orange sur les autres centres autorisés.
+		fetch(`/api/animateurs/${animateur.id}/disponibilites/`)
+			.then((response) => response.json())
+			.then((data) => afficherDisponibilites(animateur, data.disponibilites || []))
+			.catch(() => afficherDisponibilites(animateur, animateur.disponibilites || []));
 	}
 
 	// -----------------------------------------------------------------
@@ -849,15 +903,16 @@ document.addEventListener("DOMContentLoaded", function ()
 	// rapidement une disponibilité depuis la page planning.
 	// -----------------------------------------------------------------
 
-	const modalEditAnimateur = document.getElementById("modal-edit-animateur");
-	const modalDispoAnimateur = document.getElementById("modal-dispo-animateur");
-	const modalEditContent = document.getElementById("modal-edit-animateur-content");
-	const modalDispoContent = document.getElementById("modal-dispo-animateur-content");
+	// La page planning est volontairement allégée :
+	// les modifications de fiche et les disponibilités se gèrent depuis /gestion/.
+	// On garde uniquement la modal de remplissage automatique.
+	const modalEditAnimateur = null;
+	const modalDispoAnimateur = null;
+	const modalEditContent = null;
+	const modalDispoContent = null;
 	const modalAuto = document.getElementById("modal-auto-remplissage");
 	const modalAutoContent = document.getElementById("modal-auto-remplissage-content");
 
-	initFermetureModal(modalEditAnimateur);
-	initFermetureModal(modalDispoAnimateur);
 	initFermetureModal(modalAuto);
 
 	function chargerReferentielsEdition()
@@ -1176,7 +1231,7 @@ document.addEventListener("DOMContentLoaded", function ()
 	// Construit et ouvre la popup listant chaque centre avec son effectif
 	// par jour (pré-rempli avec l'effectif cible) et, en option, un minimum
 	// de titulaires par qualification.
-	async function ouvrirPopupRemplissageAuto()
+	function ouvrirPopupRemplissageAuto()
 	{
 		if (centresPlanning.length === 0)
 		{
@@ -1184,21 +1239,11 @@ document.addEventListener("DOMContentLoaded", function ()
 			return;
 		}
 
-		// La page Planning ne chargeait les qualifications que lorsqu'on ouvrait
-		// la modal d'édition d'un animateur. Résultat : la popup de remplissage
-		// auto pouvait afficher "Aucune qualification" alors qu'il y en avait bien
-		// dans la base. On recharge donc explicitement la liste juste avant
-		// de construire la popup auto.
-		try
+		// Les qualifications peuvent ne pas être chargées sur la page planning
+		// tant qu'aucune fiche animateur n'a été ouverte : on les recharge ici
+		// juste avant de construire la fenêtre auto.
+		const construirePopup = () =>
 		{
-			qualificationsPlanning = await apiFetch("/api/qualifications/");
-		}
-		catch (err)
-		{
-			afficherToast(erreurMessage(err, "Impossible de charger les qualifications."), true);
-			return;
-		}
-
 		const qualifs = qualificationsPlanning || [];
 
 		const blocs = centresPlanning.map((centre) =>
@@ -1332,6 +1377,11 @@ document.addEventListener("DOMContentLoaded", function ()
 		});
 
 		ouvrirModal(modalAuto);
+		};
+
+		apiFetch("/api/qualifications/")
+			.then((qualifications) => { qualificationsPlanning = qualifications; construirePopup(); })
+			.catch(() => construirePopup());
 	}
 
 	if (btnAutoSemaine)
