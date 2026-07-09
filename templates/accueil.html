@@ -15,19 +15,25 @@
     {% include "partials/_nav.html" with active="accueil" %}
 
     <main class="home-page">
-        <section class="home-header">
-            <div>
-                <p class="eyebrow">Tableau de bord</p>
-                <h1 id="Title">Gestion équipe animation</h1>
-                <p>Vue rapide du planning et accès aux documents utiles.</p>
-            </div>
-            <a class="btn btn-primary" href="{% url 'planning' %}">Ouvrir le planning</a>
-        </section>
+        <section class="home-section home-planning-section">
+            <div class="section-heading home-calendar-heading">
+                <div>
+                    <h2>Planning</h2>
+                    <span class="section-note">Période affichée : <strong id="home-visible-period">chargement...</strong></span>
+                </div>
 
-        <section class="home-section">
-            <div class="section-heading">
-                <h2>Planning de la semaine</h2>
-                <span class="section-note">Lecture seule</span>
+                <div class="home-calendar-tools">
+                    <div class="home-view-toggle" aria-label="Choix de la vue">
+                        <button type="button" class="btn btn-ghost active" id="home-view-week">Semaine</button>
+                        <button type="button" class="btn btn-ghost" id="home-view-month">Mois</button>
+                    </div>
+
+                    <div class="home-week-controls" aria-label="Navigation planning">
+                        <button type="button" class="btn btn-ghost" id="home-prev-week">← Précédent</button>
+                        <button type="button" class="btn btn-ghost" id="home-current-week">Aujourd’hui</button>
+                        <button type="button" class="btn btn-ghost" id="home-next-week">Suivant →</button>
+                    </div>
+                </div>
             </div>
             <div id="home-calendars" class="home-calendars"></div>
         </section>
@@ -35,7 +41,7 @@
         <section class="home-section">
             <div class="section-heading">
                 <h2>Documents disponibles</h2>
-                <a class="btn btn-ghost" href="{% url 'documents' %}">Gérer les documents</a>
+                <span class="section-note">Téléchargement direct</span>
             </div>
             <div id="home-documents" class="home-documents"></div>
         </section>

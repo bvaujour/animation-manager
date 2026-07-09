@@ -424,15 +424,15 @@ document.addEventListener("DOMContentLoaded", function ()
 		const calendar = new FullCalendar.Calendar(calendarEl,
 		{
 			initialView: "dayGridWeek",
-			height: "100%",
+			height: "auto",
 			locale: "fr",
 			firstDay: 1, // la semaine commence le lundi
-			weekends: false, // cache samedi/dimanche pour gagner de la place
+			hiddenDays: [0], // cache uniquement le dimanche : lundi -> samedi visibles
 			editable: true,   // autorise glisser/redimensionner un évènement existant
 			droppable: true,  // autorise à recevoir un élément externe (la liste d'animateurs)
 			selectable: true,
 
-			expandRows: true,
+			expandRows: false,
 			headerToolbar: false, // on utilise notre propre barre d'outils commune
 			footerToolbar: false,
 
@@ -577,6 +577,21 @@ document.addEventListener("DOMContentLoaded", function ()
 	document.getElementById("btn-next").addEventListener("click", () => calendars.forEach((c) => c.next()));
 	document.getElementById("btn-today").addEventListener("click", () => calendars.forEach((c) => c.today()));
 
+	function appliquerModeVue(viewName)
+	{
+		// Sur la page planning, les calendriers doivent se comporter comme sur
+		// l'accueil : en vue semaine ils restent compacts, et en vue mois ils
+		// grandissent naturellement avec toutes les lignes du mois.
+		const vueMois = viewName === "dayGridMonth";
+		calendarsContainer.classList.toggle("planning-view-month", vueMois);
+		calendarsContainer.classList.toggle("planning-view-week", !vueMois);
+
+		requestAnimationFrame(() =>
+		{
+			calendars.forEach((calendar) => calendar.updateSize());
+		});
+	}
+
 	document.querySelectorAll(".view-btn").forEach((btn) =>
 	{
 		btn.addEventListener("click", () =>
@@ -584,8 +599,12 @@ document.addEventListener("DOMContentLoaded", function ()
 			document.querySelectorAll(".view-btn").forEach((b) => b.classList.remove("active"));
 			btn.classList.add("active");
 			calendars.forEach((c) => c.changeView(btn.dataset.view));
+			appliquerModeVue(btn.dataset.view);
 		});
 	});
+
+	// Mode initial : semaine compacte.
+	appliquerModeVue("dayGridWeek");
 
 	// Renvoie le lundi de la semaine contenant `date` (à minuit local).
 	// getDay() renvoie 0 pour dimanche, 1 pour lundi, ..., 6 pour samedi ;
@@ -1170,7 +1189,7 @@ document.addEventListener("DOMContentLoaded", function ()
 			};
 		},
 	});
-	// Placement automatique de la semaine affichée (lundi -> vendredi).
+	// Placement automatique de la semaine affichée (lundi -> samedi).
 	// On ouvre d'abord une popup pour choisir le nombre d'animateurs par
 	// jour et par centre, puis le serveur vide la semaine et reconstruit
 	// les affectations en respectant disponibilités et centres autorisés.
@@ -1286,7 +1305,7 @@ document.addEventListener("DOMContentLoaded", function ()
 		}).join("");
 
 		modalAutoContent.innerHTML = `
-			<p class="form-hint">Choisis le nombre d'animateurs à placer <strong>par jour</strong> dans chaque centre, du lundi au vendredi. Tu peux exiger un minimum de titulaires d'une qualification (ex : 2 BAFA) : ces places sont pourvues en priorité, le reste est libre. Mettre 0 en total exclut un centre.</p>
+			<p class="form-hint">Choisis le nombre d'animateurs à placer <strong>par jour</strong> dans chaque centre, du lundi au samedi. Tu peux exiger un minimum de titulaires d'une qualification (ex : 2 BAFA) : ces places sont pourvues en priorité, le reste est libre. Mettre 0 en total exclut un centre.</p>
 			<div class="auto-centres-liste">${blocs}</div>
 			<p class="form-error" id="auto-error"></p>
 			<div class="edit-actions">
@@ -1368,7 +1387,7 @@ document.addEventListener("DOMContentLoaded", function ()
 				return;
 			}
 
-			if (!confirm("Remplir automatiquement du lundi au vendredi ? Les affectations existantes de ces jours seront remplacées."))
+			if (!confirm("Remplir automatiquement du lundi au samedi ? Les affectations existantes de ces jours seront remplacées."))
 			{
 				return;
 			}

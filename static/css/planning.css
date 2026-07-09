@@ -16,70 +16,69 @@ html, body {
     overflow: hidden;
 }
 
+/* Page planning : même logique visuelle que l'accueil.
+   - options + animateurs restent en haut ;
+   - les 3 calendriers sont compacts, côte à côte quand la largeur le permet ;
+   - seule la zone planning scrolle si nécessaire. */
 #layout {
     display: flex;
-    flex-direction: row;
-    gap: 14px;
-    padding: 14px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
     height: calc(100vh - 58px);
     min-height: 0;
     overflow: hidden;
 }
 
-/* --- Panneau animateurs --- */
+/* --- Bandeau animateurs horizontal --- */
 
 #animateurs-panel {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: 14px 14px 10px;
-    /* Barre à gauche à toutes les tailles : maintenant que les calendriers
-       scrollent horizontalement, on n'a plus besoin de faire passer la
-       barre au-dessus sur mobile (ce qui cassait l'ouverture de la fiche
-       animateur). Largeur volontairement réduite sur mobile ; élargie en
-       desktop (voir plus bas). */
-    width: 150px;
-    flex: 0 0 150px;
+    padding: 8px;
+    flex: 0 0 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
+    gap: 6px;
 }
 
 #animateurs-panel .section-title {
-    margin-bottom: 10px;
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 #animateurs-list {
     display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px 12px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    flex: 1;
-    padding: 12px 4px 6px;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 3px 2px 6px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
 }
 
 #dispo-info {
-    color: var(--color-text-muted);
-    font-size: 0.82rem;
-    min-height: 18px;
-    padding: 8px 4px 2px;
-    border-top: 1px dashed var(--color-border);
-    margin-top: 6px;
+    display: none;
 }
 
-/* Badge animateur : ruban de couleur + badges des centres affectables */
+/* Badge animateur compact */
 
 .animateur {
     position: relative;
     flex: 0 0 auto;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: 9px 12px 9px 16px;
+    border-radius: 999px;
+    padding: 6px 10px 6px 13px;
     white-space: nowrap;
     box-shadow: var(--shadow-sm);
     cursor: pointer;
@@ -90,12 +89,11 @@ html, body {
     content: "";
     position: absolute;
     left: 0;
-    top: 0;
-    bottom: 0;
-    width: 6px;
+    top: 6px;
+    bottom: 6px;
+    width: 5px;
     background: var(--ruban, var(--color-border));
-    border-top-left-radius: var(--radius-sm);
-    border-bottom-left-radius: var(--radius-sm);
+    border-radius: 999px;
 }
 
 .animateur:hover {
@@ -113,52 +111,29 @@ html, body {
 }
 
 .anim-name {
-    font-weight: 600;
-    font-size: 0.88rem;
-    flex: 1;
-    min-width: 0;
+    font-weight: 700;
+    font-size: 0.82rem;
+    max-width: 110px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .anim-prefs {
-    /* Masqués sur l'étiquette : ils mangeaient toute la largeur du nom.
-       On garde les éléments dans le DOM (le mode "jour sélectionné" les
-       interroge encore), ils ne sont simplement plus affichés ici. On
-       réintroduira l'info des centres autrement. */
     display: none;
-    gap: 3px;
 }
 
 .pref-dot {
     background-color: var(--c, var(--color-accent));
-    width: 15px;
-    height: 15px;
-    border-radius: 50%;
-    font-size: 9px;
-    line-height: 15px;
-    text-align: center;
     color: #fff;
-    opacity: 0.55;
-    transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .pref-dot.active {
     opacity: 1;
-    transform: scale(1.3);
+    transform: scale(1.2);
     box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--color-primary);
 }
 
-.pref-dot {
-    min-width: 22px;
-    width: auto;
-    padding: 0 5px;
-    border-radius: 999px;
-    font-size: 8px;
-    font-weight: 700;
-}
-
-/* --- Calendriers --- */
+/* --- Zone calendriers --- */
 
 #calendars-section {
     flex: 1;
@@ -166,7 +141,7 @@ html, body {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     overflow: hidden;
 }
 
@@ -176,43 +151,34 @@ html, body {
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 6px;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: 8px 12px;
+    padding: 6px 8px;
 }
 
-.toolbar-nav {
+.toolbar-nav,
+.toolbar-views,
+.toolbar-actions {
     display: flex;
     align-items: center;
     gap: 4px;
+    flex-wrap: wrap;
 }
 
-.toolbar-nav .btn {
-    padding: 6px 11px;
+.toolbar-nav .btn,
+.toolbar-views .btn,
+.toolbar-actions .btn {
+    padding: 5px 8px;
+    font-size: 0.8rem;
 }
 
 .toolbar-label {
-    margin-left: 8px;
-    font-weight: 600;
-    font-size: 0.92rem;
+    margin-left: 5px;
+    font-weight: 700;
+    font-size: 0.86rem;
     text-transform: capitalize;
-}
-
-.toolbar-views {
-    display: flex;
-    gap: 4px;
-}
-
-.toolbar-views .btn {
-    padding: 6px 12px;
-}
-
-.toolbar-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
 }
 
 .view-btn.active {
@@ -220,15 +186,16 @@ html, body {
     color: #fff;
 }
 
+/* Même esprit que l'accueil : 3 petites cartes côte à côte.
+   En largeur réduite, elles restent lisibles via un scroll horizontal. */
 #calendars-container {
     flex: 1;
     min-height: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding-right: 4px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(290px, 1fr));
+    gap: 8px;
+    overflow: auto;
+    padding: 0 2px 4px;
     -webkit-overflow-scrolling: touch;
 }
 
@@ -236,18 +203,20 @@ html, body {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: 10px 12px 12px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
-    height: 320px;
+    min-width: 290px;
+    min-height: 0;
     box-shadow: var(--shadow-sm);
 }
 
 .calendar-card h3 {
-    font-size: 0.95rem;
-    margin: 0 0 8px;
-    padding: 6px 10px;
+    font-size: 0.82rem;
+    margin: 0 0 5px;
+    padding: 5px 8px;
     border-radius: var(--radius-sm);
+    text-align: center;
     background-color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 16%, white);
     color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 70%, black);
     border-left: 4px solid var(--centre-color, var(--color-primary));
@@ -256,6 +225,76 @@ html, body {
 .calendar-card .calendar {
     flex: 1;
     min-height: 0;
+}
+
+/* FullCalendar compact comme sur l'accueil */
+.fc {
+    font-size: 0.75rem;
+}
+
+.fc .fc-col-header-cell-cushion,
+.fc .fc-daygrid-day-number {
+    font-size: 0.72rem;
+    padding: 2px 3px;
+}
+
+.fc .fc-daygrid-day-frame {
+    min-height: 34px;
+}
+
+.fc-event {
+    border-radius: 6px;
+    font-size: 0.68rem;
+    padding: 1px 3px;
+}
+
+.fc .fc-daygrid-event {
+    margin-top: 1px;
+}
+
+
+/* --- Hauteur dynamique des calendriers selon la vue ---
+/* Avant, les cartes avaient une hauteur fixe : semaine et mois avaient donc
+   exactement la même taille. Ici on laisse FullCalendar calculer sa hauteur :
+   une semaine = une seule ligne, un mois = 5/6 lignes, donc la carte grandit. */
+#calendars-container.planning-view-week,
+#calendars-container.planning-view-month {
+    align-items: start;
+}
+
+#calendars-container.planning-view-week .calendar-card,
+#calendars-container.planning-view-month .calendar-card {
+    height: auto;
+}
+
+#calendars-container.planning-view-week .calendar-card .calendar,
+#calendars-container.planning-view-month .calendar-card .calendar {
+    flex: 0 0 auto;
+}
+
+#calendars-container.planning-view-week .fc .fc-daygrid-day-frame {
+    min-height: 62px;
+}
+
+#calendars-container.planning-view-month .fc .fc-daygrid-day-frame {
+    min-height: 54px;
+}
+
+@media (min-width: 641px) {
+    #calendars-container.planning-view-week .calendar-card,
+    #calendars-container.planning-view-month .calendar-card {
+        height: auto;
+    }
+}
+
+@media (max-width: 640px) {
+    #calendars-container.planning-view-week .fc .fc-daygrid-day-frame {
+        min-height: 58px;
+    }
+
+    #calendars-container.planning-view-month .fc .fc-daygrid-day-frame {
+        min-height: 46px;
+    }
 }
 
 /* --- Bouton d'ajout rapide --- */
@@ -828,5 +867,240 @@ html, body {
 
     #calendars-scroll-top {
         margin-bottom: 4px;
+    }
+}
+
+/* ==========================================================================
+   Harmonisation planning = format compact de l'accueil
+   --------------------------------------------------------------------------
+   Bloc volontairement en fin de fichier pour écraser les anciennes règles
+   "calendriers empilés / barre latérale" sans toucher au JS métier.
+   ========================================================================== */
+#layout {
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 8px !important;
+    height: calc(100vh - 58px) !important;
+}
+
+#animateurs-panel {
+    order: 0 !important;
+    width: 100% !important;
+    flex: 0 0 auto !important;
+    padding: 7px !important;
+    border-radius: var(--radius-md) !important;
+}
+
+#animateurs-panel .section-title {
+    display: none !important;
+}
+
+#animateurs-list {
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 6px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 3px 2px 5px !important;
+    flex: 0 0 auto !important;
+}
+
+.animateur {
+    min-width: max-content !important;
+    padding: 6px 9px 6px 12px !important;
+    border-radius: 999px !important;
+    gap: 5px !important;
+    box-shadow: var(--shadow-sm) !important;
+    font-size: 0.78rem !important;
+}
+
+.animateur::before {
+    width: 4px !important;
+    top: 6px !important;
+    bottom: 6px !important;
+    border-radius: 999px !important;
+}
+
+.anim-name {
+    font-size: 0.78rem !important;
+    max-width: 96px !important;
+}
+
+/* On garde les infos centre dans le DOM pour le JS, mais les badges ne mangent
+   pas de place sur le planning. */
+.anim-prefs {
+    display: none !important;
+}
+
+#calendars-section {
+    flex: 1 !important;
+    min-height: 0 !important;
+    gap: 8px !important;
+}
+
+#planning-toolbar {
+    padding: 6px 8px !important;
+    gap: 6px !important;
+    border-radius: var(--radius-md) !important;
+}
+
+.toolbar-nav .btn,
+.toolbar-views .btn,
+.toolbar-actions .btn {
+    padding: 5px 8px !important;
+    font-size: 0.76rem !important;
+}
+
+.toolbar-label {
+    font-size: 0.82rem !important;
+    margin-left: 5px !important;
+}
+
+#calendars-container {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(230px, 1fr)) !important;
+    gap: 8px !important;
+    overflow: auto !important;
+    padding: 0 2px 4px !important;
+}
+
+.calendar-card {
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background: var(--color-surface-sunken) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 7px !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.calendar-card h3 {
+    margin: 0 0 5px !important;
+    padding: 5px 7px !important;
+    border-radius: 10px !important;
+    background: var(--centre-color, var(--color-primary)) !important;
+    color: white !important;
+    border-left: 0 !important;
+    font-size: 0.82rem !important;
+    line-height: 1.1 !important;
+    text-align: center !important;
+}
+
+.calendar-card .calendar {
+    min-height: 0 !important;
+}
+
+.calendar .fc {
+    font-size: 0.68rem !important;
+}
+
+.calendar .fc-scrollgrid,
+.calendar .fc-theme-standard td,
+.calendar .fc-theme-standard th {
+    border-color: rgba(30, 42, 34, 0.16) !important;
+}
+
+.calendar .fc-col-header-cell-cushion,
+.calendar .fc-daygrid-day-number {
+    padding: 1px 2px !important;
+    font-size: 0.64rem !important;
+}
+
+.calendar .fc-daygrid-day-frame {
+    min-height: 58px !important;
+    padding-bottom: 2px !important;
+}
+
+.calendar .fc-daygrid-day-events {
+    margin-top: 0 !important;
+}
+
+.calendar .fc-daygrid-event-harness {
+    margin-top: 1px !important;
+}
+
+.calendar .fc-event {
+    margin: 0 1px !important;
+    padding: 0 2px !important;
+    border-radius: 4px !important;
+    font-size: 0.58rem !important;
+    line-height: 1.25 !important;
+    white-space: normal !important;
+}
+
+.calendar .fc-event-title {
+    white-space: normal !important;
+    overflow: visible !important;
+}
+
+@media (max-width: 760px) {
+    #layout {
+        height: calc(100vh - 52px) !important;
+        gap: 6px !important;
+        padding: 6px !important;
+    }
+
+    #planning-toolbar {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 5px !important;
+        padding: 6px !important;
+    }
+
+    .toolbar-nav,
+    .toolbar-views,
+    .toolbar-actions {
+        display: grid !important;
+        width: 100% !important;
+    }
+
+    .toolbar-nav {
+        grid-template-columns: auto 1fr auto auto !important;
+    }
+
+    .toolbar-views {
+        grid-template-columns: 1fr 1fr !important;
+    }
+
+    .toolbar-actions {
+        grid-template-columns: 1fr 1fr !important;
+    }
+
+    .toolbar-label {
+        width: auto !important;
+        order: 0 !important;
+        margin: 0 !important;
+        text-align: center !important;
+        align-self: center !important;
+        font-size: 0.72rem !important;
+    }
+
+    #calendars-container {
+        grid-template-columns: repeat(3, minmax(215px, 1fr)) !important;
+        gap: 7px !important;
+        overflow: auto !important;
+    }
+
+    .calendar-card {
+        min-width: 215px !important;
+        padding: 5px !important;
+    }
+
+    .calendar-card h3 {
+        font-size: 0.76rem !important;
+        padding: 4px 6px !important;
+    }
+
+    .calendar .fc {
+        font-size: 0.62rem !important;
+    }
+
+    .calendar .fc-daygrid-day-frame {
+        min-height: 52px !important;
+    }
+
+    .calendar .fc-event {
+        font-size: 0.56rem !important;
     }
 }

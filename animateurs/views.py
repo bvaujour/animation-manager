@@ -1050,7 +1050,7 @@ def api_document_detail(request, document_id):
 
 @require_POST
 def api_planning_auto(request):
-    """Remplit automatiquement la semaine affichée, du LUNDI au VENDREDI.
+    """Remplit automatiquement la semaine affichée, du LUNDI au SAMEDI.
 
     Corps JSON attendu :
         {
@@ -1064,9 +1064,9 @@ def api_planning_auto(request):
     Ancien format encore accepté (rétro-compatibilité) :
         {"debut": "...", "effectifs": {"1": 2, "3": 1}}   # sans exigence de qualif
 
-    - "debut" est ramené au lundi de sa semaine ; seuls les 5 jours ouvrés
-      (lundi -> vendredi) sont remplis. Les éventuelles affectations du
-      week-end ne sont pas touchées.
+    - "debut" est ramené au lundi de sa semaine ; seuls les 6 jours affichés
+      (lundi -> samedi) sont remplis. Les éventuelles affectations du
+      dimanche ne sont pas touchées.
     - "effectif" = nombre d'animateurs/jour dans le centre. Une valeur 0
       exclut le centre. Un centre absent retombe sur son effectif_cible.
     - "qualifs" = minimums par qualification, honorés À L'INTÉRIEUR de
@@ -1096,13 +1096,15 @@ def api_planning_auto(request):
     if not debut_date:
         return JsonResponse({"error": "Date de début invalide."}, status=400)
 
-    # Lundi de la semaine reçue, puis 5 jours ouvrés (lundi -> vendredi).
+    # Lundi de la semaine reçue, puis 6 jours affichés (lundi -> samedi).
+    # FullCalendar masque seulement le dimanche côté front : l'auto doit donc
+    # aussi remplir le samedi. La borne de fin est exclusive, donc dimanche.
     lundi = debut_date - datetime.timedelta(days=debut_date.weekday())
-    jours = [lundi + datetime.timedelta(days=i) for i in range(5)]
-    samedi = lundi + datetime.timedelta(days=5)  # borne exclusive (le week-end n'est pas rempli)
+    jours = [lundi + datetime.timedelta(days=i) for i in range(6)]
+    dimanche = lundi + datetime.timedelta(days=6)
 
     debut_dt = _parse_to_aware_datetime(lundi.isoformat())
-    fin_dt = _parse_to_aware_datetime(samedi.isoformat())
+    fin_dt = _parse_to_aware_datetime(dimanche.isoformat())
 
     centres = list(Centre.objects.all().order_by("nom"))
     animateurs = list(
@@ -1199,7 +1201,7 @@ def api_planning_auto(request):
             return True
         return any(plage.debut <= jour <= plage.fin for plage in plages)
 
-    # Nombre de jours ouvrés où chaque animateur est disponible : on s'en
+    # Nombre de jours affichés où chaque animateur est disponible : on s'en
     # sert pour traiter en priorité les profils les moins disponibles (les
     # plus difficiles à caser), ce qui maximise le nombre de personnes utilisées.
     jours_dispo = {
@@ -1208,7 +1210,7 @@ def api_planning_auto(request):
     }
 
     with transaction.atomic():
-        # On repart d'une semaine propre (lundi -> vendredi uniquement).
+        # On repart d'une semaine propre (lundi -> samedi uniquement).
         supprimees, _ = Affectation.objects.filter(
             debut__lt=fin_dt,
             fin__gt=debut_dt,
@@ -1332,7 +1334,7 @@ def api_planning_auto(request):
     animateurs_utilises = sum(1 for nb in jours_travailles.values() if nb > 0)
 
     message = (
-        f"{creees} affectation(s) créée(s) du lundi au vendredi, "
+        f"{creees} affectation(s) créée(s) du lundi au samedi, "
         f"{supprimees} ancienne(s) remplacée(s). "
         f"{animateurs_utilises}/{len(animateurs)} animateur(s) utilisé(s)."
     )
