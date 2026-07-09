@@ -17,7 +17,7 @@ html, body {
 
 #layout {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 14px;
     padding: 14px;
     min-height: calc(100vh - 58px);
@@ -30,6 +30,15 @@ html, body {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: 14px 14px 10px;
+    /* Barre à gauche à toutes les tailles : maintenant que les calendriers
+       scrollent horizontalement, on n'a plus besoin de faire passer la
+       barre au-dessus sur mobile (ce qui cassait l'ouverture de la fiche
+       animateur). Largeur volontairement réduite sur mobile ; élargie en
+       desktop (voir plus bas). */
+    width: 150px;
+    flex: 0 0 150px;
+    display: flex;
+    flex-direction: column;
 }
 
 #animateurs-panel .section-title {
@@ -38,9 +47,12 @@ html, body {
 
 #animateurs-list {
     display: flex;
+    flex-direction: column;
+    align-items: stretch;
     gap: 10px 12px;
-    overflow-x: auto;
-    overflow-y: visible;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
     padding: 12px 4px 6px;
 }
 
@@ -100,10 +112,18 @@ html, body {
 .anim-name {
     font-weight: 600;
     font-size: 0.88rem;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .anim-prefs {
-    display: inline-flex;
+    /* Masqués sur l'étiquette : ils mangeaient toute la largeur du nom.
+       On garde les éléments dans le DOM (le mode "jour sélectionné" les
+       interroge encore), ils ne sont simplement plus affichés ici. On
+       réintroduira l'info des centres autrement. */
+    display: none;
     gap: 3px;
 }
 
@@ -236,23 +256,12 @@ html, body {
 
 @media (min-width: 641px) {
     #layout {
-        flex-direction: row;
         padding: 18px;
     }
 
     #animateurs-panel {
         width: 250px;
         flex: 0 0 250px;
-        display: flex;
-        flex-direction: column;
-    }
-
-    #animateurs-list {
-        flex-direction: column;
-        align-items: stretch;
-        overflow-y: auto;
-        overflow-x: visible;
-        flex: 1;
     }
 
     .calendar-card {
@@ -267,6 +276,69 @@ html, body {
         margin-left: 0;
         text-align: center;
     }
+}
+
+/* --- Scroll horizontal des calendriers sur mobile ---
+   Sur écran étroit, 7 colonnes tiennent mal. Plutôt que de compresser les
+   jours (illisibles), on élargit les cartes au-delà de la largeur de
+   l'écran et on rend TOUT le conteneur des calendriers défilable
+   horizontalement. On scrolle alors de gauche à droite pour atteindre le
+   jour voulu.
+
+   Trois avantages :
+     - un seul scroll pour tous les centres : ils défilent ensemble, calés
+       sur le même jour, sans une ligne de JS ;
+     - FullCalendar rend normalement dans une carte "large" (il se croit sur
+       grand écran) — en-tête et corps alignés — sans dépendre du ScrollGrid
+       premium ;
+     - #planning-toolbar est AU-DESSUS du conteneur (hors zone défilable),
+       donc les boutons semaine / vue / actions restent fixes.                */
+@media (max-width: 640px) {
+    #calendars-container {
+        overflow-x: auto;
+        /* Inertie tactile sur iOS. */
+        -webkit-overflow-scrolling: touch;
+        /* Un peu d'air sous la barre de défilement. */
+        padding-bottom: 4px;
+    }
+
+    .calendar-card {
+        /* Plus large que le téléphone => déborde à droite (~108px par jour,
+           lisible). min-width plutôt que width : la carte reste correcte si
+           le conteneur est légèrement plus large que prévu. */
+        min-width: 760px;
+    }
+}
+
+/* Barre de défilement du HAUT des calendriers (créée par installerBarreScrollHaut
+   dans planning.js). Masquée tant qu'il n'y a rien à défiler ; rendue visible via
+   la classe .visible dès qu'il y a débordement (donc en pratique sur mobile). */
+#calendars-scroll-top {
+    display: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin-bottom: 8px;
+    /* Barre fine et matérialisée là où le navigateur le permet. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+}
+
+#calendars-scroll-top.visible {
+    display: block;
+}
+
+#calendars-scroll-top > div {
+    height: 1px;
+}
+
+#calendars-scroll-top::-webkit-scrollbar {
+    height: 10px;
+    -webkit-appearance: none;
+}
+
+#calendars-scroll-top::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 999px;
 }
 
 
@@ -439,15 +511,6 @@ html, body {
 
 .animateur-detail .selected-actions .btn {
     flex: 1 1 100%;
-}
-
-@media (max-width: 640px) {
-    #animateurs-list {
-        flex-direction: column;
-        overflow-y: auto;
-        overflow-x: hidden;
-        max-height: 260px;
-    }
 }
 
 /* Mode "jour sélectionné" : clic sur une case calendrier sans animateur actif */

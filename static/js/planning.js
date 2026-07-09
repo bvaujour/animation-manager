@@ -427,7 +427,6 @@ document.addEventListener("DOMContentLoaded", function ()
 			height: "100%",
 			locale: "fr",
 			firstDay: 1, // la semaine commence le lundi
-			overflow: false,
 			editable: true,   // autorise glisser/redimensionner un évènement existant
 			droppable: true,  // autorise à recevoir un élément externe (la liste d'animateurs)
 			selectable: true,
@@ -1017,6 +1016,76 @@ document.addEventListener("DOMContentLoaded", function ()
 
 		ouvrirModal(modalDispoAnimateur);
 	}
+
+	// -----------------------------------------------------------------
+	// Double barre de défilement horizontale pour les calendriers.
+	// Sur mobile, #calendars-container déborde à droite et possède déjà
+	// une barre de défilement native EN BAS. Mais comme les calendriers
+	// sont empilés (un par centre), ce bas est souvent loin sous la ligne
+	// de flottaison. On ajoute donc une seconde barre EN HAUT, synchronisée,
+	// pour pouvoir faire défiler les jours sans descendre tout en bas.
+	//
+	// Technique de la "double scrollbar" : un conteneur vide au-dessus,
+	// lui-même défilable horizontalement, dont la piste interne fait
+	// exactement la largeur défilable des calendriers. On recopie la
+	// position de scroll de l'un vers l'autre.
+	// -----------------------------------------------------------------
+	function installerBarreScrollHaut(container)
+	{
+		const barreHaut = document.createElement("div");
+		barreHaut.id = "calendars-scroll-top";
+		const piste = document.createElement("div");
+		barreHaut.appendChild(piste);
+		container.parentNode.insertBefore(barreHaut, container);
+
+		// La piste prend la largeur totale défilable du conteneur, pour que
+		// la barre du haut ait la même amplitude que celle du bas. La barre
+		// n'est montrée que s'il y a effectivement un débordement (donc pas
+		// sur desktop, où tout tient dans la largeur).
+		function rafraichir()
+		{
+			piste.style.width = container.scrollWidth + "px";
+			const deborde = container.scrollWidth > container.clientWidth + 1;
+			barreHaut.classList.toggle("visible", deborde);
+		}
+
+		// Recalcul groupé sur une frame pour éviter les rafales (rendu
+		// FullCalendar, rotation d'écran, ajout de centre...).
+		let planifie = false;
+		function planifierRafraichir()
+		{
+			if (planifie) return;
+			planifie = true;
+			requestAnimationFrame(() => { planifie = false; rafraichir(); });
+		}
+
+		// Synchronisation croisée des positions de scroll, avec verrou
+		// anti-boucle (déplacer l'un déclenche le scroll de l'autre).
+		let enCours = false;
+		function relier(source, cible)
+		{
+			source.addEventListener("scroll", () =>
+			{
+				if (enCours) return;
+				enCours = true;
+				cible.scrollLeft = source.scrollLeft;
+				requestAnimationFrame(() => { enCours = false; });
+			});
+		}
+		relier(barreHaut, container);
+		relier(container, barreHaut);
+
+		// La largeur défilable change avec la taille de l'écran ET avec le
+		// contenu (rendu des calendriers, changement de vue, ajout/retrait
+		// de centre). On surveille les deux.
+		window.addEventListener("resize", planifierRafraichir);
+		new ResizeObserver(planifierRafraichir).observe(container);
+		new MutationObserver(planifierRafraichir).observe(container, { childList: true, subtree: true });
+
+		planifierRafraichir();
+	}
+
+	installerBarreScrollHaut(calendarsContainer);
 
 	// -----------------------------------------------------------------
 	// Chargement initial
