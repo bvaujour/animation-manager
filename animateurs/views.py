@@ -881,158 +881,115 @@ def api_qualification_detail(request, qualification_id):
 # ---------------------------------------------------------------------------
 
 def api_recapitulatif(request):
-    """Calcule les statistiques affichées sur la page Récapitulatif :
-      - compteurs globaux (nb animateurs/centres/qualifications/affectations) ;
-      - jours travaillés par animateur et par centre sur une période
-        optionnelle (?debut=...&fin=..., aucun des deux n'est obligatoire) ;
-      - quelques listes "à surveiller" (toujours calculées sur l'ensemble
-        des données, indépendamment du filtre de période).
+    """Récapitulatif simple sur une période donnée.
 
-    Tout est calculé ici plutôt que côté JS pour que ça reste correct et
-    rapide même quand il y aura beaucoup d'affectations en base.
+    Objectif de la page : renseigner une période et voir, pour chaque
+    animateur, combien de jours il a travaillé au total et dans chaque centre.
+
+    Convention de dates :
+      - `debut` est inclus ;
+      - `fin` est exclusif, comme FullCalendar.
+
+    Si aucune période n'est fournie, on utilise par défaut le mois courant.
     """
 
     debut_str = request.GET.get("debut")
     fin_str = request.GET.get("fin")
 
-    affectations_qs = Affectation.objects.select_related("animateur", "centre")
+    aujourd_hui = timezone.localdate()
 
-    # Une affectation est "dans la période" si elle chevauche l'intervalle
-    # demandé (même logique que pour les conflits de placement).
     if debut_str:
-        affectations_qs = affectations_qs.filter(fin__gt=_parse_to_aware_datetime(debut_str))
+        debut = _parse_to_aware_datetime(debut_str)
+    else:
+        premier_jour = aujourd_hui.replace(day=1)
+        debut = timezone.make_aware(datetime.datetime.combine(premier_jour, datetime.time.min))
+
     if fin_str:
-        affectations_qs = affectations_qs.filter(debut__lt=_parse_to_aware_datetime(fin_str))
+        fin = _parse_to_aware_datetime(fin_str)
+    else:
+        if aujourd_hui.month == 12:
+            mois_suivant = aujourd_hui.replace(year=aujourd_hui.year + 1, month=1, day=1)
+        else:
+            mois_suivant = aujourd_hui.replace(month=aujourd_hui.month + 1, day=1)
+        fin = timezone.make_aware(datetime.datetime.combine(mois_suivant, datetime.time.min))
 
-    affectations = list(affectations_qs)
+    if debut >= fin:
+        return JsonResponse({"error": "La date de début doit être avant la date de fin."}, status=400)
 
-    # --- Cumul du nombre de jours par animateur et par centre ---
-    # (dictionnaires indexés par id, remplis en parcourant les
-    # affectations une seule fois)
-    par_animateur = {}
-    par_centre = {}
+    centres = list(Centre.objects.all().order_by("nom"))
+    animateurs = list(Animateur.objects.all().order_by("prenom", "nom"))
 
-    for affectation in affectations:
-        # Une affectation peut durer plusieurs jours (redimensionnée dans
-        # le calendrier) : on compte le nombre réel de jours couverts,
-        # pas juste "1 ligne = 1 jour".
-        nb_jours = max((affectation.fin.date() - affectation.debut.date()).days, 1)
+    affectations = list(
+        Affectation.objects
+        .select_related("animateur", "centre")
+        .filter(debut__lt=fin, fin__gt=debut)
+    )
 
-        cle_animateur = affectation.animateur_id
-        if cle_animateur not in par_animateur:
-            par_animateur[cle_animateur] = {
-                "id": affectation.animateur.id,
-                "prenom": affectation.animateur.prenom,
-                "nom": affectation.animateur.nom,
-                "age": affectation.animateur.age,
-                "jours": 0,
-                "centres": set(),
-            }
-        par_animateur[cle_animateur]["jours"] += nb_jours
-        par_animateur[cle_animateur]["centres"].add(affectation.centre_id)
-
-        cle_centre = affectation.centre_id
-        if cle_centre not in par_centre:
-            par_centre[cle_centre] = {
-                "id": affectation.centre.id,
-                "nom": affectation.centre.nom,
-                "code": affectation.centre.code,
-                "jours": 0,
-                "animateurs": set(),
-            }
-        par_centre[cle_centre]["jours"] += nb_jours
-        par_centre[cle_centre]["animateurs"].add(affectation.animateur_id)
-
-    # On ajoute aussi les animateurs/centres qui n'ont RIEN sur la période
-    # (0 jour), pour qu'ils apparaissent quand même dans les tableaux.
-    for animateur in Animateur.objects.all():
-        par_animateur.setdefault(animateur.id, {
+    # Structure de départ : tous les animateurs apparaissent, même à 0 jour.
+    recap = {}
+    for animateur in animateurs:
+        recap[animateur.id] = {
             "id": animateur.id,
             "prenom": animateur.prenom,
             "nom": animateur.nom,
-            "age": animateur.age,
-            "jours": 0,
-            "centres": set(),
+            "total": 0,
+            "centres": {centre.id: 0 for centre in centres},
+        }
+
+    # On compte les jours réellement inclus dans la période demandée.
+    # Exemple : affectation 30/07 -> 03/08, période août : on ne compte que
+    # 01/08 et 02/08.
+    for affectation in affectations:
+        debut_effectif = max(affectation.debut, debut)
+        fin_effective = min(affectation.fin, fin)
+        nb_jours = max((fin_effective.date() - debut_effectif.date()).days, 1)
+
+        ligne = recap.setdefault(affectation.animateur_id, {
+            "id": affectation.animateur.id,
+            "prenom": affectation.animateur.prenom,
+            "nom": affectation.animateur.nom,
+            "total": 0,
+            "centres": {centre.id: 0 for centre in centres},
         })
 
-    for centre in Centre.objects.all():
-        par_centre.setdefault(centre.id, {
-            "id": centre.id,
-            "nom": centre.nom,
-            "code": centre.code,
-            "jours": 0,
-            "animateurs": set(),
+        ligne["total"] += nb_jours
+        ligne["centres"][affectation.centre_id] = ligne["centres"].get(affectation.centre_id, 0) + nb_jours
+
+    animateurs_data = []
+    for ligne in recap.values():
+        animateurs_data.append({
+            "id": ligne["id"],
+            "prenom": ligne["prenom"],
+            "nom": ligne["nom"],
+            "total": ligne["total"],
+            "centres": [
+                {
+                    "id": centre.id,
+                    "jours": ligne["centres"].get(centre.id, 0),
+                }
+                for centre in centres
+            ],
         })
 
-    animateurs_data = sorted(
-        (
-            {
-                "id": v["id"],
-                "prenom": v["prenom"],
-                "nom": v["nom"],
-                "age": v.get("age"),
-                "jours": v["jours"],
-                "nb_centres": len(v["centres"]),
-            }
-            for v in par_animateur.values()
-        ),
-        key=lambda x: (-x["jours"], x["prenom"], x["nom"]),
-    )
-
-    centres_data = sorted(
-        (
-            {
-                "id": v["id"],
-                "nom": v["nom"],
-                "code": v["code"],
-                "jours": v["jours"],
-                "nb_animateurs": len(v["animateurs"]),
-            }
-            for v in par_centre.values()
-        ),
-        key=lambda x: (-x["jours"], x["nom"]),
-    )
-
-    # --- Signaux à surveiller (toujours sur l'ensemble des données, sans
-    # tenir compte du filtre de période choisi sur la page) ---
-    animateurs_sans_centre_autorise = [
-        f"{prenom} {nom}"
-        for prenom, nom in Animateur.objects.filter(preferences__isnull=True).values_list("prenom", "nom")
-    ]
-    animateurs_sans_disponibilite = [
-        f"{prenom} {nom}"
-        for prenom, nom in Animateur.objects.filter(disponibilites__isnull=True).values_list("prenom", "nom")
-    ]
-    animateurs_jamais_affectes = [
-        f"{prenom} {nom}"
-        for prenom, nom in Animateur.objects.filter(affectations__isnull=True).values_list("prenom", "nom")
-    ]
-    centres_jamais_utilises = list(
-        Centre.objects.filter(affectations__isnull=True).values_list("nom", flat=True)
-    )
-    qualifications_non_utilisees = list(
-        Qualification.objects.filter(animateur__isnull=True).values_list("nom", flat=True)
-    )
+    animateurs_data.sort(key=lambda item: (-item["total"], item["prenom"], item["nom"]))
 
     return JsonResponse({
-        "compteurs": {
-            "nb_animateurs": Animateur.objects.count(),
-            "nb_centres": Centre.objects.count(),
-            "nb_qualifications": Qualification.objects.count(),
-            "nb_affectations_periode": len(affectations),
-            "nb_affectations_a_venir": Affectation.objects.filter(debut__gte=timezone.now()).count(),
+        "periode": {
+            "debut": debut.date().isoformat(),
+            # On renvoie aussi la fin exclusive pour rester cohérent avec l'API.
+            "fin": fin.date().isoformat(),
         },
+        "centres": [
+            {
+                "id": centre.id,
+                "nom": centre.nom,
+                "code": centre.code,
+                "couleur": centre.couleur,
+            }
+            for centre in centres
+        ],
         "animateurs": animateurs_data,
-        "centres": centres_data,
-        "alertes": {
-            "animateurs_sans_centre_autorise": animateurs_sans_centre_autorise,
-            "animateurs_sans_disponibilite": animateurs_sans_disponibilite,
-            "animateurs_jamais_affectes": animateurs_jamais_affectes,
-            "centres_jamais_utilises": centres_jamais_utilises,
-            "qualifications_non_utilisees": qualifications_non_utilisees,
-        },
     })
-
 
 # ---------------------------------------------------------------------------
 # API - Documents (liste, upload, suppression)

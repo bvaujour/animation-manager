@@ -1,165 +1,148 @@
 // ===========================================================================
 // recapitulatif.js
 // ---------------------------------------------------------------------------
-// Page /recapitulatif/ : appelle /api/recapitulatif/ (avec ou sans filtre
-// de période) et affiche les compteurs, les deux tableaux et les listes
-// "à surveiller". Toute la logique de calcul est côté serveur (voir
-// api_recapitulatif dans views.py) ; ce fichier ne fait que mettre en
-// forme la réponse JSON.
+// Page /recapitulatif/ simplifiée : choix d'une période et affichage du
+// nombre de jours travaillés par animateur, avec une colonne par centre.
+// La période par défaut est le mois actuel.
 // ===========================================================================
 
 document.addEventListener("DOMContentLoaded", () =>
 {
-	const select = document.getElementById("filtre-periode");
-	const plagePersonnalisee = document.getElementById("plage-personnalisee");
-	const debutInput = document.getElementById("filtre-debut");
-	const finInput = document.getElementById("filtre-fin");
-	const btnAppliquer = document.getElementById("btn-appliquer-filtre");
+	const debutInput = document.getElementById("periode-debut");
+	const finInput = document.getElementById("periode-fin");
+	const btnAppliquer = document.getElementById("btn-appliquer-periode");
+	const periodeAffichee = document.getElementById("periode-affichee");
+	const table = document.getElementById("table-recap");
 
-	// Calcule les dates "debut"/"fin" (chaînes YYYY-MM-DD ou undefined)
-	// correspondant à l'option choisie dans le menu déroulant.
-	function calculerPlage()
+	function debutMoisCourant()
 	{
-		const valeur = select.value;
-		const maintenant = new Date();
-
-		if (valeur === "toute-periode")
-		{
-			return {};
-		}
-
-		if (valeur === "cette-semaine")
-		{
-			// Même logique que lundiDeLaSemaine() dans planning.js : on
-			// ramène `maintenant` au lundi de sa semaine, puis +7 jours
-			// pour la borne de fin (exclusive). formatDateLocal() (et non
-			// toISOString()) car on manipule des dates en heure locale :
-			// voir l'explication détaillée dans ui.js.
-			const jour = maintenant.getDay();
-			const diff = (jour === 0 ? -6 : 1 - jour);
-			const lundi = new Date(maintenant);
-			lundi.setDate(lundi.getDate() + diff);
-			const dimancheSuivant = new Date(lundi);
-			dimancheSuivant.setDate(dimancheSuivant.getDate() + 7);
-
-			return {
-				debut: formatDateLocal(lundi),
-				fin: formatDateLocal(dimancheSuivant),
-			};
-		}
-
-		if (valeur === "ce-mois")
-		{
-			const debut = new Date(maintenant.getFullYear(), maintenant.getMonth(), 1);
-			const finExclusive = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1);
-
-			return {
-				debut: formatDateLocal(debut),
-				fin: formatDateLocal(finExclusive),
-			};
-		}
-
-		// "personnalise" : on renvoie directement le contenu des deux
-		// champs date (peuvent être vides, l'API gère l'absence des deux).
-		return {
-			debut: debutInput.value || undefined,
-			fin: finInput.value || undefined,
-		};
+		const now = new Date();
+		return new Date(now.getFullYear(), now.getMonth(), 1);
 	}
 
-	// Remplit les 5 petites cartes de compteurs en haut de page.
-	function afficherCompteurs(compteurs)
+	function finMoisCourantInclusive()
 	{
-		document.getElementById("compteurs").innerHTML = `
-			<div class="stat-card"><span class="stat-value">${compteurs.nb_animateurs}</span><span class="stat-label">Animateurs</span></div>
-			<div class="stat-card"><span class="stat-value">${compteurs.nb_centres}</span><span class="stat-label">Centres</span></div>
-			<div class="stat-card"><span class="stat-value">${compteurs.nb_qualifications}</span><span class="stat-label">Qualifications</span></div>
-			<div class="stat-card"><span class="stat-value">${compteurs.nb_affectations_periode}</span><span class="stat-label">Affectations (période)</span></div>
-			<div class="stat-card"><span class="stat-value">${compteurs.nb_affectations_a_venir}</span><span class="stat-label">À venir (total)</span></div>
+		const now = new Date();
+		return new Date(now.getFullYear(), now.getMonth() + 1, 0);
+	}
+
+	function formatDateFr(dateStr)
+	{
+		return parseLocalDate(dateStr).toLocaleDateString("fr-FR");
+	}
+
+	function initialiserPeriodeParDefaut()
+	{
+		debutInput.value = formatDateLocal(debutMoisCourant());
+		finInput.value = formatDateLocal(finMoisCourantInclusive());
+	}
+
+	function construireUrlApi()
+	{
+		const debut = debutInput.value;
+		const finInclusive = finInput.value;
+
+		if (!debut || !finInclusive)
+		{
+			afficherToast("Renseigne une date de début et une date de fin.", true);
+			return null;
+		}
+
+		if (debut > finInclusive)
+		{
+			afficherToast("La date de début doit être avant la date de fin.", true);
+			return null;
+		}
+
+		// L'API attend une fin exclusive : pour afficher du 01 au 31 inclus,
+		// on envoie fin = 1er du mois suivant.
+		const finExclusive = addDays(finInclusive, 1);
+		const params = new URLSearchParams({ debut, fin: finExclusive });
+		return `/api/recapitulatif/?${params.toString()}`;
+	}
+
+	function couleurDouce(couleur, opacite = 0.12)
+	{
+		// Transforme une couleur hex (#e03c00) en rgba léger pour colorer
+		// toute une colonne sans nuire à la lisibilité.
+		if (!couleur || !couleur.startsWith("#") || couleur.length !== 7)
+		{
+			return `rgba(224, 60, 0, ${opacite})`;
+		}
+
+		const r = parseInt(couleur.slice(1, 3), 16);
+		const g = parseInt(couleur.slice(3, 5), 16);
+		const b = parseInt(couleur.slice(5, 7), 16);
+		return `rgba(${r}, ${g}, ${b}, ${opacite})`;
+	}
+
+	function afficherTableau(data)
+	{
+		const thead = table.querySelector("thead");
+		const tbody = table.querySelector("tbody");
+
+		periodeAffichee.textContent = `Du ${formatDateFr(debutInput.value)} au ${formatDateFr(finInput.value)}`;
+
+		thead.innerHTML = `
+			<tr>
+				<th class="animateur-header">Animateur</th>
+				${data.centres.map((centre) => `
+					<th
+						class="centre-header"
+						style="--centre-color:${centre.couleur}; --centre-bg:${couleurDouce(centre.couleur, 0.16)};"
+					>
+						<span class="centre-dot" style="--c:${centre.couleur}"></span>
+						<span>${centre.code || centre.nom}</span>
+					</th>
+				`).join("")}
+				<th class="total-header">Total</th>
+			</tr>
 		`;
-	}
 
-	// Remplit un tableau <tbody> à partir d'une liste de lignes déjà
-	// construites en HTML (une petite fonction generic pour éviter de
-	// dupliquer la même logique pour le tableau animateurs et centres).
-	function remplirTableau(selecteurBody, lignesHtml, colspanSiVide, texteSiVide)
-	{
-		const tbody = document.querySelector(selecteurBody);
-		tbody.innerHTML = "";
-
-		if (lignesHtml.length === 0)
+		if (data.animateurs.length === 0)
 		{
-			tbody.innerHTML = `<tr><td colspan="${colspanSiVide}" class="empty-note">${texteSiVide}</td></tr>`;
+			tbody.innerHTML = `<tr><td colspan="${data.centres.length + 2}" class="empty-note">Aucun animateur.</td></tr>`;
 			return;
 		}
 
-		tbody.innerHTML = lignesHtml.join("");
+		tbody.innerHTML = data.animateurs.map((animateur) =>
+		{
+			const cellulesCentres = animateur.centres.map((centreRecap, index) =>
+			{
+				const centre = data.centres[index];
+				const classe = centreRecap.jours > 0 ? "jours-value has-days" : "jours-value";
+				return `
+					<td
+						class="number-cell centre-cell"
+						style="--centre-color:${centre.couleur}; --centre-bg:${couleurDouce(centre.couleur, 0.08)};"
+					>
+						<span class="${classe}">${centreRecap.jours}</span>
+					</td>
+				`;
+			}).join("");
+
+			return `
+				<tr>
+					<td class="animateur-cell">${animateur.prenom} ${animateur.nom}</td>
+					${cellulesCentres}
+					<td class="number-cell total-cell">${animateur.total}</td>
+				</tr>
+			`;
+		}).join("");
 	}
 
-	// Affiche (ou masque si vide) un bloc "à surveiller" donné.
-	function afficherAlerte(idListe, liste)
+	function chargerRecap()
 	{
-		const ul = document.getElementById(idListe);
-		const bloc = ul.closest(".alerte-bloc");
+		const url = construireUrlApi();
+		if (!url) return;
 
-		if (liste.length === 0)
-		{
-			bloc.hidden = true;
-			return;
-		}
-
-		bloc.hidden = false;
-		ul.innerHTML = liste.map((texte) => `<li>${texte}</li>`).join("");
+		apiFetch(url)
+			.then(afficherTableau)
+			.catch((err) => afficherToast(erreurMessage(err, "Le récapitulatif n'a pas pu être chargé."), true));
 	}
 
-	// Appelle l'API avec le filtre courant et met à jour toute la page.
-	function charger()
-	{
-		const plage = calculerPlage();
-		const params = new URLSearchParams();
-		if (plage.debut) params.set("debut", plage.debut);
-		if (plage.fin) params.set("fin", plage.fin);
+	btnAppliquer.addEventListener("click", chargerRecap);
 
-		apiFetch(`/api/recapitulatif/?${params.toString()}`).then((data) =>
-		{
-			afficherCompteurs(data.compteurs);
-
-			remplirTableau(
-				"#table-animateurs tbody",
-				data.animateurs.map((a) => `<tr><td>${a.prenom} ${a.nom}</td><td>${a.age ?? "—"}</td><td>${a.jours}</td><td>${a.nb_centres}</td></tr>`),
-				4,
-				"Aucun animateur."
-			);
-
-			remplirTableau(
-				"#table-centres tbody",
-				data.centres.map((c) => `<tr><td>${c.nom} (${c.code})</td><td>${c.jours}</td><td>${c.nb_animateurs}</td></tr>`),
-				3,
-				"Aucun centre."
-			);
-
-			afficherAlerte("alerte-sans-preference", data.alertes.animateurs_sans_centre_autorise);
-			afficherAlerte("alerte-sans-disponibilite", data.alertes.animateurs_sans_disponibilite);
-			afficherAlerte("alerte-jamais-affectes", data.alertes.animateurs_jamais_affectes);
-			afficherAlerte("alerte-centres-inutilises", data.alertes.centres_jamais_utilises);
-			afficherAlerte("alerte-qualifs-inutilisees", data.alertes.qualifications_non_utilisees);
-		});
-	}
-
-	// Changer d'option recharge tout de suite, SAUF "personnalise" qui a
-	// besoin qu'on saisisse d'abord les deux dates puis clique "Appliquer".
-	select.addEventListener("change", () =>
-	{
-		const estPersonnalise = select.value === "personnalise";
-		plagePersonnalisee.hidden = !estPersonnalise;
-
-		if (!estPersonnalise)
-		{
-			charger();
-		}
-	});
-
-	btnAppliquer.addEventListener("click", charger);
-
-	charger();
+	initialiserPeriodeParDefaut();
+	chargerRecap();
 });
