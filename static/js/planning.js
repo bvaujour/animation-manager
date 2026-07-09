@@ -42,6 +42,12 @@ document.addEventListener("DOMContentLoaded", function ()
 	let selectedChip = null;
 	let selectedDetail = null;
 
+	// Animateur dont on affiche temporairement les disponibilités pendant
+	// un glisser-déposer depuis la liste.
+	// Différent d'animateurActif : ici, on ne sélectionne pas vraiment
+	// l'animateur, on donne juste une aide visuelle pendant le drag.
+	let animateurDragPreview = null;
+
 	// Mode "clic sur un jour sans animateur sélectionné".
 	// Quand il est actif, les animateurs disponibles pour ce jour sont
 	// mis en évidence. Un clic sur l'un d'eux crée directement
@@ -211,7 +217,9 @@ document.addEventListener("DOMContentLoaded", function ()
 
 	function animateurAffectableSurCentre(animateur, centre)
 	{
-		return (animateur.centres_autorises || []).some((c) => Number(c.id) === Number(centre.id));
+		// Les centres associés à l'animateur servent seulement d'indication
+		// visuelle (badges / choix habituels). Ils ne bloquent plus le placement.
+		return true;
 	}
 
 	function evenementCouvreJour(event, dateStr)
@@ -222,27 +230,61 @@ document.addEventListener("DOMContentLoaded", function ()
 		return debut <= dateStr && dateStr < finExclusive;
 	}
 
-	function animateurDejaAffecteCeJour(animateurId, dateStr)
+	function estVraieAffectation(event)
 	{
+		return event && event.display !== "background";
+	}
+
+	function idAnimateurDepuisEvent(event)
+	{
+		return Number(event?.extendedProps?.animateur_id || event?.extendedProps?.animateurId || 0);
+	}
+
+	function idEventNormalise(event)
+	{
+		return event && event.id !== undefined && event.id !== null ? String(event.id) : null;
+	}
+
+	function intervallesSeChevauchent(debutA, finA, debutB, finB)
+	{
+		return debutA < finB && finA > debutB;
+	}
+
+	function eventIntervalleDates(event)
+	{
+		const debut = event.start ? formatDateLocal(event.start) : event.startStr;
+		const fin = event.end ? formatDateLocal(event.end) : (event.endStr || addDays(debut, 1));
+		return { debut, fin };
+	}
+
+	function animateurDejaAffecteSurIntervalle(animateurId, debutStr, finStr, excludeEventId = null)
+	{
+		const exclude = excludeEventId !== null && excludeEventId !== undefined ? String(excludeEventId) : null;
+
 		return calendars.some((calendar) =>
 			calendar.getEvents().some((event) =>
 			{
-				if (event.display === "background") return false;
+				if (!estVraieAffectation(event)) return false;
+				if (exclude && idEventNormalise(event) === exclude) return false;
 
-				const eventAnimateurId = Number(
-					event.extendedProps.animateur_id || event.extendedProps.animateurId
-				);
+				const eventAnimateurId = idAnimateurDepuisEvent(event);
+				if (eventAnimateurId !== Number(animateurId)) return false;
 
-				return eventAnimateurId === Number(animateurId) && evenementCouvreJour(event, dateStr);
+				const intervalle = eventIntervalleDates(event);
+				return intervallesSeChevauchent(debutStr, finStr, intervalle.debut, intervalle.fin);
 			})
 		);
 	}
 
-	function animateurPlacableSurJour(animateur, dateStr, centre = null)
+	function animateurDejaAffecteCeJour(animateurId, dateStr, excludeEventId = null)
+	{
+		return animateurDejaAffecteSurIntervalle(animateurId, dateStr, addDays(dateStr, 1), excludeEventId);
+	}
+
+	function animateurPlacableSurJour(animateur, dateStr, centre = null, excludeEventId = null)
 	{
 		return animateurDisponibleCeJour(animateur, dateStr)
-			&& (!centre || animateurAffectableSurCentre(animateur, centre))
-			&& !animateurDejaAffecteCeJour(animateur.id, dateStr);
+			&& !animateurDejaAffecteCeJour(animateur.id, dateStr, excludeEventId);
 	}
 
 	function nettoyerModePlacementJour()
@@ -274,9 +316,8 @@ document.addEventListener("DOMContentLoaded", function ()
 			if (!animateur) return;
 
 			const disponible = animateurDisponibleCeJour(animateur, dateStr);
-			const affectable = animateurAffectableSurCentre(animateur, centre);
 			const dejaPlace = animateurDejaAffecteCeJour(animateur.id, dateStr);
-			const placable = disponible && affectable && !dejaPlace;
+			const placable = disponible && !dejaPlace;
 
 			chip.classList.toggle("day-available", placable);
 			chip.classList.toggle("day-unavailable", !placable);
@@ -284,10 +325,6 @@ document.addEventListener("DOMContentLoaded", function ()
 			if (!disponible)
 			{
 				chip.dataset.dayHint = "Non disponible ce jour-là";
-			}
-			else if (!affectable)
-			{
-				chip.dataset.dayHint = "Non affectable sur ce centre";
 			}
 			else if (dejaPlace)
 			{
@@ -343,18 +380,9 @@ document.addEventListener("DOMContentLoaded", function ()
 			}),
 		}).then((data) =>
 		{
-			calendar.addEvent({
-				id: data.id,
-				title: data.title,
-				start: data.start,
-				end: data.end,
-				allDay: true,
-				extendedProps: data.extendedProps || {
-					animateur_id: animateur.id,
-					centre_id: centre.id,
-				},
-			});
+			rafraichirAffectationsVisibles();
 			afficherToast(`${animateur.prenom} affecté·e à ${centre.nom} le ${libelleDate(debut)}.`);
+			return data;
 		});
 	}
 
@@ -370,10 +398,6 @@ document.addEventListener("DOMContentLoaded", function ()
 			{
 				afficherToast(`${animateur.prenom} n'est pas disponible le ${libelleDate(date)}.`, true);
 			}
-			else if (!animateurAffectableSurCentre(animateur, centre))
-			{
-				afficherToast(`${animateur.prenom} n'est pas affectable sur ${centre.nom}.`, true);
-			}
 			else
 			{
 				afficherToast(`${animateur.prenom} est déjà affecté·e ce jour-là.`, true);
@@ -388,6 +412,18 @@ document.addEventListener("DOMContentLoaded", function ()
 		return true;
 	}
 
+	function rafraichirAffectationsVisibles()
+	{
+		calendars.forEach((calendar) =>
+		{
+			calendar.getEvents().forEach((event) =>
+			{
+				if (estVraieAffectation(event)) event.remove();
+			});
+			calendar.refetchEvents();
+		});
+	}
+
 	// -----------------------------------------------------------------
 	// Calendriers (un par centre)
 	// -----------------------------------------------------------------
@@ -396,21 +432,35 @@ document.addEventListener("DOMContentLoaded", function ()
 	// (glisser-déposer classique). On enregistre le nouveau créneau côté
 	// serveur, et si le serveur refuse (conflit, indisponibilité...) on
 	// annule visuellement le déplacement avec info.revert().
-	function updateAffectation(info)
+	function updateAffectation(info, centre = null)
 	{
 		const event = info.event;
+		const payload = {
+			debut: event.startStr,
+			fin: event.endStr || addDays(event.startStr, 1),
+		};
 
-		apiFetch(`/api/affectations/${event.id}/`,
+		// Quand on déplace une affectation vers un autre calendrier, on envoie
+		// aussi le nouveau centre au backend. Cela permet de changer le centre
+		// directement par drag & drop.
+		if (centre)
+		{
+			payload.centre_id = centre.id;
+		}
+
+		return apiFetch(`/api/affectations/${event.id}/`,
 		{
 			method: "PATCH",
-			body: JSON.stringify({
-				debut: event.startStr,
-				fin: event.endStr || addDays(event.startStr, 1),
-			}),
+			body: JSON.stringify(payload),
+		}).then((data) =>
+		{
+			rafraichirAffectationsVisibles();
+			return data;
 		}).catch((err) =>
 		{
 			afficherToast(erreurMessage(err, "La mise à jour n'a pas pu être enregistrée."), true);
-			info.revert();
+			if (typeof info.revert === "function") info.revert();
+			throw err;
 		});
 	}
 
@@ -449,9 +499,15 @@ document.addEventListener("DOMContentLoaded", function ()
 
 				// Si un animateur est sélectionné, on recalcule les zones
 				// de disponibilité quand on change de semaine/mois.
+				// Si on est seulement en train de glisser une étiquette, on garde
+				// aussi cette aide visuelle pendant le changement de vue.
 				if (animateurActif)
 				{
 					afficherDisponibilites(animateurActif, animateurActif.disponibilites || []);
+				}
+				else if (animateurDragPreview)
+				{
+					afficherDisponibilites(animateurDragPreview, animateurDragPreview.disponibilites || []);
 				}
 			},
 
@@ -471,13 +527,49 @@ document.addEventListener("DOMContentLoaded", function ()
 					.catch((err) => afficherToast(erreurMessage(err, "Cette affectation n'a pas pu être enregistrée."), true));
 			},
 
+			// Empêche côté interface de créer un doublon en déposant un
+			// animateur déjà affecté sur le même jour. Le backend garde
+			// aussi la validation : ici, c'est surtout pour éviter les
+			// doublons visuels pendant le drag & drop.
+			eventAllow: function (dropInfo, draggedEvent)
+			{
+				const animateurId = idAnimateurDepuisEvent(draggedEvent);
+				if (!animateurId) return true;
+
+				const debut = formatDateLocal(dropInfo.start);
+				const fin = dropInfo.end ? formatDateLocal(dropInfo.end) : addDays(debut, 1);
+				const animateur = animateursPlanning.find((a) => Number(a.id) === Number(animateurId));
+
+				if (animateur && !animateurDisponibleCeJour(animateur, debut)) return false;
+
+				return !animateurDejaAffecteSurIntervalle(
+					animateurId,
+					debut,
+					fin,
+					idEventNormalise(draggedEvent)
+				);
+			},
+
 			// Un élément de la liste d'animateurs (voir plus bas, la
 			// FullCalendar.Draggable) est déposé sur ce calendrier.
 			eventReceive: function (info)
 			{
-				const animateurId = info.event.extendedProps.animateurId;
 				const debut = info.event.startStr;
 				const fin = info.event.endStr || addDays(debut, 1);
+
+				// Cas 1 : on a déplacé une affectation existante depuis un autre
+				// calendrier. Elle possède déjà un id : on ne crée pas une nouvelle
+				// ligne, on met seulement à jour son centre et sa date.
+				if (info.event.id)
+				{
+					updateAffectation(info, centre)
+						.catch(() => info.event.remove());
+					return;
+				}
+
+				// Cas 2 : on glisse une étiquette animateur depuis la liste.
+				// Là, il faut créer une nouvelle affectation en base.
+				const animateurId = info.event.extendedProps.animateurId;
 
 				apiFetch("/api/affectations/",
 				{
@@ -490,20 +582,19 @@ document.addEventListener("DOMContentLoaded", function ()
 					}),
 				}).then((data) =>
 				{
-					// FullCalendar a déjà affiché l'évènement de façon
-					// optimiste ; on lui donne juste le vrai id renvoyé
-					// par le serveur pour pouvoir le retrouver plus tard
-					// (PATCH/DELETE).
-					info.event.setProp("id", data.id);
+				rafraichirAffectationsVisibles();
 				}).catch((err) =>
 				{
 					afficherToast(erreurMessage(err, "Cette affectation n'a pas pu être enregistrée."), true);
 					info.event.remove();
+				}).finally(() =>
+				{
+					if (!animateurActif) nettoyerDisponibilitesDragPreview();
 				});
 			},
 
-			eventDrop: function (info) { updateAffectation(info); },
-			eventResize: function (info) { updateAffectation(info); },
+			eventDrop: function (info) { updateAffectation(info, centre); },
+			eventResize: function (info) { updateAffectation(info, centre); },
 
 			// Clic sur un évènement existant : proposer de le supprimer.
 			// On ignore les évènements "background" (les plages de
@@ -722,6 +813,15 @@ document.addEventListener("DOMContentLoaded", function ()
 
 		div.appendChild(centresBadges);
 
+		// Début de prise en main de l'étiquette : on affiche tout de suite
+		// les disponibilités, avant même que l'animateur soit déposé.
+		// On écoute plusieurs évènements car FullCalendar peut initier le
+		// déplacement différemment selon souris/tactile/navigateur.
+		["pointerdown", "mousedown", "touchstart"].forEach((eventName) =>
+		{
+			div.addEventListener(eventName, () => afficherDisponibilitesPendantDrag(animateur), { passive: true });
+		});
+
 		// Clic = sélectionner/désélectionner cet animateur (voir toggleSelection).
 		div.addEventListener("click", () => toggleSelection(div, animateur));
 
@@ -845,6 +945,61 @@ document.addEventListener("DOMContentLoaded", function ()
 		});
 	}
 
+	// Affiche temporairement les disponibilités d'un animateur dès que
+	// l'utilisateur commence à le prendre pour le glisser dans un calendrier.
+	// Ça donne le même repère visuel que la sélection classique : vert sur
+	// son premier centre autorisé, orange sur les suivants.
+	function afficherDisponibilitesPendantDrag(animateur)
+	{
+		// Si l'animateur est déjà sélectionné, les disponibilités sont déjà
+		// affichées durablement par toggleSelection().
+		if (animateurActif && Number(animateurActif.id) === Number(animateur.id))
+		{
+			return;
+		}
+
+		animateurDragPreview = animateur;
+
+		// Si les disponibilités sont déjà présentes dans le cache animateur,
+		// on les affiche immédiatement. Sinon on les charge depuis l'API.
+		if (Array.isArray(animateur.disponibilites))
+		{
+			afficherDisponibilites(animateur, animateur.disponibilites);
+			return;
+		}
+
+		fetch(`/api/animateurs/${animateur.id}/disponibilites/`)
+			.then((response) => response.json())
+			.then((data) =>
+			{
+				// Si l'utilisateur a déjà commencé à glisser un autre animateur,
+				// on ignore la réponse devenue obsolète.
+				if (!animateurDragPreview || Number(animateurDragPreview.id) !== Number(animateur.id))
+				{
+					return;
+				}
+
+				afficherDisponibilites(animateur, data.disponibilites || []);
+			})
+			.catch(() => afficherDisponibilites(animateur, animateur.disponibilites || []));
+	}
+
+	// Nettoie l'affichage temporaire des disponibilités après un drag
+	// non sélectionné. Si un animateur est sélectionné, on garde son affichage.
+	function nettoyerDisponibilitesDragPreview()
+	{
+		animateurDragPreview = null;
+
+		if (animateurActif)
+		{
+			afficherDisponibilites(animateurActif, animateurActif.disponibilites || []);
+		}
+		else
+		{
+			effacerDisponibilitesAffichees();
+		}
+	}
+
 	// Sélectionne/désélectionne un animateur au clic sur son badge.
 	// Un seul animateur peut être sélectionné à la fois.
 	function toggleSelection(chip, animateur)
@@ -861,6 +1016,7 @@ document.addEventListener("DOMContentLoaded", function ()
 		const dejaSelectionne = chip.classList.contains("selected");
 
 		document.querySelectorAll(".animateur.selected").forEach((el) => el.classList.remove("selected"));
+		animateurDragPreview = null;
 		effacerDisponibilitesAffichees();
 		animateurActif = null;
 		selectedChip = null;
@@ -1188,6 +1344,20 @@ document.addEventListener("DOMContentLoaded", function ()
 				},
 			};
 		},
+	});
+
+	// À la fin du geste de drag/clic, on retire l'aide visuelle si elle était
+	// seulement temporaire. Le setTimeout laisse le temps au click de sélection
+	// de s'exécuter si c'était un simple clic.
+	["pointerup", "pointercancel", "mouseup", "touchend", "dragend", "drop"].forEach((eventName) =>
+	{
+		document.addEventListener(eventName, () =>
+		{
+			if (!animateurDragPreview) return;
+			// Petit délai : FullCalendar doit d'abord exécuter eventReceive
+			// si le dépôt a réellement eu lieu.
+			window.setTimeout(nettoyerDisponibilitesDragPreview, 120);
+		});
 	});
 	// Placement automatique de la semaine affichée (lundi -> samedi).
 	// On ouvre d'abord une popup pour choisir le nombre d'animateurs par
