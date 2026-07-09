@@ -167,8 +167,7 @@ html, body {
 
 #planning-toolbar {
     display: flex;
-	flex-direction: column;
-    /*align-items: center;*/
+    align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 10px;
@@ -180,8 +179,7 @@ html, body {
 
 .toolbar-nav {
     display: flex;
-	flex-direction: column;
-    /*align-items: center;*/
+    align-items: center;
     gap: 4px;
 }
 
@@ -585,4 +583,75 @@ html, body {
     border-radius: 6px;
     font-size: 1rem;
     text-align: center;
+}
+
+/* --- Popup remplissage auto : bloc par centre avec exigences de qualif --- */
+.auto-centre-bloc {
+    border: 1px solid var(--color-border, #e2e2e2);
+    border-radius: 8px;
+    background: var(--color-surface, #fff);
+    padding: 8px 12px;
+    margin-bottom: 8px;
+}
+
+.auto-centre-entete {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.auto-centre-total {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.auto-centre-toggle {
+    margin-top: 8px;
+    background: none;
+    border: none;
+    padding: 2px 0;
+    color: var(--color-primary);
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.auto-centre-qualifs {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.auto-qualif-ligne {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.auto-qualif-nom {
+    font-size: 0.88rem;
+}
+
+.auto-qualif-ligne .auto-centre-qualif {
+    width: 64px;
+    padding: 5px 8px;
+    border: 1px solid var(--color-border, #ccc);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    text-align: center;
+}
+
+.auto-centre-avert {
+    margin: 2px 0 0;
+    font-size: 0.8rem;
+    color: var(--color-danger, #b23b1e);
 }

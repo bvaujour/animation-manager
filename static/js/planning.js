@@ -430,10 +430,11 @@ document.addEventListener("DOMContentLoaded", function ()
 			editable: true,   // autorise glisser/redimensionner un évènement existant
 			droppable: true,  // autorise à recevoir un élément externe (la liste d'animateurs)
 			selectable: true,
-			weekends: false,
+
 			expandRows: true,
 			headerToolbar: false, // on utilise notre propre barre d'outils commune
 			footerToolbar: false,
+			weekends: false,
 
 			// Chaque calendrier ne charge que les évènements de SON centre.
 			events: `/api/planning/?centre_id=${centre.id}`,
@@ -1120,8 +1121,9 @@ document.addEventListener("DOMContentLoaded", function ()
 	// les affectations en respectant disponibilités et centres autorisés.
 	const btnAutoSemaine = document.getElementById("btn-auto-semaine");
 
-	// Lance réellement le remplissage une fois les effectifs choisis.
-	function lancerRemplissageAuto(effectifs, boutonValider)
+	// Lance réellement le remplissage une fois les besoins choisis (effectif
+	// + minimums par qualification, par centre).
+	function lancerRemplissageAuto(centres, boutonValider)
 	{
 		const lundi = lundiDeLaSemaine(calendars[0].getDate());
 		const debut = formatDateLocal(lundi);
@@ -1137,7 +1139,7 @@ document.addEventListener("DOMContentLoaded", function ()
 		apiFetch("/api/planning/auto/",
 		{
 			method: "POST",
-			body: JSON.stringify({ debut, effectifs }),
+			body: JSON.stringify({ debut, centres }),
 		})
 		.then((data) =>
 		{
@@ -1171,9 +1173,10 @@ document.addEventListener("DOMContentLoaded", function ()
 		});
 	}
 
-	// Construit et ouvre la popup listant chaque centre avec un champ
-	// "nombre d'animateurs par jour" (pré-rempli avec son effectif cible).
-	function ouvrirPopupRemplissageAuto()
+	// Construit et ouvre la popup listant chaque centre avec son effectif
+	// par jour (pré-rempli avec l'effectif cible) et, en option, un minimum
+	// de titulaires par qualification.
+	async function ouvrirPopupRemplissageAuto()
 	{
 		if (centresPlanning.length === 0)
 		{
@@ -1181,25 +1184,65 @@ document.addEventListener("DOMContentLoaded", function ()
 			return;
 		}
 
-		const lignes = centresPlanning.map((centre) =>
+		// La page Planning ne chargeait les qualifications que lorsqu'on ouvrait
+		// la modal d'édition d'un animateur. Résultat : la popup de remplissage
+		// auto pouvait afficher "Aucune qualification" alors qu'il y en avait bien
+		// dans la base. On recharge donc explicitement la liste juste avant
+		// de construire la popup auto.
+		try
+		{
+			qualificationsPlanning = await apiFetch("/api/qualifications/");
+		}
+		catch (err)
+		{
+			afficherToast(erreurMessage(err, "Impossible de charger les qualifications."), true);
+			return;
+		}
+
+		const qualifs = qualificationsPlanning || [];
+
+		const blocs = centresPlanning.map((centre) =>
 		{
 			const defaut = Number(centre.effectif_cible) || 1;
+
+			const lignesQualifs = qualifs.length === 0
+				? '<p class="empty-note">Aucune qualification définie. Ajoutes-en dans Gestion pour pouvoir en exiger ici.</p>'
+				: qualifs.map((q) => `
+					<label class="auto-qualif-ligne">
+						<span class="auto-qualif-nom">${escapeHtml(q.nom)}</span>
+						<input type="number" min="0" max="20" step="1"
+							   class="auto-centre-qualif"
+							   data-qualif-id="${escapeHtml(q.id)}"
+							   value="0">
+					</label>
+				`).join("");
+
 			return `
-				<div class="auto-centre-ligne">
-					<span class="auto-centre-nom">
-						<span class="centre-pastille" style="background:${centre.couleur}"></span>
-						${centre.nom}
-					</span>
-					<input type="number" min="0" max="20" step="1"
-						   class="auto-centre-effectif"
-						   data-centre-id="${centre.id}"
-						   value="${defaut}">
+				<div class="auto-centre-bloc" data-centre-id="${escapeHtml(centre.id)}">
+					<div class="auto-centre-entete">
+						<span class="auto-centre-nom">
+							<span class="centre-pastille" style="background:${escapeHtml(centre.couleur)}"></span>
+							${escapeHtml(centre.nom)}
+						</span>
+						<label class="auto-centre-total">
+							<span>Total / jour</span>
+							<input type="number" min="0" max="20" step="1"
+								   class="auto-centre-effectif"
+								   data-centre-id="${escapeHtml(centre.id)}"
+								   value="${defaut}">
+						</label>
+					</div>
+					<button class="auto-centre-toggle" type="button" aria-expanded="false">Exigences par qualification ▾</button>
+					<div class="auto-centre-qualifs" hidden>
+						${lignesQualifs}
+						<p class="auto-centre-avert" hidden></p>
+					</div>
 				</div>`;
 		}).join("");
 
 		modalAutoContent.innerHTML = `
-			<p class="form-hint">Choisis le nombre d'animateurs à placer <strong>par jour</strong> dans chaque centre, du lundi au vendredi. Les disponibilités de chacun sont respectées. Mettre 0 exclut un centre.</p>
-			<div class="auto-centres-liste">${lignes}</div>
+			<p class="form-hint">Choisis le nombre d'animateurs à placer <strong>par jour</strong> dans chaque centre, du lundi au vendredi. Tu peux exiger un minimum de titulaires d'une qualification (ex : 2 BAFA) : ces places sont pourvues en priorité, le reste est libre. Mettre 0 en total exclut un centre.</p>
+			<div class="auto-centres-liste">${blocs}</div>
 			<p class="form-error" id="auto-error"></p>
 			<div class="edit-actions">
 				<button class="btn btn-primary" id="auto-valider" type="button">Remplir la semaine</button>
@@ -1207,19 +1250,71 @@ document.addEventListener("DOMContentLoaded", function ()
 			</div>
 		`;
 
+		// Dépliage des exigences par qualification.
+		modalAutoContent.querySelectorAll(".auto-centre-toggle").forEach((btn) =>
+		{
+			btn.addEventListener("click", () =>
+			{
+				const zone = btn.nextElementSibling;
+				const etaitCache = zone.hasAttribute("hidden");
+				if (etaitCache) zone.removeAttribute("hidden");
+				else zone.setAttribute("hidden", "");
+				btn.setAttribute("aria-expanded", etaitCache ? "true" : "false");
+			});
+		});
+
+		// Avertissement en direct : somme des exigences > effectif total.
+		function verifierBloc(bloc)
+		{
+			const effectif = Math.max(0, parseInt(bloc.querySelector(".auto-centre-effectif").value, 10) || 0);
+			let somme = 0;
+			bloc.querySelectorAll(".auto-centre-qualif").forEach((i) =>
+			{
+				somme += Math.max(0, parseInt(i.value, 10) || 0);
+			});
+
+			const avert = bloc.querySelector(".auto-centre-avert");
+			if (!avert) return;
+
+			if (somme > effectif)
+			{
+				avert.textContent = `Les exigences (${somme}) dépassent le total (${effectif}) : seules les plus prioritaires seront placées.`;
+				avert.removeAttribute("hidden");
+			}
+			else
+			{
+				avert.setAttribute("hidden", "");
+			}
+		}
+
+		modalAutoContent.querySelectorAll(".auto-centre-bloc").forEach((bloc) =>
+		{
+			bloc.querySelectorAll("input").forEach((i) =>
+				i.addEventListener("input", () => verifierBloc(bloc)));
+		});
+
 		modalAutoContent.querySelector("#auto-valider").addEventListener("click", () =>
 		{
 			const erreur = modalAutoContent.querySelector("#auto-error");
 			erreur.textContent = "";
 
-			const effectifs = {};
+			const centres = {};
 			let total = 0;
 
-			modalAutoContent.querySelectorAll(".auto-centre-effectif").forEach((input) =>
+			modalAutoContent.querySelectorAll(".auto-centre-bloc").forEach((bloc) =>
 			{
-				const valeur = Math.max(0, parseInt(input.value, 10) || 0);
-				effectifs[input.dataset.centreId] = valeur;
-				total += valeur;
+				const centreId = bloc.dataset.centreId;
+				const effectif = Math.max(0, parseInt(bloc.querySelector(".auto-centre-effectif").value, 10) || 0);
+
+				const qualifsObj = {};
+				bloc.querySelectorAll(".auto-centre-qualif").forEach((input) =>
+				{
+					const valeur = Math.max(0, parseInt(input.value, 10) || 0);
+					if (valeur > 0) qualifsObj[input.dataset.qualifId] = valeur;
+				});
+
+				centres[centreId] = { effectif, qualifs: qualifsObj };
+				total += effectif;
 			});
 
 			if (total === 0)
@@ -1233,7 +1328,7 @@ document.addEventListener("DOMContentLoaded", function ()
 				return;
 			}
 
-			lancerRemplissageAuto(effectifs, modalAutoContent.querySelector("#auto-valider"));
+			lancerRemplissageAuto(centres, modalAutoContent.querySelector("#auto-valider"));
 		});
 
 		ouvrirModal(modalAuto);

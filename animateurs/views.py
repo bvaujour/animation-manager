@@ -1098,16 +1098,24 @@ def api_planning_auto(request):
     Corps JSON attendu :
         {
           "debut": "2026-07-06",          # une date quelconque de la semaine
-          "effectifs": {"1": 2, "3": 1}   # nb d'animateurs/jour par centre (optionnel)
+          "centres": {                    # besoins par centre (optionnel)
+            "1": {"effectif": 3, "qualifs": {"2": 2}},  # 3/jour dont >=2 qualif #2
+            "3": {"effectif": 1, "qualifs": {}}
+          }
         }
+
+    Ancien format encore accepté (rétro-compatibilité) :
+        {"debut": "...", "effectifs": {"1": 2, "3": 1}}   # sans exigence de qualif
 
     - "debut" est ramené au lundi de sa semaine ; seuls les 5 jours ouvrés
       (lundi -> vendredi) sont remplis. Les éventuelles affectations du
       week-end ne sont pas touchées.
-    - "effectifs" permet de choisir, depuis la popup du planning, combien
-      d'animateurs placer par jour dans chaque centre. Si un centre n'y
-      figure pas, on retombe sur son `effectif_cible`. Une valeur 0 exclut
-      le centre du remplissage.
+    - "effectif" = nombre d'animateurs/jour dans le centre. Une valeur 0
+      exclut le centre. Un centre absent retombe sur son effectif_cible.
+    - "qualifs" = minimums par qualification, honorés À L'INTÉRIEUR de
+      l'effectif (les places restantes sont "libres"). Si la somme des
+      minimums dépasse l'effectif, les qualifications les plus rares sont
+      prioritaires et le surplus est ignoré.
 
     Objectifs de l'algorithme (dans cet ordre) :
       1. faire travailler un MAXIMUM d'animateurs différents (au moins une
@@ -1142,7 +1150,7 @@ def api_planning_auto(request):
     centres = list(Centre.objects.all().order_by("nom"))
     animateurs = list(
         Animateur.objects
-        .prefetch_related("disponibilites", "preferences")
+        .prefetch_related("disponibilites", "preferences", "qualifications")
         .order_by("prenom", "nom")
     )
 
@@ -1151,18 +1159,69 @@ def api_planning_auto(request):
     if not animateurs:
         return JsonResponse({"error": "Aucun animateur n'est configuré."}, status=400)
 
-    # --- Effectifs par centre (venus de la popup, sinon effectif_cible) ---
-    effectifs_recus = data.get("effectifs") or {}
+    # --- Besoins par centre : effectif total + minimums par qualification ---
+    # Deux formats acceptés dans le corps de la requête :
+    #   Nouveau : "centres": {"<id>": {"effectif": 3, "qualifs": {"<qid>": 2}}}
+    #             -> 3 animateurs/jour, dont au moins 2 titulaires de la
+    #                qualification <qid>.
+    #   Ancien  : "effectifs": {"<id>": 3}   -> 3 animateurs/jour, sans
+    #             exigence de qualification (rétro-compatibilité).
+    # Absent    : on retombe sur l'effectif_cible du centre, sans exigence.
+    besoins_recus = data.get("centres")
+    effectifs_anciens = data.get("effectifs") or {}
 
-    def effectif_pour(centre):
-        brut = effectifs_recus.get(str(centre.id))
+    def besoin_pour(centre):
+        """(effectif_total, {qualif_id: nb_min}) pour un centre.
+
+        L'effectif total est TOUJOURS le nombre de places du centre. Les
+        minimums par qualification sont honorés à l'intérieur de cet
+        effectif (voir la génération des slots plus bas) : si leur somme
+        dépasse l'effectif, les exigences les plus rares sont prioritaires
+        et le surplus est ignoré.
+        """
+        if isinstance(besoins_recus, dict):
+            brut = besoins_recus.get(str(centre.id))
+            if brut is None:
+                brut = besoins_recus.get(centre.id)
+            if isinstance(brut, dict):
+                try:
+                    effectif = int(brut.get("effectif", centre.effectif_cible))
+                except (TypeError, ValueError):
+                    effectif = centre.effectif_cible
+                qualifs = {}
+                for qid, nb in (brut.get("qualifs") or {}).items():
+                    try:
+                        qid_int, nb_int = int(qid), int(nb)
+                    except (TypeError, ValueError):
+                        continue
+                    if nb_int > 0:
+                        qualifs[qid_int] = nb_int
+                return max(0, effectif), qualifs
+
+        brut = effectifs_anciens.get(str(centre.id))
         if brut is None:
-            brut = effectifs_recus.get(centre.id, centre.effectif_cible)
+            brut = effectifs_anciens.get(centre.id, centre.effectif_cible)
         try:
-            valeur = int(brut)
+            effectif = int(brut)
         except (TypeError, ValueError):
-            valeur = centre.effectif_cible
-        return max(0, valeur)
+            effectif = centre.effectif_cible
+        return max(0, effectif), {}
+
+    # Qualifications de chaque animateur, en mémoire (grâce au prefetch).
+    qualifs_animateur = {
+        animateur.id: {qualification.id for qualification in animateur.qualifications.all()}
+        for animateur in animateurs
+    }
+
+    def a_la_qualif(animateur, qualif_id):
+        return qualif_id in qualifs_animateur.get(animateur.id, set())
+
+    # Nombre de titulaires par qualification : sert à traiter en priorité
+    # les exigences les plus rares (les plus difficiles à satisfaire).
+    nb_titulaires = {}
+    for ids in qualifs_animateur.values():
+        for qid in ids:
+            nb_titulaires[qid] = nb_titulaires.get(qid, 0) + 1
 
     # --- Centres autorisés : un animateur ne peut être placé que sur ces centres ---
     centres_autorises = {}
@@ -1198,12 +1257,34 @@ def api_planning_auto(request):
             fin__gt=debut_dt,
         ).delete()
 
-        # Une "place" = un besoin d'un animateur sur (un jour, un centre).
+        # Une "place" = un besoin d'un animateur sur (un jour, un centre),
+        # éventuellement avec une qualification imposée ("qualif").
+        # Pour chaque centre/jour : on crée d'abord les places à
+        # qualification imposée (les qualifications les plus rares d'abord),
+        # dans la limite de l'effectif, puis on complète avec des places
+        # "libres" (qualif = None, n'importe quel animateur convient).
         slots = []
         for jour in jours:
             for centre in centres:
-                for _ in range(effectif_pour(centre)):
-                    slots.append({"jour": jour, "centre": centre, "animateur": None})
+                effectif, qualifs_min = besoin_pour(centre)
+                if effectif <= 0:
+                    continue
+
+                exigences = sorted(
+                    qualifs_min.items(),
+                    key=lambda item: (nb_titulaires.get(item[0], 0), item[0]),
+                )
+                places_qualifiees = []
+                for qid, nb in exigences:
+                    places_qualifiees.extend([qid] * nb)
+                # Jamais plus de places qualifiées que l'effectif total.
+                places_qualifiees = places_qualifiees[:effectif]
+                nb_libres = effectif - len(places_qualifiees)
+
+                for qid in places_qualifiees:
+                    slots.append({"jour": jour, "centre": centre, "qualif": qid, "animateur": None})
+                for _ in range(nb_libres):
+                    slots.append({"jour": jour, "centre": centre, "qualif": None, "animateur": None})
 
         occupe_ce_jour = {jour: set() for jour in jours}   # jour -> {animateur_id}
         jours_travailles = {animateur.id: 0 for animateur in animateurs}
@@ -1211,7 +1292,12 @@ def api_planning_auto(request):
         def peut_placer(animateur, slot):
             if animateur.id in occupe_ce_jour[slot["jour"]]:
                 return False
-            return disponible(animateur, slot["jour"]) and affectable_sur_centre(animateur, slot["centre"])
+            if not (disponible(animateur, slot["jour"]) and affectable_sur_centre(animateur, slot["centre"])):
+                return False
+            # Place à qualification imposée : l'animateur doit la détenir.
+            if slot["qualif"] is not None and not a_la_qualif(animateur, slot["qualif"]):
+                return False
+            return True
 
         def placer(animateur, slot):
             slot["animateur"] = animateur
@@ -1229,21 +1315,31 @@ def api_planning_auto(request):
                 continue  # jamais disponible cette semaine : rien à faire
 
             meilleurs = [
-                # jour le moins rempli (pour étaler l'équipe)
-                (len(occupe_ce_jour[slot["jour"]]), index)
+                # 1) place qualifiée d'abord (pour "rentabiliser" un titulaire),
+                # 2) puis jour le moins rempli (pour étaler l'équipe).
+                (0 if slot["qualif"] is not None else 1, len(occupe_ce_jour[slot["jour"]]), index)
                 for index, slot in enumerate(slots)
                 if slot["animateur"] is None and peut_placer(animateur, slot)
             ]
             if meilleurs:
                 meilleurs.sort()
-                placer(animateur, slots[meilleurs[0][1]])
+                placer(animateur, slots[meilleurs[0][2]])
 
-        # --- Passe 2 : remplir les places restantes en équilibrant la charge
-        # (le moins de jours déjà travaillés d'abord), centre autorisé en départage. ---
-        for slot in slots:
-            if slot["animateur"] is not None:
-                continue
+        # --- Passe 2 : remplir les places restantes. On traite d'abord les
+        # places à qualification imposée (les qualifications les plus rares
+        # en premier), car ce sont les plus difficiles à pourvoir ; les
+        # places libres viennent ensuite. À l'intérieur, on choisit
+        # l'animateur ayant le moins de jours déjà travaillés (équilibrage). ---
+        def cle_tri_slot(slot):
+            if slot["qualif"] is None:
+                return (1, 0)               # libre : après les qualifiées
+            return (0, nb_titulaires.get(slot["qualif"], 0))  # rare d'abord
 
+        slots_restants = sorted(
+            (slot for slot in slots if slot["animateur"] is None),
+            key=cle_tri_slot,
+        )
+        for slot in slots_restants:
             candidats = [
                 (jours_travailles[a.id], a.prenom, a.nom, a)
                 for a in animateurs
@@ -1272,6 +1368,10 @@ def api_planning_auto(request):
     total_places = len(slots)
     creees = len(a_creer)
     non_remplies = total_places - creees
+    non_remplies_qualif = sum(
+        1 for slot in slots
+        if slot["animateur"] is None and slot["qualif"] is not None
+    )
     animateurs_utilises = sum(1 for nb in jours_travailles.values() if nb > 0)
 
     message = (
@@ -1280,7 +1380,10 @@ def api_planning_auto(request):
         f"{animateurs_utilises}/{len(animateurs)} animateur(s) utilisé(s)."
     )
     if non_remplies > 0:
-        message += f" {non_remplies} place(s) non remplie(s) faute d'animateur disponible."
+        message += f" {non_remplies} place(s) non remplie(s) faute d'animateur disponible"
+        if non_remplies_qualif > 0:
+            message += f" (dont {non_remplies_qualif} à qualification imposée)"
+        message += "."
 
     return JsonResponse({
         "ok": True,
@@ -1288,6 +1391,7 @@ def api_planning_auto(request):
         "deleted": supprimees,
         "total_places": total_places,
         "unfilled": non_remplies,
+        "unfilled_qualif": non_remplies_qualif,
         "animateurs_utilises": animateurs_utilises,
         "message": message,
     })
