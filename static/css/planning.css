@@ -167,7 +167,8 @@ html, body {
 
 #planning-toolbar {
     display: flex;
-    align-items: center;
+	flex-direction: column;
+    /*align-items: center;*/
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 10px;
@@ -179,7 +180,8 @@ html, body {
 
 .toolbar-nav {
     display: flex;
-    align-items: center;
+	flex-direction: column;
+    /*align-items: center;*/
     gap: 4px;
 }
 

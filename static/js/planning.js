@@ -430,7 +430,7 @@ document.addEventListener("DOMContentLoaded", function ()
 			editable: true,   // autorise glisser/redimensionner un évènement existant
 			droppable: true,  // autorise à recevoir un élément externe (la liste d'animateurs)
 			selectable: true,
-
+			weekends: false,
 			expandRows: true,
 			headerToolbar: false, // on utilise notre propre barre d'outils commune
 			footerToolbar: false,
