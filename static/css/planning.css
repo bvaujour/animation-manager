@@ -1104,3 +1104,61 @@ html, body {
         font-size: 0.56rem !important;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Correction V2 : sur la page planning, les calendriers sont empilés
+   verticalement, tout en gardant une hauteur naturelle selon la vue.
+   - Vue semaine : carte plus compacte.
+   - Vue mois : carte plus haute automatiquement, car FullCalendar affiche
+     davantage de lignes.
+   --------------------------------------------------------------------------- */
+#calendars-container {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    align-items: stretch !important;
+}
+
+#calendars-container .calendar-card {
+    width: 100%;
+    min-width: 0 !important;
+    height: auto !important;
+    flex: 0 0 auto;
+}
+
+#calendars-container .calendar-card .calendar {
+    flex: 0 0 auto;
+    min-height: 0;
+}
+
+#calendars-container.planning-view-week .fc .fc-daygrid-day-frame {
+    min-height: 58px;
+}
+
+#calendars-container.planning-view-month .fc .fc-daygrid-day-frame {
+    min-height: 48px;
+}
+
+@media (min-width: 641px) {
+    #calendars-container .calendar-card {
+        height: auto !important;
+    }
+}
+
+@media (max-width: 640px) {
+    #calendars-container {
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #calendars-container .calendar-card {
+        min-width: 0 !important;
+        width: 100%;
+    }
+
+    #calendars-scroll-top {
+        display: none !important;
+    }
+}
