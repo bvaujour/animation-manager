@@ -20,7 +20,6 @@ from animateurs.views import (
     gestion,
     planning,
     recapitulatif,
-    test,
 )
 from animateurs.views import (
     api_animateurs,
@@ -54,7 +53,6 @@ urlpatterns = [
     path("planning/", planning, name="planning"),
     path("gestion/", gestion, name="gestion"),
     path("recapitulatif/", recapitulatif, name="recapitulatif"),
-    path("test/", test, name="test"),
 
     # --- API : animateurs ---
     path("api/animateurs/", api_animateurs, name="api_animateurs"),
