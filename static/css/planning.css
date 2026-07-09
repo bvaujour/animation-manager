@@ -147,10 +147,8 @@ html, body {
 
 #planning-toolbar {
     flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-rows: auto auto auto;
     gap: 6px;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -158,33 +156,77 @@ html, body {
     padding: 6px 8px;
 }
 
-.toolbar-nav,
-.toolbar-views,
-.toolbar-actions {
+.toolbar-row {
     display: flex;
     align-items: center;
-    gap: 4px;
-    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
 }
 
-.toolbar-nav .btn,
-.toolbar-views .btn,
-.toolbar-actions .btn {
+.toolbar-period {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.toolbar-views,
+.toolbar-actions {
+    flex-wrap: nowrap;
+}
+
+.toolbar-row .btn {
     padding: 5px 8px;
     font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.toolbar-views .btn,
+.toolbar-actions .btn {
+    flex: 1 1 0;
+    max-width: 180px;
+    justify-content: center;
 }
 
 .toolbar-label {
-    margin-left: 5px;
-    font-weight: 700;
-    font-size: 0.86rem;
+    min-width: 0;
+    font-weight: 800;
+    font-size: 0.88rem;
+    text-align: center;
     text-transform: capitalize;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .view-btn.active {
     background-color: var(--color-primary);
     color: #fff;
 }
+@media (max-width: 520px) {
+    #planning-toolbar {
+        gap: 5px;
+        padding: 5px;
+    }
+
+    .toolbar-row {
+        gap: 4px;
+    }
+
+    .toolbar-row .btn {
+        padding: 5px 6px;
+        font-size: 0.76rem;
+    }
+
+    .toolbar-label {
+        font-size: 0.8rem;
+    }
+
+    .toolbar-actions .btn,
+    .toolbar-views .btn {
+        max-width: none;
+    }
+}
+
 
 /* Même esprit que l'accueil : 3 petites cartes côte à côte.
    En largeur réduite, elles restent lisibles via un scroll horizontal. */
@@ -320,14 +362,6 @@ html, body {
     }
 }
 
-@media (max-width: 480px) {
-    .toolbar-label {
-        width: 100%;
-        order: 3;
-        margin-left: 0;
-        text-align: center;
-    }
-}
 
 /* --- Scroll horizontal des calendriers sur mobile ---
    Sur écran étroit, 7 colonnes tiennent mal. Plutôt que de compresser les
@@ -1160,5 +1194,170 @@ html, body {
 
     #calendars-scroll-top {
         display: none !important;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Toolbar planning V3 : 3 lignes identiques desktop/mobile
+   1) période affichée + navigation
+   2) choix Semaine / Mois
+   3) actions Remplir / Vider
+   --------------------------------------------------------------------------- */
+#planning-toolbar {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    gap: 6px !important;
+    padding: 6px 8px !important;
+}
+
+#planning-toolbar .toolbar-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+#planning-toolbar .toolbar-period {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) auto auto !important;
+    align-items: center !important;
+}
+
+#planning-toolbar .toolbar-views,
+#planning-toolbar .toolbar-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+}
+
+#planning-toolbar .btn {
+    padding: 5px 8px !important;
+    font-size: 0.78rem !important;
+    white-space: nowrap !important;
+    justify-content: center !important;
+}
+
+#planning-toolbar .toolbar-label {
+    width: auto !important;
+    margin: 0 !important;
+    order: 0 !important;
+    min-width: 0 !important;
+    text-align: center !important;
+    font-size: 0.84rem !important;
+    font-weight: 800 !important;
+    text-transform: capitalize !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+@media (max-width: 520px) {
+    #planning-toolbar {
+        gap: 5px !important;
+        padding: 5px !important;
+    }
+
+    #planning-toolbar .toolbar-row {
+        gap: 4px !important;
+    }
+
+    #planning-toolbar .btn {
+        padding: 5px 6px !important;
+        font-size: 0.74rem !important;
+    }
+
+    #planning-toolbar .toolbar-label {
+        font-size: 0.76rem !important;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Toolbar planning V4 : les contrôles ne sont plus dans un seul container.
+   - Sélecteur Semaine/Mois au-dessus de la période.
+   - Navigation période juste au-dessus des calendriers.
+   - Actions Remplir/Vider sous les calendriers.
+   Même structure en desktop et mobile.
+   --------------------------------------------------------------------------- */
+#planning-toolbar {
+    display: none !important;
+}
+
+.planning-control-block {
+    flex: 0 0 auto;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 6px 8px;
+    box-shadow: var(--shadow-sm);
+}
+
+#planning-view-switcher {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+#planning-period-nav {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 6px;
+}
+
+#planning-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.planning-control-block .btn {
+    padding: 5px 8px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    justify-content: center;
+}
+
+#planning-period-nav .toolbar-label {
+    min-width: 0;
+    margin: 0;
+    text-align: center;
+    font-size: 0.84rem;
+    font-weight: 800;
+    text-transform: capitalize;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#calendars-section {
+    gap: 6px !important;
+}
+
+#calendars-container {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+@media (max-width: 520px) {
+    .planning-control-block {
+        padding: 5px;
+        border-radius: var(--radius-sm);
+    }
+
+    #planning-view-switcher,
+    #planning-period-nav,
+    #planning-actions {
+        gap: 4px;
+    }
+
+    .planning-control-block .btn {
+        padding: 5px 6px;
+        font-size: 0.74rem;
+    }
+
+    #planning-period-nav .toolbar-label {
+        font-size: 0.76rem;
     }
 }
