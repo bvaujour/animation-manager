@@ -315,3 +315,83 @@
         padding: 8px;
     }
 }
+
+/* Classement des documents de l'accueil par période. */
+.home-documents {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.home-document-group > h3 {
+    margin: 0 0 8px;
+    font-size: 0.9rem;
+}
+
+.home-document-group-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+}
+
+.home-document-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.home-document-info .home-document-period {
+    color: var(--color-primary);
+    font-weight: 700;
+    margin-bottom: 1px;
+}
+
+/* Documents de l'accueil : étiquettes très compactes. */
+.home-document-group-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.home-document-card {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+    min-height: 40px;
+    padding: 4px 6px;
+    border-radius: 9px;
+}
+
+.home-document-icon {
+    width: 29px;
+    height: 29px;
+    flex: none;
+    border-radius: 8px;
+    font-size: 0.58rem;
+}
+
+.home-document-title {
+    min-width: 0;
+    margin: 0;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.home-document-card .btn {
+    min-height: 29px;
+    padding: 4px 7px;
+    font-size: 0.72rem;
+}
+
+@media (max-width: 600px) {
+    .home-document-card {
+        grid-template-columns: 30px minmax(0, 1fr) auto;
+        gap: 5px;
+    }
+
+    .home-document-card .btn {
+        padding-inline: 6px;
+    }
+}

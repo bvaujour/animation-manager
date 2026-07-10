@@ -505,6 +505,10 @@ const GestionApp = (function ()
 						<label>Date de naissance</label>
 						<input type="date" class="edit-anim-date-naissance" value="${a.date_naissance || ""}">
 					</div>
+					<div class="field">
+						<label>Couleur planning</label>
+						<input type="color" class="edit-anim-couleur" value="${escapeHtml(a.couleur || "#2563EB")}">
+					</div>
 					<div class="field edit-qualifs-field">
 						<label>Qualifications</label>
 						<div class="checkbox-grid edit-anim-qualifs">
@@ -530,6 +534,7 @@ const GestionApp = (function ()
 				const telephone = champValeur(row, ".edit-anim-telephone");
 				const email = champValeur(row, ".edit-anim-email");
 				const date_naissance = row.querySelector(".edit-anim-date-naissance").value || null;
+				const couleur = row.querySelector(".edit-anim-couleur").value;
 				const qualifications = idsCheckboxesCochees(row.querySelector(".edit-anim-qualifs"));
 				const centres_autorises = centresAutorisesDepuisForm(row.querySelector(".edit-anim-centres"));
 
@@ -541,7 +546,7 @@ const GestionApp = (function ()
 
 				apiFetch(`/api/animateurs/${a.id}/`, {
 					method: "PATCH",
-					body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications, centres_autorises }),
+					body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, couleur, qualifications, centres_autorises }),
 				}).then(() =>
 				{
 					afficherToast("Animateur modifié.");
@@ -651,6 +656,7 @@ const GestionApp = (function ()
 
 					const row = document.createElement("div");
 					row.classList.add("entity-row");
+					row.style.setProperty("--animateur-color", a.couleur || "#94a3b8");
 					row.innerHTML = `
 						<div class="entity-main entity-main-stack">
 							<span class="truncate">${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}</span>

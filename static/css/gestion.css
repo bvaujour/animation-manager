@@ -154,3 +154,8 @@
     font-size: 0.82rem;
     color: var(--color-text);
 }
+
+/* Repère couleur fixe de l'animateur dans la liste de gestion. */
+.entity-row[style*="--animateur-color"] {
+    border-left: 5px solid var(--animateur-color);
+}

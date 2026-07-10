@@ -22,7 +22,13 @@ from .models import (
 )
 
 
-admin.site.register(Document)
+@admin.register(Document)
+class DocumentAdmin(admin.ModelAdmin):
+    list_display = ("titre", "permanent", "periode_debut", "periode_fin", "date_ajout")
+    list_filter = ("permanent",)
+    search_fields = ("titre",)
+    date_hierarchy = "date_ajout"
+
 
 admin.site.register(Qualification)
 
@@ -62,6 +68,7 @@ class AnimateurAdmin(admin.ModelAdmin):
         "email",
         "date_naissance",
         "age",
+        "couleur",
     )
     search_fields = ("prenom", "nom", "telephone", "email")
     inlines = [PreferenceCentreInline, DisponibiliteInline]

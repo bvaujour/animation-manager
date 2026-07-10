@@ -28,6 +28,23 @@
                 <label for="doc-fichier">Fichier</label>
                 <input type="file" id="doc-fichier" required>
             </div>
+
+            <label class="permanent-toggle" for="doc-permanent">
+                <input type="checkbox" id="doc-permanent" checked>
+                <span>Document permanent</span>
+            </label>
+
+            <div class="document-period-fields" id="doc-period-fields" hidden>
+                <div class="field">
+                    <label for="doc-periode-debut">Début de la période</label>
+                    <input type="date" id="doc-periode-debut">
+                </div>
+                <div class="field">
+                    <label for="doc-periode-fin">Fin de la période</label>
+                    <input type="date" id="doc-periode-fin">
+                </div>
+            </div>
+
             <p class="form-error" id="doc-error"></p>
             <button class="btn btn-primary" type="submit">Ajouter le document</button>
         </form>

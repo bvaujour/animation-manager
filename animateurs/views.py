@@ -16,6 +16,7 @@ code HTTP adapté (400 = requête invalide, 404 = introuvable,
 
 import datetime
 import json
+import re
 
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
@@ -106,6 +107,9 @@ def _affectation_to_event(affectation):
         "start": affectation.debut.isoformat(),
         "end": affectation.fin.isoformat(),
         "allDay": True,
+        "backgroundColor": affectation.animateur.couleur,
+        "borderColor": affectation.animateur.couleur,
+        "textColor": "#ffffff",
         "extendedProps": {
             "animateur_id": affectation.animateur_id,
             "centre_id": affectation.centre_id,
@@ -217,6 +221,7 @@ def _animateur_to_dict(animateur):
         "email": animateur.email,
         "date_naissance": animateur.date_naissance.isoformat() if animateur.date_naissance else None,
         "age": animateur.age,
+        "couleur": animateur.couleur,
         "qualification_ids": [
             qualification.id
             for qualification in animateur.qualifications.all()
@@ -400,6 +405,7 @@ def api_animateurs(request):
         email = payload.get("email", "").strip()
         date_naissance_raw = payload.get("date_naissance") or None
         date_naissance = parse_date(date_naissance_raw) if date_naissance_raw else None
+        couleur = (payload.get("couleur") or "").strip()
         qualification_ids = payload.get("qualifications", [])
         centres_autorises, erreur_centres = _normaliser_centres_autorises(payload)
         if erreur_centres:
@@ -411,6 +417,9 @@ def api_animateurs(request):
         if date_naissance_raw and date_naissance is None:
             return JsonResponse({"error": "La date de naissance est invalide."}, status=400)
 
+        if couleur and not re.fullmatch(r"#[0-9A-Fa-f]{6}", couleur):
+            return JsonResponse({"error": "La couleur doit être au format #RRGGBB."}, status=400)
+
     except (KeyError, TypeError, AttributeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
@@ -421,6 +430,7 @@ def api_animateurs(request):
             telephone=telephone,
             email=email,
             date_naissance=date_naissance,
+            couleur=couleur,
         )
 
         if qualification_ids:
@@ -483,6 +493,12 @@ def api_animateur_detail(request, animateur_id):
             if date_naissance_raw and date_naissance is None:
                 return JsonResponse({"error": "La date de naissance est invalide."}, status=400)
             animateur.date_naissance = date_naissance
+
+        if "couleur" in payload:
+            couleur = (payload.get("couleur") or "").strip()
+            if couleur and not re.fullmatch(r"#[0-9A-Fa-f]{6}", couleur):
+                return JsonResponse({"error": "La couleur doit être au format #RRGGBB."}, status=400)
+            animateur.couleur = couleur
 
         if not animateur.prenom or not animateur.nom:
             return JsonResponse({"error": "Le prénom et le nom sont obligatoires."}, status=400)
@@ -1026,31 +1042,53 @@ def _document_to_dict(document):
         "titre": document.titre,
         "url": document.fichier.url,
         "date_ajout": document.date_ajout.isoformat(),
+        "permanent": document.permanent,
+        "periode_debut": document.periode_debut.isoformat() if document.periode_debut else None,
+        "periode_fin": document.periode_fin.isoformat() if document.periode_fin else None,
+        "libelle_periode": document.libelle_periode,
     }
 
 
 @require_http_methods(["GET", "POST"])
 def api_documents(request):
     """GET : liste des documents (les plus récents en premier).
-    POST : ajoute un document (formulaire multipart, champs "titre" et
-    "fichier")."""
+    POST : ajoute un document multipart avec son titre, son fichier et
+    soit le statut permanent, soit une période début/fin."""
 
     if request.method == "GET":
-        documents_qs = Document.objects.all().order_by("-date_ajout")
+        documents_qs = Document.objects.all().order_by("-permanent", "-periode_debut", "-date_ajout")
         return JsonResponse([_document_to_dict(d) for d in documents_qs], safe=False)
 
     titre = request.POST.get("titre", "").strip()
     fichier = request.FILES.get("fichier")
+    permanent = request.POST.get("permanent", "false").lower() in {"1", "true", "on", "yes"}
+    periode_debut = parse_date(request.POST.get("periode_debut", ""))
+    periode_fin = parse_date(request.POST.get("periode_fin", ""))
 
     if not titre or not fichier:
         return JsonResponse({"error": "Le titre et le fichier sont obligatoires."}, status=400)
 
-    document = Document.objects.create(titre=titre, fichier=fichier)
+    if not permanent:
+        if not periode_debut or not periode_fin:
+            return JsonResponse({"error": "Renseigne une date de début et une date de fin, ou choisis Permanent."}, status=400)
+        if periode_fin < periode_debut:
+            return JsonResponse({"error": "La date de fin doit être postérieure ou égale à la date de début."}, status=400)
+    else:
+        periode_debut = None
+        periode_fin = None
+
+    document = Document.objects.create(
+        titre=titre,
+        fichier=fichier,
+        permanent=permanent,
+        periode_debut=periode_debut,
+        periode_fin=periode_fin,
+    )
 
     return JsonResponse(_document_to_dict(document), status=201)
 
 
-@require_http_methods(["DELETE"])
+@require_http_methods(["PATCH", "DELETE"])
 def api_document_detail(request, document_id):
     """Supprime un document, y compris le fichier physique/distant
     associé (sans quoi il resterait orphelin dans le stockage)."""
@@ -1060,10 +1098,41 @@ def api_document_detail(request, document_id):
     except Document.DoesNotExist:
         return JsonResponse({"error": "Document introuvable."}, status=404)
 
-    document.fichier.delete(save=False)
-    document.delete()
+    if request.method == "DELETE":
+        document.fichier.delete(save=False)
+        document.delete()
+        return JsonResponse({"ok": True})
 
-    return JsonResponse({"ok": True})
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON invalide."}, status=400)
+
+    titre = str(payload.get("titre", document.titre)).strip()
+    permanent = bool(payload.get("permanent", document.permanent))
+    periode_debut = parse_date(payload.get("periode_debut") or "")
+    periode_fin = parse_date(payload.get("periode_fin") or "")
+
+    if not titre:
+        return JsonResponse({"error": "Le titre est obligatoire."}, status=400)
+
+    if permanent:
+        periode_debut = None
+        periode_fin = None
+    else:
+        if not periode_debut or not periode_fin:
+            return JsonResponse({"error": "Renseigne une date de début et une date de fin."}, status=400)
+        if periode_fin < periode_debut:
+            return JsonResponse({"error": "La date de fin doit être postérieure ou égale à la date de début."}, status=400)
+
+    document.titre = titre
+    document.permanent = permanent
+    document.periode_debut = periode_debut
+    document.periode_fin = periode_fin
+    document.full_clean()
+    document.save(update_fields=["titre", "permanent", "periode_debut", "periode_fin"])
+
+    return JsonResponse(_document_to_dict(document))
 
 
 @require_POST

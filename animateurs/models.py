@@ -25,8 +25,17 @@ Vue d'ensemble des tables et de leurs relations :
   deux, seule la date compte.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+
+
+ANIMATEUR_COLOR_PALETTE = [
+    "#2563EB", "#059669", "#DC2626", "#9333EA", "#EA580C",
+    "#0891B2", "#65A30D", "#DB2777", "#4F46E5", "#D97706",
+    "#0F766E", "#BE123C", "#7C3AED", "#0284C7", "#16A34A",
+    "#C2410C", "#A21CAF", "#0369A1", "#15803D", "#B91C1C",
+]
 
 
 class Qualification(models.Model):
@@ -55,6 +64,13 @@ class Animateur(models.Model):
     email = models.EmailField(blank=True)
     date_naissance = models.DateField(null=True, blank=True)
 
+    couleur = models.CharField(
+        max_length=7,
+        blank=True,
+        default="",
+        help_text="Couleur hexadécimale fixe utilisée dans le planning.",
+    )
+
     # ManyToMany "simple" (pas de table intermédiaire personnalisée) car
     # on n'a besoin d'aucune information supplémentaire sur la relation
     # elle-même.
@@ -75,6 +91,19 @@ class Animateur(models.Model):
             age -= 1
 
         return age
+
+    def save(self, *args, **kwargs):
+        """Attribue une couleur lisible et stable si aucune n'est définie."""
+        if not self.couleur:
+            couleurs_utilisees = set(
+                Animateur.objects.exclude(pk=self.pk).exclude(couleur="")
+                .values_list("couleur", flat=True)
+            )
+            self.couleur = next(
+                (couleur for couleur in ANIMATEUR_COLOR_PALETTE if couleur not in couleurs_utilisees),
+                ANIMATEUR_COLOR_PALETTE[Animateur.objects.count() % len(ANIMATEUR_COLOR_PALETTE)],
+            )
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.prenom} {self.nom}"
@@ -223,12 +252,48 @@ class Affectation(models.Model):
 
 
 class Document(models.Model):
-    """Un document administratif (contrat, planning imprimé, etc.)
-    consultable depuis la page /documents/."""
+    """Un document administratif consultable depuis l'application.
+
+    Un document est soit permanent, soit rattaché à une période précise.
+    Les dates sont inclusives. Les anciens documents sont considérés comme
+    permanents afin de préserver les données existantes.
+    """
 
     titre = models.CharField(max_length=150)
     fichier = models.FileField(upload_to="documents/")
+    permanent = models.BooleanField(
+        default=True,
+        help_text="Cocher si le document n'est lié à aucune période précise.",
+    )
+    periode_debut = models.DateField(null=True, blank=True)
+    periode_fin = models.DateField(null=True, blank=True)
     date_ajout = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-permanent", "-periode_debut", "-date_ajout"]
+
+    def clean(self):
+        super().clean()
+        if self.permanent:
+            self.periode_debut = None
+            self.periode_fin = None
+            return
+
+        if not self.periode_debut or not self.periode_fin:
+            raise ValidationError("Une période complète est obligatoire pour un document non permanent.")
+        if self.periode_fin < self.periode_debut:
+            raise ValidationError("La date de fin doit être postérieure ou égale à la date de début.")
+
+    @property
+    def libelle_periode(self):
+        if self.permanent:
+            return "Permanent"
+        if self.periode_debut and self.periode_fin:
+            return f"Du {self.periode_debut:%d/%m/%Y} au {self.periode_fin:%d/%m/%Y}"
+        return "Période non renseignée"
+
+    def __str__(self):
+        return self.titre
 
     def __str__(self):
         return self.titre

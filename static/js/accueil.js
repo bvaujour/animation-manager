@@ -163,14 +163,9 @@ document.addEventListener("DOMContentLoaded", () =>
         const card = document.createElement("article");
         card.classList.add("home-document-card");
 
-        const dateAjout = doc.date_ajout ? formatDate(doc.date_ajout) : "";
-
         card.innerHTML = `
             <div class="home-document-icon">${iconeDocument(doc.url)}</div>
-            <div class="home-document-info">
-                <h3>${doc.titre}</h3>
-                <span>${dateAjout ? `Ajouté le ${dateAjout}` : "Document disponible"}</span>
-            </div>
+            <h3 class="home-document-title" title="${doc.titre}">${doc.titre}</h3>
             <a class="btn btn-ghost" href="${doc.url}" target="_blank" rel="noopener" download>
                 Télécharger
             </a>
@@ -193,7 +188,31 @@ document.addEventListener("DOMContentLoaded", () =>
                     return;
                 }
 
-                documents.forEach((doc) => documentsContainer.appendChild(carteDocument(doc)));
+                const groupes = new Map();
+                documents.forEach((doc) =>
+                {
+                    const cle = doc.permanent
+                        ? "permanent"
+                        : `${doc.periode_debut || ""}|${doc.periode_fin || ""}`;
+                    if (!groupes.has(cle))
+                    {
+                        groupes.set(cle, {
+                            titre: doc.permanent ? "Permanents" : doc.libelle_periode,
+                            documents: [],
+                        });
+                    }
+                    groupes.get(cle).documents.push(doc);
+                });
+
+                groupes.forEach((groupe) =>
+                {
+                    const section = document.createElement("section");
+                    section.classList.add("home-document-group");
+                    section.innerHTML = `<h3>${groupe.titre}</h3><div class="home-document-group-grid"></div>`;
+                    const groupGrid = section.querySelector(".home-document-group-grid");
+                    groupe.documents.forEach((doc) => groupGrid.appendChild(carteDocument(doc)));
+                    documentsContainer.appendChild(section);
+                });
             })
             .catch(() => message(documentsContainer, "Impossible de charger les documents."));
     }

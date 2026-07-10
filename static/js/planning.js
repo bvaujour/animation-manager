@@ -482,6 +482,20 @@ document.addEventListener("DOMContentLoaded", function ()
 			droppable: true,  // autorise à recevoir un élément externe (la liste d'animateurs)
 			selectable: true,
 
+			// Garde un ordre stable des événements dans chaque journée.
+			// FullCalendar essaie ainsi de placer le même animateur à la même
+			// hauteur d'un jour à l'autre, ce qui facilite la lecture du planning.
+			// L'id animateur est renvoyé par l'API dans extendedProps.
+			eventOrder: function (eventA, eventB)
+			{
+				const animateurA = Number(eventA.extendedProps?.animateur_id || eventA.extendedProps?.animateurId || 0);
+				const animateurB = Number(eventB.extendedProps?.animateur_id || eventB.extendedProps?.animateurId || 0);
+
+				if (animateurA !== animateurB) return animateurA - animateurB;
+				return String(eventA.title || "").localeCompare(String(eventB.title || ""), "fr");
+			},
+			eventOrderStrict: true,
+
 			expandRows: false,
 			headerToolbar: false, // on utilise notre propre barre d'outils commune
 			footerToolbar: false,
@@ -774,17 +788,30 @@ document.addEventListener("DOMContentLoaded", function ()
 
 	// Construit le petit badge d'un animateur : ruban coloré et pastilles
 	// indiquent les centres où il peut être affecté.
+	// Choisit automatiquement un texte clair ou foncé selon la couleur de fond.
+	function couleurTexteLisible(couleur)
+	{
+		if (!/^#[0-9A-Fa-f]{6}$/.test(couleur || "")) return "#ffffff";
+
+		const r = parseInt(couleur.slice(1, 3), 16);
+		const g = parseInt(couleur.slice(3, 5), 16);
+		const b = parseInt(couleur.slice(5, 7), 16);
+		const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+
+		return luminance > 165 ? "#172033" : "#ffffff";
+	}
+
 	function creerChipAnimateur(animateur)
 	{
 		const div = document.createElement("div");
 		div.classList.add("animateur");
 		div.dataset.animateurId = animateur.id;
+		div.dataset.couleur = animateur.couleur || "";
 
 		const centresAutorises = animateur.centres_autorises || [];
-		const rubanCouleur = centresAutorises.length > 0
-			? centresAutorises[0].couleur
-			: "var(--color-border)";
-		div.style.setProperty("--ruban", rubanCouleur);
+		const couleurAnimateur = animateur.couleur || "#64748b";
+		div.style.setProperty("--animateur-color", couleurAnimateur);
+		div.style.setProperty("--animateur-text", couleurTexteLisible(couleurAnimateur));
 
 		const name = document.createElement("span");
 		name.classList.add("anim-name");
@@ -1339,6 +1366,9 @@ document.addEventListener("DOMContentLoaded", function ()
 			return {
 				title: eventEl.querySelector(".anim-name").textContent,
 				allDay: true,
+				backgroundColor: eventEl.dataset.couleur || undefined,
+				borderColor: eventEl.dataset.couleur || undefined,
+				textColor: "#ffffff",
 				extendedProps: {
 					animateurId: eventEl.dataset.animateurId,
 				},

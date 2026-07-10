@@ -75,25 +75,15 @@ html, body {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
+    background-color: var(--animateur-color, #64748b);
+    color: var(--animateur-text, #ffffff);
+    border: 1px solid color-mix(in srgb, var(--animateur-color, #64748b) 72%, #000000);
     border-radius: 999px;
-    padding: 6px 10px 6px 13px;
+    padding: 6px 10px;
     white-space: nowrap;
     box-shadow: var(--shadow-sm);
     cursor: pointer;
     transition: opacity 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
-}
-
-.animateur::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 6px;
-    bottom: 6px;
-    width: 5px;
-    background: var(--ruban, var(--color-border));
-    border-radius: 999px;
 }
 
 .animateur:hover {
@@ -111,6 +101,7 @@ html, body {
 }
 
 .anim-name {
+    color: inherit;
     font-weight: 700;
     font-size: 0.82rem;
     max-width: 110px;
@@ -795,18 +786,13 @@ html, body {
 
     .animateur {
         min-width: max-content;
-        padding: 6px 8px 6px 11px;
+        padding: 6px 8px;
         border-radius: 999px;
         gap: 5px;
         box-shadow: none;
         font-size: 0.78rem;
     }
 
-    .animateur::before {
-        width: 4px;
-        border-top-left-radius: 999px;
-        border-bottom-left-radius: 999px;
-    }
 
     .anim-name {
         font-size: 0.78rem;
@@ -941,19 +927,13 @@ html, body {
 
 .animateur {
     min-width: max-content !important;
-    padding: 6px 9px 6px 12px !important;
+    padding: 6px 9px !important;
     border-radius: 999px !important;
     gap: 5px !important;
     box-shadow: var(--shadow-sm) !important;
     font-size: 0.78rem !important;
 }
 
-.animateur::before {
-    width: 4px !important;
-    top: 6px !important;
-    bottom: 6px !important;
-    border-radius: 999px !important;
-}
 
 .anim-name {
     font-size: 0.78rem !important;
