@@ -11,13 +11,6 @@ document.addEventListener("DOMContentLoaded", () =>
     const finInput = document.getElementById("doc-periode-fin");
     const errorEl = document.getElementById("doc-error");
 
-    const EXTENSIONS_IMAGE = ["jpg", "jpeg", "png", "gif", "webp"];
-
-    function extensionDe(url)
-    {
-        return url.split("?")[0].split(".").pop().toLowerCase();
-    }
-
     function afficherChampsPeriode()
     {
         const permanent = permanentInput.checked;
@@ -34,7 +27,7 @@ document.addEventListener("DOMContentLoaded", () =>
 
     function carteDocument(doc)
     {
-        const extension = extensionDe(doc.url);
+        const extension = DocumentUtils.extension(doc.url);
         const div = document.createElement("article");
         div.classList.add("document-card");
 

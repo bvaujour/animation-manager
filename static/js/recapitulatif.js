@@ -61,20 +61,6 @@ document.addEventListener("DOMContentLoaded", () =>
 		return `/api/recapitulatif/?${params.toString()}`;
 	}
 
-	function couleurDouce(couleur, opacite = 0.12)
-	{
-		// Transforme une couleur hex (#e03c00) en rgba léger pour colorer
-		// toute une colonne sans nuire à la lisibilité.
-		if (!couleur || !couleur.startsWith("#") || couleur.length !== 7)
-		{
-			return `rgba(224, 60, 0, ${opacite})`;
-		}
-
-		const r = parseInt(couleur.slice(1, 3), 16);
-		const g = parseInt(couleur.slice(3, 5), 16);
-		const b = parseInt(couleur.slice(5, 7), 16);
-		return `rgba(${r}, ${g}, ${b}, ${opacite})`;
-	}
 
 	function afficherTableau(data)
 	{
@@ -89,7 +75,7 @@ document.addEventListener("DOMContentLoaded", () =>
 				${data.centres.map((centre) => `
 					<th
 						class="centre-header"
-						style="--centre-color:${centre.couleur}; --centre-bg:${couleurDouce(centre.couleur, 0.16)};"
+						style="--centre-color:${centre.couleur}; --centre-bg:${ColorUtils.rgba(centre.couleur, 0.16)};"
 					>
 						<span class="centre-dot" style="--c:${centre.couleur}"></span>
 						<span>${centre.code || centre.nom}</span>
@@ -114,7 +100,7 @@ document.addEventListener("DOMContentLoaded", () =>
 				return `
 					<td
 						class="number-cell centre-cell"
-						style="--centre-color:${centre.couleur}; --centre-bg:${couleurDouce(centre.couleur, 0.08)};"
+						style="--centre-color:${centre.couleur}; --centre-bg:${ColorUtils.rgba(centre.couleur, 0.08)};"
 					>
 						<span class="${classe}">${centreRecap.jours}</span>
 					</td>

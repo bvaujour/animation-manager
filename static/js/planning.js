@@ -12,6 +12,16 @@
 
 document.addEventListener("DOMContentLoaded", function ()
 {
+	const {
+		dateDansPlage,
+		evenementCouvreJour,
+		estVraieAffectation,
+		idAnimateurDepuisEvent,
+		idEventNormalise,
+		intervallesSeChevauchent,
+		eventIntervalleDates,
+		lundiDeLaSemaine,
+	} = PlanningUtils;
 	// -- Références DOM utilisées à plusieurs endroits --
 	const calendarsContainer = document.getElementById("calendars-container");
 	const animList = document.getElementById("animateurs-list");
@@ -56,63 +66,24 @@ document.addEventListener("DOMContentLoaded", function ()
 	let celluleJourSelectionnee = null;
 
 
-	function escapeHtml(value)
-	{
-		return String(value ?? "")
-			.replaceAll("&", "&amp;")
-			.replaceAll("<", "&lt;")
-			.replaceAll(">", "&gt;")
-			.replaceAll("\"", "&quot;")
-			.replaceAll("'", "&#039;");
-	}
-
-	function libelleDate(dateStr)
+function libelleDate(dateStr)
 	{
 		return parseLocalDate(dateStr).toLocaleDateString("fr-FR");
 	}
 
-	function idsCheckboxesCochees(root)
+function qualificationCheckboxes(cochees = [])
 	{
-		return Array.from(root.querySelectorAll("input:checked")).map((input) => parseInt(input.value, 10));
-	}
-
-	function qualificationCheckboxes(cochees = [])
-	{
-		if (qualificationsPlanning.length === 0)
-		{
-			return '<p class="empty-note">Aucune qualification disponible.</p>';
-		}
-
-		const cocheesSet = new Set((cochees || []).map(Number));
-		return qualificationsPlanning.map((qualification) => `
-			<label class="checkbox-chip">
-				<input type="checkbox" value="${escapeHtml(qualification.id)}" ${cocheesSet.has(qualification.id) ? "checked" : ""}>
-				${escapeHtml(qualification.nom)}
-			</label>
-		`).join("");
+		return FormOptionsUtils.qualifications(qualificationsPlanning, cochees);
 	}
 
 	function centresAutorisesInputs(centresAutorises = [])
 	{
-		if (centresPlanning.length === 0)
-		{
-			return '<p class="empty-note">Ajoute d\'abord des centres pour choisir où affecter l\'animateur.</p>';
-		}
-
-		const centresSet = new Set((centresAutorises || []).map((centre) => Number(centre.id ?? centre)));
-
-		return centresPlanning.map((centre) => `
-			<label class="checkbox-chip centre-chip-option">
-				<input type="checkbox" value="${escapeHtml(centre.id)}" ${centresSet.has(Number(centre.id)) ? "checked" : ""}>
-				<span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>
-				${escapeHtml(centre.code || centre.nom)}
-			</label>
-		`).join("");
+		return FormOptionsUtils.centres(centresPlanning, centresAutorises);
 	}
 
 	function centresAutorisesDepuisForm(root)
 	{
-		return idsCheckboxesCochees(root);
+		return FormOptionsUtils.idsCoches(root);
 	}
 
 	function disponibilitesTexte(disponibilites)
@@ -199,63 +170,19 @@ document.addEventListener("DOMContentLoaded", function ()
 	}
 
 
-	function dateDansPlage(dateStr, debutStr, finStr)
-	{
-		return debutStr <= dateStr && dateStr <= finStr;
-	}
 
 	function animateurDisponibleCeJour(animateur, dateStr)
 	{
-		// Même règle que le backend : aucune disponibilité renseignée = pas de contrainte.
+		// Même règle que le backend : sans plage renseignée, l'animateur est indisponible.
 		if (!animateur.disponibilites || animateur.disponibilites.length === 0)
 		{
-			return true;
+			return false;
 		}
 
 		return animateur.disponibilites.some((plage) => dateDansPlage(dateStr, plage.debut, plage.fin));
 	}
 
-	function animateurAffectableSurCentre(animateur, centre)
-	{
-		// Les centres associés à l'animateur servent seulement d'indication
-		// visuelle (badges / choix habituels). Ils ne bloquent plus le placement.
-		return true;
-	}
 
-	function evenementCouvreJour(event, dateStr)
-	{
-		const debut = event.start ? formatDateLocal(event.start) : event.startStr;
-		const finExclusive = event.end ? formatDateLocal(event.end) : (event.endStr || addDays(debut, 1));
-
-		return debut <= dateStr && dateStr < finExclusive;
-	}
-
-	function estVraieAffectation(event)
-	{
-		return event && event.display !== "background";
-	}
-
-	function idAnimateurDepuisEvent(event)
-	{
-		return Number(event?.extendedProps?.animateur_id || event?.extendedProps?.animateurId || 0);
-	}
-
-	function idEventNormalise(event)
-	{
-		return event && event.id !== undefined && event.id !== null ? String(event.id) : null;
-	}
-
-	function intervallesSeChevauchent(debutA, finA, debutB, finB)
-	{
-		return debutA < finB && finA > debutB;
-	}
-
-	function eventIntervalleDates(event)
-	{
-		const debut = event.start ? formatDateLocal(event.start) : event.startStr;
-		const fin = event.end ? formatDateLocal(event.end) : (event.endStr || addDays(debut, 1));
-		return { debut, fin };
-	}
 
 	function animateurDejaAffecteSurIntervalle(animateurId, debutStr, finStr, excludeEventId = null)
 	{
@@ -477,7 +404,7 @@ document.addEventListener("DOMContentLoaded", function ()
 			height: "auto",
 			locale: "fr",
 			firstDay: 1, // la semaine commence le lundi
-			hiddenDays: [0], // cache uniquement le dimanche : lundi -> samedi visibles
+			hiddenDays: [0], // cache seulement le dimanche : samedi reste visible et manuel
 			editable: true,   // autorise glisser/redimensionner un évènement existant
 			droppable: true,  // autorise à recevoir un élément externe (la liste d'animateurs)
 			selectable: true,
@@ -711,19 +638,6 @@ document.addEventListener("DOMContentLoaded", function ()
 	// Mode initial : semaine compacte.
 	appliquerModeVue("dayGridWeek");
 
-	// Renvoie le lundi de la semaine contenant `date` (à minuit local).
-	// getDay() renvoie 0 pour dimanche, 1 pour lundi, ..., 6 pour samedi ;
-	// le petit calcul ci-dessous ramène toujours au lundi précédent (ou
-	// au jour même si on est déjà lundi).
-	function lundiDeLaSemaine(date)
-	{
-		const d = new Date(date);
-		const jour = d.getDay();
-		const diff = (jour === 0 ? -6 : 1 - jour);
-		d.setDate(d.getDate() + diff);
-		d.setHours(0, 0, 0, 0);
-		return d;
-	}
 
 	// NB : le formatage en "YYYY-MM-DD" utilise formatDateLocal() (définie
 	// dans ui.js), PAS toISOString(). Ce fichier manipule des dates en
@@ -748,15 +662,15 @@ document.addEventListener("DOMContentLoaded", function ()
 		// On se base sur la date "de référence" du premier calendrier :
 		// comme les 3 sont toujours synchronisés, peu importe lequel.
 		const lundi = lundiDeLaSemaine(calendars[0].getDate());
-		const dimancheSuivant = new Date(lundi);
-		dimancheSuivant.setDate(dimancheSuivant.getDate() + 7);
+		const samedi = new Date(lundi);
+		samedi.setDate(samedi.getDate() + 5);
 
 		const confirmation = confirm(
 			"Supprimer les affectations À VENIR de cette semaine (à partir d'aujourd'hui), dans les 3 centres ? Les jours déjà passés ne sont jamais touchés. Cette action est irréversible."
 		);
 		if (!confirmation) return;
 
-		apiFetch(`/api/planning/plage/?debut=${formatDateLocal(lundi)}&fin=${formatDateLocal(dimancheSuivant)}`, { method: "DELETE" })
+		apiFetch(`/api/planning/plage/?debut=${formatDateLocal(lundi)}&fin=${formatDateLocal(samedi)}`, { method: "DELETE" })
 			.then((data) =>
 			{
 				afficherToast(`${data.supprimees} affectation(s) supprimée(s).`);
@@ -788,18 +702,6 @@ document.addEventListener("DOMContentLoaded", function ()
 
 	// Construit le petit badge d'un animateur : ruban coloré et pastilles
 	// indiquent les centres où il peut être affecté.
-	// Choisit automatiquement un texte clair ou foncé selon la couleur de fond.
-	function couleurTexteLisible(couleur)
-	{
-		if (!/^#[0-9A-Fa-f]{6}$/.test(couleur || "")) return "#ffffff";
-
-		const r = parseInt(couleur.slice(1, 3), 16);
-		const g = parseInt(couleur.slice(3, 5), 16);
-		const b = parseInt(couleur.slice(5, 7), 16);
-		const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
-
-		return luminance > 165 ? "#172033" : "#ffffff";
-	}
 
 	function creerChipAnimateur(animateur)
 	{
@@ -811,7 +713,7 @@ document.addEventListener("DOMContentLoaded", function ()
 		const centresAutorises = animateur.centres_autorises || [];
 		const couleurAnimateur = animateur.couleur || "#64748b";
 		div.style.setProperty("--animateur-color", couleurAnimateur);
-		div.style.setProperty("--animateur-text", couleurTexteLisible(couleurAnimateur));
+		div.style.setProperty("--animateur-text", ColorUtils.texteLisible(couleurAnimateur));
 
 		const name = document.createElement("span");
 		name.classList.add("anim-name");
@@ -911,8 +813,10 @@ document.addEventListener("DOMContentLoaded", function ()
 		const centres = animateur.centres_autorises || [];
 		const index = centres.findIndex((c) => Number(c.id) === Number(centre.id));
 
-		// Pas de centre autorisé = on ne colore pas ce calendrier.
-		if (index === -1) return null;
+		// Centre non autorisé : on colore les jours disponibles en rouge.
+		// Cela reste un repère visuel : une affectation manuelle peut toujours
+		// être réalisée selon les règles actuelles de l'application.
+		if (index === -1) return "#dc2626";
 
 		// Le premier centre autorisé est affiché en vert, les suivants en orange.
 		// Comme on a supprimé l'ancien ordre de préférence, "premier" signifie
@@ -922,14 +826,10 @@ document.addEventListener("DOMContentLoaded", function ()
 
 	function plagesDisponibilitesPourVue(calendar, plages)
 	{
-		// Règle métier existante : aucune disponibilité renseignée = pas de contrainte.
-		// Dans ce cas, on colore toute la période visible du calendrier.
+		// Sans disponibilité renseignée, aucune journée ne doit être colorée.
 		if (!plages || plages.length === 0)
 		{
-			return [{
-				debut: formatDateLocal(calendar.view.activeStart),
-				finExclusive: formatDateLocal(calendar.view.activeEnd),
-			}];
+			return [];
 		}
 
 		return plages.map((plage) => ({
@@ -956,7 +856,6 @@ document.addEventListener("DOMContentLoaded", function ()
 			if (!centre) return;
 
 			const couleur = couleurDisponibilitePourCentre(animateur, centre);
-			if (!couleur) return;
 
 			// FullCalendar affiche les évènements "display: background" comme
 			// une simple teinte de fond, sans les traiter comme de vraies
@@ -975,7 +874,8 @@ document.addEventListener("DOMContentLoaded", function ()
 	// Affiche temporairement les disponibilités d'un animateur dès que
 	// l'utilisateur commence à le prendre pour le glisser dans un calendrier.
 	// Ça donne le même repère visuel que la sélection classique : vert sur
-	// son premier centre autorisé, orange sur les suivants.
+	// son premier centre autorisé, orange sur les suivants et rouge sur les
+	// centres qui ne font pas partie de ses centres autorisés.
 	function afficherDisponibilitesPendantDrag(animateur)
 	{
 		// Si l'animateur est déjà sélectionné, les disponibilités sont déjà
@@ -1058,7 +958,8 @@ document.addEventListener("DOMContentLoaded", function ()
 		afficherToast(`${animateur.prenom} sélectionné : clique sur un jour pour l'affecter.`);
 
 		// Affiche immédiatement ses jours disponibles : vert sur son premier
-		// centre autorisé, orange sur les autres centres autorisés.
+		// centre autorisé, orange sur les autres centres autorisés et rouge sur
+		// les centres non autorisés.
 		fetch(`/api/animateurs/${animateur.id}/disponibilites/`)
 			.then((response) => response.json())
 			.then((data) => afficherDisponibilites(animateur, data.disponibilites || []))
@@ -1275,75 +1176,8 @@ document.addEventListener("DOMContentLoaded", function ()
 		ouvrirModal(modalDispoAnimateur);
 	}
 
-	// -----------------------------------------------------------------
-	// Double barre de défilement horizontale pour les calendriers.
-	// Sur mobile, #calendars-container déborde à droite et possède déjà
-	// une barre de défilement native EN BAS. Mais comme les calendriers
-	// sont empilés (un par centre), ce bas est souvent loin sous la ligne
-	// de flottaison. On ajoute donc une seconde barre EN HAUT, synchronisée,
-	// pour pouvoir faire défiler les jours sans descendre tout en bas.
-	//
-	// Technique de la "double scrollbar" : un conteneur vide au-dessus,
-	// lui-même défilable horizontalement, dont la piste interne fait
-	// exactement la largeur défilable des calendriers. On recopie la
-	// position de scroll de l'un vers l'autre.
-	// -----------------------------------------------------------------
-	function installerBarreScrollHaut(container)
-	{
-		const barreHaut = document.createElement("div");
-		barreHaut.id = "calendars-scroll-top";
-		const piste = document.createElement("div");
-		barreHaut.appendChild(piste);
-		container.parentNode.insertBefore(barreHaut, container);
-
-		// La piste prend la largeur totale défilable du conteneur, pour que
-		// la barre du haut ait la même amplitude que celle du bas. La barre
-		// n'est montrée que s'il y a effectivement un débordement (donc pas
-		// sur desktop, où tout tient dans la largeur).
-		function rafraichir()
-		{
-			piste.style.width = container.scrollWidth + "px";
-			const deborde = container.scrollWidth > container.clientWidth + 1;
-			barreHaut.classList.toggle("visible", deborde);
-		}
-
-		// Recalcul groupé sur une frame pour éviter les rafales (rendu
-		// FullCalendar, rotation d'écran, ajout de centre...).
-		let planifie = false;
-		function planifierRafraichir()
-		{
-			if (planifie) return;
-			planifie = true;
-			requestAnimationFrame(() => { planifie = false; rafraichir(); });
-		}
-
-		// Synchronisation croisée des positions de scroll, avec verrou
-		// anti-boucle (déplacer l'un déclenche le scroll de l'autre).
-		let enCours = false;
-		function relier(source, cible)
-		{
-			source.addEventListener("scroll", () =>
-			{
-				if (enCours) return;
-				enCours = true;
-				cible.scrollLeft = source.scrollLeft;
-				requestAnimationFrame(() => { enCours = false; });
-			});
-		}
-		relier(barreHaut, container);
-		relier(container, barreHaut);
-
-		// La largeur défilable change avec la taille de l'écran ET avec le
-		// contenu (rendu des calendriers, changement de vue, ajout/retrait
-		// de centre). On surveille les deux.
-		window.addEventListener("resize", planifierRafraichir);
-		new ResizeObserver(planifierRafraichir).observe(container);
-		new MutationObserver(planifierRafraichir).observe(container, { childList: true, subtree: true });
-
-		planifierRafraichir();
-	}
-
-	installerBarreScrollHaut(calendarsContainer);
+	// Les calendriers occupent maintenant toute la largeur disponible.
+	// Aucun scroll horizontal synchronisé n'est nécessaire.
 
 	// -----------------------------------------------------------------
 	// Chargement initial
@@ -1389,7 +1223,7 @@ document.addEventListener("DOMContentLoaded", function ()
 			window.setTimeout(nettoyerDisponibilitesDragPreview, 120);
 		});
 	});
-	// Placement automatique de la semaine affichée (lundi -> samedi).
+	// Placement automatique de la semaine affichée (lundi -> vendredi).
 	// On ouvre d'abord une popup pour choisir le nombre d'animateurs par
 	// jour et par centre, puis le serveur vide la semaine et reconstruit
 	// les affectations en respectant disponibilités et centres autorisés.
@@ -1505,7 +1339,7 @@ document.addEventListener("DOMContentLoaded", function ()
 		}).join("");
 
 		modalAutoContent.innerHTML = `
-			<p class="form-hint">Choisis le nombre d'animateurs à placer <strong>par jour</strong> dans chaque centre, du lundi au samedi. Tu peux exiger un minimum de titulaires d'une qualification (ex : 2 BAFA) : ces places sont pourvues en priorité, le reste est libre. Mettre 0 en total exclut un centre.</p>
+			<p class="form-hint">Choisis le nombre d'animateurs à placer <strong>par jour</strong> dans chaque centre, du lundi au vendredi. Tu peux exiger un minimum de titulaires d'une qualification (ex : 2 BAFA) : ces places sont pourvues en priorité, le reste est libre. Mettre 0 en total exclut un centre.</p>
 			<div class="auto-centres-liste">${blocs}</div>
 			<p class="form-error" id="auto-error"></p>
 			<div class="edit-actions">
@@ -1587,7 +1421,7 @@ document.addEventListener("DOMContentLoaded", function ()
 				return;
 			}
 
-			if (!confirm("Remplir automatiquement du lundi au samedi ? Les affectations existantes de ces jours seront remplacées."))
+			if (!confirm("Remplir automatiquement du lundi au vendredi ? Les affectations existantes de ces jours seront remplacées."))
 			{
 				return;
 			}

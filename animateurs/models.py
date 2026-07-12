@@ -178,11 +178,9 @@ class Disponibilite(models.Model):
     """Une plage de dates (bornes incluses) où un animateur est
     disponible pour travailler.
 
-    Règle importante appliquée côté vues (voir _animateur_disponible
-    dans views.py) : un animateur qui n'a AUCUNE ligne Disponibilite est
-    considéré disponible tout le temps (pas de contrainte tant que
-    l'information n'a pas été saisie). Dès qu'il a au moins une plage,
-    seuls les jours couverts par une de ses plages sont autorisés.
+    Règle métier : un animateur qui n'a AUCUNE ligne Disponibilite est
+    considéré indisponible. Une affectation n'est autorisée que lorsque
+    chaque jour concerné est couvert par au moins une plage renseignée.
 
     On utilise des plages (debut/fin) plutôt qu'une ligne par jour :
     plus rapide à saisir dans l'admin (ex: "disponible du 6 au 20
@@ -199,8 +197,10 @@ class Disponibilite(models.Model):
 
     class Meta:
         ordering = ["debut"]
+        indexes = [
+            models.Index(fields=["animateur", "debut", "fin"], name="dispo_anim_dates_idx"),
+        ]
         constraints = [
-            # Empêche de saisir une plage à l'envers (fin avant début).
             models.CheckConstraint(
                 condition=models.Q(fin__gte=models.F("debut")),
                 name="dispo_fin_apres_debut",
@@ -246,6 +246,17 @@ class Affectation(models.Model):
 
     class Meta:
         ordering = ["debut"]
+        indexes = [
+            models.Index(fields=["centre", "debut"], name="aff_centre_debut_idx"),
+            models.Index(fields=["animateur", "debut"], name="aff_anim_debut_idx"),
+            models.Index(fields=["debut", "fin"], name="aff_periode_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(fin__gt=models.F("debut")),
+                name="affectation_fin_apres_debut",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.animateur} @ {self.centre} ({self.debut:%d/%m/%Y})"
@@ -271,6 +282,9 @@ class Document(models.Model):
 
     class Meta:
         ordering = ["-permanent", "-periode_debut", "-date_ajout"]
+        indexes = [
+            models.Index(fields=["permanent", "periode_debut", "periode_fin"], name="document_periode_idx"),
+        ]
 
     def clean(self):
         super().clean()
@@ -291,9 +305,6 @@ class Document(models.Model):
         if self.periode_debut and self.periode_fin:
             return f"Du {self.periode_debut:%d/%m/%Y} au {self.periode_fin:%d/%m/%Y}"
         return "Période non renseignée"
-
-    def __str__(self):
-        return self.titre
 
     def __str__(self):
         return self.titre

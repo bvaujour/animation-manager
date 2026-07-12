@@ -1,57 +1,19 @@
+{% extends "base.html" %}
 {% load static %}
-
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Récapitulatif</title>
-
-    <link rel="stylesheet" href="{% static 'css/base.css' %}">
-    <link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}">
-</head>
-<body>
-    {% csrf_token %}
-    {% include "partials/_nav.html" with active="recapitulatif" %}
-
-    <main class="recap-page">
-        <header class="recap-header">
-            <div>
-                <h1>Récapitulatif</h1>
-                <p class="page-intro">Nombre de jours travaillés par animateur, répartis par centre.</p>
-            </div>
-        </header>
-
-        <section class="periode-card" aria-label="Choix de la période">
-            <label>
-                Début
-                <input type="date" id="periode-debut">
-            </label>
-
-            <label>
-                Fin
-                <input type="date" id="periode-fin">
-            </label>
-
-            <button id="btn-appliquer-periode" class="btn" type="button">Afficher</button>
-        </section>
-
-        <section class="table-card">
-            <div class="table-header">
-                <h2>Jours travaillés</h2>
-                <p id="periode-affichee"></p>
-            </div>
-
-            <div class="table-scroll">
-                <table class="recap-table" id="table-recap">
-                    <thead></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </section>
-    </main>
-
-    <script src="{% static 'js/ui.js' %}"></script>
-    <script src="{% static 'js/recapitulatif.js' %}"></script>
-</body>
-</html>
+{% block title %}Récapitulatif{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}">{% endblock %}
+{% block content %}
+<main class="recap-page">
+    <header class="recap-header"><div><h1>Récapitulatif</h1><p class="page-intro">Nombre de jours travaillés par animateur, répartis par centre.</p></div></header>
+    <section class="periode-card" aria-label="Choix de la période">
+        <label>Début<input type="date" id="periode-debut"></label>
+        <label>Fin<input type="date" id="periode-fin"></label>
+        <button id="btn-appliquer-periode" class="btn" type="button">Afficher</button>
+    </section>
+    <section class="table-card">
+        <div class="table-header"><h2>Jours travaillés</h2><p id="periode-affichee"></p></div>
+        <div class="table-scroll"><table class="recap-table" id="table-recap"><thead></thead><tbody></tbody></table></div>
+    </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/recapitulatif.js' %}"></script>{% endblock %}

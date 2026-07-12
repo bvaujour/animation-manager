@@ -99,6 +99,24 @@ function parseLocalDate(dateStr) {
 	return new Date(annee, mois - 1, jour);
 }
 
+
+// Échappe du texte avant insertion dans une chaîne HTML.
+function escapeHtml(value) {
+	return String(value ?? "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll("\"", "&quot;")
+		.replaceAll("'", "&#039;");
+}
+
+// Renvoie les identifiants numériques de cases cochées dans un conteneur.
+function idsCheckboxesCochees(root) {
+	return Array.from(root.querySelectorAll("input:checked"))
+		.map((input) => Number.parseInt(input.value, 10))
+		.filter(Number.isFinite);
+}
+
 // --- Modal générique (popup) ---
 // Une seule modal HTML par page (voir planning.html), affichée/masquée
 // simplement via l'attribut `hidden`.

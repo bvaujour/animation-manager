@@ -12,27 +12,12 @@
 
 const GestionApp = (function ()
 {
-	function escapeHtml(value)
-	{
-		return String(value ?? "")
-			.replaceAll("&", "&amp;")
-			.replaceAll("<", "&lt;")
-			.replaceAll(">", "&gt;")
-			.replaceAll("\"", "&quot;")
-			.replaceAll("'", "&#039;");
-	}
-
-	function champValeur(form, selector)
+function champValeur(form, selector)
 	{
 		return form.querySelector(selector).value.trim();
 	}
 
-	function idsCheckboxesCochees(root)
-	{
-		return Array.from(root.querySelectorAll("input:checked")).map((el) => parseInt(el.value, 10));
-	}
-
-	function bouton(label, classes, onClick)
+function bouton(label, classes, onClick)
 	{
 		const btn = document.createElement("button");
 		btn.type = "button";
@@ -64,43 +49,18 @@ const GestionApp = (function ()
 
 	function qualificationCheckboxes(qualifications, cochees = [])
 	{
-		if (!qualifications.length)
-		{
-			return '<p class="empty-note">Aucune qualification disponible.</p>';
-		}
-
-		const cocheesSet = new Set(cochees.map(Number));
-
-		return qualifications.map((q) => `
-			<label class="checkbox-chip">
-				<input type="checkbox" value="${escapeHtml(q.id)}" ${cocheesSet.has(q.id) ? "checked" : ""}>
-				${escapeHtml(q.nom)}
-			</label>
-		`).join("");
+		return FormOptionsUtils.qualifications(qualifications, cochees);
 	}
-
 
 	function centresAutorisesInputs(centres, centresAutorises = [])
 	{
-		if (!centres.length)
-		{
-			return '<p class="empty-note">Ajoute d\'abord des centres pour pouvoir choisir où affecter l\'animateur.</p>';
-		}
-
-		const centresSet = new Set((centresAutorises || []).map((centre) => Number(centre.id ?? centre)));
-
-		return centres.map((centre) => `
-			<label class="checkbox-chip centre-chip-option">
-				<input type="checkbox" value="${escapeHtml(centre.id)}" ${centresSet.has(Number(centre.id)) ? "checked" : ""}>
-				<span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>
-				${escapeHtml(centre.code || centre.nom)}
-			</label>
-		`).join("");
+		return FormOptionsUtils.centres(centres, centresAutorises,
+			"Ajoute d'abord des centres pour pouvoir choisir où affecter l'animateur.");
 	}
 
 	function centresAutorisesDepuisForm(root)
 	{
-		return idsCheckboxesCochees(root);
+		return FormOptionsUtils.idsCoches(root);
 	}
 
 	// ------------------------------------------------------------------
@@ -563,7 +523,7 @@ const GestionApp = (function ()
 			row.innerHTML = `
 				<div class="entity-main entity-main-stack">
 					<strong>Disponibilités de ${escapeHtml(a.prenom)} ${escapeHtml(a.nom)}</strong>
-					<small class="entity-muted">Ajoute une plage rapidement. Si aucune disponibilité n'est renseignée, l'animateur est considéré disponible par défaut.</small>
+					<small class="entity-muted">Ajoute une plage rapidement. Sans disponibilité renseignée, l'animateur est considéré indisponible.</small>
 				</div>
 				<div class="dispos-list" id="edit-dispos-list"></div>
 				<div class="edit-grid">

@@ -1509,3 +1509,141 @@ html, body {
         padding: 6px 4px !important;
     }
 }
+
+/* ========================================================================== 
+   Mise en page finale : planning pleine largeur, sans scroll interne
+   --------------------------------------------------------------------------
+   Cette section est volontairement placée en dernier afin de neutraliser les
+   anciennes variantes de mise en page accumulées pendant les refontes.
+
+   - aucune largeur maximale artificielle ;
+   - aucune marge latérale autour des calendriers ;
+   - aucun défilement horizontal ;
+   - les trois calendriers sont empilés et occupent 100 % de la largeur ;
+   - le défilement vertical appartient à la page, comme sur l'accueil.
+   ========================================================================== */
+html,
+body {
+    min-height: 100%;
+    height: auto !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+#layout {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: calc(100vh - 52px) !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 4px !important;
+    overflow: visible !important;
+}
+
+#animateurs-panel {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    padding: 5px 4px !important;
+}
+
+#calendars-section {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    overflow: visible !important;
+}
+
+.planning-control-block,
+#planning-view-switcher,
+#planning-period-nav,
+#planning-actions {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-radius: 0 !important;
+}
+
+#calendars-container {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    overflow: visible !important;
+    align-items: stretch !important;
+}
+
+#calendars-container .calendar-card {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 4px !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+}
+
+#calendars-container .calendar-card .calendar,
+#calendars-container .fc,
+#calendars-container .fc-view-harness,
+#calendars-container .fc-scrollgrid {
+    width: 100% !important;
+    max-width: none !important;
+}
+
+#calendars-scroll-top {
+    display: none !important;
+}
+
+#planning-actions {
+    position: static !important;
+    bottom: auto !important;
+}
+
+@media (max-width: 640px) {
+    #layout {
+        min-height: calc(100dvh - 52px) !important;
+        height: auto !important;
+        padding: 0 !important;
+    }
+
+    #animateurs-panel {
+        max-height: none !important;
+        padding: 4px 2px !important;
+    }
+
+    #calendars-container,
+    #calendars-container .calendar-card {
+        min-width: 0 !important;
+        overflow: visible !important;
+    }
+
+    #calendars-container .calendar-card {
+        padding: 3px 2px !important;
+    }
+
+    #planning-view-switcher,
+    #planning-period-nav,
+    #planning-actions {
+        padding-left: 3px !important;
+        padding-right: 3px !important;
+    }
+}

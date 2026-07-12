@@ -19,16 +19,12 @@ document.addEventListener("DOMContentLoaded", () =>
         container.innerHTML = `<p class="empty-note">${texte}</p>`;
     }
 
-    function formatDate(dateIso)
-    {
-        return new Date(dateIso).toLocaleDateString("fr-FR");
-    }
 
-    function addDays(date, days)
+    function decalerDate(date, jours)
     {
-        const d = new Date(date);
-        d.setDate(d.getDate() + days);
-        return d;
+        const resultat = new Date(date);
+        resultat.setDate(resultat.getDate() + jours);
+        return resultat;
     }
 
     function mettreAJourPeriodeVisible()
@@ -61,7 +57,7 @@ document.addEventListener("DOMContentLoaded", () =>
         });
 
         const activeDate = calendars[0]?.getDate();
-        currentDate = activeDate ? new Date(activeDate) : addDays(currentDate, delta * 7);
+        currentDate = activeDate ? new Date(activeDate) : decalerDate(currentDate, delta * 7);
 
         requestAnimationFrame(mettreAJourPeriodeVisible);
     }
@@ -102,15 +98,29 @@ document.addEventListener("DOMContentLoaded", () =>
                     const card = document.createElement("article");
                     card.classList.add("home-calendar-card");
 
-                    const title = document.createElement("h3");
-                    title.textContent = centre.nom;
-                    title.style.setProperty("--centre-color", centre.couleur || "#1f6f54");
+                    const toggle = document.createElement("button");
+                    toggle.type = "button";
+                    toggle.classList.add("home-calendar-toggle");
+                    toggle.style.setProperty("--centre-color", centre.couleur || "#1f6f54");
+                    toggle.setAttribute("aria-expanded", "true");
+                    toggle.innerHTML = `
+                        <span class="home-calendar-toggle-title">${escapeHtml(centre.nom)}</span>
+                        <span class="home-calendar-toggle-icon" aria-hidden="true">⌄</span>
+                    `;
+
+                    const collapse = document.createElement("div");
+                    collapse.classList.add("home-calendar-collapse");
+
+                    const collapseInner = document.createElement("div");
+                    collapseInner.classList.add("home-calendar-collapse-inner");
 
                     const calendarEl = document.createElement("div");
                     calendarEl.classList.add("home-calendar");
 
-                    card.appendChild(title);
-                    card.appendChild(calendarEl);
+                    collapseInner.appendChild(calendarEl);
+                    collapse.appendChild(collapseInner);
+                    card.appendChild(toggle);
+                    card.appendChild(collapse);
                     calendarsContainer.appendChild(card);
 
                     const calendar = new FullCalendar.Calendar(calendarEl,
@@ -133,6 +143,17 @@ document.addEventListener("DOMContentLoaded", () =>
                         eventOrder: "title",
                     });
 
+                    toggle.addEventListener("click", () =>
+                    {
+                        const ferme = card.classList.toggle("collapsed");
+                        toggle.setAttribute("aria-expanded", String(!ferme));
+
+                        if (!ferme)
+                        {
+                            window.setTimeout(() => calendar.updateSize(), 220);
+                        }
+                    });
+
                     calendars.push(calendar);
                     calendar.render();
                     mettreAJourPeriodeVisible();
@@ -141,30 +162,13 @@ document.addEventListener("DOMContentLoaded", () =>
             .catch(() => message(calendarsContainer, "Impossible de charger le planning."));
     }
 
-    function extensionDe(url)
-    {
-        return url.split("?")[0].split(".").pop().toLowerCase();
-    }
-
-    function iconeDocument(url)
-    {
-        const ext = extensionDe(url);
-
-        if (ext === "pdf") return "PDF";
-        if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return "IMG";
-        if (["doc", "docx"].includes(ext)) return "DOC";
-        if (["xls", "xlsx", "csv"].includes(ext)) return "XLS";
-
-        return "FIC";
-    }
-
     function carteDocument(doc)
     {
         const card = document.createElement("article");
         card.classList.add("home-document-card");
 
         card.innerHTML = `
-            <div class="home-document-icon">${iconeDocument(doc.url)}</div>
+            <div class="home-document-icon">${DocumentUtils.typeCourt(doc.url)}</div>
             <h3 class="home-document-title" title="${doc.titre}">${doc.titre}</h3>
             <a class="btn btn-ghost" href="${doc.url}" target="_blank" rel="noopener" download>
                 Télécharger

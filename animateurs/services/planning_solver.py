@@ -39,7 +39,7 @@ def generer_planning_auto(payload):
     Retour:
         tuple(dict, int): données JSON à renvoyer et code HTTP.
     """
-    """Remplit automatiquement la semaine affichée (lundi -> samedi) avec
+    """Remplit automatiquement la semaine affichée (lundi -> vendredi) avec
     un solveur par backtracking borné.
 
     Pourquoi ce choix : l'ancien algorithme choisissait le meilleur candidat
@@ -49,18 +49,21 @@ def generer_planning_auto(payload):
 
     Objectifs, par ordre de priorité :
       1. remplir le plus de places possible ;
-      2. utiliser le plus d'animateurs différents possible ;
-      3. équilibrer le nombre de jours travaillés ;
-      4. favoriser les centres indiqués sur la fiche animateur ;
+      2. conserver au maximum la même équipe dans chaque centre toute la semaine ;
+      3. favoriser les enchaînements de jours consécutifs dans le même centre ;
+      4. limiter le nombre total d'animateurs mobilisés ;
       5. respecter les exigences de qualifications demandées dans la modal.
 
     Contraintes strictes :
       - un animateur ne peut pas être placé deux fois le même jour ;
-      - un animateur doit être disponible sur le jour concerné ;
-      - si une place demande une qualification, l'animateur doit l'avoir.
+      - un animateur doit avoir une disponibilité renseignée couvrant le jour concerné ;
+      - si une place demande une qualification, l'animateur doit l'avoir ;
+      - un animateur ne peut être placé automatiquement que dans un centre
+        sélectionné sur sa fiche.
 
-    Important : les centres affectables de la fiche animateur ne sont PAS
-    bloquants. Ils servent uniquement de bonus dans le score.
+    Les centres affectables sont donc bloquants pour le remplissage automatique.
+    Ils restent uniquement indicatifs pour les affectations manuelles, qui sont
+    gérées par les autres endpoints.
     """
 
     data = payload or {}
@@ -69,13 +72,13 @@ def generer_planning_auto(payload):
     if not debut_date:
         return {"error": "Date de début invalide."}, 400
 
-    # Semaine affichée : lundi -> samedi. Dimanche exclu.
+    # Remplissage automatique : lundi -> vendredi uniquement. Le samedi reste disponible pour les affectations manuelles et ne doit pas être supprimé par ce solveur.
     lundi = debut_date - datetime.timedelta(days=debut_date.weekday())
-    jours = [lundi + datetime.timedelta(days=i) for i in range(6)]
-    dimanche = lundi + datetime.timedelta(days=6)
+    jours = [lundi + datetime.timedelta(days=i) for i in range(5)]
+    samedi = lundi + datetime.timedelta(days=5)
 
     debut_dt = parse_to_aware_datetime(lundi.isoformat())
-    fin_dt = parse_to_aware_datetime(dimanche.isoformat())
+    fin_dt = parse_to_aware_datetime(samedi.isoformat())
 
     centres = list(Centre.objects.all().order_by("nom"))
     animateurs = list(
@@ -137,7 +140,7 @@ def generer_planning_auto(payload):
         for animateur in animateurs
     }
 
-    centres_reperes = {
+    centres_autorises = {
         animateur.id: {pref.centre_id for pref in animateur.preferences.all()}
         for animateur in animateurs
     }
@@ -145,13 +148,13 @@ def generer_planning_auto(payload):
     def a_la_qualif(animateur, qualif_id):
         return qualif_id in qualifs_animateur.get(animateur.id, set())
 
-    def centre_est_repere(animateur, centre):
-        return centre.id in centres_reperes.get(animateur.id, set())
+    def centre_est_autorise(animateur, centre):
+        return centre.id in centres_autorises.get(animateur.id, set())
 
     def disponible(animateur, jour):
         plages = list(animateur.disponibilites.all())
         if not plages:
-            return True
+            return False
         return any(plage.debut <= jour <= plage.fin for plage in plages)
 
     jours_dispo = {
@@ -202,6 +205,8 @@ def generer_planning_auto(payload):
                 continue
             if not disponible(animateur, slot["jour"]):
                 continue
+            if not centre_est_autorise(animateur, slot["centre"]):
+                continue
             if slot["qualif"] is not None and not a_la_qualif(animateur, slot["qualif"]):
                 continue
             candidats.append(animateur)
@@ -229,37 +234,57 @@ def generer_planning_auto(payload):
 
     occupe_ce_jour = {jour: set() for jour in jours}
     jours_travailles = {a.id: 0 for a in animateurs}
+    jours_par_animateur_centre = {}
 
     best_score = None
     appels = 0
     interrompu = False
 
     def score_solution(filled_count):
+        """Score lexicographique privilégiant une équipe stable par centre."""
+
         used = sum(1 for nb in jours_travailles.values() if nb > 0)
         counts = [nb for nb in jours_travailles.values() if nb > 0]
         max_load = max(counts) if counts else 0
         min_load = min(counts) if counts else 0
         spread = max_load - min_load
-        pref_bonus = 0
+
+        # Nombre de jours supplémentaires assurés par les mêmes personnes dans
+        # un même centre. Plus cette valeur est grande, moins l'équipe tourne.
+        continuite_centre = sum(
+            max(0, nb - 1)
+            for nb in jours_par_animateur_centre.values()
+        )
+
+        # Bonus lorsqu'un animateur travaille dans le même centre deux jours
+        # ouvrés consécutifs. Cela rend le planning plus lisible et cohérent.
+        continuite_consecutive = 0
+        affectations_par_pair = {}
         qualif_bonus = 0
 
         for index, animateur in enumerate(assignment):
             if animateur is None:
                 continue
             slot = slots[index]
-            if centre_est_repere(animateur, slot["centre"]):
-                pref_bonus += 1
+            pair = (animateur.id, slot["centre"].id)
+            affectations_par_pair.setdefault(pair, set()).add(slot["jour"])
             if slot["qualif"] is not None:
                 qualif_bonus += 1
 
+        for jours_pair in affectations_par_pair.values():
+            for jour in jours_pair:
+                if jour - datetime.timedelta(days=1) in jours_pair:
+                    continuite_consecutive += 1
+
         # Tuple lexicographique : Python compare de gauche à droite.
         return (
-            filled_count,     # priorité 1 : remplir un maximum
-            used,             # priorité 2 : utiliser un maximum d'animateurs
-            -max_load,        # priorité 3 : éviter de surcharger une personne
-            -spread,          # priorité 4 : équilibrer les charges
-            pref_bonus,       # priorité 5 : respecter les centres repères
-            qualif_bonus,     # sécurité : garder les qualifs remplies
+            filled_count,             # priorité 1 : remplir un maximum
+            continuite_centre,         # priorité 2 : garder les mêmes équipes
+            continuite_consecutive,    # priorité 3 : continuité jour après jour
+            -used,                     # priorité 4 : mobiliser moins de personnes
+            -spread,                   # priorité 5 : équilibrer l'équipe retenue
+            -max_load,                 # départage final raisonnable
+            qualif_bonus,              # sécurité : garder les qualifs remplies
         )
 
     def memoriser_si_meilleur(filled_count):
@@ -276,11 +301,29 @@ def generer_planning_auto(payload):
             if a.id not in occupe_ce_jour[slot["jour"]]
         ]
 
-        # On essaie d'abord les animateurs les moins chargés, puis ceux pour
-        # qui le centre est dans les repères, puis les moins disponibles.
+        jour_precedent = slot["jour"] - datetime.timedelta(days=1)
+
+        def a_travaille_veille_meme_centre(animateur):
+            for index, assigne in enumerate(assignment):
+                if assigne is None or assigne.id != animateur.id:
+                    continue
+                autre_slot = slots[index]
+                if (
+                    autre_slot["centre"].id == slot["centre"].id
+                    and autre_slot["jour"] == jour_precedent
+                ):
+                    return True
+            return False
+
+        # On essaie d'abord les animateurs déjà présents dans ce centre durant
+        # la semaine, puis ceux présents la veille dans ce même centre. Ainsi,
+        # même si la recherche atteint sa limite de temps, la première solution
+        # complète trouvée est déjà généralement stable.
         candidats.sort(key=lambda a: (
-            jours_travailles[a.id],
-            0 if centre_est_repere(a, slot["centre"]) else 1,
+            0 if a_travaille_veille_meme_centre(a) else 1,
+            0 if jours_par_animateur_centre.get((a.id, slot["centre"].id), 0) > 0 else 1,
+            -jours_par_animateur_centre.get((a.id, slot["centre"].id), 0),
+            -jours_travailles[a.id],
             jours_dispo[a.id],
             a.prenom,
             a.nom,
@@ -315,9 +358,14 @@ def generer_planning_auto(payload):
             assignment[slot_index] = animateur
             occupe_ce_jour[slot["jour"]].add(animateur.id)
             jours_travailles[animateur.id] += 1
+            pair = (animateur.id, slot["centre"].id)
+            jours_par_animateur_centre[pair] = jours_par_animateur_centre.get(pair, 0) + 1
 
             backtrack(position + 1, filled_count + 1)
 
+            jours_par_animateur_centre[pair] -= 1
+            if jours_par_animateur_centre[pair] == 0:
+                del jours_par_animateur_centre[pair]
             jours_travailles[animateur.id] -= 1
             occupe_ce_jour[slot["jour"]].remove(animateur.id)
             assignment[slot_index] = None
@@ -335,11 +383,11 @@ def generer_planning_auto(payload):
     backtrack(0, 0)
 
     if best_score is None:
-        best_score = (0, 0, 0, 0, 0, 0)
+        best_score = (0, 0, 0, 0, 0, 0, 0)
         best_assignment = [None] * len(slots)
 
     with transaction.atomic():
-        # On repart d'une semaine propre uniquement après avoir trouvé une
+        # On remplace uniquement les affectations du lundi au vendredi après avoir trouvé une
         # solution, même partielle. Si le solveur plantait avant, on ne vide
         # donc pas la semaine existante.
         supprimees, _ = Affectation.objects.filter(
@@ -364,7 +412,11 @@ def generer_planning_auto(payload):
     total_places = len(slots)
     creees = len(a_creer)
     non_remplies = total_places - creees
-    animateurs_utilises = best_score[1]
+    animateurs_utilises = len({
+        animateur.id
+        for animateur in best_assignment
+        if animateur is not None
+    })
 
     # Diagnostics simples pour comprendre les trous éventuels.
     details_non_remplis = []

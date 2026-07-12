@@ -1,52 +1,31 @@
+{% extends "base.html" %}
 {% load static %}
-
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestion de l'équipe</title>
-
-    <link rel="stylesheet" href="{% static 'css/base.css' %}">
-    <link rel="stylesheet" href="{% static 'css/gestion.css' %}">
-</head>
-<body>
-    {% csrf_token %}
-    {% include "partials/_nav.html" with active="gestion" %}
-
-    <main class="gestion-page">
-        <h1>Gestion de l'équipe</h1>
-        <p class="page-intro">Ajoute, modifie ou retire des animateurs, des centres et des qualifications. Les suppressions entraînent aussi celle des affectations et disponibilités liées.</p>
-
-        <div class="tabs" id="gestion-tabs">
-            <button class="tab-btn active" data-tab="animateurs" type="button">Animateurs</button>
-            <button class="tab-btn" data-tab="centres" type="button">Centres</button>
-            <button class="tab-btn" data-tab="qualifications" type="button">Qualifications</button>
-        </div>
-
-        <div class="tab-panel" data-panel="animateurs">
-            <div id="panel-animateurs"></div>
-        </div>
-        <div class="tab-panel" data-panel="centres" hidden>
-            <div id="panel-centres"></div>
-        </div>
-        <div class="tab-panel" data-panel="qualifications" hidden>
-            <div id="panel-qualifications"></div>
-        </div>
-    </main>
-
-    <script src="{% static 'js/ui.js' %}"></script>
-    <script src="{% static 'js/gestion.js' %}"></script>
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const animateurs = GestionApp.mountAnimateurs(document.getElementById("panel-animateurs"));
-            const centres = GestionApp.mountCentres(document.getElementById("panel-centres"));
-            const qualifications = GestionApp.mountQualifications(document.getElementById("panel-qualifications"), {
-                onChange: () => animateurs.chargerCheckboxesQualifs(),
-            });
-
-            initTabs(document.getElementById("gestion-tabs").parentElement);
-        });
-    </script>
-</body>
-</html>
+{% block title %}Gestion de l'équipe{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/gestion.css' %}">{% endblock %}
+{% block content %}
+<main class="gestion-page">
+    <h1>Gestion de l'équipe</h1>
+    <p class="page-intro">Ajoute, modifie ou retire des animateurs, des centres et des qualifications. Les suppressions entraînent aussi celle des affectations et disponibilités liées.</p>
+    <div class="tabs" id="gestion-tabs">
+        <button class="tab-btn active" data-tab="animateurs" type="button">Animateurs</button>
+        <button class="tab-btn" data-tab="centres" type="button">Centres</button>
+        <button class="tab-btn" data-tab="qualifications" type="button">Qualifications</button>
+    </div>
+    <div class="tab-panel" data-panel="animateurs"><div id="panel-animateurs"></div></div>
+    <div class="tab-panel" data-panel="centres" hidden><div id="panel-centres"></div></div>
+    <div class="tab-panel" data-panel="qualifications" hidden><div id="panel-qualifications"></div></div>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/gestion.js' %}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const animateurs = GestionApp.mountAnimateurs(document.getElementById("panel-animateurs"));
+    GestionApp.mountCentres(document.getElementById("panel-centres"));
+    GestionApp.mountQualifications(document.getElementById("panel-qualifications"), {
+        onChange: () => animateurs.chargerCheckboxesQualifs(),
+    });
+    initTabs(document.getElementById("gestion-tabs").parentElement);
+});
+</script>
+{% endblock %}
