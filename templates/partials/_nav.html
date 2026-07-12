@@ -26,58 +26,10 @@
     <nav class="nav-drawer-links">
         <a href="{% url 'accueil' %}" class="{% if active == 'accueil' %}active{% endif %}">Accueil</a>
         <a href="{% url 'planning' %}" class="{% if active == 'planning' %}active{% endif %}">Planning</a>
+        <a href="{% url 'equipe' %}" class="{% if active == 'equipe' %}active{% endif %}">Équipe</a>
         <a href="{% url 'gestion' %}" class="{% if active == 'gestion' %}active{% endif %}">Gestion</a>
         <a href="{% url 'recapitulatif' %}" class="{% if active == 'recapitulatif' %}active{% endif %}">Récapitulatif</a>
         <a href="{% url 'documents' %}" class="{% if active == 'documents' %}active{% endif %}">Documents</a>
         <a href="/admin/">Administration</a>
     </nav>
 </aside>
-
-<script>
-(function () {
-    if (window.__gestionAnimationNavReady) return;
-    window.__gestionAnimationNavReady = true;
-
-    function initNav() {
-        const drawer = document.getElementById("app-drawer");
-        const overlay = document.querySelector("[data-nav-close].nav-overlay");
-        const openButton = document.querySelector("[data-nav-open]");
-        const closeButtons = document.querySelectorAll("[data-nav-close]");
-
-        if (!drawer || !overlay || !openButton) return;
-
-        function openNav() {
-            drawer.hidden = false;
-            overlay.hidden = false;
-            requestAnimationFrame(() => {
-                drawer.classList.add("open");
-                overlay.classList.add("open");
-                openButton.setAttribute("aria-expanded", "true");
-            });
-        }
-
-        function closeNav() {
-            drawer.classList.remove("open");
-            overlay.classList.remove("open");
-            openButton.setAttribute("aria-expanded", "false");
-            window.setTimeout(() => {
-                drawer.hidden = true;
-                overlay.hidden = true;
-            }, 180);
-        }
-
-        openButton.addEventListener("click", openNav);
-        closeButtons.forEach((button) => button.addEventListener("click", closeNav));
-
-        document.addEventListener("keydown", (event) => {
-            if (event.key === "Escape" && !drawer.hidden) closeNav();
-        });
-    }
-
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", initNav);
-    } else {
-        initNav();
-    }
-})();
-</script>

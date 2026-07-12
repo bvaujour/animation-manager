@@ -1,18 +1,16 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Gestion de l'équipe{% endblock %}
+{% block title %}Gestion des paramètres{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'css/gestion.css' %}">{% endblock %}
 {% block content %}
 <main class="gestion-page">
-    <h1>Gestion de l'équipe</h1>
-    <p class="page-intro">Ajoute, modifie ou retire des animateurs, des centres et des qualifications. Les suppressions entraînent aussi celle des affectations et disponibilités liées.</p>
+    <h1>Gestion des paramètres</h1>
+    <p class="page-intro">Gère ici les centres et les qualifications. Les animateurs disposent désormais de leur propre page Équipe.</p>
     <div class="tabs" id="gestion-tabs">
-        <button class="tab-btn active" data-tab="animateurs" type="button">Animateurs</button>
-        <button class="tab-btn" data-tab="centres" type="button">Centres</button>
+        <button class="tab-btn active" data-tab="centres" type="button">Centres</button>
         <button class="tab-btn" data-tab="qualifications" type="button">Qualifications</button>
     </div>
-    <div class="tab-panel" data-panel="animateurs"><div id="panel-animateurs"></div></div>
-    <div class="tab-panel" data-panel="centres" hidden><div id="panel-centres"></div></div>
+    <div class="tab-panel" data-panel="centres"><div id="panel-centres"></div></div>
     <div class="tab-panel" data-panel="qualifications" hidden><div id="panel-qualifications"></div></div>
 </main>
 {% endblock %}
@@ -20,11 +18,8 @@
 <script src="{% static 'js/gestion.js' %}"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-    const animateurs = GestionApp.mountAnimateurs(document.getElementById("panel-animateurs"));
     GestionApp.mountCentres(document.getElementById("panel-centres"));
-    GestionApp.mountQualifications(document.getElementById("panel-qualifications"), {
-        onChange: () => animateurs.chargerCheckboxesQualifs(),
-    });
+    GestionApp.mountQualifications(document.getElementById("panel-qualifications"));
     initTabs(document.getElementById("gestion-tabs").parentElement);
 });
 </script>

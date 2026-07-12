@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Équipe{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/equipe.css' %}">{% endblock %}
+{% block content %}
+<main class="equipe-page">
+    <section class="equipe-sidebar" aria-label="Liste des animateurs">
+        <div class="equipe-sidebar-head">
+            <div>
+                <h1>Équipe</h1>
+                <p>Choisis un animateur pour ouvrir sa fiche.</p>
+            </div>
+            <button class="btn btn-primary" id="equipe-add" type="button">+ Ajouter</button>
+        </div>
+        <label class="equipe-search">
+            <span class="sr-only">Rechercher un animateur</span>
+            <input type="search" id="equipe-search" placeholder="Rechercher…" autocomplete="off">
+        </label>
+        <div id="equipe-list" class="equipe-list"></div>
+    </section>
+
+    <section class="equipe-detail" id="equipe-detail" aria-live="polite">
+        <div class="equipe-empty">
+            <strong>Sélectionne un animateur</strong>
+            <p>Sa fiche complète apparaîtra ici.</p>
+        </div>
+    </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/equipe.js' %}"></script>
+{% endblock %}

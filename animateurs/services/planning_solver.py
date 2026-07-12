@@ -7,38 +7,12 @@ pouvoir tester/améliorer l'algorithme sans toucher aux endpoints HTTP.
 
 import datetime
 from django.db import transaction
-from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.dateparse import parse_date
 
 from animateurs.models import Affectation, Animateur, Centre, Qualification
-
-
-def parse_to_aware_datetime(value):
-    """Convertit une date ou datetime ISO en datetime aware."""
-
-    dt = parse_datetime(value)
-
-    if dt is None:
-        date_seule = parse_date(value)
-        if date_seule is None:
-            raise ValueError(f"Date invalide : {value!r}")
-        dt = datetime.datetime.combine(date_seule, datetime.time.min)
-
-    if timezone.is_naive(dt):
-        dt = timezone.make_aware(dt)
-
-    return dt
-
+from .dates import parse_to_aware_datetime
 
 def generer_planning_auto(payload):
-    """Génère automatiquement une semaine de planning.
-
-    Paramètre:
-        payload (dict): contenu JSON reçu depuis `/api/planning/auto/`.
-
-    Retour:
-        tuple(dict, int): données JSON à renvoyer et code HTTP.
-    """
     """Remplit automatiquement la semaine affichée (lundi -> vendredi) avec
     un solveur par backtracking borné.
 

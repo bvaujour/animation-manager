@@ -17,6 +17,7 @@ from django.urls import path
 from animateurs.views import (
     accueil,
     documents,
+    equipe,
     gestion,
     planning,
     recapitulatif,
@@ -25,6 +26,7 @@ from animateurs.views import (
     api_animateurs,
     api_animateur_detail,
     api_disponibilites,
+    api_disponibilite_detail,
 )
 from animateurs.views import (
     api_centres,
@@ -51,6 +53,7 @@ urlpatterns = [
     path("", accueil, name="accueil"),
     path("documents/", documents, name="documents"),
     path("planning/", planning, name="planning"),
+    path("equipe/", equipe, name="equipe"),
     path("gestion/", gestion, name="gestion"),
     path("recapitulatif/", recapitulatif, name="recapitulatif"),
 
@@ -58,6 +61,7 @@ urlpatterns = [
     path("api/animateurs/", api_animateurs, name="api_animateurs"),
     path("api/animateurs/<int:animateur_id>/", api_animateur_detail, name="api_animateur_detail"),
     path("api/animateurs/<int:animateur_id>/disponibilites/", api_disponibilites, name="api_disponibilites"),
+    path("api/animateurs/<int:animateur_id>/disponibilites/<int:disponibilite_id>/", api_disponibilite_detail, name="api_disponibilite_detail"),
 
     # --- API : centres ---
     path("api/centres/", api_centres, name="api_centres"),

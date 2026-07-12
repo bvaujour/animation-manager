@@ -111,19 +111,3 @@ def appliquer_centres_hierarchises(animateur, centre_prefere_id, centres_seconda
         )
 
     PreferenceCentre.objects.bulk_create(relations)
-
-
-# Alias de compatibilité pour du code ancien encore éventuel.
-def normaliser_centres_autorises(payload):
-    prefere, secondaires, erreur = normaliser_centres_hierarchises(payload)
-    if prefere is None and secondaires is None:
-        return None, erreur
-    return ([prefere] if prefere is not None else []) + (secondaires or []), erreur
-
-
-def appliquer_centres_autorises(animateur, centres_ids):
-    if centres_ids is None:
-        return
-    prefere = centres_ids[0] if centres_ids else None
-    secondaires = centres_ids[1:] if len(centres_ids) > 1 else []
-    appliquer_centres_hierarchises(animateur, prefere, secondaires)

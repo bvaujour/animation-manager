@@ -64,3 +64,8 @@ le centre préféré. Les affectations manuelles restent libres.
 Le champ `selectionnable_remplissage_auto` vaut désormais `False` par défaut
 pour les nouvelles qualifications. Les qualifications déjà existantes gardent
 leur valeur actuelle après migration.
+
+## Audit de nettoyage
+
+Le détail de la passe de nettoyage réalisée sur la base AM(7) est disponible dans
+`NETTOYAGE_AM7.md`.

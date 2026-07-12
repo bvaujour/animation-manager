@@ -177,3 +177,58 @@ class AnimateurCentresHierarchisesApiTests(TestCase):
         self.assertEqual(data["centre_prefere"]["id"], prefere.id)
         self.assertEqual([c["id"] for c in data["centres_secondaires"]], [secondaire.id])
         self.assertEqual([c["id"] for c in data["centres_autorises"]], [prefere.id, secondaire.id])
+
+class AnimateurDetailApiTests(TestCase):
+    def setUp(self):
+        self.animateur = Animateur.objects.create(prenom="Alice", nom="Couleur")
+
+    def test_modification_couleur_valide(self):
+        response = self.client.patch(
+            reverse("api_animateur_detail", args=[self.animateur.id]),
+            data=json.dumps({"couleur": "#123ABC"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.animateur.refresh_from_db()
+        self.assertEqual(self.animateur.couleur, "#123ABC")
+
+    def test_refuse_couleur_invalide(self):
+        response = self.client.patch(
+            reverse("api_animateur_detail", args=[self.animateur.id]),
+            data=json.dumps({"couleur": "rouge"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+
+class EquipePageAndDisponibiliteApiTests(TestCase):
+    def setUp(self):
+        self.animateur = Animateur.objects.create(prenom="Alice", nom="Martin")
+        self.disponibilite = Disponibilite.objects.create(
+            animateur=self.animateur,
+            debut=datetime.date(2026, 8, 3),
+            fin=datetime.date(2026, 8, 7),
+        )
+
+    def test_equipe_page_is_available(self):
+        response = self.client.get("/equipe/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Équipe")
+
+    def test_update_disponibilite(self):
+        response = self.client.patch(
+            f"/api/animateurs/{self.animateur.id}/disponibilites/{self.disponibilite.id}/",
+            data=json.dumps({"debut": "2026-08-04", "fin": "2026-08-08"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.disponibilite.refresh_from_db()
+        self.assertEqual(self.disponibilite.debut, datetime.date(2026, 8, 4))
+        self.assertEqual(self.disponibilite.fin, datetime.date(2026, 8, 8))
+
+    def test_delete_disponibilite(self):
+        response = self.client.delete(
+            f"/api/animateurs/{self.animateur.id}/disponibilites/{self.disponibilite.id}/"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Disponibilite.objects.filter(pk=self.disponibilite.id).exists())

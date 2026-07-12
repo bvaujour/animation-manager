@@ -196,3 +196,45 @@ function initTabs(rootEl) {
 		});
 	});
 }
+
+// --- Navigation latérale commune ---
+function initNavigationLaterale() {
+    if (window.__gestionAnimationNavReady) return;
+    window.__gestionAnimationNavReady = true;
+
+    const drawer = document.getElementById("app-drawer");
+    const overlay = document.querySelector("[data-nav-close].nav-overlay");
+    const openButton = document.querySelector("[data-nav-open]");
+    const closeButtons = document.querySelectorAll("[data-nav-close]");
+
+    if (!drawer || !overlay || !openButton) return;
+
+    function ouvrirNavigation() {
+        drawer.hidden = false;
+        overlay.hidden = false;
+        requestAnimationFrame(() => {
+            drawer.classList.add("open");
+            overlay.classList.add("open");
+            openButton.setAttribute("aria-expanded", "true");
+        });
+    }
+
+    function fermerNavigation() {
+        drawer.classList.remove("open");
+        overlay.classList.remove("open");
+        openButton.setAttribute("aria-expanded", "false");
+        window.setTimeout(() => {
+            drawer.hidden = true;
+            overlay.hidden = true;
+        }, 180);
+    }
+
+    openButton.addEventListener("click", ouvrirNavigation);
+    closeButtons.forEach((button) => button.addEventListener("click", fermerNavigation));
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !drawer.hidden) fermerNavigation();
+    });
+}
+
+document.addEventListener("DOMContentLoaded", initNavigationLaterale);
+

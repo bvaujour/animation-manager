@@ -236,9 +236,8 @@ class Affectation(models.Model):
     savoir si c'est "à venir" ou "déjà travaillé" (voir la page
     Récapitulatif, qui fait cette distinction à la volée).
 
-    Deux règles métier sont imposées AVANT la sauvegarde (voir
-    _valider_affectation dans views.py, PAS de contrainte au niveau du
-    modèle ici) :
+    Deux règles métier sont imposées par le service
+    ``services/affectations.py`` avant la sauvegarde :
       1. un animateur ne peut pas avoir deux affectations qui se
          chevauchent le même jour, même dans deux centres différents ;
       2. il doit être disponible sur toute la période couverte.

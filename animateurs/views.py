@@ -16,15 +16,16 @@ code HTTP adapté (400 = requête invalide, 404 = introuvable,
 
 import datetime
 import json
+import re
 
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .models import Affectation, Animateur, Centre, Disponibilite, Document, Qualification, PreferenceCentre
+from .models import Affectation, Animateur, Centre, Disponibilite, Document, Qualification
 
 from .services.affectations import creer_affectation, modifier_affectation
 from .services.animateurs import appliquer_centres_hierarchises, normaliser_centres_hierarchises
@@ -61,10 +62,13 @@ def planning(request):
     return render(request, "planning.html", {"active_page": "planning"})
 
 
+def equipe(request):
+    """Page dédiée à la gestion complète des animateurs."""
+    return render(request, "equipe.html", {"active_page": "equipe"})
+
+
 def gestion(request):
-    """Page de gestion CRUD (ajout/suppression) des animateurs, centres et
-    qualifications. Le même module JS (gestion.js) est aussi utilisé dans
-    la popup d'ajout rapide du planning."""
+    """Page de gestion des paramètres : centres et qualifications."""
     return render(request, "gestion.html", {"active_page": "gestion"})
 
 
@@ -72,7 +76,6 @@ def recapitulatif(request):
     """Tableau de bord : jours travaillés par animateur/centre et alertes
     de suivi (animateurs jamais affectés, centres inutilisés, etc.)."""
     return render(request, "recapitulatif.html", {"active_page": "recapitulatif"})
-
 
 
 def documents(request):
@@ -83,33 +86,8 @@ def documents(request):
 
 
 # ---------------------------------------------------------------------------
-# Helpers communs (dates, règles métier de placement)
-# ---------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ---------------------------------------------------------------------------
 # API - Animateurs (lecture, création, suppression)
 # ---------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
 
 
 @require_http_methods(["GET", "POST"])
@@ -311,6 +289,43 @@ def api_disponibilites(request, animateur_id):
     return JsonResponse({"disponibilites": plages})
 
 
+@require_http_methods(["PATCH", "DELETE"])
+def api_disponibilite_detail(request, animateur_id, disponibilite_id):
+    """Modifie ou supprime une plage de disponibilité précise."""
+
+    try:
+        animateur = Animateur.objects.get(pk=animateur_id)
+        disponibilite = Disponibilite.objects.get(pk=disponibilite_id, animateur=animateur)
+    except (Animateur.DoesNotExist, Disponibilite.DoesNotExist):
+        return JsonResponse({"error": "Disponibilité introuvable."}, status=404)
+
+    if request.method == "DELETE":
+        disponibilite.delete()
+        return JsonResponse({"ok": True})
+
+    try:
+        payload = json.loads(request.body)
+        debut = parse_date(payload.get("debut"))
+        fin = parse_date(payload.get("fin") or payload.get("debut"))
+        if debut is None or fin is None:
+            raise ValueError("date invalide")
+        if fin < debut:
+            return JsonResponse({"error": "La date de fin doit être après la date de début."}, status=400)
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return JsonResponse({"error": "Requête invalide."}, status=400)
+
+    disponibilite.debut = debut
+    disponibilite.fin = fin
+    disponibilite.save(update_fields=["debut", "fin"])
+    fusionner_et_nettoyer_disponibilites(animateur)
+
+    plages = [
+        {"id": dispo.id, "debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()}
+        for dispo in animateur.disponibilites.all()
+    ]
+    return JsonResponse({"disponibilites": plages})
+
+
 # ---------------------------------------------------------------------------
 # API - Planning (lecture des évènements + écriture individuelle)
 # ---------------------------------------------------------------------------
@@ -476,11 +491,9 @@ def api_planning_plage(request):
     return JsonResponse({"supprimees": nb_supprimees})
 
 
-
 # ---------------------------------------------------------------------------
 # API - Gestion (CRUD centres / qualifications)
 # ---------------------------------------------------------------------------
-
 
 
 @require_http_methods(["GET", "POST"])
@@ -561,8 +574,6 @@ def api_centre_detail(request, centre_id):
         return JsonResponse({"error": f"Le code « {centre.code} » est déjà utilisé par un autre centre."}, status=409)
 
     return JsonResponse(centre_to_dict(centre))
-
-
 
 
 @require_http_methods(["GET", "POST"])
@@ -704,7 +715,6 @@ def api_recapitulatif(request):
 # settings.py : ici un bucket S3 Supabase), donc `document.fichier.url`
 # renvoie directement l'URL publique du fichier, quel que soit le
 # stockage utilisé.
-
 
 
 @require_http_methods(["GET", "POST"])
