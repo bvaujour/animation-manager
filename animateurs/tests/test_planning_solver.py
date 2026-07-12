@@ -179,3 +179,47 @@ class PlanningSolverTests(TestCase):
             1,
         )
 
+
+    def test_priorise_le_centre_prefere(self):
+        autre = Centre.objects.create(
+            nom="Autre centre", code="AUT", couleur="#abcdef", effectif_cible=1
+        )
+        # Le qualifié peut travailler dans les deux centres, mais son centre
+        # préféré est `self.centre`.
+        relation = PreferenceCentre.objects.get(
+            animateur=self.qualifie, centre=self.centre
+        )
+        relation.est_prefere = True
+        relation.save(update_fields=["est_prefere"])
+        PreferenceCentre.objects.create(
+            animateur=self.qualifie, centre=autre, est_prefere=False
+        )
+
+        # Un second animateur est uniquement affectable au centre principal.
+        autre_anim = Animateur.objects.create(prenom="Autre", nom="Animateur")
+        PreferenceCentre.objects.create(
+            animateur=autre_anim, centre=self.centre, est_prefere=False
+        )
+        Disponibilite.objects.create(
+            animateur=autre_anim,
+            debut=datetime.date(2026, 7, 6),
+            fin=datetime.date(2026, 7, 10),
+        )
+
+        payload = {
+            "debut": "2026-07-06",
+            "centres": {
+                str(self.centre.id): {"effectif": 1, "qualifs": {}},
+                str(autre.id): {"effectif": 0, "qualifs": {}},
+            },
+        }
+
+        data, status = generer_planning_auto(payload)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(data["created"], 5)
+        self.assertFalse(
+            Affectation.objects.filter(centre=self.centre)
+            .exclude(animateur=self.qualifie)
+            .exists()
+        )

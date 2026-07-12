@@ -47,3 +47,20 @@ python manage.py check
 python manage.py test animateurs.tests
 python manage.py collectstatic --noinput
 ```
+
+## Centres des animateurs
+
+Chaque animateur peut désormais avoir :
+
+- un seul **centre préféré** ;
+- zéro ou plusieurs **centres secondaires**.
+
+Le modèle historique `PreferenceCentre` est conservé, avec le booléen
+`est_prefere`. Le solveur automatique n'utilise que ces centres et privilégie
+le centre préféré. Les affectations manuelles restent libres.
+
+## Qualifications proposées dans l'auto
+
+Le champ `selectionnable_remplissage_auto` vaut désormais `False` par défaut
+pour les nouvelles qualifications. Les qualifications déjà existantes gardent
+leur valeur actuelle après migration.

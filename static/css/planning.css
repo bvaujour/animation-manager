@@ -1647,3 +1647,9 @@ body {
         padding-right: 3px !important;
     }
 }
+
+/* Le centre préféré est distingué des centres secondaires sur les badges. */
+.pref-dot.preferred {
+    font-weight: 800;
+    box-shadow: 0 0 0 2px var(--c), 0 0 0 3px rgba(255,255,255,.85);
+}

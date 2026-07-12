@@ -144,6 +144,13 @@ def generer_planning_auto(payload):
         animateur.id: {pref.centre_id for pref in animateur.preferences.all()}
         for animateur in animateurs
     }
+    centres_preferes = {
+        animateur.id: next(
+            (pref.centre_id for pref in animateur.preferences.all() if pref.est_prefere),
+            None,
+        )
+        for animateur in animateurs
+    }
 
     def a_la_qualif(animateur, qualif_id):
         return qualif_id in qualifs_animateur.get(animateur.id, set())
@@ -261,6 +268,7 @@ def generer_planning_auto(payload):
         continuite_consecutive = 0
         affectations_par_pair = {}
         qualif_bonus = 0
+        placements_centre_prefere = 0
 
         for index, animateur in enumerate(assignment):
             if animateur is None:
@@ -270,6 +278,8 @@ def generer_planning_auto(payload):
             affectations_par_pair.setdefault(pair, set()).add(slot["jour"])
             if slot["qualif"] is not None:
                 qualif_bonus += 1
+            if centres_preferes.get(animateur.id) == slot["centre"].id:
+                placements_centre_prefere += 1
 
         for jours_pair in affectations_par_pair.values():
             for jour in jours_pair:
@@ -278,11 +288,12 @@ def generer_planning_auto(payload):
 
         # Tuple lexicographique : Python compare de gauche à droite.
         return (
-            filled_count,             # priorité 1 : remplir un maximum
-            continuite_centre,         # priorité 2 : garder les mêmes équipes
-            continuite_consecutive,    # priorité 3 : continuité jour après jour
-            -used,                     # priorité 4 : mobiliser moins de personnes
-            -spread,                   # priorité 5 : équilibrer l'équipe retenue
+            filled_count,              # priorité 1 : remplir un maximum
+            placements_centre_prefere, # priorité 2 : respecter le centre préféré
+            continuite_centre,         # priorité 3 : garder les mêmes équipes
+            continuite_consecutive,    # priorité 4 : continuité jour après jour
+            -used,                     # priorité 5 : mobiliser moins de personnes
+            -spread,                   # priorité 6 : équilibrer l'équipe retenue
             -max_load,                 # départage final raisonnable
             qualif_bonus,              # sécurité : garder les qualifs remplies
         )
@@ -320,6 +331,7 @@ def generer_planning_auto(payload):
         # même si la recherche atteint sa limite de temps, la première solution
         # complète trouvée est déjà généralement stable.
         candidats.sort(key=lambda a: (
+            0 if centres_preferes.get(a.id) == slot["centre"].id else 1,
             0 if a_travaille_veille_meme_centre(a) else 1,
             0 if jours_par_animateur_centre.get((a.id, slot["centre"].id), 0) > 0 else 1,
             -jours_par_animateur_centre.get((a.id, slot["centre"].id), 0),

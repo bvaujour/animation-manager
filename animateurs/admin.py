@@ -30,7 +30,12 @@ class DocumentAdmin(admin.ModelAdmin):
     date_hierarchy = "date_ajout"
 
 
-admin.site.register(Qualification)
+@admin.register(Qualification)
+class QualificationAdmin(admin.ModelAdmin):
+    list_display = ("nom", "selectionnable_remplissage_auto")
+    list_filter = ("selectionnable_remplissage_auto",)
+    search_fields = ("nom",)
+
 
 
 @admin.register(Centre)
@@ -47,7 +52,8 @@ class PreferenceCentreInline(admin.TabularInline):
     directement depuis sa fiche, sans passer par un écran séparé."""
     model = PreferenceCentre
     extra = 1
-    ordering = ["centre__nom"]
+    fields = ("centre", "est_prefere")
+    ordering = ["-est_prefere", "centre__nom"]
 
 
 class DisponibiliteInline(admin.TabularInline):

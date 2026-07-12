@@ -12,9 +12,9 @@ Vue d'ensemble des tables et de leurs relations :
 - Un Animateur a des Qualifications (ManyToMany direct, pas de table
   intermédiaire explicite car on n'a pas besoin d'infos en plus comme
   une date d'obtention).
-- PreferenceCentre relie un Animateur aux Centres où il peut être affecté.
-  Le nom historique du modèle est conservé pour éviter de casser les
-  migrations existantes, mais il ne s'agit plus d'un ordre de centre autorisé.
+- PreferenceCentre relie un Animateur à son centre préféré et à ses
+  centres secondaires. Le nom historique du modèle est conservé pour ne pas
+  casser la table existante.
 - Disponibilite : plages de dates où un animateur est disponible pour
   travailler. Voir la docstring du modèle plus bas pour la règle
   "par défaut disponible" appliquée quand il n'y a aucune plage.
@@ -43,6 +43,10 @@ class Qualification(models.Model):
     permis B, PSC1...). Purement déclaratif pour l’instant."""
 
     nom = models.CharField(max_length=100)
+    selectionnable_remplissage_auto = models.BooleanField(
+        default=False,
+        help_text="Affiche cette qualification parmi les exigences du remplissage automatique.",
+    )
 
     def __str__(self):
         return self.nom
@@ -140,12 +144,11 @@ class Centre(models.Model):
 
 
 class PreferenceCentre(models.Model):
-    """Centre dans lequel un animateur peut être affecté.
+    """Lien entre un animateur et un centre où il peut être affecté.
 
-    Le nom historique `PreferenceCentre` est conservé pour ne pas
-    renommer toute la table existante, mais fonctionnellement ce modèle
-    représente maintenant une simple autorisation : si une ligne existe,
-    l'animateur peut être placé sur ce centre.
+    Une relation peut être marquée comme centre préféré. Les autres
+    relations sont des centres secondaires. Un animateur ne peut avoir
+    qu'un seul centre préféré, mais plusieurs centres secondaires.
     """
 
     animateur = models.ForeignKey(
@@ -158,9 +161,13 @@ class PreferenceCentre(models.Model):
         on_delete=models.CASCADE,
         related_name="preferences",
     )
+    est_prefere = models.BooleanField(
+        default=False,
+        help_text="Centre principal à privilégier lors du remplissage automatique.",
+    )
 
     class Meta:
-        ordering = ["centre__nom"]
+        ordering = ["-est_prefere", "centre__nom"]
         constraints = [
             # Un animateur ne peut pas avoir deux fois le même centre
             # dans ses centres autorisés.
@@ -168,10 +175,16 @@ class PreferenceCentre(models.Model):
                 fields=["animateur", "centre"],
                 name="unique_animateur_centre",
             ),
+            models.UniqueConstraint(
+                fields=["animateur"],
+                condition=models.Q(est_prefere=True),
+                name="unique_centre_prefere_par_animateur",
+            ),
         ]
 
     def __str__(self):
-        return f"{self.animateur} peut être affecté à {self.centre}"
+        type_centre = "centre préféré" if self.est_prefere else "centre secondaire"
+        return f"{self.animateur} - {type_centre} : {self.centre}"
 
 
 class Disponibilite(models.Model):

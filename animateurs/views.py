@@ -27,7 +27,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from .models import Affectation, Animateur, Centre, Disponibilite, Document, Qualification, PreferenceCentre
 
 from .services.affectations import creer_affectation, modifier_affectation
-from .services.animateurs import appliquer_centres_autorises, normaliser_centres_autorises
+from .services.animateurs import appliquer_centres_hierarchises, normaliser_centres_hierarchises
 from .services.dates import parse_to_aware_datetime
 from .services.disponibilites import (
     fusionner_et_nettoyer_disponibilites,
@@ -115,7 +115,7 @@ def documents(request):
 @require_http_methods(["GET", "POST"])
 def api_animateurs(request):
     """GET : liste tous les animateurs.
-    POST : crée un animateur ({"prenom", "nom", "telephone", "email", "date_naissance", "qualifications": [ids], "centres_autorises": [ids]})."""
+    POST : crée un animateur avec ses coordonnées, qualifications, un centre préféré et des centres secondaires."""
 
     if request.method == "GET":
         # Nettoyage opportuniste : on supprime les anciennes disponibilités
@@ -144,7 +144,7 @@ def api_animateurs(request):
         date_naissance = parse_date(date_naissance_raw) if date_naissance_raw else None
         couleur = (payload.get("couleur") or "").strip()
         qualification_ids = payload.get("qualifications", [])
-        centres_autorises, erreur_centres = normaliser_centres_autorises(payload)
+        centre_prefere, centres_secondaires, erreur_centres = normaliser_centres_hierarchises(payload)
         if erreur_centres:
             return JsonResponse({"error": erreur_centres}, status=400)
 
@@ -176,7 +176,7 @@ def api_animateurs(request):
                 Qualification.objects.filter(pk__in=qualification_ids)
             )
 
-        appliquer_centres_autorises(animateur, centres_autorises)
+        appliquer_centres_hierarchises(animateur, centre_prefere, centres_secondaires)
 
     animateur = Animateur.objects.prefetch_related(
         "qualifications",
@@ -241,7 +241,7 @@ def api_animateur_detail(request, animateur_id):
             return JsonResponse({"error": "Le prénom et le nom sont obligatoires."}, status=400)
 
         qualification_ids = payload.get("qualifications", None)
-        centres_autorises, erreur_centres = normaliser_centres_autorises(payload)
+        centre_prefere, centres_secondaires, erreur_centres = normaliser_centres_hierarchises(payload)
         if erreur_centres:
             return JsonResponse({"error": erreur_centres}, status=400)
 
@@ -256,7 +256,7 @@ def api_animateur_detail(request, animateur_id):
                 Qualification.objects.filter(pk__in=qualification_ids)
             )
 
-        appliquer_centres_autorises(animateur, centres_autorises)
+        appliquer_centres_hierarchises(animateur, centre_prefere, centres_secondaires)
 
     animateur = Animateur.objects.prefetch_related(
         "qualifications",
@@ -576,6 +576,7 @@ def api_qualifications(request):
     try:
         payload = json.loads(request.body)
         nom = payload["nom"].strip()
+        selectionnable_auto = bool(payload.get("selectionnable_remplissage_auto", False))
 
         if not nom:
             return JsonResponse({"error": "Le nom est obligatoire."}, status=400)
@@ -583,7 +584,10 @@ def api_qualifications(request):
     except (KeyError, TypeError, AttributeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
-    qualification = Qualification.objects.create(nom=nom)
+    qualification = Qualification.objects.create(
+        nom=nom,
+        selectionnable_remplissage_auto=selectionnable_auto,
+    )
 
     return JsonResponse(qualification_to_dict(qualification), status=201)
 
@@ -609,7 +613,13 @@ def api_qualification_detail(request, qualification_id):
 
     try:
         payload = json.loads(request.body)
-        nom = payload["nom"].strip()
+        nom = payload.get("nom", qualification.nom).strip()
+        selectionnable_auto = bool(
+            payload.get(
+                "selectionnable_remplissage_auto",
+                qualification.selectionnable_remplissage_auto,
+            )
+        )
 
         if not nom:
             return JsonResponse({"error": "Le nom est obligatoire."}, status=400)
@@ -618,7 +628,8 @@ def api_qualification_detail(request, qualification_id):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
     qualification.nom = nom
-    qualification.save()
+    qualification.selectionnable_remplissage_auto = selectionnable_auto
+    qualification.save(update_fields=["nom", "selectionnable_remplissage_auto"])
 
     return JsonResponse(qualification_to_dict(qualification))
 

@@ -44,7 +44,7 @@ function bouton(label, classes, onClick)
 		form.querySelector("#anim-email").value = "";
 		form.querySelector("#anim-date-naissance").value = "";
 		form.querySelectorAll("#anim-qualifs input:checked").forEach((el) => { el.checked = false; });
-		form.querySelectorAll("#anim-centres input:checked").forEach((el) => { el.checked = false; });
+		form.querySelectorAll("#anim-centres input").forEach((el) => { el.checked = false; el.disabled = false; });
 	}
 
 	function qualificationCheckboxes(qualifications, cochees = [])
@@ -52,15 +52,14 @@ function bouton(label, classes, onClick)
 		return FormOptionsUtils.qualifications(qualifications, cochees);
 	}
 
-	function centresAutorisesInputs(centres, centresAutorises = [])
+	function centresHierarchisesInputs(centres, centrePrefere = null, centresSecondaires = [], groupe = "centre-prefere")
 	{
-		return FormOptionsUtils.centres(centres, centresAutorises,
-			"Ajoute d'abord des centres pour pouvoir choisir où affecter l'animateur.");
+		return FormOptionsUtils.centresHierarchises(centres, centrePrefere, centresSecondaires, groupe);
 	}
 
-	function centresAutorisesDepuisForm(root)
+	function centresHierarchisesDepuisForm(root)
 	{
-		return FormOptionsUtils.idsCoches(root);
+		return FormOptionsUtils.lireCentresHierarchises(root);
 	}
 
 	// ------------------------------------------------------------------
@@ -77,6 +76,10 @@ function bouton(label, classes, onClick)
 					<label for="qualif-nom">Nom</label>
 					<input type="text" id="qualif-nom" placeholder="ex : BAFA">
 				</div>
+				<label class="checkbox-option">
+					<input type="checkbox" id="qualif-auto">
+					<span>Proposer cette qualification dans le remplissage automatique</span>
+				</label>
 				<p class="form-error" id="qualif-error"></p>
 				<button class="btn btn-primary" id="qualif-submit" type="button">Ajouter</button>
 			</div>
@@ -84,6 +87,7 @@ function bouton(label, classes, onClick)
 
 		const list = container.querySelector("#qualifs-list");
 		const input = container.querySelector("#qualif-nom");
+		const autoEl = container.querySelector("#qualif-auto");
 		const errorEl = container.querySelector("#qualif-error");
 
 		function ouvrirEdition(q, row)
@@ -95,15 +99,22 @@ function bouton(label, classes, onClick)
 						<label>Nom</label>
 						<input type="text" class="edit-qualif-nom" value="${escapeHtml(q.nom)}">
 					</div>
+					<label class="checkbox-option">
+						<input type="checkbox" class="edit-qualif-auto" ${q.selectionnable_remplissage_auto !== false ? "checked" : ""}>
+						<span>Proposer dans le remplissage automatique</span>
+					</label>
 					<p class="form-error edit-error"></p>
 				</div>
 			`;
+
+			FormOptionsUtils.activerCentresHierarchises(row.querySelector(".edit-anim-centres"));
 
 			const error = row.querySelector(".edit-error");
 			row.appendChild(creerFormActions(() =>
 			{
 				error.textContent = "";
 				const nom = champValeur(row, ".edit-qualif-nom");
+				const selectionnable_remplissage_auto = row.querySelector(".edit-qualif-auto").checked;
 
 				if (!nom)
 				{
@@ -113,7 +124,7 @@ function bouton(label, classes, onClick)
 
 				apiFetch(`/api/qualifications/${escapeHtml(q.id)}/`, {
 					method: "PATCH",
-					body: JSON.stringify({ nom }),
+					body: JSON.stringify({ nom, selectionnable_remplissage_auto }),
 				}).then(() =>
 				{
 					afficherToast("Qualification modifiée.");
@@ -140,7 +151,10 @@ function bouton(label, classes, onClick)
 					const row = document.createElement("div");
 					row.classList.add("entity-row");
 					row.innerHTML = `
-						<div class="entity-main"><span class="truncate">${escapeHtml(q.nom)}</span></div>
+						<div class="entity-main">
+							<span class="truncate">${escapeHtml(q.nom)}</span>
+							<span class="entity-meta">${q.selectionnable_remplissage_auto !== false ? "Disponible en auto" : "Masquée dans l’auto"}</span>
+						</div>
 						<div class="entity-actions"></div>
 					`;
 
@@ -171,6 +185,7 @@ function bouton(label, classes, onClick)
 		{
 			errorEl.textContent = "";
 			const nom = input.value.trim();
+			const selectionnable_remplissage_auto = autoEl.checked;
 
 			if (!nom)
 			{
@@ -178,10 +193,11 @@ function bouton(label, classes, onClick)
 				return;
 			}
 
-			apiFetch("/api/qualifications/", { method: "POST", body: JSON.stringify({ nom }) })
+			apiFetch("/api/qualifications/", { method: "POST", body: JSON.stringify({ nom, selectionnable_remplissage_auto }) })
 				.then((nouvelle) =>
 				{
 					input.value = "";
+					autoEl.checked = false;
 					afficherToast("Qualification ajoutée.");
 					charger();
 					if (options.onChange) options.onChange(nouvelle);
@@ -400,9 +416,9 @@ function bouton(label, classes, onClick)
 					<div class="checkbox-grid" id="anim-qualifs"></div>
 				</div>
 				<div class="field field-wide">
-					<label>Centres possibles</label>
-					<div class="checkbox-grid" id="anim-centres"></div>
-					<small class="entity-muted">Coche les centres où cet animateur peut être affecté.</small>
+					<label>Centre préféré et centres secondaires</label>
+					<div class="centre-hierarchy-grid" id="anim-centres"></div>
+					<small class="entity-muted">Choisis un centre préféré, puis éventuellement plusieurs centres secondaires.</small>
 				</div>
 				<p class="form-error" id="anim-error"></p>
 				<button class="btn btn-primary" id="anim-submit" type="button">Ajouter</button>
@@ -435,7 +451,8 @@ function bouton(label, classes, onClick)
 			return apiFetch("/api/centres/").then((data) =>
 			{
 				centresCache = data;
-				centresEl.innerHTML = centresAutorisesInputs(data);
+				centresEl.innerHTML = centresHierarchisesInputs(data, null, [], "anim-centre-prefere");
+				FormOptionsUtils.activerCentresHierarchises(centresEl);
 				return data;
 			});
 		}
@@ -476,14 +493,16 @@ function bouton(label, classes, onClick)
 						</div>
 					</div>
 					<div class="field edit-qualifs-field">
-						<label>Centres possibles</label>
-						<div class="checkbox-grid edit-anim-centres">
-							${centresAutorisesInputs(centresCache, a.centres_autorises || [])}
+						<label>Centre préféré et centres secondaires</label>
+						<div class="centre-hierarchy-grid edit-anim-centres">
+							${centresHierarchisesInputs(centresCache, a.centre_prefere, a.centres_secondaires || [], `edit-centre-prefere-${a.id}`)}
 						</div>
 					</div>
 					<p class="form-error edit-error"></p>
 				</div>
 			`;
+
+			FormOptionsUtils.activerCentresHierarchises(row.querySelector(".edit-anim-centres"));
 
 			const error = row.querySelector(".edit-error");
 			row.appendChild(creerFormActions(() =>
@@ -496,7 +515,7 @@ function bouton(label, classes, onClick)
 				const date_naissance = row.querySelector(".edit-anim-date-naissance").value || null;
 				const couleur = row.querySelector(".edit-anim-couleur").value;
 				const qualifications = idsCheckboxesCochees(row.querySelector(".edit-anim-qualifs"));
-				const centres_autorises = centresAutorisesDepuisForm(row.querySelector(".edit-anim-centres"));
+				const { centre_prefere, centres_secondaires } = centresHierarchisesDepuisForm(row.querySelector(".edit-anim-centres"));
 
 				if (!prenom || !nom)
 				{
@@ -506,7 +525,7 @@ function bouton(label, classes, onClick)
 
 				apiFetch(`/api/animateurs/${a.id}/`, {
 					method: "PATCH",
-					body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, couleur, qualifications, centres_autorises }),
+					body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, couleur, qualifications, centre_prefere, centres_secondaires }),
 				}).then(() =>
 				{
 					afficherToast("Animateur modifié.");
@@ -658,7 +677,7 @@ function bouton(label, classes, onClick)
 			const email = emailEl.value.trim();
 			const date_naissance = dateNaissanceEl.value || null;
 			const qualifications = idsCheckboxesCochees(qualifsEl);
-			const centres_autorises = centresAutorisesDepuisForm(centresEl);
+			const { centre_prefere, centres_secondaires } = centresHierarchisesDepuisForm(centresEl);
 
 			if (!prenom || !nom)
 			{
@@ -668,7 +687,7 @@ function bouton(label, classes, onClick)
 
 			apiFetch("/api/animateurs/", {
 				method: "POST",
-				body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications, centres_autorises }),
+				body: JSON.stringify({ prenom, nom, telephone, email, date_naissance, qualifications, centre_prefere, centres_secondaires }),
 			})
 				.then((nouveau) =>
 				{

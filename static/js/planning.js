@@ -76,14 +76,14 @@ function qualificationCheckboxes(cochees = [])
 		return FormOptionsUtils.qualifications(qualificationsPlanning, cochees);
 	}
 
-	function centresAutorisesInputs(centresAutorises = [])
+	function centresHierarchisesInputs(centrePrefere = null, centresSecondaires = [], groupe = "planning-centre-prefere")
 	{
-		return FormOptionsUtils.centres(centresPlanning, centresAutorises);
+		return FormOptionsUtils.centresHierarchises(centresPlanning, centrePrefere, centresSecondaires, groupe);
 	}
 
-	function centresAutorisesDepuisForm(root)
+	function centresHierarchisesDepuisForm(root)
 	{
-		return FormOptionsUtils.idsCoches(root);
+		return FormOptionsUtils.lireCentresHierarchises(root);
 	}
 
 	function disponibilitesTexte(disponibilites)
@@ -98,12 +98,13 @@ function qualificationCheckboxes(cochees = [])
 
 	function centresAutorisesTexte(animateur)
 	{
-		if (!animateur.centres_autorises || animateur.centres_autorises.length === 0)
+		const morceaux = [];
+		if (animateur.centre_prefere) morceaux.push(`Préféré : ${animateur.centre_prefere.nom}`);
+		if (animateur.centres_secondaires && animateur.centres_secondaires.length)
 		{
-			return "Aucun centre autorisé";
+			morceaux.push(`Secondaires : ${animateur.centres_secondaires.map((centre) => centre.nom).join(" · ")}`);
 		}
-
-		return animateur.centres_autorises.map((centre) => centre.nom).join(" · ");
+		return morceaux.length ? morceaux.join(" — ") : "Aucun centre renseigné";
 	}
 
 	function retirerFicheAnimateurSelectionne()
@@ -733,10 +734,12 @@ function qualificationCheckboxes(cochees = [])
 		{
 			const dot = document.createElement("span");
 			dot.classList.add("pref-dot");
+			const estPrefere = animateur.centre_prefere && Number(animateur.centre_prefere.id) === Number(centre.id);
+			if (estPrefere) dot.classList.add("preferred");
 			dot.dataset.centre = centre.id;
 			dot.style.setProperty("--c", centre.couleur);
-			dot.title = centre.nom;
-			dot.textContent = centre.code || "•";
+			dot.title = estPrefere ? `${centre.nom} — centre préféré` : `${centre.nom} — centre secondaire`;
+			dot.textContent = `${estPrefere ? "★" : ""}${centre.code || "•"}`;
 			centresBadges.appendChild(dot);
 		});
 
@@ -810,18 +813,17 @@ function qualificationCheckboxes(cochees = [])
 	// de l'animateur sélectionné + un message texte au-dessus de la liste.
 	function couleurDisponibilitePourCentre(animateur, centre)
 	{
-		const centres = animateur.centres_autorises || [];
-		const index = centres.findIndex((c) => Number(c.id) === Number(centre.id));
+		if (animateur.centre_prefere && Number(animateur.centre_prefere.id) === Number(centre.id))
+		{
+			return "#3ba55c"; // vert : centre préféré
+		}
 
-		// Centre non autorisé : on colore les jours disponibles en rouge.
-		// Cela reste un repère visuel : une affectation manuelle peut toujours
-		// être réalisée selon les règles actuelles de l'application.
-		if (index === -1) return "#dc2626";
+		const estSecondaire = (animateur.centres_secondaires || []).some(
+			(c) => Number(c.id) === Number(centre.id)
+		);
+		if (estSecondaire) return "#f59e0b"; // orange : centre secondaire
 
-		// Le premier centre autorisé est affiché en vert, les suivants en orange.
-		// Comme on a supprimé l'ancien ordre de préférence, "premier" signifie
-		// ici le premier centre renvoyé par l'API.
-		return index === 0 ? "#3ba55c" : "#f59e0b";
+		return "#dc2626"; // rouge : centre non renseigné
 	}
 
 	function plagesDisponibilitesPourVue(calendar, plages)
@@ -1065,7 +1067,7 @@ function qualificationCheckboxes(cochees = [])
 					</div>
 					<div class="field field-wide">
 						<label>Centres possibles</label>
-						<div class="checkbox-grid" id="edit-selected-centres">${centresAutorisesInputs(a.centres_autorises || [])}</div>
+						<div class="checkbox-grid" id="edit-selected-centres">${centresHierarchisesInputs(a.centre_prefere, a.centres_secondaires || [], `planning-edit-centre-${a.id}`)}</div>
 						<small class="entity-muted">Coche les centres où cet animateur peut être affecté.</small>
 					</div>
 					<p class="form-error" id="edit-selected-error"></p>
@@ -1075,6 +1077,8 @@ function qualificationCheckboxes(cochees = [])
 					</div>
 				</div>
 			`;
+
+			FormOptionsUtils.activerCentresHierarchises(modalEditContent.querySelector("#edit-selected-centres"));
 
 			modalEditContent.querySelector("#edit-selected-save").addEventListener("click", () =>
 			{
@@ -1088,7 +1092,7 @@ function qualificationCheckboxes(cochees = [])
 					email: modalEditContent.querySelector("#edit-selected-email").value.trim(),
 					date_naissance: modalEditContent.querySelector("#edit-selected-date-naissance").value || null,
 					qualifications: idsCheckboxesCochees(modalEditContent.querySelector("#edit-selected-qualifs")),
-					centres_autorises: centresAutorisesDepuisForm(modalEditContent.querySelector("#edit-selected-centres")),
+					...centresHierarchisesDepuisForm(modalEditContent.querySelector("#edit-selected-centres")),
 				};
 
 				if (!payload.prenom || !payload.nom)
@@ -1297,14 +1301,16 @@ function qualificationCheckboxes(cochees = [])
 		// juste avant de construire la fenêtre auto.
 		const construirePopup = () =>
 		{
-		const qualifs = qualificationsPlanning || [];
+		const qualifs = (qualificationsPlanning || []).filter(
+			(q) => q.selectionnable_remplissage_auto !== false
+		);
 
 		const blocs = centresPlanning.map((centre) =>
 		{
 			const defaut = Number(centre.effectif_cible) || 1;
 
 			const lignesQualifs = qualifs.length === 0
-				? '<p class="empty-note">Aucune qualification définie. Ajoutes-en dans Gestion pour pouvoir en exiger ici.</p>'
+				? '<p class="empty-note">Aucune qualification n’est activée pour le remplissage automatique. Active-les dans Gestion > Qualifications.</p>'
 				: qualifs.map((q) => `
 					<label class="auto-qualif-ligne">
 						<span class="auto-qualif-nom">${escapeHtml(q.nom)}</span>

@@ -101,3 +101,79 @@ class PlanningApiTests(TestCase):
         self.assertFalse(Affectation.objects.filter(debut__date=datetime.date(2026, 7, 6)).exists())
         self.assertTrue(Affectation.objects.filter(pk=affectation_samedi.pk).exists())
 
+
+
+class QualificationApiTests(TestCase):
+    def test_creation_et_modification_visibilite_auto(self):
+        response = self.client.post(
+            reverse("api_qualifications"),
+            data=json.dumps({
+                "nom": "BAFA",
+                "selectionnable_remplissage_auto": False,
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertFalse(data["selectionnable_remplissage_auto"])
+
+        qualification_id = data["id"]
+        response = self.client.patch(
+            reverse("api_qualification_detail", args=[qualification_id]),
+            data=json.dumps({
+                "nom": "BAFA confirmé",
+                "selectionnable_remplissage_auto": True,
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["nom"], "BAFA confirmé")
+        self.assertTrue(data["selectionnable_remplissage_auto"])
+
+    def test_liste_expose_visibilite_auto(self):
+        from animateurs.models import Qualification
+
+        Qualification.objects.create(
+            nom="PSC1",
+            selectionnable_remplissage_auto=False,
+        )
+        response = self.client.get(reverse("api_qualifications"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["selectionnable_remplissage_auto"], False)
+
+
+class QualificationDefaultTests(TestCase):
+    def test_nouvelle_qualification_non_selectionnable_par_defaut(self):
+        response = self.client.post(
+            reverse("api_qualifications"),
+            data=json.dumps({"nom": "SB"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertFalse(response.json()["selectionnable_remplissage_auto"])
+
+
+class AnimateurCentresHierarchisesApiTests(TestCase):
+    def test_creation_avec_centre_prefere_et_secondaires(self):
+        from animateurs.models import Centre
+
+        prefere = Centre.objects.create(nom="Préféré", code="PREF", couleur="#112233")
+        secondaire = Centre.objects.create(nom="Secondaire", code="SEC", couleur="#445566")
+
+        response = self.client.post(
+            reverse("api_animateurs"),
+            data=json.dumps({
+                "prenom": "Julie",
+                "nom": "Test",
+                "centre_prefere": prefere.id,
+                "centres_secondaires": [secondaire.id],
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["centre_prefere"]["id"], prefere.id)
+        self.assertEqual([c["id"] for c in data["centres_secondaires"]], [secondaire.id])
+        self.assertEqual([c["id"] for c in data["centres_autorises"]], [prefere.id, secondaire.id])

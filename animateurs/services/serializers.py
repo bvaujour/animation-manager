@@ -22,6 +22,22 @@ def animateur_to_dict(animateur):
     qualifications = list(animateur.qualifications.all())
     preferences = list(animateur.preferences.all())
     disponibilites = list(animateur.disponibilites.all())
+
+    pref_relation = next((pref for pref in preferences if pref.est_prefere), None)
+    secondaires_relations = [pref for pref in preferences if not pref.est_prefere]
+
+    def centre_dict(pref):
+        return {
+            "id": pref.centre_id,
+            "nom": pref.centre.nom,
+            "code": pref.centre.code,
+            "couleur": pref.centre.couleur,
+        }
+
+    centre_prefere = centre_dict(pref_relation) if pref_relation else None
+    centres_secondaires = [centre_dict(pref) for pref in secondaires_relations]
+    centres_autorises = ([centre_prefere] if centre_prefere else []) + centres_secondaires
+
     return {
         "id": animateur.id,
         "prenom": animateur.prenom,
@@ -33,15 +49,11 @@ def animateur_to_dict(animateur):
         "couleur": animateur.couleur,
         "qualification_ids": [q.id for q in qualifications],
         "qualifications": [q.nom for q in qualifications],
-        "centres_autorises": [
-            {
-                "id": pref.centre_id,
-                "nom": pref.centre.nom,
-                "code": pref.centre.code,
-                "couleur": pref.centre.couleur,
-            }
-            for pref in preferences
-        ],
+        "centre_prefere": centre_prefere,
+        "centres_secondaires": centres_secondaires,
+        # Champ conservé pour compatibilité avec les écrans qui attendent encore
+        # une liste globale. Le centre préféré est toujours placé en premier.
+        "centres_autorises": centres_autorises,
         "disponibilites": [
             {"debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()}
             for dispo in disponibilites
@@ -60,7 +72,11 @@ def centre_to_dict(centre):
 
 
 def qualification_to_dict(qualification):
-    return {"id": qualification.id, "nom": qualification.nom}
+    return {
+        "id": qualification.id,
+        "nom": qualification.nom,
+        "selectionnable_remplissage_auto": qualification.selectionnable_remplissage_auto,
+    }
 
 
 def document_to_dict(document):
