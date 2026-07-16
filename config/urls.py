@@ -16,11 +16,14 @@ from django.urls import path
 
 from animateurs.views import (
     accueil,
+    administration,
     documents,
-    equipe,
+    evenement,
     gestion,
     planning,
     recapitulatif,
+    export_planning_excel,
+    export_planning_pdf,
 )
 from animateurs.views import (
     api_animateurs,
@@ -30,7 +33,11 @@ from animateurs.views import (
 )
 from animateurs.views import (
     api_centres,
+    api_centres_reordonner,
     api_centre_detail,
+    api_evenements,
+    api_evenement_detail,
+    api_evenements_reordonner,
 )
 from animateurs.views import (
     api_qualifications,
@@ -44,7 +51,7 @@ from animateurs.views import (
     api_affectation_detail,
 )
 from animateurs.views import api_recapitulatif
-from animateurs.views import api_documents, api_document_detail
+from animateurs.views import api_documents, api_document_detail, api_envois_email
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -52,8 +59,12 @@ urlpatterns = [
     # --- Pages ---
     path("", accueil, name="accueil"),
     path("documents/", documents, name="documents"),
+    path("administration/", administration, name="administration"),
+    path("administration/export-planning.xlsx", export_planning_excel, name="export_planning_excel"),
+    path("administration/export-planning.pdf", export_planning_pdf, name="export_planning_pdf"),
     path("planning/", planning, name="planning"),
-    path("equipe/", equipe, name="equipe"),
+    path("evenement/", evenement, name="evenement"),
+    path("equipe/", evenement, name="equipe"),
     path("gestion/", gestion, name="gestion"),
     path("recapitulatif/", recapitulatif, name="recapitulatif"),
 
@@ -65,7 +76,11 @@ urlpatterns = [
 
     # --- API : centres ---
     path("api/centres/", api_centres, name="api_centres"),
+    path("api/centres/reordonner/", api_centres_reordonner, name="api_centres_reordonner"),
     path("api/centres/<int:centre_id>/", api_centre_detail, name="api_centre_detail"),
+    path("api/centres/<int:centre_id>/evenements/", api_evenements, name="api_evenements"),
+    path("api/centres/<int:centre_id>/evenements/reordonner/", api_evenements_reordonner, name="api_evenements_reordonner"),
+    path("api/evenements/<int:evenement_id>/", api_evenement_detail, name="api_evenement_detail"),
 
     # --- API : qualifications ---
     path("api/qualifications/", api_qualifications, name="api_qualifications"),
@@ -86,6 +101,7 @@ urlpatterns = [
     # --- API : documents ---
     path("api/documents/", api_documents, name="api_documents"),
     path("api/documents/<int:document_id>/", api_document_detail, name="api_document_detail"),
+    path("api/envois-email/", api_envois_email, name="api_envois_email"),
 ]
 
 # En développement avec le stockage local (pas de S3 Supabase configuré),

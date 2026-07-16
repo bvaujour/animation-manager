@@ -1,26 +1,77 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Gestion des paramètres{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/gestion.css' %}">{% endblock %}
+{% block title %}Gestion{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/animateurs.css' %}">
+<link rel="stylesheet" href="{% static 'css/gestion.css' %}">
+{% endblock %}
 {% block content %}
 <main class="gestion-page">
-    <h1>Gestion des paramètres</h1>
-    <p class="page-intro">Gère ici les centres et les qualifications. Les animateurs disposent désormais de leur propre page Équipe.</p>
+    <h1>Gestion</h1>
+    <p class="page-intro">Retrouve ici les salariés, les lieux avec leurs événements, ainsi que les qualifications utilisées dans le planning.</p>
+
     <div class="tabs" id="gestion-tabs">
-        <button class="tab-btn active" data-tab="centres" type="button">Centres</button>
+        <button class="tab-btn active" data-tab="salaries" type="button">Salariés</button>
+        <button class="tab-btn" data-tab="lieux" type="button">Lieux et événements</button>
         <button class="tab-btn" data-tab="qualifications" type="button">Qualifications</button>
     </div>
-    <div class="tab-panel" data-panel="centres"><div id="panel-centres"></div></div>
-    <div class="tab-panel" data-panel="qualifications" hidden><div id="panel-qualifications"></div></div>
+
+    <div class="tab-panel" data-panel="salaries">
+        <div class="gestion-salaries-embed">
+            <section class="evenement-sidebar" aria-label="Liste des salariés">
+                <div class="evenement-sidebar-head">
+                    <div>
+                        <h2>Salariés</h2>
+                        <p>Choisis une personne pour ouvrir sa fiche.</p>
+                    </div>
+                    <button class="btn btn-primary" id="evenement-add" type="button">+ Ajouter un salarié</button>
+                </div>
+                <label class="evenement-search">
+                    <span class="sr-only">Rechercher un salarié</span>
+                    <input type="search" id="evenement-search" name="recherche_salarie" placeholder="Rechercher…" autocomplete="off">
+                </label>
+                <div id="evenement-list" class="evenement-list"></div>
+            </section>
+
+            <section class="evenement-detail" id="evenement-detail" aria-live="polite">
+                <div class="evenement-empty">
+                    <strong>Sélectionne un salarié</strong>
+                    <p>Sa fiche complète apparaîtra ici.</p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div class="tab-panel" data-panel="lieux" hidden>
+        <div id="panel-centres"></div>
+    </div>
+    <div class="tab-panel" data-panel="qualifications" hidden>
+        <div id="panel-qualifications"></div>
+    </div>
 </main>
 {% endblock %}
 {% block scripts %}
+<script src="{% static 'js/animateurs.js' %}"></script>
 <script src="{% static 'js/gestion.js' %}"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     GestionApp.mountCentres(document.getElementById("panel-centres"));
     GestionApp.mountQualifications(document.getElementById("panel-qualifications"));
-    initTabs(document.getElementById("gestion-tabs").parentElement);
+
+    const root = document.getElementById("gestion-tabs").parentElement;
+    initTabs(root);
+
+    const requestedTab = new URLSearchParams(window.location.search).get("onglet");
+    const requestedButton = root.querySelector(`.tab-btn[data-tab="${requestedTab}"]`);
+    if (requestedButton) requestedButton.click();
+
+    root.querySelectorAll(".tab-btn").forEach((button) => {
+        button.addEventListener("click", () => {
+            const url = new URL(window.location.href);
+            url.searchParams.set("onglet", button.dataset.tab);
+            window.history.replaceState({}, "", url);
+        });
+    });
 });
 </script>
 {% endblock %}

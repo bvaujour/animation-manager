@@ -489,3 +489,96 @@
         padding: 5px;
     }
 }
+
+/* Accueil : un calendrier distinct par événement, regroupé sous son lieu. */
+.home-calendar-toggle-title {
+    flex: 1 1 auto;
+}
+
+.home-calendar-toggle-meta {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 3px 7px;
+    border: 1px solid rgba(255, 255, 255, 0.38);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.home-event-calendars {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.home-event-calendar-card {
+    min-width: 0;
+    padding: 6px;
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 24%, var(--color-border));
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+}
+
+.home-event-calendar-card.inactive {
+    opacity: 0.72;
+    border-style: dashed;
+}
+
+.home-event-calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+    padding: 5px 7px;
+    border-radius: var(--radius-sm);
+    border-bottom: 2px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 55%, var(--color-border));
+    background: var(--color-surface-sunken);
+}
+
+.home-event-calendar-header h3 {
+    min-width: 0;
+    margin: 0;
+    color: var(--color-text);
+    font-size: 0.82rem;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-event-calendar-header span {
+    flex: 0 0 auto;
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.home-calendar .fc-daygrid-day.home-evenement-hors-periode,
+.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-frame,
+.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-bg,
+.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-events {
+    background: #000 !important;
+}
+
+.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-number,
+.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-top,
+.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-events,
+.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-bottom {
+    visibility: hidden !important;
+}
+
+@media (max-width: 640px) {
+    .home-calendar-toggle-meta {
+        display: none;
+    }
+
+    .home-event-calendar-card {
+        padding: 4px;
+    }
+}

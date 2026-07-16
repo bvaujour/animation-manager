@@ -1,141 +1,159 @@
-"""Services d'envoi d'e-mails.
+"""Services d'envoi d'e-mails aux salariés avec pièces jointes.
 
-La vue HTTP ne fait que valider la requête puis déléguer ici. Ce module
-centralise la résolution des destinataires, les limites de pièces jointes
-et l'appel au backend e-mail configuré dans Django.
+Chaque destinataire reçoit un message séparé afin que les adresses des autres
+salariés ne soient jamais exposées. Les documents sont lus une seule fois puis
+réutilisés pour tous les messages de l'envoi.
 """
 
 from __future__ import annotations
 
 import mimetypes
 from dataclasses import dataclass
+from pathlib import Path
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.core.mail import EmailMessage
-from django.core.validators import validate_email
+from django.core.mail import EmailMultiAlternatives, get_connection
+from django.utils.html import escape, linebreaks
 
-from ..models import Animateur, Document
 
-MAX_DESTINATAIRES = 100
-MAX_DOCUMENTS = 10
-MAX_TAILLE_PIECES_JOINTES = 20 * 1024 * 1024  # 20 Mo
+MAX_PIECES_JOINTES_OCTETS = 18 * 1024 * 1024
 
 
 @dataclass(frozen=True)
-class ResultatEnvoi:
-    destinataires: list[str]
-    documents: list[str]
-    backend_console: bool
+class PieceJointe:
+    nom: str
+    contenu: bytes
+    type_mime: str
 
 
-def _normaliser_email(value: str) -> str:
-    email = str(value or "").strip().lower()
-    if not email:
-        raise ValueError("Une adresse e-mail est vide.")
-    try:
-        validate_email(email)
-    except ValidationError as exc:
-        raise ValueError(f"Adresse e-mail invalide : {email}") from exc
-    return email
+class ConfigurationEmailError(RuntimeError):
+    """La configuration ne permet pas un vrai envoi en production."""
 
 
-def resoudre_destinataires(*, animateur_ids, emails_manuels) -> list[str]:
-    """Retourne une liste dédupliquée d'adresses valides."""
-    destinataires: list[str] = []
-    deja_vus: set[str] = set()
-
-    ids = []
-    for value in animateur_ids or []:
-        try:
-            ids.append(int(value))
-        except (TypeError, ValueError):
-            raise ValueError("Identifiant d'animateur invalide.")
-
-    for animateur in Animateur.objects.filter(pk__in=ids).only("email"):
-        if not animateur.email:
-            continue
-        email = _normaliser_email(animateur.email)
-        if email not in deja_vus:
-            destinataires.append(email)
-            deja_vus.add(email)
-
-    for value in emails_manuels or []:
-        email = _normaliser_email(value)
-        if email not in deja_vus:
-            destinataires.append(email)
-            deja_vus.add(email)
-
-    if not destinataires:
-        raise ValueError("Ajoute au moins un destinataire avec une adresse e-mail valide.")
-    if len(destinataires) > MAX_DESTINATAIRES:
-        raise ValueError(f"Maximum {MAX_DESTINATAIRES} destinataires par envoi.")
-
-    return destinataires
+class PiecesJointesError(ValueError):
+    """Les documents demandés ne peuvent pas être joints au message."""
 
 
-def _attacher_documents(message: EmailMessage, document_ids) -> list[str]:
-    ids = []
-    for value in document_ids or []:
-        try:
-            ids.append(int(value))
-        except (TypeError, ValueError):
-            raise ValueError("Identifiant de document invalide.")
+def statut_configuration_email() -> dict:
+    """Décrit le mode d'envoi actif pour l'affichage et les contrôles API."""
 
-    ids = list(dict.fromkeys(ids))
-    if len(ids) > MAX_DOCUMENTS:
-        raise ValueError(f"Maximum {MAX_DOCUMENTS} documents par e-mail.")
+    backend = settings.EMAIL_BACKEND
+    mode_test = backend.endswith("console.EmailBackend") or backend.endswith("locmem.EmailBackend")
+    est_smtp = backend.endswith("smtp.EmailBackend")
 
-    documents = list(Document.objects.filter(pk__in=ids))
-    if len(documents) != len(ids):
-        raise ValueError("Un des documents sélectionnés est introuvable.")
+    if settings.EMAIL_USE_TLS and settings.EMAIL_USE_SSL:
+        return {
+            "operationnel": False,
+            "mode_test": False,
+            "message": "EMAIL_USE_TLS et EMAIL_USE_SSL ne peuvent pas être activés ensemble.",
+        }
 
-    total = 0
-    titres = []
+    if est_smtp and not settings.EMAIL_HOST:
+        return {
+            "operationnel": False,
+            "mode_test": False,
+            "message": "Le serveur SMTP n'est pas configuré.",
+        }
+
+    if backend.endswith("dummy.EmailBackend"):
+        return {
+            "operationnel": False,
+            "mode_test": False,
+            "message": "Le backend e-mail factice ne permet pas d'envoyer de messages.",
+        }
+
+    if mode_test and not settings.DEBUG:
+        return {
+            "operationnel": False,
+            "mode_test": True,
+            "message": "L'envoi de test ne peut pas être utilisé en production.",
+        }
+
+    return {
+        "operationnel": True,
+        "mode_test": mode_test,
+        "message": (
+            "Mode test : les messages sont interceptés localement."
+            if mode_test
+            else "Configuration e-mail opérationnelle."
+        ),
+    }
+
+
+def charger_pieces_jointes(documents) -> list[PieceJointe]:
+    """Charge les fichiers et applique une limite commune raisonnable.
+
+    La limite de 18 Mio laisse de la marge pour l'encodage MIME, les fournisseurs
+    limitant souvent un message complet à environ 20-25 Mio.
+    """
+
+    pieces: list[PieceJointe] = []
+    taille_totale = 0
+
     for document in documents:
-        document.fichier.open("rb")
         try:
-            contenu = document.fichier.read()
-        finally:
-            document.fichier.close()
+            taille = int(document.fichier.size)
+        except (OSError, ValueError, TypeError) as exc:
+            raise PiecesJointesError(
+                f'Impossible de déterminer la taille du document « {document.titre} ».'
+            ) from exc
 
-        total += len(contenu)
-        if total > MAX_TAILLE_PIECES_JOINTES:
-            raise ValueError("Les pièces jointes dépassent la limite totale de 20 Mo.")
+        taille_totale += taille
+        if taille_totale > MAX_PIECES_JOINTES_OCTETS:
+            raise PiecesJointesError(
+                "Les pièces jointes dépassent 18 Mo au total. Retire un ou plusieurs documents."
+            )
 
-        nom = document.fichier.name.rsplit("/", 1)[-1]
-        mime_type, _ = mimetypes.guess_type(nom)
-        message.attach(nom, contenu, mime_type or "application/octet-stream")
-        titres.append(document.titre)
+        try:
+            with document.fichier.open("rb") as fichier:
+                contenu = fichier.read()
+        except (OSError, ValueError) as exc:
+            raise PiecesJointesError(
+                f'Impossible de lire le document « {document.titre} ».'
+            ) from exc
 
-    return titres
+        nom = Path(document.fichier.name).name
+        type_mime = mimetypes.guess_type(nom)[0] or "application/octet-stream"
+        pieces.append(PieceJointe(nom=nom, contenu=contenu, type_mime=type_mime))
+
+    return pieces
 
 
-def envoyer_email(*, animateur_ids, emails_manuels, sujet, corps, document_ids=None) -> ResultatEnvoi:
-    sujet = str(sujet or "").strip()
-    corps = str(corps or "").strip()
-    if not sujet:
-        raise ValueError("Le sujet est obligatoire.")
-    if not corps:
-        raise ValueError("Le message est obligatoire.")
-
-    destinataires = resoudre_destinataires(
-        animateur_ids=animateur_ids,
-        emails_manuels=emails_manuels,
+def _corps_html(message: str, prenom: str) -> str:
+    salutation = f"Bonjour {escape(prenom)}," if prenom else "Bonjour,"
+    corps = linebreaks(escape(message))
+    return (
+        '<div style="font-family:Arial,sans-serif;line-height:1.55;color:#1e2a22">'
+        f"<p>{salutation}</p>{corps}"
+        '<p style="margin-top:24px;color:#5c6b60;font-size:13px">'
+        "Ce message a été envoyé depuis l’application Gestion animation."
+        "</p></div>"
     )
 
-    email = EmailMessage(
-        subject=sujet,
-        body=corps,
+
+def envoyer_un_message(*, animateur, objet: str, message: str, pieces: list[PieceJointe], connection) -> None:
+    """Envoie un message individuel à un salarié."""
+
+    reply_to = [settings.EMAIL_REPLY_TO] if settings.EMAIL_REPLY_TO else None
+    texte = f"Bonjour {animateur.prenom},\n\n{message}\n\nCe message a été envoyé depuis l’application Gestion animation."
+    email = EmailMultiAlternatives(
+        subject=objet,
+        body=texte,
         from_email=settings.DEFAULT_FROM_EMAIL,
-        to=destinataires,
-        reply_to=[settings.EMAIL_REPLY_TO] if getattr(settings, "EMAIL_REPLY_TO", "") else None,
+        to=[animateur.email],
+        reply_to=reply_to,
+        connection=connection,
     )
-    documents = _attacher_documents(email, document_ids)
+    email.attach_alternative(_corps_html(message, animateur.prenom), "text/html")
+    for piece in pieces:
+        email.attach(piece.nom, piece.contenu, piece.type_mime)
     email.send(fail_silently=False)
 
-    return ResultatEnvoi(
-        destinataires=destinataires,
-        documents=documents,
-        backend_console=settings.EMAIL_BACKEND.endswith("console.EmailBackend"),
-    )
+
+def connexion_email():
+    """Ouvre une connexion réutilisable pour un envoi groupé."""
+
+    statut = statut_configuration_email()
+    if not statut["operationnel"]:
+        raise ConfigurationEmailError(statut["message"])
+    return get_connection(fail_silently=False)

@@ -502,25 +502,8 @@ html, body {
     overflow-wrap: anywhere;
 }
 
-.selected-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 12px;
-}
-
-.selected-actions .btn {
-    flex: 1 1 120px;
-    justify-content: center;
-}
-
 .modal-box-small {
     max-width: 460px;
-}
-
-.selected-edit-form,
-.selected-dispo-form {
-    margin-bottom: 0;
 }
 
 @media (max-width: 640px) {
@@ -583,10 +566,6 @@ html, body {
 
 .animateur-detail .selected-details {
     grid-template-columns: 1fr;
-}
-
-.animateur-detail .selected-actions .btn {
-    flex: 1 1 100%;
 }
 
 /* Mode "jour sélectionné" : clic sur une case calendrier sans animateur actif */
@@ -1652,4 +1631,966 @@ body {
 .pref-dot.preferred {
     font-weight: 800;
     box-shadow: 0 0 0 2px var(--c), 0 0 0 3px rgba(255,255,255,.85);
+}
+
+/* ==========================================================================
+   Gestion finale du viewport et du scroll
+   --------------------------------------------------------------------------
+   La navigation, le bandeau des animateurs, la vue/période et les actions
+   restent visibles. Seule la zone contenant les calendriers défile.
+   Ces règles sont placées en fin de fichier pour neutraliser les anciens
+   comportements responsive contradictoires accumulés au fil des refontes.
+   ========================================================================== */
+.page-planning {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+}
+
+.page-planning #layout {
+    height: calc(100dvh - var(--top-nav-height));
+    min-height: 0;
+    overflow: hidden;
+    padding: 6px;
+}
+
+.page-planning #animateurs-panel {
+    flex: 0 0 auto;
+    width: 100%;
+    max-height: 112px;
+    overflow: hidden;
+}
+
+.page-planning #animateurs-list {
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.page-planning #calendars-section {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.page-planning #planning-view-switcher,
+.page-planning #planning-period-nav,
+.page-planning #planning-actions {
+    flex: 0 0 auto;
+}
+
+.page-planning #calendars-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding: 0;
+}
+
+/* Les cartes ne forcent plus la hauteur du document : elles appartiennent à
+   la seule zone scrollable du planning. */
+.page-planning .calendar-card {
+    max-width: 100%;
+}
+
+@media (min-width: 641px) {
+    .page-planning #layout {
+        padding: 8px;
+    }
+
+    .page-planning #animateurs-panel {
+        width: 100%;
+        flex-basis: auto;
+    }
+}
+
+@media (max-width: 640px) {
+    .page-planning #layout {
+        gap: 5px;
+        padding: 3px;
+    }
+
+    .page-planning #animateurs-panel {
+        max-height: 96px;
+        padding: 5px;
+        border-radius: 10px;
+    }
+
+    .page-planning #animateurs-list {
+        padding-bottom: 3px;
+    }
+
+    .page-planning #calendars-section {
+        gap: 5px;
+    }
+
+    .page-planning #calendars-container {
+        padding: 0;
+    }
+
+    /* On conserve le défilement horizontal nécessaire aux colonnes des jours,
+       mais uniquement dans la zone calendrier. */
+    .page-planning .calendar-card {
+        min-width: 690px;
+    }
+}
+
+/* ========================================================================== 
+   Correctif définitif du scroll de la page Planning
+   --------------------------------------------------------------------------
+   La navigation, la liste des animateurs, le changement de vue, la période
+   et les actions restent fixes. Seule la zone des calendriers peut défiler.
+   ========================================================================== */
+
+html {
+    height: 100%;
+}
+
+body.page-planning {
+    height: 100dvh;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+}
+
+body.page-planning > .top-nav {
+    flex: 0 0 auto;
+}
+
+body.page-planning #layout {
+    flex: 1 1 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning #animateurs-panel {
+    flex: 0 0 auto !important;
+}
+
+body.page-planning #calendars-section {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning #planning-view-switcher,
+body.page-planning #planning-period-nav,
+body.page-planning #planning-actions {
+    flex: 0 0 auto !important;
+}
+
+body.page-planning #calendars-container {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+@media (max-width: 760px) {
+    body.page-planning {
+        height: 100dvh;
+    }
+
+    body.page-planning #layout {
+        padding: 4px !important;
+        gap: 4px !important;
+    }
+
+    body.page-planning #calendars-section {
+        gap: 4px !important;
+    }
+
+    body.page-planning #calendars-container {
+        /* Sur mobile, le scroll horizontal nécessaire aux jours reste limité
+           à la zone des calendriers, jamais à la page entière. */
+        overflow: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* ========================================================================== 
+   Correctif visibilité V3 — viewport fixe sans hauteur nulle
+   --------------------------------------------------------------------------
+   La version précédente utilisait `height: 0` sur plusieurs conteneurs flex,
+   ce qui pouvait faire disparaître toute la page selon le navigateur.
+   Ici :
+   - le body occupe le viewport ;
+   - la navigation conserve sa hauteur naturelle ;
+   - #layout prend simplement l'espace restant ;
+   - seule la zone #calendars-container défile.
+   ========================================================================== */
+html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden !important;
+}
+
+body.page-planning {
+    width: 100%;
+    height: 100dvh;
+    min-height: 100dvh !important;
+    max-height: 100dvh;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+body.page-planning > .top-nav {
+    flex: 0 0 auto !important;
+}
+
+body.page-planning > #layout {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+}
+
+body.page-planning #animateurs-panel {
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning #calendars-section {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+    overflow: hidden !important;
+}
+
+body.page-planning #planning-view-switcher,
+body.page-planning #planning-period-nav,
+body.page-planning #planning-actions {
+    min-height: 0 !important;
+    overflow: visible !important;
+}
+
+body.page-planning #calendars-container {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 760px) {
+    body.page-planning > #layout {
+        padding: 4px !important;
+        gap: 4px !important;
+    }
+
+    body.page-planning #calendars-container {
+        overflow: auto !important;
+    }
+}
+
+/* ========================================================================== 
+   Étape 3 — planning manuel par événement
+   --------------------------------------------------------------------------
+   Un bloc correspond à un centre. À l'intérieur, chaque événement dispose de
+   son propre calendrier et constitue une zone de dépôt précise.
+   ========================================================================== */
+body.page-planning #calendars-container {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)) !important;
+    align-items: start;
+    gap: 10px !important;
+    padding: 2px 4px 10px !important;
+}
+
+.centre-planning-group {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 4%, var(--color-surface));
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 28%, var(--color-border));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.centre-planning-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 42px;
+    padding: 7px 9px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 14%, white);
+    border-left: 5px solid var(--centre-color, var(--color-primary));
+}
+
+.centre-planning-header > div {
+    min-width: 0;
+}
+
+.centre-planning-header h2 {
+    margin: 1px 0 0;
+    color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 72%, black);
+    font-size: 0.96rem;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.centre-planning-code {
+    display: block;
+    color: var(--color-text-muted);
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.centre-evenements-count {
+    flex: 0 0 auto;
+    padding: 4px 7px;
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 35%, var(--color-border));
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.evenement-calendars {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.evenement-calendar-card {
+    min-width: 0;
+    padding: 7px;
+    border-color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 22%, var(--color-border));
+}
+
+.evenement-calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+    padding: 5px 7px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-sunken);
+    border-bottom: 2px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 55%, var(--color-border));
+}
+
+.evenement-calendar-header > div:first-child {
+    min-width: 0;
+}
+
+.calendar-card .evenement-calendar-header h3 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    font-size: 0.82rem;
+    line-height: 1.15;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.evenement-calendar-meta {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 3px;
+    color: var(--color-text-muted);
+    font-size: 0.66rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.evenement-inactive {
+    opacity: 0.72;
+    border-style: dashed;
+}
+
+.evenement-inactive .calendar {
+    filter: grayscale(0.3);
+}
+
+.evenement-inactive-badge {
+    padding: 2px 5px;
+    border-radius: 999px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+@media (max-width: 760px) {
+    body.page-planning #calendars-container {
+        display: flex !important;
+        flex-direction: column;
+        align-items: flex-start;
+        overflow: auto !important;
+    }
+
+    .centre-planning-group {
+        min-width: 780px;
+        width: max-content;
+    }
+
+    .evenement-calendar-card {
+        min-width: 760px;
+    }
+}
+
+#btn-auto-semaine:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+/* Étape 4 — remplissage automatique par événement */
+#modal-auto-remplissage .modal-box {
+    width: min(760px, calc(100vw - 28px));
+    max-width: 760px;
+}
+
+#modal-auto-remplissage .modal-body {
+    max-height: min(78vh, 760px);
+    overflow-y: auto;
+}
+
+.auto-centre-groupe {
+    overflow: hidden;
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 12px;
+    background: var(--color-surface, #fff);
+}
+
+.auto-centre-groupe-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 13px;
+    border-bottom: 1px solid var(--color-border, #e2e8f0);
+    background: #f8fafc;
+}
+
+.auto-centre-groupe-head > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.auto-centre-groupe-head span:not(.centre-pastille) {
+    font-size: 0.78rem;
+    color: var(--color-text-muted, #64748b);
+}
+
+.auto-evenements-liste {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 10px;
+}
+
+.auto-evenement-bloc {
+    padding: 10px 12px;
+    border: 1px solid #e8edf2;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.auto-evenement-entete {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.auto-evenement-entete > div:first-child {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.auto-evenement-entete > div:first-child > span {
+    font-size: 0.78rem;
+    color: var(--color-text-muted, #64748b);
+}
+
+.auto-evenement-effectif,
+.auto-evenement-qualif {
+    width: 68px;
+    padding: 6px 8px;
+    border: 1px solid var(--color-border, #cbd5e1);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    text-align: center;
+}
+
+.auto-evenement-info {
+    margin: 3px 0 0;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: #eff6ff;
+    color: #1e3a5f;
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+@media (max-width: 620px) {
+    .auto-evenement-entete {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .auto-centre-total {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+/* ========================================================================== 
+   Tri manuel des blocs du planning
+   --------------------------------------------------------------------------
+   Les poignées ⠿ permettent de classer les centres entre eux et les événements
+   à l'intérieur de leur centre. Le drag est volontairement limité à ces
+   poignées pour ne pas entrer en conflit avec le déplacement des animateurs.
+   ========================================================================== */
+.planning-sort-hint {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 0;
+    padding: 5px 9px;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+    line-height: 1.25;
+    text-align: center;
+}
+
+.planning-sort-hint span {
+    color: var(--color-primary);
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.centre-planning-title,
+.evenement-calendar-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.centre-planning-title > div,
+.evenement-calendar-title > div {
+    min-width: 0;
+}
+
+.planning-drag-handle {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 35%, var(--color-border));
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 8%, var(--color-surface));
+    color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 72%, black);
+    font-size: 1rem;
+    font-weight: 900;
+    line-height: 1;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.planning-drag-handle:hover,
+.planning-drag-handle:focus-visible {
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 18%, var(--color-surface));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--centre-color, var(--color-primary)) 20%, transparent);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.planning-drag-handle:active {
+    cursor: grabbing;
+}
+
+.evenement-drag-handle {
+    width: 23px;
+    height: 23px;
+    border-color: var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+}
+
+.planning-dragging {
+    opacity: 0.48;
+    outline: 2px dashed var(--centre-color, var(--color-primary));
+    outline-offset: 2px;
+    box-shadow: none !important;
+}
+
+body.planning-sort-active .centre-planning-group,
+body.planning-sort-active .evenement-calendar-card {
+    transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+body.planning-sort-active,
+body.planning-sort-active * {
+    cursor: grabbing;
+}
+
+body.planning-sort-active .planning-drag-handle {
+    cursor: grabbing;
+}
+
+@media (max-width: 760px) {
+    .planning-sort-hint {
+        justify-content: flex-start;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 0.68rem;
+    }
+
+    .planning-drag-handle {
+        width: 30px;
+        height: 30px;
+    }
+}
+
+/* ========================================================================== 
+   Jours fermés d'un événement
+   --------------------------------------------------------------------------
+   Chaque calendrier reste visible lorsqu'on navigue dans les semaines/mois,
+   mais les dates situées avant le début ou après la fin de l'événement sont
+   rendues entièrement noires et ne peuvent recevoir aucune interaction.
+   ========================================================================== */
+.calendar .fc-daygrid-day.evenement-hors-periode,
+.calendar .fc-daygrid-day.evenement-hors-periode .fc-daygrid-day-frame,
+.calendar .fc-daygrid-day.evenement-hors-periode .fc-daygrid-day-bg,
+.calendar .fc-daygrid-day.evenement-hors-periode .fc-daygrid-day-events {
+    background: #000 !important;
+}
+
+.calendar .fc-daygrid-day.evenement-hors-periode {
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+}
+
+.calendar .fc-daygrid-day.evenement-hors-periode .fc-daygrid-day-top,
+.calendar .fc-daygrid-day.evenement-hors-periode .fc-daygrid-day-number,
+.calendar .fc-daygrid-day.evenement-hors-periode .fc-daygrid-day-events,
+.calendar .fc-daygrid-day.evenement-hors-periode .fc-daygrid-day-bottom,
+.calendar .fc-daygrid-day.evenement-hors-periode .fc-daygrid-day-bg {
+    visibility: hidden !important;
+}
+
+/* Remplissage automatique : besoins en lecture seule, issus des événements. */
+.auto-centre-total-readonly {
+	display: flex;
+	align-items: center;
+	gap: .55rem;
+}
+
+.auto-centre-total-readonly strong {
+	font-size: 1.15rem;
+}
+
+.auto-evenement-periode {
+	display: block;
+	margin-top: .2rem;
+	font-size: .82rem;
+	opacity: .72;
+}
+
+.auto-centre-qualifs-readonly {
+	display: block;
+}
+
+.auto-centre-qualifs-readonly ul {
+	margin: .55rem 0 0;
+	padding-left: 1.2rem;
+}
+
+.auto-centre-qualifs-readonly li + li {
+	margin-top: .25rem;
+}
+
+/* ========================================================================== 
+   Filtres de la liste des salariés
+   ========================================================================== */
+.animateurs-panel-header {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.animateurs-order-note {
+    display: block;
+    margin-top: 1px;
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    font-weight: 500;
+}
+
+.animateurs-filter-control {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.animateurs-filter-control > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 5px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.animateurs-filter-control > summary::-webkit-details-marker {
+    display: none;
+}
+
+.animateurs-filter-control > summary::before {
+    content: "☷";
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+}
+
+.animateurs-filter-control[open] > summary,
+.animateurs-filter-control > summary:focus-visible {
+    border-color: var(--color-primary);
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
+    outline-offset: 1px;
+}
+
+.animateurs-filter-count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.68rem;
+}
+
+.animateurs-filter-count[hidden] {
+    display: none;
+}
+
+.animateurs-filter-panel {
+    position: fixed;
+    z-index: 120;
+    top: 72px;
+    right: 10px;
+    width: min(360px, calc(100vw - 28px));
+    max-height: min(520px, 72vh);
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+    box-shadow: 0 16px 38px rgba(15, 23, 42, 0.18);
+}
+
+.animateurs-filter-group {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.animateurs-filter-group + .animateurs-filter-group {
+    margin-top: 13px;
+    padding-top: 13px;
+    border-top: 1px solid var(--color-border);
+}
+
+.animateurs-filter-group legend {
+    margin-bottom: 7px;
+    color: var(--color-text);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.animateurs-filter-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px 8px;
+}
+
+.animateurs-filter-option {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 5px 6px;
+    border-radius: 7px;
+    color: var(--color-text);
+    font-size: 0.76rem;
+    cursor: pointer;
+}
+
+.animateurs-filter-option:hover {
+    background: var(--color-surface-soft, #f1f5f9);
+}
+
+.animateurs-filter-option input {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--color-primary);
+}
+
+.animateurs-filter-option span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.animateurs-filter-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 13px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+}
+
+.animateurs-filter-summary {
+    min-height: 1em;
+    margin: 3px 0 6px;
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+}
+
+@media (max-width: 640px) {
+    .animateurs-panel-header {
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .animateurs-filter-panel {
+        position: fixed;
+        top: 72px;
+        right: 10px;
+        left: 10px;
+        width: auto;
+        max-height: calc(100vh - 92px);
+    }
+
+    .animateurs-filter-options {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* Lieux repliables dans le planning. */
+.centre-planning-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.centre-collapse-toggle {
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 35%, var(--color-border));
+    border-radius: 8px;
+    background: var(--color-surface);
+    color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 72%, black);
+    cursor: pointer;
+}
+
+.centre-collapse-toggle:hover,
+.centre-collapse-toggle:focus-visible {
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 10%, var(--color-surface));
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--centre-color, var(--color-primary)) 18%, transparent);
+}
+
+.centre-collapse-toggle span {
+    font-size: 1.2rem;
+    line-height: 1;
+    transform: rotate(0deg);
+    transition: transform 0.18s ease;
+}
+
+.centre-planning-group.collapsed {
+    gap: 0;
+}
+
+.centre-planning-group.collapsed .centre-collapse-toggle span {
+    transform: rotate(-90deg);
+}
+
+.centre-planning-group.collapsed .evenement-calendars {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    .centre-planning-actions {
+        gap: 4px;
+    }
+
+    .centre-collapse-toggle {
+        width: 32px;
+        height: 32px;
+    }
 }

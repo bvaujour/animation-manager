@@ -4,7 +4,8 @@
 // Logique de la page /planning/ : un calendrier FullCalendar par centre,
 // la liste des animateurs (glisser-déposer OU clic-puis-clic pour les
 // affecter), la barre d'outils (navigation, vue, vider la semaine) et la
-// popup d'édition rapide (qui réutilise gestion.js).
+// popup de remplissage automatique. La fiche et les disponibilités d'un
+// animateur se modifient dans Gestion > Salariés, pas ici.
 //
 // Toutes les fonctions utilitaires génériques (apiFetch, addDays, modal,
 // toast...) viennent de ui.js, chargé juste avant ce fichier.
@@ -25,6 +26,11 @@ document.addEventListener("DOMContentLoaded", function ()
 	// -- Références DOM utilisées à plusieurs endroits --
 	const calendarsContainer = document.getElementById("calendars-container");
 	const animList = document.getElementById("animateurs-list");
+	const filtresAnimateursDetails = document.getElementById("animateurs-filters");
+	const filtresQualificationsConteneur = document.getElementById("animateurs-filter-qualifications");
+	const filtresCentresConteneur = document.getElementById("animateurs-filter-centres");
+	const compteurFiltresAnimateurs = document.getElementById("animateurs-filter-count");
+	const boutonEffacerFiltresAnimateurs = document.getElementById("animateurs-filter-reset");
 	const toolbarLabel = document.getElementById("toolbar-label");
 
 	// Un FullCalendar.Calendar par centre, dans le même ordre que les
@@ -38,6 +44,25 @@ document.addEventListener("DOMContentLoaded", function ()
 	let centresPlanning = [];
 	let animateursPlanning = [];
 	let qualificationsPlanning = [];
+	let centresFiltresCharges = false;
+	let qualificationsFiltresChargees = false;
+
+	function lireIdsFiltres(cle)
+	{
+		try
+		{
+			const valeur = JSON.parse(localStorage.getItem(cle) || "[]");
+			return new Set(Array.isArray(valeur) ? valeur.map(Number).filter(Number.isFinite) : []);
+		}
+		catch (_erreur)
+		{
+			return new Set();
+		}
+	}
+
+	let filtresQualificationsAnimateurs = lireIdsFiltres("planning-filtres-qualifications");
+	let filtresCentresAnimateurs = lireIdsFiltres("planning-filtres-centres");
+	localStorage.removeItem("planning-tri-animateurs");
 
 	// Identifiant de la "source d'évènements" utilisée pour afficher les
 	// disponibilités en fond de calendrier (voir afficherDisponibilites).
@@ -65,25 +90,256 @@ document.addEventListener("DOMContentLoaded", function ()
 	let jourSelectionnePourPlacement = null;
 	let celluleJourSelectionnee = null;
 
+	// Tri visuel des blocs du planning. Le déplacement ne modifie aucune
+	// affectation : il enregistre uniquement l'ordre des centres et des
+	// événements afin de retrouver la même disposition au prochain chargement.
+	let triPlanningActif = null;
+
+	// Les lieux peuvent être repliés pour libérer de la place. Le choix est
+	// conservé uniquement dans le navigateur : il ne modifie aucune donnée.
+	const CENTRES_REPLIES_KEY = "planning-centres-replies";
+
+	function lireCentresReplies()
+	{
+		try
+		{
+			const ids = JSON.parse(localStorage.getItem(CENTRES_REPLIES_KEY) || "[]");
+			return new Set(Array.isArray(ids) ? ids.map(Number).filter(Number.isFinite) : []);
+		}
+		catch (_erreur)
+		{
+			return new Set();
+		}
+	}
+
+	const centresReplies = lireCentresReplies();
+
+	function sauvegarderCentresReplies()
+	{
+		localStorage.setItem(CENTRES_REPLIES_KEY, JSON.stringify([...centresReplies]));
+	}
+
+	function reglerCentreReplie(groupe, centreId, replie)
+	{
+		const id = Number(centreId);
+		const bouton = groupe.querySelector(".centre-collapse-toggle");
+		groupe.classList.toggle("collapsed", replie);
+		bouton?.setAttribute("aria-expanded", String(!replie));
+		bouton?.setAttribute("aria-label", replie ? "Déplier ce lieu" : "Replier ce lieu");
+
+		if (replie) centresReplies.add(id);
+		else centresReplies.delete(id);
+		sauvegarderCentresReplies();
+
+		if (!replie)
+		{
+			window.setTimeout(() =>
+			{
+				calendars
+					.filter((calendar) => Number(calendar.centrePlanning?.id) === id)
+					.forEach((calendar) => calendar.updateSize());
+			}, 30);
+		}
+	}
+
+	function idsEnfants(container, selector, dataKey)
+	{
+		return Array.from(container.querySelectorAll(`:scope > ${selector}`))
+			.map((element) => Number(element.dataset[dataKey]));
+	}
+
+	function memesIds(idsA, idsB)
+	{
+		return idsA.length === idsB.length && idsA.every((id, index) => id === idsB[index]);
+	}
+
+	function restaurerOrdreDom(container, selector, dataKey, ids)
+	{
+		const elements = new Map(
+			Array.from(container.querySelectorAll(`:scope > ${selector}`))
+				.map((element) => [Number(element.dataset[dataKey]), element])
+		);
+		ids.forEach((id) =>
+		{
+			const element = elements.get(Number(id));
+			if (element) container.appendChild(element);
+		});
+	}
+
+	function placerAvantCible(event, cible, verticalSeulement = false)
+	{
+		const rect = cible.getBoundingClientRect();
+		if (verticalSeulement) return event.clientY < rect.top + (rect.height / 2);
+
+		// Les centres sont disposés dans une grille : sur une même ligne, la
+		// position horizontale décide ; entre deux lignes, la verticale suffit.
+		if (event.clientY >= rect.top && event.clientY <= rect.bottom)
+		{
+			return event.clientX < rect.left + (rect.width / 2);
+		}
+		return event.clientY < rect.top + (rect.height / 2);
+	}
+
+	function demarrerTriPlanning(event, configuration)
+	{
+		event.stopPropagation();
+		triPlanningActif = {
+			...configuration,
+			idsOrigine: idsEnfants(
+				configuration.container,
+				configuration.selector,
+				configuration.dataKey
+			),
+		};
+		configuration.element.classList.add("planning-dragging");
+		document.body.classList.add("planning-sort-active");
+		event.dataTransfer.effectAllowed = "move";
+		event.dataTransfer.setData("text/plain", `${configuration.type}:${configuration.id}`);
+	}
+
+	function deplacerTriPlanning(event, cible, verticalSeulement = false)
+	{
+		if (!triPlanningActif || triPlanningActif.element === cible) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = "move";
+
+		const container = triPlanningActif.container;
+		if (placerAvantCible(event, cible, verticalSeulement))
+		{
+			container.insertBefore(triPlanningActif.element, cible);
+		}
+		else
+		{
+			cible.insertAdjacentElement("afterend", triPlanningActif.element);
+		}
+	}
+
+	function mettreAJourCacheOrdre(type, ids, centreId = null)
+	{
+		if (type === "centre")
+		{
+			const centresParId = new Map(centresPlanning.map((centre) => [Number(centre.id), centre]));
+			centresPlanning = ids.map((id, ordre) =>
+			{
+				const centre = centresParId.get(Number(id));
+				if (centre) centre.ordre = ordre;
+				return centre;
+			}).filter(Boolean);
+			return;
+		}
+
+		const centre = centresPlanning.find((item) => Number(item.id) === Number(centreId));
+		if (!centre) return;
+		const evenementsParId = new Map((centre.evenements || []).map((evenement) => [Number(evenement.id), evenement]));
+		centre.evenements = ids.map((id, ordre) =>
+		{
+			const evenement = evenementsParId.get(Number(id));
+			if (evenement) evenement.ordre = ordre;
+			return evenement;
+		}).filter(Boolean);
+	}
+
+	function terminerTriPlanning()
+	{
+		if (!triPlanningActif) return;
+
+		const etat = triPlanningActif;
+		triPlanningActif = null;
+		etat.element.classList.remove("planning-dragging");
+		document.body.classList.remove("planning-sort-active");
+
+		const ids = idsEnfants(etat.container, etat.selector, etat.dataKey);
+		if (memesIds(ids, etat.idsOrigine)) return;
+
+		const url = etat.type === "centre"
+			? "/api/centres/reordonner/"
+			: `/api/centres/${etat.centreId}/evenements/reordonner/`;
+		const payload = etat.type === "centre"
+			? { centre_ids: ids }
+			: { evenement_ids: ids };
+
+		apiFetch(url, { method: "POST", body: JSON.stringify(payload) })
+			.then(() =>
+			{
+				mettreAJourCacheOrdre(etat.type, ids, etat.centreId);
+				afficherToast(etat.type === "centre"
+					? "Ordre des centres enregistré."
+					: "Ordre des événements enregistré.");
+			})
+			.catch((err) =>
+			{
+				restaurerOrdreDom(etat.container, etat.selector, etat.dataKey, etat.idsOrigine);
+				afficherToast(erreurMessage(err, "L’ordre n’a pas pu être enregistré."), true);
+			});
+	}
+
+	function installerTriCentre(groupe, centre)
+	{
+		const poignee = groupe.querySelector(".centre-drag-handle");
+		poignee.addEventListener("dragstart", (event) => demarrerTriPlanning(event, {
+			type: "centre",
+			id: centre.id,
+			element: groupe,
+			container: calendarsContainer,
+			selector: ".centre-planning-group",
+			dataKey: "centreId",
+		}));
+		poignee.addEventListener("dragend", terminerTriPlanning);
+		groupe.addEventListener("dragover", (event) =>
+		{
+			if (triPlanningActif?.type === "centre") deplacerTriPlanning(event, groupe);
+		});
+		groupe.addEventListener("drop", (event) =>
+		{
+			if (triPlanningActif?.type !== "centre") return;
+			event.preventDefault();
+			terminerTriPlanning();
+		});
+	}
+
+	function installerTriEvenement(card, centre, evenement, zoneEvenements)
+	{
+		const poignee = card.querySelector(".evenement-drag-handle");
+		poignee.addEventListener("dragstart", (event) => demarrerTriPlanning(event, {
+			type: "evenement",
+			id: evenement.id,
+			centreId: centre.id,
+			element: card,
+			container: zoneEvenements,
+			selector: ".evenement-calendar-card",
+			dataKey: "evenementId",
+		}));
+		poignee.addEventListener("dragend", terminerTriPlanning);
+		card.addEventListener("dragover", (event) =>
+		{
+			if (triPlanningActif?.type === "evenement" && Number(triPlanningActif.centreId) === Number(centre.id))
+			{
+				deplacerTriPlanning(event, card, true);
+			}
+		});
+		card.addEventListener("drop", (event) =>
+		{
+			if (triPlanningActif?.type !== "evenement" || Number(triPlanningActif.centreId) !== Number(centre.id)) return;
+			event.preventDefault();
+			terminerTriPlanning();
+		});
+	}
+
 
 function libelleDate(dateStr)
 	{
 		return parseLocalDate(dateStr).toLocaleDateString("fr-FR");
 	}
 
-function qualificationCheckboxes(cochees = [])
+	function periodeEvenementLibelle(evenement)
 	{
-		return FormOptionsUtils.qualifications(qualificationsPlanning, cochees);
-	}
-
-	function centresHierarchisesInputs(centrePrefere = null, centresSecondaires = [], groupe = "planning-centre-prefere")
-	{
-		return FormOptionsUtils.centresHierarchises(centresPlanning, centrePrefere, centresSecondaires, groupe);
-	}
-
-	function centresHierarchisesDepuisForm(root)
-	{
-		return FormOptionsUtils.lireCentresHierarchises(root);
+		if (evenement.debut && evenement.fin)
+		{
+			return `Du ${libelleDate(evenement.debut)} au ${libelleDate(evenement.fin)}`;
+		}
+		if (evenement.debut) return `À partir du ${libelleDate(evenement.debut)}`;
+		if (evenement.fin) return `Jusqu’au ${libelleDate(evenement.fin)}`;
+		return "Période non définie";
 	}
 
 	function disponibilitesTexte(disponibilites)
@@ -151,13 +407,10 @@ function qualificationCheckboxes(cochees = [])
 				<p><strong>Email</strong><span>${escapeHtml(animateur.email || "Non renseigné")}</span></p>
 				<p><strong>Qualifications</strong><span>${escapeHtml(qualifications)}</span></p>
 				<p><strong>Centres possibles</strong><span>${escapeHtml(centresAutorisesTexte(animateur))}</span></p>
+				<p><strong>Événement préféré</strong><span>${escapeHtml(animateur.evenement_preferee?.nom || "Aucune préférence")}</span></p>
 				<p><strong>Disponibilités</strong><span>${escapeHtml(disponibilitesTexte(plages))}</span></p>
 			</div>
-			<div class="selected-actions">
-				<button class="btn btn-primary" id="btn-edit-selected" type="button">Modifier</button>
-				<button class="btn btn-accent" id="btn-dispo-selected" type="button">Ajouter une dispo</button>
-			</div>
-			<p class="selected-help">Clique sur un jour d'un calendrier pour affecter ${escapeHtml(animateur.prenom)}.</p>
+			<p class="selected-help">Clique sur un jour d'un calendrier pour affecter ${escapeHtml(animateur.prenom)}. Sa fiche et ses disponibilités se modifient dans Gestion > Salariés.</p>
 		`;
 
 		selectedChip.insertAdjacentElement("afterend", selectedDetail);
@@ -166,8 +419,6 @@ function qualificationCheckboxes(cochees = [])
 		// d'ajouter la classe .open : l'animation CSS peut ainsi se déclencher.
 		requestAnimationFrame(() => selectedDetail.classList.add("open"));
 
-		selectedDetail.querySelector("#btn-edit-selected").addEventListener("click", ouvrirModalEditionAnimateur);
-		selectedDetail.querySelector("#btn-dispo-selected").addEventListener("click", ouvrirModalDispoAnimateur);
 	}
 
 
@@ -185,6 +436,37 @@ function qualificationCheckboxes(cochees = [])
 
 
 
+	function numeroJourSemaine(dateStr)
+	{
+		const jourJs = parseLocalDate(dateStr).getDay();
+		return (jourJs + 6) % 7; // 0=lundi ... 6=dimanche
+	}
+
+	function evenementOuvertCeJour(evenement, dateStr)
+	{
+		if (!evenement || !dateStr || evenement.active === false) return false;
+		if (evenement.debut && dateStr < evenement.debut) return false;
+		if (evenement.fin && dateStr > evenement.fin) return false;
+		const joursOuverts = Array.isArray(evenement.jours_ouverts)
+			? evenement.jours_ouverts.map(Number)
+			: [0, 1, 2, 3, 4, 5];
+		if (!joursOuverts.includes(numeroJourSemaine(dateStr))) return false;
+		if ((evenement.dates_exclues || []).includes(dateStr)) return false;
+		return true;
+	}
+
+	function intervalleDansPeriodeEvenement(evenement, debutStr, finExclusiveStr)
+	{
+		if (!finExclusiveStr) return evenementOuvertCeJour(evenement, debutStr);
+		let jour = debutStr;
+		while (jour < finExclusiveStr)
+		{
+			if (!evenementOuvertCeJour(evenement, jour)) return false;
+			jour = addDays(jour, 1);
+		}
+		return true;
+	}
+
 	function animateurDejaAffecteSurIntervalle(animateurId, debutStr, finStr, excludeEventId = null)
 	{
 		const exclude = excludeEventId !== null && excludeEventId !== undefined ? String(excludeEventId) : null;
@@ -199,19 +481,29 @@ function qualificationCheckboxes(cochees = [])
 				if (eventAnimateurId !== Number(animateurId)) return false;
 
 				const intervalle = eventIntervalleDates(event);
-				return intervallesSeChevauchent(debutStr, finStr, intervalle.debut, intervalle.fin);
+				if (!intervallesSeChevauchent(debutStr, finStr, intervalle.debut, intervalle.fin)) return false;
+
+				// La gestion est exclusivement journalière : toute autre affectation
+				// qui chevauche cette date constitue donc un conflit.
+				return true;
 			})
 		);
 	}
 
 	function animateurDejaAffecteCeJour(animateurId, dateStr, excludeEventId = null)
 	{
-		return animateurDejaAffecteSurIntervalle(animateurId, dateStr, addDays(dateStr, 1), excludeEventId);
+		return animateurDejaAffecteSurIntervalle(
+			animateurId,
+			dateStr,
+			addDays(dateStr, 1),
+			excludeEventId
+		);
 	}
 
-	function animateurPlacableSurJour(animateur, dateStr, centre = null, excludeEventId = null)
+	function animateurPlacableSurJour(animateur, dateStr, evenement = null, excludeEventId = null)
 	{
-		return animateurDisponibleCeJour(animateur, dateStr)
+		return evenementOuvertCeJour(evenement, dateStr)
+			&& animateurDisponibleCeJour(animateur, dateStr)
 			&& !animateurDejaAffecteCeJour(animateur.id, dateStr, excludeEventId);
 	}
 
@@ -236,7 +528,7 @@ function qualificationCheckboxes(cochees = [])
 		});
 	}
 
-	function surlignerAnimateursDisponibles(dateStr, centre)
+	function surlignerAnimateursDisponibles(dateStr, centre, evenement)
 	{
 		document.querySelectorAll(".animateur").forEach((chip) =>
 		{
@@ -265,11 +557,19 @@ function qualificationCheckboxes(cochees = [])
 		});
 	}
 
-	function activerModePlacementJour(info, centre, calendar)
+	function activerModePlacementJour(info, centre, evenement, calendar)
 	{
+		if (!evenementOuvertCeJour(evenement, info.dateStr)) return;
+
+		if (!evenement.active)
+		{
+			afficherToast(`L’événement ${evenement.nom} est inactif : réactive-la dans Gestion pour y ajouter des animateurs.`, true);
+			return;
+		}
+
 		const memeJour = jourSelectionnePourPlacement
 			&& jourSelectionnePourPlacement.date === info.dateStr
-			&& Number(jourSelectionnePourPlacement.centre.id) === Number(centre.id);
+			&& Number(jourSelectionnePourPlacement.evenement.id) === Number(evenement.id);
 
 		nettoyerModePlacementJour();
 
@@ -282,6 +582,7 @@ function qualificationCheckboxes(cochees = [])
 		jourSelectionnePourPlacement = {
 			date: info.dateStr,
 			centre: centre,
+			evenement: evenement,
 			calendar: calendar,
 		};
 
@@ -289,12 +590,17 @@ function qualificationCheckboxes(cochees = [])
 		celluleJourSelectionnee.classList.add("jour-placement-selected");
 		info.dayEl.closest(".calendar-card")?.classList.add("day-pick-active");
 
-		surlignerAnimateursDisponibles(info.dateStr, centre);
-		afficherToast(`Choisis un animateur disponible pour ${centre.nom} le ${libelleDate(info.dateStr)}.`);
+		surlignerAnimateursDisponibles(info.dateStr, centre, evenement);
+		afficherToast(`Choisis un animateur pour ${centre.nom} — ${evenement.nom}, le ${libelleDate(info.dateStr)}.`);
 	}
 
-	function creerAffectationDepuisJour(animateur, centre, calendar, debut)
+	function creerAffectationDepuisJour(animateur, centre, evenement, calendar, debut)
 	{
+		if (!evenementOuvertCeJour(evenement, debut))
+		{
+			return Promise.reject({ error: "Ce jour est en dehors de la période de l’événement." });
+		}
+
 		const fin = addDays(debut, 1);
 
 		return apiFetch("/api/affectations/",
@@ -303,13 +609,14 @@ function qualificationCheckboxes(cochees = [])
 			body: JSON.stringify({
 				animateur_id: animateur.id,
 				centre_id: centre.id,
+				evenement_id: evenement.id,
 				debut: debut,
 				fin: fin,
 			}),
 		}).then((data) =>
 		{
 			rafraichirAffectationsVisibles();
-			afficherToast(`${animateur.prenom} affecté·e à ${centre.nom} le ${libelleDate(debut)}.`);
+			afficherToast(`${animateur.prenom} affecté·e à ${centre.nom} — ${evenement.nom}, le ${libelleDate(debut)}.`);
 			return data;
 		});
 	}
@@ -318,9 +625,9 @@ function qualificationCheckboxes(cochees = [])
 	{
 		if (!jourSelectionnePourPlacement) return false;
 
-		const { date, centre, calendar } = jourSelectionnePourPlacement;
+		const { date, centre, evenement, calendar } = jourSelectionnePourPlacement;
 
-		if (!animateurPlacableSurJour(animateur, date, centre))
+		if (!animateurPlacableSurJour(animateur, date, evenement))
 		{
 			if (!animateurDisponibleCeJour(animateur, date))
 			{
@@ -333,7 +640,7 @@ function qualificationCheckboxes(cochees = [])
 			return true;
 		}
 
-		creerAffectationDepuisJour(animateur, centre, calendar, date)
+		creerAffectationDepuisJour(animateur, centre, evenement, calendar, date)
 			.then(() => nettoyerModePlacementJour())
 			.catch((err) => afficherToast(erreurMessage(err, "Cette affectation n'a pas pu être enregistrée."), true));
 
@@ -360,7 +667,7 @@ function qualificationCheckboxes(cochees = [])
 	// (glisser-déposer classique). On enregistre le nouveau créneau côté
 	// serveur, et si le serveur refuse (conflit, indisponibilité...) on
 	// annule visuellement le déplacement avec info.revert().
-	function updateAffectation(info, centre = null)
+	function updateAffectation(info, centre = null, evenement = null)
 	{
 		const event = info.event;
 		const payload = {
@@ -368,10 +675,12 @@ function qualificationCheckboxes(cochees = [])
 			fin: event.endStr || addDays(event.startStr, 1),
 		};
 
-		// Quand on déplace une affectation vers un autre calendrier, on envoie
-		// aussi le nouveau centre au backend. Cela permet de changer le centre
-		// directement par drag & drop.
-		if (centre)
+		if (evenement)
+		{
+			payload.evenement_id = evenement.id;
+			payload.centre_id = centre.id;
+		}
+		else if (centre)
 		{
 			payload.centre_id = centre.id;
 		}
@@ -392,10 +701,9 @@ function qualificationCheckboxes(cochees = [])
 		});
 	}
 
-	// Crée l'instance FullCalendar pour un centre donné et la monte dans
-	// la carte fournie. `centre` reste accessible dans toutes les
-	// fonctions de callback ci-dessous grâce à la fermeture (closure).
-	function creerCalendar(centre, card)
+	// Une instance FullCalendar par événement. Toutes les événements d'un même
+	// centre restent regroupées visuellement dans le même bloc.
+	function creerCalendar(centre, evenement, card)
 	{
 		const calendarEl = card.querySelector(".calendar");
 
@@ -404,45 +712,47 @@ function qualificationCheckboxes(cochees = [])
 			initialView: "dayGridWeek",
 			height: "auto",
 			locale: "fr",
-			firstDay: 1, // la semaine commence le lundi
-			hiddenDays: [0], // cache seulement le dimanche : samedi reste visible et manuel
-			editable: true,   // autorise glisser/redimensionner un évènement existant
-			droppable: true,  // autorise à recevoir un élément externe (la liste d'animateurs)
-			selectable: true,
+			firstDay: 1,
+			hiddenDays: [0],
+			editable: true,
+			droppable: Boolean(evenement.active),
+			selectable: Boolean(evenement.active),
 
-			// Garde un ordre stable des événements dans chaque journée.
-			// FullCalendar essaie ainsi de placer le même animateur à la même
-			// hauteur d'un jour à l'autre, ce qui facilite la lecture du planning.
-			// L'id animateur est renvoyé par l'API dans extendedProps.
+			dayCellClassNames: function (arg)
+			{
+				const dateStr = formatDateLocal(arg.date);
+				return evenementOuvertCeJour(evenement, dateStr)
+					? []
+					: ["evenement-hors-periode"];
+			},
+
+			dayCellDidMount: function (arg)
+			{
+				const dateStr = formatDateLocal(arg.date);
+				if (!evenementOuvertCeJour(evenement, dateStr))
+				{
+					arg.el.setAttribute("aria-disabled", "true");
+					arg.el.title = "Événement fermé à cette date (hors période, jour habituel non ouvert ou date exclue)";
+				}
+			},
+
 			eventOrder: function (eventA, eventB)
 			{
 				const animateurA = Number(eventA.extendedProps?.animateur_id || eventA.extendedProps?.animateurId || 0);
 				const animateurB = Number(eventB.extendedProps?.animateur_id || eventB.extendedProps?.animateurId || 0);
-
 				if (animateurA !== animateurB) return animateurA - animateurB;
 				return String(eventA.title || "").localeCompare(String(eventB.title || ""), "fr");
 			},
 			eventOrderStrict: true,
-
 			expandRows: false,
-			headerToolbar: false, // on utilise notre propre barre d'outils commune
+			headerToolbar: false,
 			footerToolbar: false,
 
-			// Chaque calendrier ne charge que les évènements de SON centre.
-			events: `/api/planning/?centre_id=${centre.id}`,
+			events: `/api/planning/?evenement_id=${evenement.id}`,
 
-			// Se déclenche à chaque changement de dates affichées (navigation,
-			// changement de vue...). Comme les 3 calendriers sont toujours
-			// synchronisés, n'importe lequel peut mettre à jour le libellé
-			// commun de la barre d'outils.
 			datesSet: function (info)
 			{
 				toolbarLabel.textContent = info.view.title;
-
-				// Si un animateur est sélectionné, on recalcule les zones
-				// de disponibilité quand on change de semaine/mois.
-				// Si on est seulement en train de glisser une étiquette, on garde
-				// aussi cette aide visuelle pendant le changement de vue.
 				if (animateurActif)
 				{
 					afficherDisponibilites(animateurActif, animateurActif.disponibilites || []);
@@ -453,35 +763,37 @@ function qualificationCheckboxes(cochees = [])
 				}
 			},
 
-			// Clic sur un jour du calendrier :
-			// - si un animateur est déjà sélectionné, on l'affecte directement ;
-			// - sinon, on passe en mode "choix d'un animateur pour ce jour" :
-			//   les animateurs disponibles sont mis en surbrillance dans la liste.
 			dateClick: function (info)
 			{
-				if (!animateurActif)
+				if (!evenementOuvertCeJour(evenement, info.dateStr)) return;
+
+				if (!evenement.active)
 				{
-					activerModePlacementJour(info, centre, calendar);
+					afficherToast(`L’événement ${evenement.nom} est inactif.`, true);
 					return;
 				}
 
-				creerAffectationDepuisJour(animateurActif, centre, info.view.calendar, info.dateStr)
+				if (!animateurActif)
+				{
+					activerModePlacementJour(info, centre, evenement, calendar);
+					return;
+				}
+
+				creerAffectationDepuisJour(animateurActif, centre, evenement, info.view.calendar, info.dateStr)
 					.catch((err) => afficherToast(erreurMessage(err, "Cette affectation n'a pas pu être enregistrée."), true));
 			},
 
-			// Empêche côté interface de créer un doublon en déposant un
-			// animateur déjà affecté sur le même jour. Le backend garde
-			// aussi la validation : ici, c'est surtout pour éviter les
-			// doublons visuels pendant le drag & drop.
 			eventAllow: function (dropInfo, draggedEvent)
 			{
-				const animateurId = idAnimateurDepuisEvent(draggedEvent);
-				if (!animateurId) return true;
+				if (!evenement.active) return false;
 
 				const debut = formatDateLocal(dropInfo.start);
 				const fin = dropInfo.end ? formatDateLocal(dropInfo.end) : addDays(debut, 1);
-				const animateur = animateursPlanning.find((a) => Number(a.id) === Number(animateurId));
+				if (!intervalleDansPeriodeEvenement(evenement, debut, fin)) return false;
 
+				const animateurId = idAnimateurDepuisEvent(draggedEvent);
+				if (!animateurId) return true;
+				const animateur = animateursPlanning.find((a) => Number(a.id) === Number(animateurId));
 				if (animateur && !animateurDisponibleCeJour(animateur, debut)) return false;
 
 				return !animateurDejaAffecteSurIntervalle(
@@ -492,39 +804,44 @@ function qualificationCheckboxes(cochees = [])
 				);
 			},
 
-			// Un élément de la liste d'animateurs (voir plus bas, la
-			// FullCalendar.Draggable) est déposé sur ce calendrier.
 			eventReceive: function (info)
 			{
 				const debut = info.event.startStr;
 				const fin = info.event.endStr || addDays(debut, 1);
 
-				// Cas 1 : on a déplacé une affectation existante depuis un autre
-				// calendrier. Elle possède déjà un id : on ne crée pas une nouvelle
-				// ligne, on met seulement à jour son centre et sa date.
-				if (info.event.id)
+				if (!intervalleDansPeriodeEvenement(evenement, debut, fin))
 				{
-					updateAffectation(info, centre)
-						.catch(() => info.event.remove());
+					info.event.remove();
 					return;
 				}
 
-				// Cas 2 : on glisse une étiquette animateur depuis la liste.
-				// Là, il faut créer une nouvelle affectation en base.
-				const animateurId = info.event.extendedProps.animateurId;
+				if (!evenement.active)
+				{
+					info.event.remove();
+					afficherToast(`L’événement ${evenement.nom} est inactif.`, true);
+					return;
+				}
 
+				if (info.event.id)
+				{
+					updateAffectation(info, centre, evenement).catch(() => info.event.remove());
+					return;
+				}
+
+				const animateurId = info.event.extendedProps.animateurId;
 				apiFetch("/api/affectations/",
 				{
 					method: "POST",
 					body: JSON.stringify({
 						animateur_id: animateurId,
 						centre_id: centre.id,
+						evenement_id: evenement.id,
 						debut: debut,
 						fin: fin,
 					}),
-				}).then((data) =>
+				}).then(() =>
 				{
-				rafraichirAffectationsVisibles();
+					rafraichirAffectationsVisibles();
 				}).catch((err) =>
 				{
 					afficherToast(erreurMessage(err, "Cette affectation n'a pas pu être enregistrée."), true);
@@ -535,18 +852,13 @@ function qualificationCheckboxes(cochees = [])
 				});
 			},
 
-			eventDrop: function (info) { updateAffectation(info, centre); },
-			eventResize: function (info) { updateAffectation(info, centre); },
+			eventDrop: function (info) { updateAffectation(info, centre, evenement); },
+			eventResize: function (info) { updateAffectation(info, centre, evenement); },
 
-			// Clic sur un évènement existant : proposer de le supprimer.
-			// On ignore les évènements "background" (les plages de
-			// disponibilité affichées en surbrillance, qui ne sont pas
-			// de vraies affectations).
 			eventClick: function (info)
 			{
 				if (info.event.display === "background") return;
-
-				if (confirm(`Supprimer l'affectation de ${info.event.title} ?`))
+				if (confirm(`Supprimer l'affectation de ${info.event.title} dans ${evenement.nom} ?`))
 				{
 					apiFetch(`/api/affectations/${info.event.id}/`, { method: "DELETE" })
 						.then(() => info.event.remove())
@@ -555,49 +867,119 @@ function qualificationCheckboxes(cochees = [])
 			},
 		});
 
-		// On rattache le centre à l'instance FullCalendar pour pouvoir
-		// colorer les disponibilités différemment selon le centre.
 		calendar.centrePlanning = centre;
-
+		calendar.evenementPlanning = evenement;
 		calendar.render();
 		return calendar;
 	}
 
-	// Ajoute la carte HTML + l'instance FullCalendar d'un nouveau centre
-	// (appelé au chargement initial pour chaque centre, et aussi juste
-	// après avoir créé un centre depuis la popup d'ajout rapide).
 	function ajouterCentreAuPlanning(centre)
 	{
-		const card = document.createElement("div");
-		card.classList.add("calendar-card");
-		card.dataset.centreId = centre.id;
-		card.style.setProperty("--centre-color", centre.couleur);
+		const groupe = document.createElement("section");
+		groupe.classList.add("centre-planning-group");
+		groupe.dataset.centreId = centre.id;
+		groupe.style.setProperty("--centre-color", centre.couleur);
 
-		card.innerHTML = `<h3>${centre.nom}</h3><div class="calendar"></div>`;
-		calendarsContainer.appendChild(card);
+		const evenements = centre.evenements || [];
+		groupe.innerHTML = `
+			<header class="centre-planning-header">
+				<div class="centre-planning-title">
+					<span class="planning-drag-handle centre-drag-handle" draggable="true" role="button" tabindex="0" aria-label="Déplacer le planning du centre ${escapeHtml(centre.nom)}" title="Glisser pour déplacer ce centre">⠿</span>
+					<div>
+						<span class="centre-planning-code">${escapeHtml(centre.code || "")}</span>
+						<h2>${escapeHtml(centre.nom)}</h2>
+					</div>
+				</div>
+				<div class="centre-planning-actions">
+					<span class="centre-evenements-count">${evenements.length} événement${evenements.length > 1 ? "s" : ""}</span>
+					<button class="centre-collapse-toggle" type="button" aria-expanded="true" aria-label="Replier ce lieu" title="Replier ou déplier ce lieu">
+						<span aria-hidden="true">⌄</span>
+					</button>
+				</div>
+			</header>
+			<div class="evenement-calendars"></div>`;
 
-		attacherSurvolCentre(card, centre.id);
+		calendarsContainer.appendChild(groupe);
+		attacherSurvolCentre(groupe, centre.id);
+		installerTriCentre(groupe, centre);
 
-		const calendar = creerCalendar(centre, card);
-		calendars.push(calendar);
+		const boutonRepli = groupe.querySelector(".centre-collapse-toggle");
+		boutonRepli.addEventListener("click", () =>
+		{
+			reglerCentreReplie(groupe, centre.id, !groupe.classList.contains("collapsed"));
+		});
+
+		const zoneEvenements = groupe.querySelector(".evenement-calendars");
+		if (evenements.length === 0)
+		{
+			zoneEvenements.innerHTML = '<p class="empty-note">Aucun événement dans ce lieu.</p>';
+			if (centresReplies.has(Number(centre.id)))
+			{
+				reglerCentreReplie(groupe, centre.id, true);
+			}
+			return;
+		}
+
+		evenements.forEach((evenement) =>
+		{
+			const card = document.createElement("article");
+			card.classList.add("calendar-card", "evenement-calendar-card");
+			if (!evenement.active) card.classList.add("evenement-inactive");
+			card.dataset.centreId = centre.id;
+			card.dataset.evenementId = evenement.id;
+			card.style.setProperty("--centre-color", centre.couleur);
+
+			card.innerHTML = `
+				<header class="evenement-calendar-header">
+					<div class="evenement-calendar-title">
+						<span class="planning-drag-handle evenement-drag-handle" draggable="true" role="button" tabindex="0" aria-label="Déplacer le planning ${escapeHtml(evenement.nom)}" title="Glisser pour déplacer cet événement">⠿</span>
+						<div>
+							<h3>${escapeHtml(evenement.nom)}</h3>
+						</div>
+					</div>
+					<div class="evenement-calendar-meta">
+						<span>Objectif ${escapeHtml(evenement.effectif_cible)}</span>
+						${evenement.active ? "" : '<span class="evenement-inactive-badge">Inactive</span>'}
+					</div>
+				</header>
+				<div class="calendar"></div>`;
+
+			zoneEvenements.appendChild(card);
+			installerTriEvenement(card, centre, evenement, zoneEvenements);
+			const calendar = creerCalendar(centre, evenement, card);
+			calendars.push(calendar);
+		});
+
+		if (centresReplies.has(Number(centre.id)))
+		{
+			reglerCentreReplie(groupe, centre.id, true);
+		}
 	}
 
-	// Charge la liste des centres et construit un calendrier pour chacun.
 	function chargerCentres()
 	{
-		return apiFetch("/api/centres/").then((centres) =>
-		{
-			centresPlanning = centres;
-			calendarsContainer.innerHTML = "";
-
-			if (centres.length === 0)
+		return apiFetch("/api/centres/")
+			.then((centres) => Promise.all(centres.map((centre) =>
+				apiFetch(`/api/centres/${centre.id}/evenements/`)
+					.then((evenements) => ({ ...centre, evenements }))
+			)))
+			.then((centres) =>
 			{
-				calendarsContainer.innerHTML = '<p class="empty-note">Aucun centre pour l\'instant. Utilise le bouton "+" pour en ajouter un.</p>';
-				return;
-			}
+				centresPlanning = centres;
+				centresFiltresCharges = true;
+				rafraichirFiltresAnimateurs();
+				calendars.splice(0).forEach((calendar) => calendar.destroy());
+				calendarsContainer.innerHTML = "";
 
-			centres.forEach((centre) => ajouterCentreAuPlanning(centre));
-		});
+				if (centres.length === 0)
+				{
+					calendarsContainer.innerHTML = '<p class="empty-note">Aucun centre pour l\'instant. Ajoute-en un depuis Gestion.</p>';
+					return;
+				}
+
+				centres.forEach((centre) => ajouterCentreAuPlanning(centre));
+				appliquerModeVue(document.querySelector(".view-btn.active")?.dataset.view || "dayGridWeek");
+			});
 	}
 
 	// -----------------------------------------------------------------
@@ -760,37 +1142,250 @@ function qualificationCheckboxes(cochees = [])
 		return div;
 	}
 
+	function comparerTexte(a, b)
+	{
+		return String(a || "").localeCompare(String(b || ""), "fr", { sensitivity: "base" });
+	}
+
+	function comparerAnimateursParPrenom(a, b)
+	{
+		return comparerTexte(a.prenom, b.prenom) || comparerTexte(a.nom, b.nom);
+	}
+
+	function idsCentresAnimateur(animateur)
+	{
+		return new Set((animateur.centres_autorises || []).map((centre) => Number(centre.id)));
+	}
+
+	function animateurCorrespondAuxFiltres(animateur)
+	{
+		const qualificationsAnimateur = new Set((animateur.qualification_ids || []).map(Number));
+		const possedeToutesLesQualifications = [...filtresQualificationsAnimateurs]
+			.every((qualificationId) => qualificationsAnimateur.has(qualificationId));
+		if (!possedeToutesLesQualifications) return false;
+
+		if (filtresCentresAnimateurs.size === 0) return true;
+		const centresAnimateur = idsCentresAnimateur(animateur);
+		return [...filtresCentresAnimateurs].some((centreId) => centresAnimateur.has(centreId));
+	}
+
+	function sauvegarderFiltresAnimateurs()
+	{
+		localStorage.setItem("planning-filtres-qualifications", JSON.stringify([...filtresQualificationsAnimateurs]));
+		localStorage.setItem("planning-filtres-centres", JSON.stringify([...filtresCentresAnimateurs]));
+	}
+
+	function nombreFiltresAnimateursActifs()
+	{
+		return filtresQualificationsAnimateurs.size + filtresCentresAnimateurs.size;
+	}
+
+	function mettreAJourResumeFiltresAnimateurs(_nombreAffiche)
+	{
+		const nombreActifs = nombreFiltresAnimateursActifs();
+		if (compteurFiltresAnimateurs)
+		{
+			compteurFiltresAnimateurs.textContent = String(nombreActifs);
+			compteurFiltresAnimateurs.hidden = nombreActifs === 0;
+		}
+	}
+
+	function creerCaseFiltre(type, item, selection)
+	{
+		const label = document.createElement("label");
+		label.className = "animateurs-filter-option";
+
+		const input = document.createElement("input");
+		input.type = "checkbox";
+		input.id = `filtre-animateurs-${type}-${item.id}`;
+		input.name = `filtres_animateurs_${type}`;
+		input.value = String(item.id);
+		input.checked = selection.has(Number(item.id));
+
+		const texte = document.createElement("span");
+		texte.textContent = item.nom;
+		label.append(input, texte);
+
+		input.addEventListener("change", () =>
+		{
+			const id = Number(input.value);
+			if (input.checked) selection.add(id);
+			else selection.delete(id);
+			sauvegarderFiltresAnimateurs();
+			rendreListeAnimateurs();
+		});
+
+		return label;
+	}
+
+	function rafraichirFiltresAnimateurs()
+	{
+		if (qualificationsFiltresChargees)
+		{
+			const idsExistants = new Set(qualificationsPlanning.map((qualification) => Number(qualification.id)));
+			filtresQualificationsAnimateurs = new Set(
+				[...filtresQualificationsAnimateurs].filter((id) => idsExistants.has(id))
+			);
+			if (filtresQualificationsConteneur)
+			{
+				filtresQualificationsConteneur.innerHTML = "";
+				if (qualificationsPlanning.length === 0)
+				{
+					filtresQualificationsConteneur.innerHTML = '<span class="empty-note">Aucune qualification</span>';
+				}
+				else
+				{
+					[...qualificationsPlanning]
+						.sort((a, b) => comparerTexte(a.nom, b.nom))
+						.forEach((qualification) => filtresQualificationsConteneur.appendChild(
+							creerCaseFiltre("qualification", qualification, filtresQualificationsAnimateurs)
+						));
+				}
+			}
+		}
+
+		if (centresFiltresCharges)
+		{
+			const idsExistants = new Set(centresPlanning.map((centre) => Number(centre.id)));
+			filtresCentresAnimateurs = new Set(
+				[...filtresCentresAnimateurs].filter((id) => idsExistants.has(id))
+			);
+			if (filtresCentresConteneur)
+			{
+				filtresCentresConteneur.innerHTML = "";
+				if (centresPlanning.length === 0)
+				{
+					filtresCentresConteneur.innerHTML = '<span class="empty-note">Aucun lieu</span>';
+				}
+				else
+				{
+					[...centresPlanning]
+						.sort((a, b) => comparerTexte(a.nom, b.nom))
+						.forEach((centre) => filtresCentresConteneur.appendChild(
+							creerCaseFiltre("centre", centre, filtresCentresAnimateurs)
+						));
+				}
+			}
+		}
+
+		sauvegarderFiltresAnimateurs();
+		rendreListeAnimateurs();
+	}
+
+	function animateursFiltresEtTries()
+	{
+		return animateursPlanning
+			.filter(animateurCorrespondAuxFiltres)
+			.sort(comparerAnimateursParPrenom);
+	}
+
+	function rendreListeAnimateurs()
+	{
+		animList.innerHTML = "";
+
+		if (animateursPlanning.length === 0)
+		{
+			animList.innerHTML = '<p class="empty-note">Aucun animateur pour l\'instant.</p>';
+			mettreAJourResumeFiltresAnimateurs(0);
+			return;
+		}
+
+		const animateursAffiches = animateursFiltresEtTries();
+		if (animateurActif && !animateursAffiches.some((animateur) => Number(animateur.id) === Number(animateurActif.id)))
+		{
+			animateurDragPreview = null;
+			effacerDisponibilitesAffichees();
+			animateurActif = null;
+			selectedChip = null;
+			retirerFicheAnimateurSelectionne();
+		}
+
+		selectedChip = null;
+		animateursAffiches.forEach((animateur) =>
+		{
+			const chip = creerChipAnimateur(animateur);
+			if (animateurActif && animateurActif.id === animateur.id)
+			{
+				animateurActif = animateur;
+				selectedChip = chip;
+				chip.classList.add("selected");
+			}
+			animList.appendChild(chip);
+		});
+
+		if (animateursAffiches.length === 0)
+		{
+			animList.innerHTML = '<p class="empty-note">Aucun salarié ne correspond aux filtres cochés.</p>';
+		}
+		mettreAJourResumeFiltresAnimateurs(animateursAffiches.length);
+	}
+
 	// (Re)charge la liste des animateurs dans la barre latérale. Appelée
-	// au chargement initial, et à nouveau après un ajout/suppression
-	// depuis la popup d'ajout rapide.
+	// au chargement initial, et à nouveau après un ajout/suppression.
 	function chargerAnimateurs()
 	{
 		return apiFetch("/api/animateurs/").then((animateurs) =>
 		{
 			animateursPlanning = animateurs;
-			animList.innerHTML = "";
+			rendreListeAnimateurs();
+		});
+	}
 
-			if (animateurs.length === 0)
+	function chargerQualificationsFiltres()
+	{
+		return apiFetch("/api/qualifications/")
+			.then((qualifications) =>
 			{
-				animList.innerHTML = '<p class="empty-note">Aucun animateur pour l\'instant.</p>';
-				return;
-			}
-
-			selectedChip = null;
-			animateurs.forEach((animateur) =>
+				qualificationsPlanning = qualifications;
+				qualificationsFiltresChargees = true;
+				rafraichirFiltresAnimateurs();
+			})
+			.catch(() =>
 			{
-				const chip = creerChipAnimateur(animateur);
-				if (animateurActif && animateurActif.id === animateur.id)
-				{
-					animateurActif = animateur;
-					selectedChip = chip;
-					chip.classList.add("selected");
-				}
-				animList.appendChild(chip);
+				qualificationsPlanning = [];
+				qualificationsFiltresChargees = true;
+				rafraichirFiltresAnimateurs();
 			});
+	}
 
-			// Sur la page planning, on garde uniquement la sélection visuelle :
-			// pas de fiche détaillée sous l'étiquette, pour gagner de la place.
+	if (boutonEffacerFiltresAnimateurs)
+	{
+		boutonEffacerFiltresAnimateurs.addEventListener("click", () =>
+		{
+			filtresQualificationsAnimateurs.clear();
+			filtresCentresAnimateurs.clear();
+			sauvegarderFiltresAnimateurs();
+			rafraichirFiltresAnimateurs();
+		});
+	}
+
+	if (filtresAnimateursDetails)
+	{
+		const positionnerPanneauFiltres = () =>
+		{
+			const panneau = filtresAnimateursDetails.querySelector(".animateurs-filter-panel");
+			const resume = filtresAnimateursDetails.querySelector("summary");
+			if (!panneau || !resume || window.innerWidth <= 640) return;
+			const rect = resume.getBoundingClientRect();
+			panneau.style.top = `${Math.round(rect.bottom + 7)}px`;
+			panneau.style.right = `${Math.max(10, Math.round(window.innerWidth - rect.right))}px`;
+		};
+
+		filtresAnimateursDetails.addEventListener("toggle", () =>
+		{
+			if (filtresAnimateursDetails.open) positionnerPanneauFiltres();
+		});
+		window.addEventListener("resize", () =>
+		{
+			if (filtresAnimateursDetails.open) positionnerPanneauFiltres();
+		});
+
+		document.addEventListener("click", (event) =>
+		{
+			if (filtresAnimateursDetails.open && !filtresAnimateursDetails.contains(event.target))
+			{
+				filtresAnimateursDetails.removeAttribute("open");
+			}
 		});
 	}
 
@@ -1008,177 +1603,13 @@ function qualificationCheckboxes(cochees = [])
 	// rapidement une disponibilité depuis la page planning.
 	// -----------------------------------------------------------------
 
-	// La page planning est volontairement allégée :
-	// les modifications de fiche et les disponibilités se gèrent depuis /gestion/.
-	// On garde uniquement la modal de remplissage automatique.
-	const modalEditAnimateur = null;
-	const modalDispoAnimateur = null;
-	const modalEditContent = null;
-	const modalDispoContent = null;
+	// La page planning est volontairement allégée : la fiche et les
+	// disponibilités d'un animateur se modifient dans Gestion > Salariés.
+	// Ici on garde uniquement la modale de remplissage automatique.
 	const modalAuto = document.getElementById("modal-auto-remplissage");
 	const modalAutoContent = document.getElementById("modal-auto-remplissage-content");
 
 	initFermetureModal(modalAuto);
-
-	function chargerReferentielsEdition()
-	{
-		return Promise.all([
-			apiFetch("/api/centres/").then((centres) => { centresPlanning = centres; }),
-			apiFetch("/api/qualifications/").then((qualifications) => { qualificationsPlanning = qualifications; }),
-		]);
-	}
-
-	function ouvrirModalEditionAnimateur()
-	{
-		if (!animateurActif)
-		{
-			afficherToast("Sélectionne d'abord un animateur.", true);
-			return;
-		}
-
-		chargerReferentielsEdition().then(() =>
-		{
-			const a = animateurActif;
-			modalEditContent.innerHTML = `
-				<div class="gestion-form selected-edit-form">
-					<div class="field">
-						<label>Prénom</label>
-						<input type="text" id="edit-selected-prenom" value="${escapeHtml(a.prenom)}">
-					</div>
-					<div class="field">
-						<label>Nom</label>
-						<input type="text" id="edit-selected-nom" value="${escapeHtml(a.nom)}">
-					</div>
-					<div class="field">
-						<label>Téléphone</label>
-						<input type="tel" id="edit-selected-telephone" value="${escapeHtml(a.telephone || "")}">
-					</div>
-					<div class="field">
-						<label>Email</label>
-						<input type="email" id="edit-selected-email" value="${escapeHtml(a.email || "")}">
-					</div>
-					<div class="field">
-						<label>Date de naissance</label>
-						<input type="date" id="edit-selected-date-naissance" value="${a.date_naissance || ""}">
-					</div>
-					<div class="field field-wide">
-						<label>Qualifications</label>
-						<div class="checkbox-grid" id="edit-selected-qualifs">${qualificationCheckboxes(a.qualification_ids || [])}</div>
-					</div>
-					<div class="field field-wide">
-						<label>Centres possibles</label>
-						<div class="checkbox-grid" id="edit-selected-centres">${centresHierarchisesInputs(a.centre_prefere, a.centres_secondaires || [], `planning-edit-centre-${a.id}`)}</div>
-						<small class="entity-muted">Coche les centres où cet animateur peut être affecté.</small>
-					</div>
-					<p class="form-error" id="edit-selected-error"></p>
-					<div class="edit-actions">
-						<button class="btn btn-primary" id="edit-selected-save" type="button">Enregistrer</button>
-						<button class="btn btn-ghost" data-modal-close type="button">Annuler</button>
-					</div>
-				</div>
-			`;
-
-			FormOptionsUtils.activerCentresHierarchises(modalEditContent.querySelector("#edit-selected-centres"));
-
-			modalEditContent.querySelector("#edit-selected-save").addEventListener("click", () =>
-			{
-				const error = modalEditContent.querySelector("#edit-selected-error");
-				error.textContent = "";
-
-				const payload = {
-					prenom: modalEditContent.querySelector("#edit-selected-prenom").value.trim(),
-					nom: modalEditContent.querySelector("#edit-selected-nom").value.trim(),
-					telephone: modalEditContent.querySelector("#edit-selected-telephone").value.trim(),
-					email: modalEditContent.querySelector("#edit-selected-email").value.trim(),
-					date_naissance: modalEditContent.querySelector("#edit-selected-date-naissance").value || null,
-					qualifications: idsCheckboxesCochees(modalEditContent.querySelector("#edit-selected-qualifs")),
-					...centresHierarchisesDepuisForm(modalEditContent.querySelector("#edit-selected-centres")),
-				};
-
-				if (!payload.prenom || !payload.nom)
-				{
-					error.textContent = "Le prénom et le nom sont obligatoires.";
-					return;
-				}
-
-				apiFetch(`/api/animateurs/${a.id}/`, {
-					method: "PATCH",
-					body: JSON.stringify(payload),
-				}).then((animateurModifie) =>
-				{
-					animateurActif = animateurModifie;
-					rendreFicheAnimateurSelectionne(animateurModifie.disponibilites || []);
-					chargerAnimateurs();
-					calendars.forEach((calendar) => calendar.refetchEvents());
-					fermerModal(modalEditAnimateur);
-					afficherToast("Animateur modifié.");
-				}).catch((err) =>
-				{
-					error.textContent = erreurMessage(err, "Modification impossible.");
-				});
-			});
-
-			ouvrirModal(modalEditAnimateur);
-		}).catch((err) => afficherToast(erreurMessage(err, "Impossible de préparer le formulaire."), true));
-	}
-
-	function ouvrirModalDispoAnimateur()
-	{
-		if (!animateurActif)
-		{
-			afficherToast("Sélectionne d'abord un animateur.", true);
-			return;
-		}
-
-		const aujourdHui = formatDateLocal(new Date());
-		modalDispoContent.innerHTML = `
-			<div class="gestion-form selected-dispo-form">
-				<p class="empty-note">Ajouter une plage de disponibilité pour <strong>${escapeHtml(animateurActif.prenom)} ${escapeHtml(animateurActif.nom)}</strong>.</p>
-				<div class="field">
-					<label>Début</label>
-					<input type="date" id="dispo-selected-debut" value="${aujourdHui}">
-				</div>
-				<div class="field">
-					<label>Fin incluse</label>
-					<input type="date" id="dispo-selected-fin" value="${aujourdHui}">
-				</div>
-				<p class="form-error" id="dispo-selected-error"></p>
-				<div class="edit-actions">
-					<button class="btn btn-primary" id="dispo-selected-save" type="button">Ajouter la disponibilité</button>
-					<button class="btn btn-ghost" data-modal-close type="button">Annuler</button>
-				</div>
-			</div>
-		`;
-
-		modalDispoContent.querySelector("#dispo-selected-save").addEventListener("click", () =>
-		{
-			const debut = modalDispoContent.querySelector("#dispo-selected-debut").value;
-			const fin = modalDispoContent.querySelector("#dispo-selected-fin").value;
-			const error = modalDispoContent.querySelector("#dispo-selected-error");
-			error.textContent = "";
-
-			if (!debut || !fin)
-			{
-				error.textContent = "Les deux dates sont obligatoires.";
-				return;
-			}
-
-			apiFetch(`/api/animateurs/${animateurActif.id}/disponibilites/`, {
-				method: "POST",
-				body: JSON.stringify({ debut, fin }),
-			}).then((data) =>
-			{
-				afficherDisponibilites(animateurActif, data.disponibilites);
-				fermerModal(modalDispoAnimateur);
-				afficherToast("Disponibilité ajoutée.");
-			}).catch((err) =>
-			{
-				error.textContent = erreurMessage(err, "Impossible d'ajouter cette disponibilité.");
-			});
-		});
-
-		ouvrirModal(modalDispoAnimateur);
-	}
 
 	// Les calendriers occupent maintenant toute la largeur disponible.
 	// Aucun scroll horizontal synchronisé n'est nécessaire.
@@ -1188,6 +1619,7 @@ function qualificationCheckboxes(cochees = [])
 	// -----------------------------------------------------------------
 
 	chargerCentres();
+	chargerQualificationsFiltres();
 	chargerAnimateurs();
 
 	// Glisser-déposer : un seul objet Draggable enregistré une fois pour
@@ -1227,15 +1659,11 @@ function qualificationCheckboxes(cochees = [])
 			window.setTimeout(nettoyerDisponibilitesDragPreview, 120);
 		});
 	});
-	// Placement automatique de la semaine affichée (lundi -> vendredi).
-	// On ouvre d'abord une popup pour choisir le nombre d'animateurs par
-	// jour et par centre, puis le serveur vide la semaine et reconstruit
-	// les affectations en respectant disponibilités et centres autorisés.
+	// Placement automatique de la semaine affichée (lundi -> vendredi),
+	// désormais calculé événement par événement.
 	const btnAutoSemaine = document.getElementById("btn-auto-semaine");
 
-	// Lance réellement le remplissage une fois les besoins choisis (effectif
-	// + minimums par qualification, par centre).
-	function lancerRemplissageAuto(centres, boutonValider)
+	function lancerRemplissageAuto(boutonValider)
 	{
 		const lundi = lundiDeLaSemaine(calendars[0].getDate());
 		const debut = formatDateLocal(lundi);
@@ -1251,21 +1679,11 @@ function qualificationCheckboxes(cochees = [])
 		apiFetch("/api/planning/auto/",
 		{
 			method: "POST",
-			body: JSON.stringify({ debut, centres }),
+			body: JSON.stringify({ debut }),
 		})
 		.then((data) =>
 		{
-			calendars.forEach((calendar) =>
-			{
-				calendar.getEvents().forEach((event) =>
-				{
-					if (event.display !== "background")
-					{
-						event.remove();
-					}
-				});
-				calendar.refetchEvents();
-			});
+			rafraichirAffectationsVisibles();
 			fermerModal(modalAuto);
 			afficherToast(data.message || "Planning rempli automatiquement.", Boolean(data.unfilled));
 		})
@@ -1285,157 +1703,89 @@ function qualificationCheckboxes(cochees = [])
 		});
 	}
 
-	// Construit et ouvre la popup listant chaque centre avec son effectif
-	// par jour (pré-rempli avec l'effectif cible) et, en option, un minimum
-	// de titulaires par qualification.
 	function ouvrirPopupRemplissageAuto()
 	{
-		if (centresPlanning.length === 0)
+		const evenementsActives = centresPlanning.flatMap((centre) =>
+			(centre.evenements || [])
+				.filter((evenement) => evenement.active)
+				.map((evenement) => ({ ...evenement, centre }))
+		);
+
+		if (evenementsActives.length === 0)
 		{
-			afficherToast("Ajoute d'abord au moins un centre.", true);
+			afficherToast("Ajoute d'abord au moins un événement actif dans Gestion.", true);
 			return;
 		}
 
-		// Les qualifications peuvent ne pas être chargées sur la page planning
-		// tant qu'aucune fiche animateur n'a été ouverte : on les recharge ici
-		// juste avant de construire la fenêtre auto.
 		const construirePopup = () =>
 		{
-		const qualifs = (qualificationsPlanning || []).filter(
-			(q) => q.selectionnable_remplissage_auto !== false
-		);
+			const nomsQualifications = new Map(
+				(qualificationsPlanning || []).map((qualification) => [String(qualification.id), qualification.nom])
+			);
 
-		const blocs = centresPlanning.map((centre) =>
-		{
-			const defaut = Number(centre.effectif_cible) || 1;
-
-			const lignesQualifs = qualifs.length === 0
-				? '<p class="empty-note">Aucune qualification n’est activée pour le remplissage automatique. Active-les dans Gestion > Qualifications.</p>'
-				: qualifs.map((q) => `
-					<label class="auto-qualif-ligne">
-						<span class="auto-qualif-nom">${escapeHtml(q.nom)}</span>
-						<input type="number" min="0" max="20" step="1"
-							   class="auto-centre-qualif"
-							   data-qualif-id="${escapeHtml(q.id)}"
-							   value="0">
-					</label>
-				`).join("");
-
-			return `
-				<div class="auto-centre-bloc" data-centre-id="${escapeHtml(centre.id)}">
-					<div class="auto-centre-entete">
-						<span class="auto-centre-nom">
-							<span class="centre-pastille" style="background:${escapeHtml(centre.couleur)}"></span>
-							${escapeHtml(centre.nom)}
-						</span>
-						<label class="auto-centre-total">
-							<span>Total / jour</span>
-							<input type="number" min="0" max="20" step="1"
-								   class="auto-centre-effectif"
-								   data-centre-id="${escapeHtml(centre.id)}"
-								   value="${defaut}">
-						</label>
-					</div>
-					<button class="auto-centre-toggle" type="button" aria-expanded="false">Exigences par qualification ▾</button>
-					<div class="auto-centre-qualifs" hidden>
-						${lignesQualifs}
-						<p class="auto-centre-avert" hidden></p>
-					</div>
-				</div>`;
-		}).join("");
-
-		modalAutoContent.innerHTML = `
-			<p class="form-hint">Choisis le nombre d'animateurs à placer <strong>par jour</strong> dans chaque centre, du lundi au vendredi. Tu peux exiger un minimum de titulaires d'une qualification (ex : 2 BAFA) : ces places sont pourvues en priorité, le reste est libre. Mettre 0 en total exclut un centre.</p>
-			<div class="auto-centres-liste">${blocs}</div>
-			<p class="form-error" id="auto-error"></p>
-			<div class="edit-actions">
-				<button class="btn btn-primary" id="auto-valider" type="button">Remplir la semaine</button>
-				<button class="btn btn-ghost" data-modal-close type="button">Annuler</button>
-			</div>
-		`;
-
-		// Dépliage des exigences par qualification.
-		modalAutoContent.querySelectorAll(".auto-centre-toggle").forEach((btn) =>
-		{
-			btn.addEventListener("click", () =>
+			const centresHtml = centresPlanning.map((centre) =>
 			{
-				const zone = btn.nextElementSibling;
-				const etaitCache = zone.hasAttribute("hidden");
-				if (etaitCache) zone.removeAttribute("hidden");
-				else zone.setAttribute("hidden", "");
-				btn.setAttribute("aria-expanded", etaitCache ? "true" : "false");
-			});
-		});
+				const evenements = (centre.evenements || []).filter((evenement) => evenement.active);
+				if (!evenements.length) return "";
 
-		// Avertissement en direct : somme des exigences > effectif total.
-		function verifierBloc(bloc)
-		{
-			const effectif = Math.max(0, parseInt(bloc.querySelector(".auto-centre-effectif").value, 10) || 0);
-			let somme = 0;
-			bloc.querySelectorAll(".auto-centre-qualif").forEach((i) =>
-			{
-				somme += Math.max(0, parseInt(i.value, 10) || 0);
-			});
-
-			const avert = bloc.querySelector(".auto-centre-avert");
-			if (!avert) return;
-
-			if (somme > effectif)
-			{
-				avert.textContent = `Les exigences (${somme}) dépassent le total (${effectif}) : seules les plus prioritaires seront placées.`;
-				avert.removeAttribute("hidden");
-			}
-			else
-			{
-				avert.setAttribute("hidden", "");
-			}
-		}
-
-		modalAutoContent.querySelectorAll(".auto-centre-bloc").forEach((bloc) =>
-		{
-			bloc.querySelectorAll("input").forEach((i) =>
-				i.addEventListener("input", () => verifierBloc(bloc)));
-		});
-
-		modalAutoContent.querySelector("#auto-valider").addEventListener("click", () =>
-		{
-			const erreur = modalAutoContent.querySelector("#auto-error");
-			erreur.textContent = "";
-
-			const centres = {};
-			let total = 0;
-
-			modalAutoContent.querySelectorAll(".auto-centre-bloc").forEach((bloc) =>
-			{
-				const centreId = bloc.dataset.centreId;
-				const effectif = Math.max(0, parseInt(bloc.querySelector(".auto-centre-effectif").value, 10) || 0);
-
-				const qualifsObj = {};
-				bloc.querySelectorAll(".auto-centre-qualif").forEach((input) =>
+				const evenementsHtml = evenements.map((evenement) =>
 				{
-					const valeur = Math.max(0, parseInt(input.value, 10) || 0);
-					if (valeur > 0) qualifsObj[input.dataset.qualifId] = valeur;
-				});
+					const exigences = Object.entries(evenement.qualifications_requises || {})
+						.filter(([, nombre]) => Number(nombre) > 0)
+						.map(([qualificationId, nombre]) => ({
+							nom: nomsQualifications.get(String(qualificationId)) || "Qualification supprimée",
+							nombre: Math.max(0, Number(nombre) || 0),
+						}));
 
-				centres[centreId] = { effectif, qualifs: qualifsObj };
-				total += effectif;
+					const lignesQualifs = exigences.length
+						? exigences.map((exigence) => `
+							<li><strong>${escapeHtml(exigence.nombre)}</strong> ${escapeHtml(exigence.nom)}</li>`).join("")
+						: '<li class="empty-note">Aucune qualification particulière</li>';
+
+					return `
+						<div class="auto-evenement-bloc">
+							<div class="auto-evenement-entete">
+								<div>
+									<strong>${escapeHtml(evenement.nom)}</strong>
+									<span class="auto-evenement-periode">${escapeHtml(periodeEvenementLibelle(evenement))}</span>
+								</div>
+								<div class="auto-centre-total auto-centre-total-readonly">
+									<span>Personnel / jour</span>
+									<strong>${Math.max(0, Number(evenement.effectif_cible) || 0)}</strong>
+								</div>
+							</div>
+							<div class="auto-centre-qualifs auto-centre-qualifs-readonly">
+								<strong>Qualifications requises</strong>
+								<ul>${lignesQualifs}</ul>
+							</div>
+						</div>`;
+				}).join("");
+
+				return `
+					<section class="auto-centre-groupe">
+						<header class="auto-centre-groupe-head">
+							<span class="centre-pastille" style="background:${escapeHtml(centre.couleur)}"></span>
+							<div><strong>${escapeHtml(centre.nom)}</strong><span>${evenements.length} événement${evenements.length > 1 ? "s" : ""}</span></div>
+						</header>
+						<div class="auto-evenements-liste">${evenementsHtml}</div>
+					</section>`;
+			}).join("");
+
+			modalAutoContent.innerHTML = `
+				<p class="form-hint">Le remplissage automatique utilisera directement le personnel et les qualifications définis pour chaque événement dans <strong>Gestion</strong>. Ces besoins ne sont pas modifiables depuis le planning.</p>
+				<div class="auto-centres-liste">${centresHtml}</div>
+				<div class="edit-actions">
+					<button class="btn btn-primary" id="auto-valider" type="button">Remplir la semaine</button>
+					<button class="btn btn-ghost" data-modal-close type="button">Annuler</button>
+				</div>`;
+
+			modalAutoContent.querySelector("#auto-valider").addEventListener("click", () =>
+			{
+				if (!confirm("Remplir automatiquement tous les événements du lundi au vendredi avec les besoins enregistrés dans Gestion ? Les affectations existantes de ces jours seront remplacées.")) return;
+				lancerRemplissageAuto(modalAutoContent.querySelector("#auto-valider"));
 			});
 
-			if (total === 0)
-			{
-				erreur.textContent = "Mets au moins un animateur dans un centre.";
-				return;
-			}
-
-			if (!confirm("Remplir automatiquement du lundi au vendredi ? Les affectations existantes de ces jours seront remplacées."))
-			{
-				return;
-			}
-
-			lancerRemplissageAuto(centres, modalAutoContent.querySelector("#auto-valider"));
-		});
-
-		ouvrirModal(modalAuto);
+			ouvrirModal(modalAuto);
 		};
 
 		apiFetch("/api/qualifications/")
@@ -1445,6 +1795,9 @@ function qualificationCheckboxes(cochees = [])
 
 	if (btnAutoSemaine)
 	{
+		btnAutoSemaine.disabled = false;
+		btnAutoSemaine.removeAttribute("title");
+		btnAutoSemaine.textContent = "Remplir auto";
 		btnAutoSemaine.addEventListener("click", () =>
 		{
 			if (calendars.length === 0)
@@ -1455,4 +1808,5 @@ function qualificationCheckboxes(cochees = [])
 			ouvrirPopupRemplissageAuto();
 		});
 	}
+
 });

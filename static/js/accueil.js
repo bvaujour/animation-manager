@@ -78,88 +78,172 @@ document.addEventListener("DOMContentLoaded", () =>
         synchroniserCalendriers();
     }
 
-    function chargerCalendriers()
+    function dateIsoLocale(date)
     {
-        fetch("/api/centres/")
-            .then((response) => response.json())
-            .then((centres) =>
-            {
-                calendarsContainer.innerHTML = "";
-                calendars.length = 0;
+        const annee = date.getFullYear();
+        const mois = String(date.getMonth() + 1).padStart(2, "0");
+        const jour = String(date.getDate()).padStart(2, "0");
+        return `${annee}-${mois}-${jour}`;
+    }
 
-                if (!centres.length)
+    function evenementCouvreJour(evenement, date)
+    {
+        const iso = dateIsoLocale(date);
+        if (evenement.active === false) return false;
+        if (evenement.debut && iso < evenement.debut) return false;
+        if (evenement.fin && iso > evenement.fin) return false;
+        const numeroJour = (date.getDay() + 6) % 7;
+        const joursOuverts = Array.isArray(evenement.jours_ouverts)
+            ? evenement.jours_ouverts.map(Number)
+            : [0, 1, 2, 3, 4, 5];
+        if (!joursOuverts.includes(numeroJour)) return false;
+        return !(evenement.dates_exclues || []).includes(iso);
+    }
+
+    async function chargerJson(url)
+    {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
+        return response.json();
+    }
+
+    function creerCalendrierEvenement(centre, evenement, liste, calendriersCentre)
+    {
+        const eventCard = document.createElement("article");
+        eventCard.classList.add("home-event-calendar-card");
+        if (!evenement.active) eventCard.classList.add("inactive");
+
+        const header = document.createElement("header");
+        header.classList.add("home-event-calendar-header");
+        header.innerHTML = `
+            <h3>${escapeHtml(evenement.nom)}</h3>
+            <span>Objectif ${escapeHtml(evenement.effectif_cible)}</span>
+        `;
+
+        const calendarEl = document.createElement("div");
+        calendarEl.classList.add("home-calendar");
+
+        eventCard.appendChild(header);
+        eventCard.appendChild(calendarEl);
+        liste.appendChild(eventCard);
+
+        const calendar = new FullCalendar.Calendar(calendarEl,
+        {
+            initialView: currentView,
+            initialDate: currentDate,
+            locale: "fr",
+            firstDay: 1,
+            hiddenDays: [0],
+            height: "auto",
+            fixedWeekCount: false,
+            dayMaxEvents: false,
+            dayMaxEventRows: false,
+            headerToolbar: false,
+            footerToolbar: false,
+            editable: false,
+            droppable: false,
+            selectable: false,
+            events: `/api/planning/?evenement_id=${evenement.id}`,
+            eventOrder: "title",
+            dayCellClassNames: (info) => evenementCouvreJour(evenement, info.date)
+                ? []
+                : ["home-evenement-hors-periode"],
+        });
+
+        calendar.centrePlanning = centre;
+        calendar.evenementPlanning = evenement;
+        calendars.push(calendar);
+        calendriersCentre.push(calendar);
+        calendar.render();
+    }
+
+    async function chargerCalendriers()
+    {
+        try
+        {
+            const centres = await chargerJson("/api/centres/");
+            const centresAvecEvenements = await Promise.all(centres.map(async (centre) => ({
+                ...centre,
+                evenements: await chargerJson(`/api/centres/${centre.id}/evenements/`),
+            })));
+
+            calendarsContainer.innerHTML = "";
+            calendars.length = 0;
+
+            if (!centresAvecEvenements.length)
+            {
+                message(calendarsContainer, "Aucun lieu configuré.");
+                if (visiblePeriod) visiblePeriod.textContent = "aucun planning";
+                return;
+            }
+
+            centresAvecEvenements.forEach((centre) =>
+            {
+                const card = document.createElement("article");
+                card.classList.add("home-calendar-card");
+                card.style.setProperty("--centre-color", centre.couleur || "#1f6f54");
+
+                const toggle = document.createElement("button");
+                toggle.type = "button";
+                toggle.classList.add("home-calendar-toggle");
+                toggle.setAttribute("aria-expanded", "true");
+                toggle.innerHTML = `
+                    <span class="home-calendar-toggle-title">${escapeHtml(centre.nom)}</span>
+                    <span class="home-calendar-toggle-meta">
+                        ${centre.evenements.length} événement${centre.evenements.length > 1 ? "s" : ""}
+                    </span>
+                    <span class="home-calendar-toggle-icon" aria-hidden="true">⌄</span>
+                `;
+
+                const collapse = document.createElement("div");
+                collapse.classList.add("home-calendar-collapse");
+
+                const collapseInner = document.createElement("div");
+                collapseInner.classList.add("home-calendar-collapse-inner");
+
+                const listeEvenements = document.createElement("div");
+                listeEvenements.classList.add("home-event-calendars");
+                collapseInner.appendChild(listeEvenements);
+                collapse.appendChild(collapseInner);
+                card.appendChild(toggle);
+                card.appendChild(collapse);
+                calendarsContainer.appendChild(card);
+
+                const calendriersCentre = [];
+                if (!centre.evenements.length)
                 {
-                    message(calendarsContainer, "Aucun centre configuré.");
-                    return;
+                    message(listeEvenements, "Aucun événement dans ce lieu.");
+                }
+                else
+                {
+                    centre.evenements.forEach((evenement) =>
+                    {
+                        creerCalendrierEvenement(centre, evenement, listeEvenements, calendriersCentre);
+                    });
                 }
 
-                centres.forEach((centre) =>
+                toggle.addEventListener("click", () =>
                 {
-                    const card = document.createElement("article");
-                    card.classList.add("home-calendar-card");
+                    const ferme = card.classList.toggle("collapsed");
+                    toggle.setAttribute("aria-expanded", String(!ferme));
 
-                    const toggle = document.createElement("button");
-                    toggle.type = "button";
-                    toggle.classList.add("home-calendar-toggle");
-                    toggle.style.setProperty("--centre-color", centre.couleur || "#1f6f54");
-                    toggle.setAttribute("aria-expanded", "true");
-                    toggle.innerHTML = `
-                        <span class="home-calendar-toggle-title">${escapeHtml(centre.nom)}</span>
-                        <span class="home-calendar-toggle-icon" aria-hidden="true">⌄</span>
-                    `;
-
-                    const collapse = document.createElement("div");
-                    collapse.classList.add("home-calendar-collapse");
-
-                    const collapseInner = document.createElement("div");
-                    collapseInner.classList.add("home-calendar-collapse-inner");
-
-                    const calendarEl = document.createElement("div");
-                    calendarEl.classList.add("home-calendar");
-
-                    collapseInner.appendChild(calendarEl);
-                    collapse.appendChild(collapseInner);
-                    card.appendChild(toggle);
-                    card.appendChild(collapse);
-                    calendarsContainer.appendChild(card);
-
-                    const calendar = new FullCalendar.Calendar(calendarEl,
+                    if (!ferme)
                     {
-                        initialView: currentView,
-                        initialDate: currentDate,
-                        locale: "fr",
-                        firstDay: 1,
-                        hiddenDays: [0],
-                        height: "auto",
-                        fixedWeekCount: false,
-                        dayMaxEvents: false,
-                        dayMaxEventRows: false,
-                        headerToolbar: false,
-                        footerToolbar: false,
-                        editable: false,
-                        droppable: false,
-                        selectable: false,
-                        events: `/api/planning/?centre_id=${centre.id}`,
-                        eventOrder: "title",
-                    });
-
-                    toggle.addEventListener("click", () =>
-                    {
-                        const ferme = card.classList.toggle("collapsed");
-                        toggle.setAttribute("aria-expanded", String(!ferme));
-
-                        if (!ferme)
+                        window.setTimeout(() =>
                         {
-                            window.setTimeout(() => calendar.updateSize(), 220);
-                        }
-                    });
-
-                    calendars.push(calendar);
-                    calendar.render();
-                    mettreAJourPeriodeVisible();
+                            calendriersCentre.forEach((calendar) => calendar.updateSize());
+                        }, 220);
+                    }
                 });
-            })
-            .catch(() => message(calendarsContainer, "Impossible de charger le planning."));
+            });
+
+            mettreAJourPeriodeVisible();
+        }
+        catch (_erreur)
+        {
+            message(calendarsContainer, "Impossible de charger le planning.");
+            if (visiblePeriod) visiblePeriod.textContent = "indisponible";
+        }
     }
 
     function carteDocument(doc)

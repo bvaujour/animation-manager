@@ -1,32 +1,20 @@
 // Générateurs HTML communs pour les formulaires Animateur.
 window.FormOptionsUtils = Object.freeze({
-    qualifications(qualifications, cochees = []) {
+    qualifications(qualifications, cochees = [], groupe = "qualifications") {
         if (!qualifications.length) {
             return '<p class="empty-note">Aucune qualification disponible.</p>';
         }
 
         const cocheesSet = new Set((cochees || []).map(Number));
-        return qualifications.map((qualification) => `
-            <label class="checkbox-chip">
-                <input type="checkbox" value="${escapeHtml(qualification.id)}" ${cocheesSet.has(Number(qualification.id)) ? "checked" : ""}>
+        return qualifications.map((qualification) => {
+            const id = `${groupe}-${qualification.id}`;
+            return `
+            <label class="checkbox-chip" for="${escapeHtml(id)}">
+                <input type="checkbox" id="${escapeHtml(id)}" name="${escapeHtml(groupe)}[]" value="${escapeHtml(qualification.id)}" ${cocheesSet.has(Number(qualification.id)) ? "checked" : ""}>
                 ${escapeHtml(qualification.nom)}
             </label>
-        `).join("");
-    },
-
-    centres(centres, centresAutorises = [], messageVide = "Ajoute d'abord des centres pour choisir où affecter l'animateur.") {
-        if (!centres.length) {
-            return `<p class="empty-note">${escapeHtml(messageVide)}</p>`;
-        }
-
-        const centresSet = new Set((centresAutorises || []).map((centre) => Number(centre.id ?? centre)));
-        return centres.map((centre) => `
-            <label class="checkbox-chip centre-chip-option">
-                <input type="checkbox" value="${escapeHtml(centre.id)}" ${centresSet.has(Number(centre.id)) ? "checked" : ""}>
-                <span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>
-                ${escapeHtml(centre.code || centre.nom)}
-            </label>
-        `).join("");
+        `;
+        }).join("");
     },
 
     centresHierarchises(centres, centrePrefere = null, centresSecondaires = [], groupe = "centre-prefere") {
@@ -51,11 +39,11 @@ window.FormOptionsUtils = Object.freeze({
                             <span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>
                             ${escapeHtml(centre.code || centre.nom)}
                         </span>
-                        <label class="centre-hierarchy-choice" title="Centre préféré">
-                            <input type="radio" name="${escapeHtml(groupe)}" data-role="prefere" value="${escapeHtml(id)}" ${estPrefere ? "checked" : ""}>
+                        <label class="centre-hierarchy-choice" for="${escapeHtml(groupe)}-prefere-${escapeHtml(id)}" title="Centre préféré">
+                            <input type="radio" id="${escapeHtml(groupe)}-prefere-${escapeHtml(id)}" name="${escapeHtml(groupe)}" data-role="prefere" value="${escapeHtml(id)}" aria-label="${escapeHtml(centre.code || centre.nom)} comme lieu préféré" ${estPrefere ? "checked" : ""}>
                         </label>
-                        <label class="centre-hierarchy-choice" title="Centre secondaire">
-                            <input type="checkbox" data-role="secondaire" value="${escapeHtml(id)}" ${estSecondaire ? "checked" : ""} ${estPrefere ? "disabled" : ""}>
+                        <label class="centre-hierarchy-choice" for="${escapeHtml(groupe)}-secondaire-${escapeHtml(id)}" title="Centre secondaire">
+                            <input type="checkbox" id="${escapeHtml(groupe)}-secondaire-${escapeHtml(id)}" name="${escapeHtml(groupe)}-secondaires[]" data-role="secondaire" value="${escapeHtml(id)}" aria-label="${escapeHtml(centre.code || centre.nom)} comme lieu secondaire" ${estSecondaire ? "checked" : ""} ${estPrefere ? "disabled" : ""}>
                         </label>
                     </div>
                 `;
@@ -87,9 +75,5 @@ window.FormOptionsUtils = Object.freeze({
             ? Array.from(root.querySelectorAll('input[data-role="secondaire"]:checked')).map((el) => Number(el.value))
             : [];
         return { centre_prefere, centres_secondaires };
-    },
-
-    idsCoches(root) {
-        return idsCheckboxesCochees(root);
     },
 });

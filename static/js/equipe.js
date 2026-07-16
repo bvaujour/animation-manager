@@ -55,11 +55,45 @@ document.addEventListener("DOMContentLoaded", () => {
         return FormOptionsUtils.centresHierarchises(centres, prefere, secondaires, group);
     }
 
+    function optionsEquipePreferee(centreId, equipeId = null) {
+        const centre = centres.find((item) => Number(item.id) === Number(centreId));
+        const equipes = (centre?.equipes || []).filter((equipe) => equipe.active);
+        const selected = Number(equipeId) || null;
+
+        if (!centreId) {
+            return '<option value="">Choisis d’abord un centre préféré</option>';
+        }
+        if (!equipes.length) {
+            return '<option value="">Aucune équipe active dans ce centre</option>';
+        }
+
+        return [
+            '<option value="">Aucune préférence d’équipe</option>',
+            ...equipes.map((equipe) => `
+                <option value="${escapeHtml(equipe.id)}" ${selected === Number(equipe.id) ? "selected" : ""}>
+                    ${escapeHtml(equipe.nom)}${equipe.heure_debut && equipe.heure_fin ? ` — ${escapeHtml(equipe.heure_debut)}–${escapeHtml(equipe.heure_fin)}` : ""}
+                </option>
+            `),
+        ].join("");
+    }
+
+    function synchroniserEquipePreferee(equipeSelectionnee = null) {
+        const select = detailEl.querySelector("#fiche-equipe-preferee");
+        const zoneCentres = detailEl.querySelector("#fiche-centres");
+        if (!select || !zoneCentres) return;
+        const centresChoisis = FormOptionsUtils.lireCentresHierarchises(zoneCentres);
+        const ancienneValeur = equipeSelectionnee ?? select.value;
+        select.innerHTML = optionsEquipePreferee(centresChoisis.centre_prefere, ancienneValeur);
+        select.disabled = !centresChoisis.centre_prefere
+            || !centres.find((centre) => Number(centre.id) === Number(centresChoisis.centre_prefere))?.equipes?.some((equipe) => equipe.active);
+    }
+
     function blankAnimateur() {
         return {
             id: null, prenom: "", nom: "", telephone: "", email: "",
             date_naissance: null, age: null, couleur: "#2563EB",
-            qualification_ids: [], centre_prefere: null, centres_secondaires: [], disponibilites: [],
+            qualification_ids: [], centre_prefere: null, centres_secondaires: [],
+            equipe_preferee: null, equipe_preferee_id: null, disponibilites: [],
         };
     }
 
@@ -78,8 +112,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
             </div>
 
-            <section class="fiche-section">
-                <h3>Informations personnelles</h3>
+            <section class="fiche-section fiche-card">
+                <div class="fiche-section-head"><div><h3>Informations personnelles</h3><p>Coordonnées et identité de l’animateur.</p></div></div>
                 <div class="fiche-grid">
                     <div class="field"><label>Prénom</label><input id="fiche-prenom" value="${escapeHtml(a.prenom || "")}"></div>
                     <div class="field"><label>Nom</label><input id="fiche-nom" value="${escapeHtml(a.nom || "")}"></div>
@@ -91,30 +125,62 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
             </section>
 
-            <section class="fiche-section">
-                <h3>Qualifications</h3>
+            <section class="fiche-section fiche-card">
+                <div class="fiche-section-head">
+                    <div>
+                        <h3>Qualifications</h3>
+                        <p>Compétences et diplômes de l’animateur.</p>
+                    </div>
+                </div>
                 <div class="equipe-qualifs" id="fiche-qualifs">${qualificationsHtml(a.qualification_ids || [])}</div>
             </section>
 
-            <section class="fiche-section">
-                <h3>Centres</h3>
+            <section class="fiche-section fiche-card centres-card">
+                <div class="fiche-section-head">
+                    <div>
+                        <h3>Centres d’affectation</h3>
+                        <p>Choisis un centre principal et, si besoin, plusieurs centres secondaires.</p>
+                    </div>
+                </div>
                 <div class="centre-hierarchy-grid equipe-centres" id="fiche-centres">
                     ${centresHtml(a.centre_prefere, a.centres_secondaires || [], `fiche-centre-prefere-${a.id || "new"}`)}
                 </div>
+                <div class="equipe-preferee-field field">
+                    <label for="fiche-equipe-preferee">Équipe préférée <span class="label-hint">(facultatif)</span></label>
+                    <select id="fiche-equipe-preferee">
+                        ${optionsEquipePreferee(a.centre_prefere?.id || a.centre_prefere, a.equipe_preferee_id || a.equipe_preferee?.id)}
+                    </select>
+                    <p class="form-hint">Le remplissage automatique privilégiera cette équipe, sans bloquer les affectations manuelles dans les autres équipes.</p>
+                </div>
             </section>
 
-            <section class="fiche-section" ${isNew ? 'hidden' : ''}>
-                <h3>Disponibilités</h3>
-                <div class="dispo-editor">
-                    <div class="field"><label>Début</label><input type="date" id="dispo-new-debut"></div>
-                    <div class="field"><label>Fin incluse</label><input type="date" id="dispo-new-fin"></div>
-                    <button class="btn btn-primary" type="button" id="dispo-add">Ajouter la plage</button>
+            <section class="fiche-section fiche-card disponibilites-card" ${isNew ? 'hidden' : ''}>
+                <div class="fiche-section-head">
+                    <div>
+                        <h3>Disponibilités</h3>
+                        <p>Ajoute une période disponible, puis ajuste les plages existantes si nécessaire.</p>
+                    </div>
+                </div>
+                <div class="dispo-editor-card">
+                    <div class="dispo-editor-title">Ajouter une disponibilité</div>
+                    <div class="dispo-editor">
+                        <div class="field"><label for="dispo-new-debut">Du</label><input type="date" id="dispo-new-debut"></div>
+                        <div class="field"><label for="dispo-new-fin">Au <span class="label-hint">(inclus)</span></label><input type="date" id="dispo-new-fin"></div>
+                        <button class="btn btn-primary" type="button" id="dispo-add">+ Ajouter</button>
+                    </div>
+                </div>
+                <div class="dispo-list-head">
+                    <span>Périodes enregistrées</span>
                 </div>
                 <div class="dispo-items" id="dispo-items"></div>
             </section>
             <p class="fiche-status"></p>`;
 
         FormOptionsUtils.activerCentresHierarchises(detailEl.querySelector("#fiche-centres"));
+        detailEl.querySelectorAll('#fiche-centres input[data-role="prefere"]').forEach((radio) => {
+            radio.addEventListener("change", () => synchroniserEquipePreferee(null));
+        });
+        synchroniserEquipePreferee(a.equipe_preferee_id || a.equipe_preferee?.id || null);
         detailEl.querySelector("#fiche-couleur").addEventListener("input", (e) => detailEl.style.setProperty("--anim-color", e.target.value));
         detailEl.querySelector("#fiche-save").addEventListener("click", () => saveFiche(a, isNew));
 
@@ -138,6 +204,7 @@ document.addEventListener("DOMContentLoaded", () => {
             qualifications: idsCheckboxesCochees(detailEl.querySelector("#fiche-qualifs")),
             centre_prefere: centresChoisis.centre_prefere,
             centres_secondaires: centresChoisis.centres_secondaires,
+            equipe_preferee: detailEl.querySelector("#fiche-equipe-preferee")?.value || null,
         };
     }
 
@@ -245,7 +312,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function init() {
         try {
-            [qualifications, centres] = await Promise.all([apiFetch("/api/qualifications/"), apiFetch("/api/centres/")]);
+            const [qualificationsChargees, centresCharges] = await Promise.all([
+                apiFetch("/api/qualifications/"),
+                apiFetch("/api/centres/"),
+            ]);
+            qualifications = qualificationsChargees;
+            centres = await Promise.all(centresCharges.map(async (centre) => ({
+                ...centre,
+                equipes: await apiFetch(`/api/centres/${centre.id}/equipes/`),
+            })));
             await loadAnimateurs();
             renderList();
             if (animateurs.length) selectAnimateur(animateurs[0].id);

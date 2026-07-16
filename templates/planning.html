@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Planning équipe{% endblock %}
+{% block title %}Planning{% endblock %}
+{% block body_class %}page-planning{% endblock %}
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
 <link rel="stylesheet" href="{% static 'css/gestion.css' %}">
@@ -8,7 +9,38 @@
 {% endblock %}
 {% block content %}
 <main id="layout">
-    <aside id="animateurs-panel"><h2 class="section-title">Équipe</h2><div id="animateurs-list"></div></aside>
+    <aside id="animateurs-panel">
+        <div class="animateurs-panel-header">
+            <div>
+                <h2 class="section-title">Salariés</h2>
+                <span class="animateurs-order-note">Classés par prénom</span>
+            </div>
+            <details id="animateurs-filters" class="animateurs-filter-control">
+                <summary>
+                    Filtres
+                    <span id="animateurs-filter-count" class="animateurs-filter-count" hidden>0</span>
+                </summary>
+                <div class="animateurs-filter-panel">
+                    <fieldset class="animateurs-filter-group">
+                        <legend>Qualifications</legend>
+                        <div id="animateurs-filter-qualifications" class="animateurs-filter-options">
+                            <span class="empty-note">Chargement…</span>
+                        </div>
+                    </fieldset>
+                    <fieldset class="animateurs-filter-group">
+                        <legend>Lieux / centres</legend>
+                        <div id="animateurs-filter-centres" class="animateurs-filter-options">
+                            <span class="empty-note">Chargement…</span>
+                        </div>
+                    </fieldset>
+                    <div class="animateurs-filter-actions">
+                        <button id="animateurs-filter-reset" class="btn btn-ghost btn-small" type="button">Effacer les filtres</button>
+                    </div>
+                </div>
+            </details>
+        </div>
+        <div id="animateurs-list"></div>
+    </aside>
     <section id="calendars-section">
         <div id="planning-view-switcher" class="planning-control-block toolbar-views" role="group" aria-label="Changer de vue">
             <button class="btn btn-ghost view-btn active" data-view="dayGridWeek" type="button">Semaine</button>
@@ -35,7 +67,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/gestion.js' %}"></script>
 <script src="{% static 'js/planning/utils.js' %}"></script>
 <script src="{% static 'js/planning.js' %}"></script>
 {% endblock %}

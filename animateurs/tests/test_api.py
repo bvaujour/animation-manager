@@ -201,7 +201,7 @@ class AnimateurDetailApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
-class EquipePageAndDisponibiliteApiTests(TestCase):
+class EvenementPageAndDisponibiliteApiTests(TestCase):
     def setUp(self):
         self.animateur = Animateur.objects.create(prenom="Alice", nom="Martin")
         self.disponibilite = Disponibilite.objects.create(
@@ -210,10 +210,20 @@ class EquipePageAndDisponibiliteApiTests(TestCase):
             fin=datetime.date(2026, 8, 7),
         )
 
-    def test_equipe_page_is_available(self):
+    def test_old_evenement_page_redirects_to_gestion_salaries(self):
+        response = self.client.get("/evenement/")
+        self.assertRedirects(response, "/gestion/?onglet=salaries", fetch_redirect_response=False)
+
+    def test_old_equipe_page_redirects_to_gestion_salaries(self):
         response = self.client.get("/equipe/")
+        self.assertRedirects(response, "/gestion/?onglet=salaries", fetch_redirect_response=False)
+
+    def test_gestion_page_contains_employee_management(self):
+        response = self.client.get("/gestion/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Équipe")
+        self.assertContains(response, "Salariés")
+        self.assertContains(response, "Lieux et événements")
+        self.assertContains(response, "Ajouter un salarié")
 
     def test_update_disponibilite(self):
         response = self.client.patch(
@@ -232,3 +242,21 @@ class EquipePageAndDisponibiliteApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Disponibilite.objects.filter(pk=self.disponibilite.id).exists())
+
+
+class PlanningPageLayoutTests(TestCase):
+    def test_planning_page_uses_fixed_viewport_layout(self):
+        response = self.client.get("/planning/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="page-planning"')
+        self.assertContains(response, 'id="animateurs-panel"')
+        self.assertContains(response, 'id="planning-period-nav"')
+        self.assertContains(response, 'id="calendars-container"')
+
+
+    def test_planning_page_exposes_scroll_layout(self):
+        response = self.client.get("/planning/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="page-planning"', html=False)
+        self.assertContains(response, 'id="calendars-container"', html=False)
+        self.assertContains(response, 'id="planning-actions"', html=False)

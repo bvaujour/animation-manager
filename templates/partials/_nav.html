@@ -26,10 +26,10 @@
     <nav class="nav-drawer-links">
         <a href="{% url 'accueil' %}" class="{% if active == 'accueil' %}active{% endif %}">Accueil</a>
         <a href="{% url 'planning' %}" class="{% if active == 'planning' %}active{% endif %}">Planning</a>
-        <a href="{% url 'equipe' %}" class="{% if active == 'equipe' %}active{% endif %}">Équipe</a>
         <a href="{% url 'gestion' %}" class="{% if active == 'gestion' %}active{% endif %}">Gestion</a>
         <a href="{% url 'recapitulatif' %}" class="{% if active == 'recapitulatif' %}active{% endif %}">Récapitulatif</a>
         <a href="{% url 'documents' %}" class="{% if active == 'documents' %}active{% endif %}">Documents</a>
-        <a href="/admin/">Administration</a>
+        <a href="{% url 'administration' %}" class="{% if active == 'administration' %}active{% endif %}">Administration</a>
+        <a href="/admin/">Administration Django</a>
     </nav>
 </aside>

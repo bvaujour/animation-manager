@@ -4,15 +4,63 @@
 {% block extra_head %}<link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}">{% endblock %}
 {% block content %}
 <main class="recap-page">
-    <header class="recap-header"><div><h1>Récapitulatif</h1><p class="page-intro">Nombre de jours travaillés par animateur, répartis par centre.</p></div></header>
+    <header class="recap-header">
+        <div>
+            <h1>Récapitulatif</h1>
+            <p class="page-intro">Couverture des événements, alertes de planning et répartition des journées par salarié.</p>
+        </div>
+    </header>
+
     <section class="periode-card" aria-label="Choix de la période">
-        <label>Début<input type="date" id="periode-debut"></label>
-        <label>Fin<input type="date" id="periode-fin"></label>
+        <label for="periode-debut">Début</label>
+        <input type="date" id="periode-debut" name="periode_debut">
+        <label for="periode-fin">Fin</label>
+        <input type="date" id="periode-fin" name="periode_fin">
         <button id="btn-appliquer-periode" class="btn" type="button">Afficher</button>
+        <p id="periode-affichee" class="periode-affichee"></p>
     </section>
-    <section class="table-card">
-        <div class="table-header"><h2>Jours travaillés</h2><p id="periode-affichee"></p></div>
-        <div class="table-scroll"><table class="recap-table" id="table-recap"><thead></thead><tbody></tbody></table></div>
+
+    <section class="synthese-grid" id="recap-synthese" aria-label="Indicateurs principaux"></section>
+
+    <section class="recap-card alertes-card">
+        <div class="section-header">
+            <div>
+                <h2>Alertes et points de vigilance</h2>
+                <p>Les manques de personnel et de qualifications sont affichés en priorité.</p>
+            </div>
+            <span id="alertes-compteur" class="section-count"></span>
+        </div>
+        <div id="recap-alertes" class="alertes-list"></div>
+    </section>
+
+    <section class="recap-card">
+        <div class="section-header">
+            <div>
+                <h2>Couverture par événement</h2>
+                <p>Comparaison entre le besoin défini dans Gestion et les affectations du planning, du lundi au samedi.</p>
+            </div>
+        </div>
+        <div class="table-scroll">
+            <table class="recap-table evenements-table" id="table-evenements">
+                <thead></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="recap-card">
+        <div class="section-header">
+            <div>
+                <h2>Répartition des journées par salarié</h2>
+                <p>Les colonnes « disponible » et « libre » permettent d’identifier les ressources encore mobilisables.</p>
+            </div>
+        </div>
+        <div class="table-scroll">
+            <table class="recap-table" id="table-recap">
+                <thead></thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </section>
 </main>
 {% endblock %}

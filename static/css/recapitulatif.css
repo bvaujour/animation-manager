@@ -1,7 +1,7 @@
-/* Page Récapitulatif simplifiée : période + tableau jours travaillés. */
+/* Tableau de bord du planning : indicateurs, alertes et tableaux de suivi. */
 
 .recap-page {
-    max-width: 1100px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: 18px 12px 60px;
 }
@@ -26,7 +26,8 @@
 }
 
 .periode-card,
-.table-card {
+.recap-card,
+.indicator-card {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -34,20 +35,17 @@
 }
 
 .periode-card {
-    display: flex;
-    align-items: end;
-    gap: 10px;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto minmax(145px, 190px) auto minmax(145px, 190px) auto 1fr;
+    align-items: center;
+    gap: 8px 10px;
     padding: 12px;
     margin-bottom: 12px;
 }
 
 .periode-card label {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
     font-size: 0.78rem;
-    font-weight: 700;
+    font-weight: 800;
     color: var(--color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -63,28 +61,193 @@
     color: var(--color-text);
 }
 
-.table-card {
+.periode-affichee {
+    margin: 0 0 0 auto;
+    color: var(--color-text-muted);
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.synthese-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.indicator-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 118px;
+    padding: 13px;
     overflow: hidden;
 }
 
-.table-header {
+.indicator-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--indicator-color, var(--color-border));
+}
+
+.indicator-danger { --indicator-color: #b42318; }
+.indicator-warning { --indicator-color: #b54708; }
+.indicator-ok { --indicator-color: #027a48; }
+.indicator-info { --indicator-color: #175cd3; }
+.indicator-neutre { --indicator-color: var(--color-border); }
+
+.indicator-label {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.045em;
+}
+
+.indicator-value {
+    margin: 8px 0 5px;
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    line-height: 1;
+}
+
+.indicator-detail {
+    margin-top: auto;
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.recap-card {
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.section-header {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
-    gap: 10px;
-    padding: 12px 12px 8px;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 13px 14px 11px;
     border-bottom: 1px solid var(--color-border);
 }
 
-.table-header h2 {
+.section-header h2 {
     margin: 0;
     font-size: 1rem;
 }
 
-.table-header p {
-    margin: 0;
+.section-header p {
+    margin: 3px 0 0;
     color: var(--color-text-muted);
-    font-size: 0.85rem;
+    font-size: 0.82rem;
+}
+
+.section-count {
+    flex: 0 0 auto;
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: var(--color-surface-sunken);
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+    font-weight: 800;
+}
+
+.alertes-list {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+}
+
+.alert-item,
+.alert-empty {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 11px;
+    border: 1px solid var(--alert-border, var(--color-border));
+    border-radius: var(--radius-sm);
+    background: var(--alert-bg, var(--color-surface));
+}
+
+.alert-danger {
+    --alert-border: #f0b7b2;
+    --alert-bg: #fff5f4;
+    --alert-color: #b42318;
+}
+
+.alert-warning {
+    --alert-border: #f4cf9a;
+    --alert-bg: #fff9ed;
+    --alert-color: #b54708;
+}
+
+.alert-info {
+    --alert-border: #b2ccff;
+    --alert-bg: #f5f8ff;
+    --alert-color: #175cd3;
+}
+
+.alert-empty {
+    --alert-border: #a6e0c2;
+    --alert-bg: #f2fbf6;
+    --alert-color: #027a48;
+}
+
+.alert-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background: var(--alert-color, #027a48);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+.alert-content {
+    min-width: 0;
+    flex: 1;
+}
+
+.alert-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.alert-title-row strong,
+.alert-empty strong {
+    color: var(--color-text);
+    font-size: 0.88rem;
+}
+
+.alert-location {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-align: right;
+}
+
+.alert-content p,
+.alert-empty p {
+    margin: 3px 0 2px;
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
+.alert-dates {
+    color: var(--alert-color, var(--color-text-muted));
+    font-size: 0.75rem;
+    font-weight: 800;
 }
 
 .table-scroll {
@@ -94,9 +257,9 @@
 
 .recap-table {
     width: 100%;
-    min-width: 560px;
+    min-width: 720px;
     border-collapse: collapse;
-    font-size: 0.9rem;
+    font-size: 0.86rem;
 }
 
 .recap-table th,
@@ -104,6 +267,7 @@
     padding: 9px 10px;
     border-bottom: 1px solid var(--color-border);
     text-align: left;
+    vertical-align: middle;
     white-space: nowrap;
 }
 
@@ -111,9 +275,17 @@
     background: var(--color-surface-sunken);
     color: var(--color-text-muted);
     font-family: var(--font-display);
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+}
+
+.recap-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.recap-table tbody tr:hover td {
+    background-image: linear-gradient(rgba(15, 23, 42, 0.018), rgba(15, 23, 42, 0.018));
 }
 
 .recap-table .animateur-header,
@@ -146,30 +318,28 @@
 }
 
 .recap-table .total-header,
-.recap-table .total-cell {
-    width: 78px;
-    min-width: 70px;
+.recap-table .total-cell,
+.recap-table .availability-header {
+    min-width: 78px;
     text-align: center !important;
 }
 
-.recap-table tbody tr:last-child td {
-    border-bottom: 0;
-}
-
 .animateur-cell {
-    font-weight: 700;
+    font-weight: 800;
 }
 
 .number-cell {
     text-align: center !important;
 }
 
-.jours-value {
+.jours-value,
+.availability-value {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     min-width: 26px;
     min-height: 26px;
+    padding: 0 5px;
     border-radius: 999px;
     color: var(--color-text-muted);
 }
@@ -180,6 +350,16 @@
     font-weight: 800;
 }
 
+.availability-value {
+    background: var(--color-surface-sunken);
+    font-weight: 800;
+}
+
+.availability-value.has-free-days {
+    background: #e8f1ff;
+    color: #175cd3;
+}
+
 .total-cell {
     font-weight: 900;
     color: var(--color-primary-dark);
@@ -187,6 +367,7 @@
 
 .centre-dot {
     display: inline-block;
+    flex: 0 0 auto;
     width: 9px;
     height: 9px;
     border-radius: 999px;
@@ -195,7 +376,130 @@
     vertical-align: middle;
 }
 
-@media (max-width: 700px) {
+.evenements-table {
+    min-width: 1120px;
+}
+
+.event-row.event-danger td:first-child {
+    box-shadow: inset 4px 0 #b42318;
+}
+
+.event-row.event-warning td:first-child {
+    box-shadow: inset 4px 0 #b54708;
+}
+
+.event-row.event-ok td:first-child {
+    box-shadow: inset 4px 0 #027a48;
+}
+
+.event-name-cell {
+    display: flex;
+    align-items: center;
+    min-width: 190px;
+}
+
+.event-name-cell > span:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.event-name-cell strong {
+    font-size: 0.86rem;
+}
+
+.event-name-cell small {
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
+}
+
+.coverage-cell {
+    min-width: 150px;
+}
+
+.coverage-value {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 5px;
+    font-size: 0.76rem;
+}
+
+.coverage-value span {
+    color: var(--color-text-muted);
+}
+
+.coverage-track {
+    width: 100%;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-surface-sunken);
+}
+
+.coverage-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-primary);
+}
+
+.qualification-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 260px;
+    white-space: normal;
+}
+
+.qualification-pill {
+    display: inline-flex;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: var(--color-surface-sunken);
+    color: var(--color-text);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.issues-value {
+    color: #b42318;
+    font-size: 0.76rem;
+    font-weight: 800;
+}
+
+.ok-value {
+    color: #027a48;
+    font-size: 0.76rem;
+    font-weight: 800;
+}
+
+.muted-value,
+.empty-note,
+.loading-note {
+    color: var(--color-text-muted);
+}
+
+.empty-note,
+.loading-note {
+    padding: 18px;
+    text-align: center !important;
+}
+
+.loading-note {
+    grid-column: 1 / -1;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+
+@media (max-width: 1180px) {
+    .synthese-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 760px) {
     .recap-page {
         padding: 12px 8px 50px;
     }
@@ -205,30 +509,50 @@
     }
 
     .periode-card {
-        gap: 8px;
-        padding: 10px;
+        grid-template-columns: auto 1fr;
     }
 
-    .periode-card label {
-        flex: 1 1 130px;
+    .periode-card .btn,
+    .periode-affichee {
+        grid-column: 1 / -1;
+        width: 100%;
+        margin: 0;
     }
 
-    .periode-card .btn {
-        flex: 1 1 100%;
+    .synthese-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .table-header {
+    .indicator-card {
+        min-height: 108px;
+    }
+
+    .indicator-value {
+        font-size: 1.55rem;
+    }
+
+    .section-header,
+    .alert-title-row {
         flex-direction: column;
         align-items: flex-start;
-        gap: 3px;
+    }
+
+    .alert-location {
+        text-align: left;
     }
 
     .recap-table {
-        font-size: 0.82rem;
+        font-size: 0.8rem;
     }
 
     .recap-table th,
     .recap-table td {
         padding: 7px 8px;
+    }
+}
+
+@media (max-width: 460px) {
+    .synthese-grid {
+        grid-template-columns: 1fr;
     }
 }

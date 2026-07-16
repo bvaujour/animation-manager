@@ -626,3 +626,27 @@ a {
     color: var(--color-text-muted);
     font-size: 0.78rem;
 }
+
+/* ---------------------------------------------------------------------------
+   En-tête persistant
+   ---------------------------------------------------------------------------
+   Le hamburger reste disponible lorsque le contenu d'une page défile. La
+   hauteur est exposée sous forme de variable pour les pages qui organisent
+   leurs propres zones scrollables (Planning et Événement).
+   --------------------------------------------------------------------------- */
+:root {
+    --top-nav-height: 52px;
+}
+
+.top-nav {
+    position: sticky;
+    top: 0;
+    z-index: 90;
+    min-height: var(--top-nav-height);
+}
+
+@media (max-width: 420px) {
+    :root {
+        --top-nav-height: 46px;
+    }
+}

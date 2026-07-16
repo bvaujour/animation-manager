@@ -14,6 +14,8 @@ def affectation_to_event(affectation):
         "extendedProps": {
             "animateur_id": affectation.animateur_id,
             "centre_id": affectation.centre_id,
+            "evenement_id": affectation.evenement_id,
+            "evenement_nom": affectation.evenement.nom,
         },
     }
 
@@ -38,6 +40,17 @@ def animateur_to_dict(animateur):
     centres_secondaires = [centre_dict(pref) for pref in secondaires_relations]
     centres_autorises = ([centre_prefere] if centre_prefere else []) + centres_secondaires
 
+    evenement_preferee = None
+    if animateur.evenement_preferee_id:
+        evenement = animateur.evenement_preferee
+        evenement_preferee = {
+            "id": evenement.id,
+            "nom": evenement.nom,
+            "centre_id": evenement.centre_id,
+            "centre_nom": evenement.centre.nom,
+            "active": evenement.active,
+        }
+
     return {
         "id": animateur.id,
         "prenom": animateur.prenom,
@@ -54,6 +67,8 @@ def animateur_to_dict(animateur):
         # Champ conservé pour compatibilité avec les écrans qui attendent encore
         # une liste globale. Le centre préféré est toujours placé en premier.
         "centres_autorises": centres_autorises,
+        "evenement_preferee": evenement_preferee,
+        "evenement_preferee_id": evenement_preferee["id"] if evenement_preferee else None,
         "disponibilites": [
             {"debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()}
             for dispo in disponibilites
@@ -68,8 +83,36 @@ def centre_to_dict(centre):
         "code": centre.code,
         "couleur": centre.couleur,
         "effectif_cible": centre.effectif_cible,
+        "ordre": centre.ordre,
     }
 
+
+
+def evenement_to_dict(evenement):
+    besoins = list(evenement.besoins_qualifications.select_related("qualification").all())
+    nb_affectations = getattr(evenement, "nb_affectations", evenement.affectations.count())
+    return {
+        "id": evenement.id,
+        "centre_id": evenement.centre_id,
+        "nom": evenement.nom,
+        "debut": evenement.debut.isoformat() if evenement.debut else None,
+        "fin": evenement.fin.isoformat() if evenement.fin else None,
+        "effectif_cible": evenement.effectif_cible,
+        "jours_ouverts": [int(numero) for numero in (evenement.jours_ouverts or [])],
+        "dates_exclues": [
+            fermeture.date.isoformat() for fermeture in evenement.dates_exclues.all()
+        ],
+        "ordre": evenement.ordre,
+        "active": evenement.active,
+        "qualifications_requises": {
+            str(b.qualification_id): b.nombre_minimum for b in besoins
+        },
+        "qualifications_libelle": [
+            f"{b.nombre_minimum} × {b.qualification.nom}" for b in besoins
+        ],
+        "nb_affectations": nb_affectations,
+        "peut_supprimer": nb_affectations == 0,
+    }
 
 def qualification_to_dict(qualification):
     return {

@@ -6,8 +6,9 @@ Vue d'ensemble des tables et de leurs relations :
     Qualification <---M2M--- Animateur ---FK---> PreferenceCentre <---FK--- Centre
                                   |                                            |
                                   +-----------FK--- Disponibilite              |
-                                  |                                            |
+                                  |                                            +---FK---> Evenement
                                   +-----------FK--- Affectation ----FK---------+
+                                                            +---FK---> Evenement
 
 - Un Animateur a des Qualifications (ManyToMany direct, pas de table
   intermédiaire explicite car on n'a pas besoin d'infos en plus comme
@@ -18,17 +19,26 @@ Vue d'ensemble des tables et de leurs relations :
 - Disponibilite : plages de dates où un animateur est disponible pour
   travailler. Voir la docstring du modèle plus bas pour la règle
   "par défaut disponible" appliquée quand il n'y a aucune plage.
+- Evenement : sous-groupe opérationnel d'un centre (ex. Maternelles,
+  Élémentaires, Matin, Soir). Chaque centre possède automatiquement une
+  « Événement principale » pour préserver la compatibilité des anciennes données.
 - Affectation : LE planning à proprement parler. Une ligne = un
-  animateur travaille dans un centre entre deux dates. C'est cette même
-  table qui sert à la fois de planning prévisionnel (dates futures) et
-  d'historique (dates passées) : pas de distinction de table entre les
-  deux, seule la date compte.
+  animateur travaille dans une événement (et donc dans son centre) entre
+  deux dates. Le champ `centre` est conservé temporairement pour ne pas
+  casser les écrans et API existants pendant la migration progressive.
 """
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
+
+def jours_ouverts_par_defaut():
+    """Jours ouverts par défaut : du lundi au samedi (weekday Python 0 à 5)."""
+    return [0, 1, 2, 3, 4, 5]
+
+
+EQUIPE_PRINCIPALE_NOM = "Événement principal"
 
 ANIMATEUR_COLOR_PALETTE = [
     "#2563EB", "#059669", "#DC2626", "#9333EA", "#EA580C",
@@ -53,7 +63,7 @@ class Qualification(models.Model):
 
 
 class Animateur(models.Model):
-    """Un membre de l'équipe d'animation.
+    """Un membre de l'événement d'animation.
 
     Les coordonnées et la date de naissance sont optionnelles pour ne pas
     bloquer les animateurs déjà créés avant l'ajout de ces champs. L'âge
@@ -79,6 +89,13 @@ class Animateur(models.Model):
     # on n'a besoin d'aucune information supplémentaire sur la relation
     # elle-même.
     qualifications = models.ManyToManyField(Qualification, blank=True)
+
+
+
+    evenement_preferee = models.ForeignKey(
+        "Evenement", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="animateurs_preferant",
+    )
 
     @property
     def age(self):
@@ -131,16 +148,144 @@ class Centre(models.Model):
         help_text="Couleur hexadécimale utilisée pour les badges, ex: #e03c00",
     )
 
-    effectif_cible = models.PositiveSmallIntegerField(
-        default=1,
-        help_text="Nombre d'animateurs souhaités par jour dans ce centre",
+    effectif_cible = models.PositiveSmallIntegerField(default=1)
+
+    ordre = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Ordre d’affichage des lieux sur la page planning.",
     )
 
     class Meta:
-        ordering = ["nom"]
+        ordering = ["ordre", "nom"]
 
     def __str__(self):
         return self.nom
+
+
+class Evenement(models.Model):
+    """Un besoin de personnel organisé dans un lieu sur une période donnée."""
+
+    centre = models.ForeignKey(
+        Centre,
+        on_delete=models.CASCADE,
+        related_name="evenements",
+        verbose_name="lieu",
+    )
+    nom = models.CharField(max_length=100)
+    debut = models.DateField(null=True, blank=True, help_text="Premier jour de l’événement")
+    fin = models.DateField(null=True, blank=True, help_text="Dernier jour de l’événement inclus")
+    effectif_cible = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Nombre de personnes nécessaires chaque jour",
+    )
+    jours_ouverts = models.JSONField(
+        default=jours_ouverts_par_defaut,
+        help_text="Jours habituels d’ouverture, de 0=lundi à 6=dimanche.",
+    )
+    qualifications_requises = models.ManyToManyField(
+        Qualification,
+        through="BesoinQualification",
+        related_name="evenements_requerants",
+        blank=True,
+    )
+    ordre = models.PositiveSmallIntegerField(default=0)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["centre__nom", "ordre", "nom"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["centre", "nom", "debut", "fin"],
+                name="unique_evenement_lieu_periode",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(debut__isnull=True) | models.Q(fin__isnull=True) | models.Q(fin__gte=models.F("debut")),
+                name="evenement_fin_apres_debut",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.fin and self.debut and self.fin < self.debut:
+            raise ValidationError("La date de fin doit être postérieure ou égale à la date de début.")
+        try:
+            jours = sorted({int(numero) for numero in (self.jours_ouverts or [])})
+        except (TypeError, ValueError):
+            raise ValidationError({"jours_ouverts": "Les jours d’ouverture sont invalides."})
+        if not jours or any(numero < 0 or numero > 6 for numero in jours):
+            raise ValidationError({"jours_ouverts": "Choisis au moins un jour d’ouverture valide."})
+        self.jours_ouverts = jours
+
+    def est_ouvert_le(self, jour, dates_exclues=None):
+        """Indique si l’événement doit être planifié à cette date."""
+        if not self.active:
+            return False
+        if self.debut and jour < self.debut:
+            return False
+        if self.fin and jour > self.fin:
+            return False
+        jours_ouverts = {int(numero) for numero in (self.jours_ouverts or [])}
+        if jour.weekday() not in jours_ouverts:
+            return False
+        if dates_exclues is None:
+            dates_exclues = set(self.dates_exclues.values_list("date", flat=True))
+        return jour not in dates_exclues
+
+    def __str__(self):
+        return f"{self.centre.nom} — {self.nom}"
+
+
+class DateExclueEvenement(models.Model):
+    """Une fermeture ponctuelle à l’intérieur de la période d’un événement."""
+
+    evenement = models.ForeignKey(
+        Evenement,
+        on_delete=models.CASCADE,
+        related_name="dates_exclues",
+    )
+    date = models.DateField()
+    motif = models.CharField(max_length=120, blank=True, default="")
+
+    class Meta:
+        ordering = ["date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["evenement", "date"],
+                name="unique_date_exclue_evenement",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.evenement.debut and self.date < self.evenement.debut:
+            raise ValidationError("La date exclue doit appartenir à la période de l’événement.")
+        if self.evenement.fin and self.date > self.evenement.fin:
+            raise ValidationError("La date exclue doit appartenir à la période de l’événement.")
+
+    def __str__(self):
+        return f"{self.evenement} fermé le {self.date:%d/%m/%Y}"
+
+
+class BesoinQualification(models.Model):
+    """Nombre minimal de titulaires d’une qualification pour un événement."""
+
+    evenement = models.ForeignKey(
+        Evenement, on_delete=models.CASCADE, related_name="besoins_qualifications"
+    )
+    qualification = models.ForeignKey(Qualification, on_delete=models.CASCADE)
+    nombre_minimum = models.PositiveSmallIntegerField(default=1)
+
+    class Meta:
+        ordering = ["qualification__nom"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["evenement", "qualification"],
+                name="unique_besoin_qualification_evenement",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.evenement} : {self.nombre_minimum} × {self.qualification}"
 
 
 class PreferenceCentre(models.Model):
@@ -215,7 +360,7 @@ class Disponibilite(models.Model):
         ]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(fin__gte=models.F("debut")),
+                condition=models.Q(debut__isnull=True) | models.Q(fin__isnull=True) | models.Q(fin__gte=models.F("debut")),
                 name="dispo_fin_apres_debut",
             ),
         ]
@@ -230,7 +375,7 @@ class Affectation(models.Model):
     de FullCalendar : une affectation d'une seule journée a
     fin = debut + 1 jour).
 
-    Une même ligne sert à la fois de planning prévisionnel (dates
+    Chaque affectation correspond à une ou plusieurs journées entières. Une même ligne sert à la fois de planning prévisionnel (dates
     futures) et d'historique (dates passées) : il n'y a pas de
     distinction de table entre les deux, seule la date compte pour
     savoir si c'est "à venir" ou "déjà travaillé" (voir la page
@@ -249,8 +394,11 @@ class Affectation(models.Model):
         related_name="affectations",
     )
     centre = models.ForeignKey(
-        Centre,
-        on_delete=models.CASCADE,
+        Centre, on_delete=models.CASCADE, related_name="affectations"
+    )
+    evenement = models.ForeignKey(
+        Evenement,
+        on_delete=models.PROTECT,
         related_name="affectations",
     )
     debut = models.DateTimeField()
@@ -260,6 +408,7 @@ class Affectation(models.Model):
         ordering = ["debut"]
         indexes = [
             models.Index(fields=["centre", "debut"], name="aff_centre_debut_idx"),
+            models.Index(fields=["evenement", "debut"], name="aff_evenement_debut_idx"),
             models.Index(fields=["animateur", "debut"], name="aff_anim_debut_idx"),
             models.Index(fields=["debut", "fin"], name="aff_periode_idx"),
         ]
@@ -270,8 +419,13 @@ class Affectation(models.Model):
             ),
         ]
 
+    def save(self, *args, **kwargs):
+        if self.evenement_id:
+            self.centre_id = self.evenement.centre_id
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.animateur} @ {self.centre} ({self.debut:%d/%m/%Y})"
+        return f"{self.animateur} @ {self.evenement} ({self.debut:%d/%m/%Y})"
 
 
 class Document(models.Model):
@@ -320,3 +474,68 @@ class Document(models.Model):
 
     def __str__(self):
         return self.titre
+
+
+class EnvoiEmail(models.Model):
+    """Historique d'un envoi groupé réalisé depuis la bibliothèque."""
+
+    objet = models.CharField(max_length=200)
+    message = models.TextField()
+    documents = models.ManyToManyField(Document, related_name="envois_email", blank=True)
+    documents_titres = models.JSONField(
+        default=list,
+        help_text="Copie des titres au moment de l’envoi, conservée si un document est supprimé.",
+    )
+    date_creation = models.DateTimeField(auto_now_add=True)
+    nombre_destinataires = models.PositiveIntegerField(default=0)
+    nombre_envoyes = models.PositiveIntegerField(default=0)
+    nombre_echecs = models.PositiveIntegerField(default=0)
+    mode_test = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-date_creation"]
+
+    def __str__(self):
+        return f"{self.objet} ({self.date_creation:%d/%m/%Y %H:%M})"
+
+
+class DestinataireEnvoiEmail(models.Model):
+    """Résultat individuel conservé même si le salarié est supprimé ensuite."""
+
+    STATUT_ENVOYE = "envoye"
+    STATUT_ECHEC = "echec"
+    STATUTS = [
+        (STATUT_ENVOYE, "Envoyé"),
+        (STATUT_ECHEC, "Échec"),
+    ]
+
+    envoi = models.ForeignKey(
+        EnvoiEmail,
+        on_delete=models.CASCADE,
+        related_name="destinataires",
+    )
+    animateur = models.ForeignKey(
+        Animateur,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="emails_recus",
+    )
+    prenom = models.CharField(max_length=100)
+    nom = models.CharField(max_length=100)
+    email = models.EmailField()
+    statut = models.CharField(max_length=10, choices=STATUTS)
+    erreur = models.TextField(blank=True, default="")
+    date_traitement = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["prenom", "nom", "email"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["envoi", "email"],
+                name="unique_destinataire_par_envoi_email",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.prenom} {self.nom} — {self.get_statut_display()}"

@@ -1,0 +1,108 @@
+.administration-page {
+    width: min(980px, calc(100% - 24px));
+    margin: 20px auto 40px;
+}
+
+.administration-header {
+    margin-bottom: 16px;
+}
+
+.administration-header .eyebrow {
+    margin: 0 0 4px;
+    color: var(--color-primary);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    font-size: .78rem;
+}
+
+.administration-header p:last-child {
+    margin: 0;
+    color: var(--color-text-muted);
+}
+
+.export-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
+}
+
+.export-card-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.export-card-heading h2,
+.export-card-heading p {
+    margin: 0;
+}
+
+.export-card-heading p {
+    margin-top: 4px;
+    color: var(--color-text-muted);
+}
+
+.export-icon {
+    flex: 0 0 44px;
+    height: 44px;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    background: var(--color-surface-sunken);
+    color: var(--color-primary-dark);
+    font-size: 1.4rem;
+}
+
+.export-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.export-form label {
+    display: grid;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.export-form input {
+    width: 100%;
+}
+
+.export-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+@media (max-width: 640px) {
+    .administration-page {
+        width: calc(100% - 12px);
+        margin-top: 8px;
+    }
+
+    .export-card {
+        padding: 14px;
+        border-radius: var(--radius-md);
+    }
+
+    .export-form {
+        grid-template-columns: 1fr;
+    }
+
+    .export-actions {
+        grid-column: auto;
+    }
+
+    .export-actions .btn {
+        flex: 1 1 150px;
+    }
+}

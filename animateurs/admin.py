@@ -15,8 +15,12 @@ from .models import (
     Affectation,
     Animateur,
     Centre,
+    DateExclueEvenement,
+    Evenement,
     Disponibilite,
     Document,
+    EnvoiEmail,
+    DestinataireEnvoiEmail,
     PreferenceCentre,
     Qualification
 )
@@ -41,6 +45,27 @@ class QualificationAdmin(admin.ModelAdmin):
 @admin.register(Centre)
 class CentreAdmin(admin.ModelAdmin):
     list_display = ("nom", "code", "couleur", "effectif_cible")
+
+
+class DateExclueEvenementInline(admin.TabularInline):
+    model = DateExclueEvenement
+    extra = 0
+    ordering = ("date",)
+
+
+@admin.register(Evenement)
+class EvenementAdmin(admin.ModelAdmin):
+    list_display = (
+        "nom",
+        "centre",
+        "effectif_cible",
+        "active",
+        "ordre",
+    )
+    list_filter = ("centre", "active")
+    search_fields = ("nom", "centre__nom")
+    ordering = ("centre__nom", "ordre", "nom")
+    inlines = [DateExclueEvenementInline]
 
 
 # --- Inlines affichés directement sur la fiche d'un animateur ---
@@ -75,6 +100,7 @@ class AnimateurAdmin(admin.ModelAdmin):
         "date_naissance",
         "age",
         "couleur",
+        "evenement_preferee",
     )
     search_fields = ("prenom", "nom", "telephone", "email")
     inlines = [PreferenceCentreInline, DisponibiliteInline]
@@ -104,8 +130,8 @@ class AffectationAdmin(admin.ModelAdmin):
     """Vue d'ensemble/filtrable du planning, utile pour vérifier ou
     corriger des affectations en masse sans passer par l'interface
     glisser-déposer."""
-    list_display = ("animateur", "centre", "debut", "fin")
-    list_filter = ("centre", "animateur")
+    list_display = ("animateur", "centre", "evenement", "debut", "fin")
+    list_filter = ("centre", "evenement", "animateur")
     date_hierarchy = "debut"
 
 
@@ -114,3 +140,20 @@ class DisponibiliteAdmin(admin.ModelAdmin):
     list_display = ("animateur", "debut", "fin")
     list_filter = ("animateur",)
     date_hierarchy = "debut"
+
+
+class DestinataireEnvoiEmailInline(admin.TabularInline):
+    model = DestinataireEnvoiEmail
+    extra = 0
+    can_delete = False
+    readonly_fields = ("prenom", "nom", "email", "statut", "erreur", "date_traitement")
+
+
+@admin.register(EnvoiEmail)
+class EnvoiEmailAdmin(admin.ModelAdmin):
+    list_display = ("objet", "date_creation", "nombre_destinataires", "nombre_envoyes", "nombre_echecs", "mode_test")
+    list_filter = ("mode_test", "date_creation")
+    search_fields = ("objet", "message", "destinataires__email", "destinataires__nom")
+    readonly_fields = ("date_creation", "documents_titres", "nombre_destinataires", "nombre_envoyes", "nombre_echecs", "mode_test")
+    filter_horizontal = ("documents",)
+    inlines = [DestinataireEnvoiEmailInline]

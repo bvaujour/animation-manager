@@ -18,29 +18,57 @@ import datetime
 import json
 import re
 
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
-from django.http import JsonResponse
-from django.shortcuts import render
+from django.db.models import Count
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .models import Affectation, Animateur, Centre, Disponibilite, Document, Qualification
+from .models import (
+    Affectation, Animateur, Centre, DestinataireEnvoiEmail, Disponibilite,
+    Document, EnvoiEmail, Evenement, Qualification,
+)
 
 from .services.affectations import creer_affectation, modifier_affectation
-from .services.animateurs import appliquer_centres_hierarchises, normaliser_centres_hierarchises
+from .services.animateurs import (
+    appliquer_centres_hierarchises,
+    normaliser_centres_hierarchises,
+    normaliser_evenement_preferee,
+)
 from .services.dates import parse_to_aware_datetime
 from .services.disponibilites import (
     fusionner_et_nettoyer_disponibilites,
     nettoyer_disponibilites_tous_animateurs,
 )
 from .services.documents import valider_periode_document
+from .services.emails import (
+    ConfigurationEmailError,
+    PiecesJointesError,
+    charger_pieces_jointes,
+    connexion_email,
+    envoyer_un_message,
+    statut_configuration_email,
+)
+from .services.centres import prochain_ordre_centre, reordonner_centres
+from .services.evenements import (
+    FermetureAvecAffectationsError,
+    creer_evenement,
+    modifier_evenement,
+    reordonner_evenements,
+    supprimer_evenement,
+)
 from .services.recapitulatif import generer_recapitulatif
+from .services.planning_exports import generer_planning_excel, generer_planning_pdf
 from .services.serializers import (
     affectation_to_event,
     animateur_to_dict,
     centre_to_dict,
     document_to_dict,
+    evenement_to_dict,
     qualification_to_dict,
 )
 
@@ -62,13 +90,13 @@ def planning(request):
     return render(request, "planning.html", {"active_page": "planning"})
 
 
-def equipe(request):
-    """Page dédiée à la gestion complète des animateurs."""
-    return render(request, "equipe.html", {"active_page": "equipe"})
+def evenement(request):
+    """Ancienne URL conservée : les salariés sont désormais gérés dans Gestion."""
+    return redirect("/gestion/?onglet=salaries")
 
 
 def gestion(request):
-    """Page de gestion des paramètres : centres et qualifications."""
+    """Page unique de gestion : salariés, lieux, événements et qualifications."""
     return render(request, "gestion.html", {"active_page": "gestion"})
 
 
@@ -83,6 +111,52 @@ def documents(request):
     JS (voir static/js/documents.js + api_documents plus bas), cette vue
     ne fait que rendre le squelette de la page."""
     return render(request, "documents.html", {"active_page": "documents"})
+
+
+def administration(request):
+    """Page regroupant les outils d'export et, plus tard, de sauvegarde."""
+    today = timezone.localdate()
+    debut_mois = today.replace(day=1)
+    return render(request, "administration.html", {
+        "active_page": "administration",
+        "periode_debut": debut_mois.isoformat(),
+        "periode_fin": today.isoformat(),
+    })
+
+
+def _periode_export(request):
+    debut = parse_date(request.GET.get("debut", ""))
+    fin = parse_date(request.GET.get("fin", ""))
+    if not debut or not fin:
+        return None, None, "Les dates de début et de fin sont obligatoires."
+    if fin < debut:
+        return None, None, "La date de fin doit être postérieure ou égale à la date de début."
+    if (fin - debut).days > 366:
+        return None, None, "La période d'export ne peut pas dépasser 366 jours."
+    return debut, fin, None
+
+
+def export_planning_excel(request):
+    debut, fin, erreur = _periode_export(request)
+    if erreur:
+        return HttpResponse(erreur, status=400, content_type="text/plain; charset=utf-8")
+    contenu = generer_planning_excel(debut, fin)
+    response = HttpResponse(
+        contenu,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="planning_{debut:%Y%m%d}_{fin:%Y%m%d}.xlsx"'
+    return response
+
+
+def export_planning_pdf(request):
+    debut, fin, erreur = _periode_export(request)
+    if erreur:
+        return HttpResponse(erreur, status=400, content_type="text/plain; charset=utf-8")
+    contenu = generer_planning_pdf(debut, fin)
+    response = HttpResponse(contenu, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="planning_{debut:%Y%m%d}_{fin:%Y%m%d}.pdf"'
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +177,9 @@ def api_animateurs(request):
         # prefetch_related évite le classique problème "N+1 requêtes" :
         # sans ça, chaque animateur referait une requête pour ses
         # qualifications et une pour ses centres autorisés.
-        animateurs = Animateur.objects.prefetch_related(
+        animateurs = Animateur.objects.select_related(
+            "evenement_preferee__centre",
+        ).prefetch_related(
             "qualifications",
             "preferences__centre",
             "disponibilites",
@@ -125,6 +201,11 @@ def api_animateurs(request):
         centre_prefere, centres_secondaires, erreur_centres = normaliser_centres_hierarchises(payload)
         if erreur_centres:
             return JsonResponse({"error": erreur_centres}, status=400)
+        evenement_preferee, evenement_preferee_fournie, erreur_evenement = normaliser_evenement_preferee(
+            payload, centre_prefere
+        )
+        if erreur_evenement:
+            return JsonResponse({"error": erreur_evenement}, status=400)
 
         if not prenom or not nom:
             return JsonResponse({"error": "Le prénom et le nom sont obligatoires."}, status=400)
@@ -146,6 +227,7 @@ def api_animateurs(request):
             email=email,
             date_naissance=date_naissance,
             couleur=couleur,
+            evenement_preferee=evenement_preferee if evenement_preferee_fournie else None,
         )
 
         if qualification_ids:
@@ -156,7 +238,13 @@ def api_animateurs(request):
 
         appliquer_centres_hierarchises(animateur, centre_prefere, centres_secondaires)
 
-    animateur = Animateur.objects.prefetch_related(
+        if evenement_preferee_fournie:
+            animateur.evenement_preferee = evenement_preferee
+            animateur.save(update_fields=["evenement_preferee"])
+
+    animateur = Animateur.objects.select_related(
+        "evenement_preferee__centre",
+    ).prefetch_related(
         "qualifications",
         "preferences__centre",
         "disponibilites",
@@ -172,7 +260,9 @@ def api_animateur_detail(request, animateur_id):
     DELETE : supprime l'animateur et, par cascade, son planning/disponibilités/centres autorisés."""
 
     try:
-        animateur = Animateur.objects.prefetch_related(
+        animateur = Animateur.objects.select_related(
+            "evenement_preferee__centre",
+        ).prefetch_related(
             "qualifications",
             "preferences__centre",
             "disponibilites",
@@ -223,6 +313,21 @@ def api_animateur_detail(request, animateur_id):
         if erreur_centres:
             return JsonResponse({"error": erreur_centres}, status=400)
 
+        if centre_prefere is None and centres_secondaires is None:
+            relation_preferee = next(
+                (pref for pref in animateur.preferences.all() if pref.est_prefere),
+                None,
+            )
+            centre_prefere_effectif = relation_preferee.centre_id if relation_preferee else None
+        else:
+            centre_prefere_effectif = centre_prefere
+
+        evenement_preferee, evenement_preferee_fournie, erreur_evenement = normaliser_evenement_preferee(
+            payload, centre_prefere_effectif
+        )
+        if erreur_evenement:
+            return JsonResponse({"error": erreur_evenement}, status=400)
+
     except (TypeError, AttributeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
@@ -236,7 +341,13 @@ def api_animateur_detail(request, animateur_id):
 
         appliquer_centres_hierarchises(animateur, centre_prefere, centres_secondaires)
 
-    animateur = Animateur.objects.prefetch_related(
+        if evenement_preferee_fournie:
+            animateur.evenement_preferee = evenement_preferee
+            animateur.save(update_fields=["evenement_preferee"])
+
+    animateur = Animateur.objects.select_related(
+        "evenement_preferee__centre",
+    ).prefetch_related(
         "qualifications",
         "preferences__centre",
         "disponibilites",
@@ -340,12 +451,15 @@ def api_planning(request):
     """
 
     centre_id = request.GET.get("centre_id")
+    evenement_id = request.GET.get("evenement_id")
     start = request.GET.get("start")
     end = request.GET.get("end")
 
-    affectations = Affectation.objects.select_related("animateur", "centre")
+    affectations = Affectation.objects.select_related("animateur", "centre", "evenement")
 
-    if centre_id:
+    if evenement_id:
+        affectations = affectations.filter(evenement_id=evenement_id)
+    elif centre_id:
         affectations = affectations.filter(centre_id=centre_id)
 
     if start and end:
@@ -371,7 +485,22 @@ def api_affectation_create(request):
         payload = json.loads(request.body)
 
         animateur = Animateur.objects.get(pk=payload["animateur_id"])
-        centre = Centre.objects.get(pk=payload["centre_id"])
+        evenement = None
+        evenement_id = payload.get("evenement_id")
+        centre_id = payload.get("centre_id")
+
+        if evenement_id is not None:
+            evenement = Evenement.objects.select_related("centre").get(pk=evenement_id)
+            centre = evenement.centre
+            if centre_id is not None and int(centre_id) != centre.id:
+                return JsonResponse(
+                    {"error": "L'événement sélectionnée n'appartient pas à ce centre."},
+                    status=400,
+                )
+        elif centre_id is not None:
+            centre = Centre.objects.get(pk=centre_id)
+        else:
+            return JsonResponse({"error": "Une événement ou un centre doit être indiqué."}, status=400)
 
         debut = parse_to_aware_datetime(payload["debut"])
         # Si "fin" n'est pas fourni, on suppose une affectation d'un seul
@@ -384,14 +513,14 @@ def api_affectation_create(request):
         else:
             fin = debut + datetime.timedelta(days=1)
 
-    except (Animateur.DoesNotExist, Centre.DoesNotExist):
-        return JsonResponse({"error": "Animateur ou centre introuvable."}, status=404)
+    except (Animateur.DoesNotExist, Centre.DoesNotExist, Evenement.DoesNotExist):
+        return JsonResponse({"error": "Animateur, centre ou événement introuvable."}, status=404)
     except (KeyError, ValueError, TypeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
     try:
         affectation = creer_affectation(
-            animateur=animateur, centre=centre, debut=debut, fin=fin
+            animateur=animateur, centre=centre, evenement=evenement, debut=debut, fin=fin
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=409)
@@ -417,29 +546,41 @@ def api_affectation_detail(request, affectation_id):
     try:
         payload = json.loads(request.body)
 
-        # On applique les champs fournis directement sur l'objet en
-        # mémoire (sans sauvegarder tout de suite), pour pouvoir valider
-        # l'état final avant de l'enregistrer réellement.
-        if "debut" in payload:
-            affectation.debut = parse_to_aware_datetime(payload["debut"])
+        debut = (
+            parse_to_aware_datetime(payload["debut"])
+            if "debut" in payload
+            else affectation.debut
+        )
+        fin = (
+            parse_to_aware_datetime(payload["fin"])
+            if "fin" in payload
+            else affectation.fin
+        )
 
-        if "fin" in payload:
-            affectation.fin = parse_to_aware_datetime(payload["fin"])
+        nouvelle_evenement = None
+        nouveau_centre = None
+        if "evenement_id" in payload:
+            nouvelle_evenement = Evenement.objects.select_related("centre").get(pk=payload["evenement_id"])
+            if "centre_id" in payload and int(payload["centre_id"]) != nouvelle_evenement.centre_id:
+                return JsonResponse(
+                    {"error": "L'événement sélectionnée n'appartient pas à ce centre."},
+                    status=400,
+                )
+        elif "centre_id" in payload:
+            nouveau_centre = Centre.objects.get(pk=payload["centre_id"])
 
-        if "centre_id" in payload:
-            affectation.centre = Centre.objects.get(pk=payload["centre_id"])
-
-    except Centre.DoesNotExist:
-        return JsonResponse({"error": "Centre introuvable."}, status=404)
+    except (Centre.DoesNotExist, Evenement.DoesNotExist):
+        return JsonResponse({"error": "Centre ou événement introuvable."}, status=404)
     except (ValueError, TypeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
     try:
         affectation = modifier_affectation(
             affectation,
-            debut=affectation.debut,
-            fin=affectation.fin,
-            centre=affectation.centre,
+            debut=debut,
+            fin=fin,
+            centre=nouveau_centre,
+            evenement=nouvelle_evenement,
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=409)
@@ -492,8 +633,19 @@ def api_planning_plage(request):
 
 
 # ---------------------------------------------------------------------------
-# API - Gestion (CRUD centres / qualifications)
+# API - Gestion (CRUD centres / événements / qualifications)
 # ---------------------------------------------------------------------------
+
+
+def _message_validation(exc):
+    if hasattr(exc, "message_dict"):
+        messages = []
+        for valeurs in exc.message_dict.values():
+            messages.extend(valeurs)
+        return " ".join(messages)
+    if hasattr(exc, "messages"):
+        return " ".join(exc.messages)
+    return str(exc)
 
 
 @require_http_methods(["GET", "POST"])
@@ -522,13 +674,35 @@ def api_centres(request):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
     try:
-        centre = Centre.objects.create(nom=nom, code=code, couleur=couleur, effectif_cible=effectif_cible)
+        centre = Centre.objects.create(
+            nom=nom,
+            code=code,
+            couleur=couleur,
+            effectif_cible=effectif_cible,
+            ordre=prochain_ordre_centre(),
+        )
     except IntegrityError:
         # Le champ `code` est unique en base (contrainte du modèle) :
         # on transforme l'erreur SQL brute en message compréhensible.
         return JsonResponse({"error": f"Le code « {code} » est déjà utilisé par un autre centre."}, status=409)
 
     return JsonResponse(centre_to_dict(centre), status=201)
+
+
+@require_POST
+def api_centres_reordonner(request):
+    """Enregistre l'ordre d'affichage des blocs centres du planning."""
+
+    try:
+        payload = json.loads(request.body)
+        centre_ids = [int(centre_id) for centre_id in payload.get("centre_ids", [])]
+        reordonner_centres(centre_ids)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"error": "Requête invalide."}, status=400)
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+
+    return JsonResponse({"ok": True})
 
 
 @require_http_methods(["PATCH", "DELETE"])
@@ -544,6 +718,11 @@ def api_centre_detail(request, centre_id):
         return JsonResponse({"error": "Centre introuvable."}, status=404)
 
     if request.method == "DELETE":
+        if centre.affectations.exists():
+            return JsonResponse(
+                {"error": "Ce centre contient des affectations et ne peut pas être supprimé."},
+                status=409,
+            )
         centre.delete()
         return JsonResponse({"ok": True})
 
@@ -574,6 +753,133 @@ def api_centre_detail(request, centre_id):
         return JsonResponse({"error": f"Le code « {centre.code} » est déjà utilisé par un autre centre."}, status=409)
 
     return JsonResponse(centre_to_dict(centre))
+
+
+@require_http_methods(["GET", "POST"])
+def api_evenements(request, centre_id):
+    """Liste ou crée les événements d'un centre."""
+
+    try:
+        centre = Centre.objects.get(pk=centre_id)
+    except Centre.DoesNotExist:
+        return JsonResponse({"error": "Centre introuvable."}, status=404)
+
+    if request.method == "GET":
+        evenements = (
+            centre.evenements
+            .prefetch_related("dates_exclues", "besoins_qualifications__qualification")
+            .annotate(nb_affectations=Count("affectations", distinct=True))
+            .order_by("ordre", "nom")
+        )
+        nb_evenements = evenements.count()
+        data = []
+        for evenement in evenements:
+            evenement.nb_evenements_centre = nb_evenements
+            data.append(evenement_to_dict(evenement))
+        return JsonResponse(data, safe=False)
+
+    try:
+        payload = json.loads(request.body)
+        evenement = creer_evenement(
+            centre=centre,
+            nom=payload.get("nom", ""),
+            debut=payload.get("debut"),
+            fin=payload.get("fin"),
+            effectif_cible=int(payload.get("effectif_cible", 1) or 1),
+            active=payload.get("active", True) is not False,
+            qualifications=payload.get("qualifications_requises", {}),
+            jours_ouverts=payload.get("jours_ouverts"),
+            dates_exclues=payload.get("dates_exclues", []),
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"error": "Requête invalide."}, status=400)
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+    except IntegrityError:
+        return JsonResponse({"error": "Une événement de ce nom existe déjà dans ce centre."}, status=409)
+
+    evenement = Evenement.objects.select_related("centre").prefetch_related(
+        "dates_exclues", "besoins_qualifications__qualification"
+    ).get(pk=evenement.pk)
+    evenement.nb_affectations = 0
+    evenement.nb_evenements_centre = centre.evenements.count()
+    return JsonResponse(evenement_to_dict(evenement), status=201)
+
+
+@require_http_methods(["PATCH", "DELETE"])
+def api_evenement_detail(request, evenement_id):
+    """Modifie ou supprime une événement sans détruire ses affectations."""
+
+    try:
+        evenement = Evenement.objects.select_related("centre").get(pk=evenement_id)
+    except Evenement.DoesNotExist:
+        return JsonResponse({"error": "Événement introuvable."}, status=404)
+
+    if request.method == "DELETE":
+        try:
+            supprimer_evenement(evenement)
+        except ValidationError as exc:
+            return JsonResponse({"error": _message_validation(exc)}, status=409)
+        return JsonResponse({"ok": True})
+
+    try:
+        payload = json.loads(request.body)
+        evenement = modifier_evenement(
+            evenement,
+            nom=payload.get("nom") if "nom" in payload else None,
+            debut=payload.get("debut") if "debut" in payload else None,
+            fin=payload.get("fin") if "fin" in payload else None,
+            effectif_cible=payload.get("effectif_cible") if "effectif_cible" in payload else None,
+            active=payload.get("active") if "active" in payload else None,
+            qualifications=payload.get("qualifications_requises", {}),
+            qualifications_fournies="qualifications_requises" in payload,
+            jours_ouverts=payload.get("jours_ouverts"),
+            jours_ouverts_fournis="jours_ouverts" in payload,
+            dates_exclues=payload.get("dates_exclues", []),
+            dates_exclues_fournies="dates_exclues" in payload,
+            supprimer_affectations_dates_fermees=bool(
+                payload.get("supprimer_affectations_dates_fermees", False)
+            ),
+        )
+    except FermetureAvecAffectationsError as exc:
+        return JsonResponse({
+            "error": _message_validation(exc),
+            "code": "affectations_dates_fermees",
+            "nb_affectations": len(exc.affectations),
+            "dates": [date.isoformat() for date in exc.dates],
+        }, status=409)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"error": "Requête invalide."}, status=400)
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+    except IntegrityError:
+        return JsonResponse({"error": "Une événement de ce nom existe déjà dans ce centre."}, status=409)
+
+    evenement = Evenement.objects.select_related("centre").prefetch_related(
+        "dates_exclues", "besoins_qualifications__qualification"
+    ).get(pk=evenement.pk)
+    evenement.nb_affectations = evenement.affectations.count()
+    evenement.nb_evenements_centre = evenement.centre.evenements.count()
+    return JsonResponse(evenement_to_dict(evenement))
+
+
+@require_POST
+def api_evenements_reordonner(request, centre_id):
+    try:
+        centre = Centre.objects.get(pk=centre_id)
+    except Centre.DoesNotExist:
+        return JsonResponse({"error": "Centre introuvable."}, status=404)
+
+    try:
+        payload = json.loads(request.body)
+        evenement_ids = [int(evenement_id) for evenement_id in payload.get("evenement_ids", [])]
+        reordonner_evenements(centre, evenement_ids)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"error": "Requête invalide."}, status=400)
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+
+    return JsonResponse({"ok": True})
 
 
 @require_http_methods(["GET", "POST"])
@@ -650,10 +956,10 @@ def api_qualification_detail(request, qualification_id):
 # ---------------------------------------------------------------------------
 
 def api_recapitulatif(request):
-    """Récapitulatif simple sur une période donnée.
+    """Tableau de bord du planning sur une période donnée.
 
-    Objectif de la page : renseigner une période et voir, pour chaque
-    animateur, combien de jours il a travaillé au total et dans chaque centre.
+    L’API renvoie la charge par salarié, la couverture des événements, les
+    qualifications manquantes et les principales anomalies de planning.
 
     Convention de dates :
       - `debut` est inclus ;
@@ -685,7 +991,7 @@ def api_recapitulatif(request):
     if debut >= fin:
         return JsonResponse({"error": "La date de début doit être avant la date de fin."}, status=400)
 
-    centres, animateurs_data = generer_recapitulatif(debut, fin)
+    recap = generer_recapitulatif(debut, fin)
 
     return JsonResponse({
         "periode": {
@@ -700,9 +1006,12 @@ def api_recapitulatif(request):
                 "code": centre.code,
                 "couleur": centre.couleur,
             }
-            for centre in centres
+            for centre in recap["centres"]
         ],
-        "animateurs": animateurs_data,
+        "animateurs": recap["animateurs"],
+        "evenements": recap["evenements"],
+        "alertes": recap["alertes"],
+        "synthese": recap["synthese"],
     })
 
 # ---------------------------------------------------------------------------
@@ -799,6 +1108,242 @@ def api_document_detail(request, document_id):
     document.save(update_fields=["titre", "permanent", "periode_debut", "periode_fin"])
 
     return JsonResponse(document_to_dict(document))
+
+
+# ---------------------------------------------------------------------------
+# API - Envois d'e-mails aux salariés
+# ---------------------------------------------------------------------------
+
+
+def _taille_document(document):
+    try:
+        return int(document.fichier.size)
+    except (OSError, TypeError, ValueError):
+        return None
+
+
+def _envoi_email_to_dict(envoi):
+    destinataires = list(envoi.destinataires.all())
+    return {
+        "id": envoi.id,
+        "objet": envoi.objet,
+        "date_creation": envoi.date_creation.isoformat(),
+        "nombre_destinataires": envoi.nombre_destinataires,
+        "nombre_envoyes": envoi.nombre_envoyes,
+        "nombre_echecs": envoi.nombre_echecs,
+        "mode_test": envoi.mode_test,
+        "documents": envoi.documents_titres or [document.titre for document in envoi.documents.all()],
+        "echecs": [
+            {
+                "prenom": destinataire.prenom,
+                "nom": destinataire.nom,
+                "email": destinataire.email,
+                "erreur": destinataire.erreur,
+            }
+            for destinataire in destinataires
+            if destinataire.statut == DestinataireEnvoiEmail.STATUT_ECHEC
+        ],
+    }
+
+
+@require_http_methods(["GET", "POST"])
+def api_envois_email(request):
+    """Prépare, exécute et historise les envois de documents aux salariés."""
+
+    if request.method == "GET":
+        animateurs = list(
+            Animateur.objects.all()
+            .prefetch_related("qualifications", "preferences__centre")
+        )
+        animateurs.sort(key=lambda a: (a.prenom.casefold(), a.nom.casefold(), a.pk))
+        documents_qs = list(Document.objects.all())
+        historique = (
+            EnvoiEmail.objects.prefetch_related("documents", "destinataires")
+            .all()[:30]
+        )
+        return JsonResponse({
+            "configuration": statut_configuration_email(),
+            "animateurs": [
+                {
+                    "id": animateur.id,
+                    "prenom": animateur.prenom,
+                    "nom": animateur.nom,
+                    "email": animateur.email,
+                    "qualifications": [q.nom for q in animateur.qualifications.all()],
+                    "lieux": [pref.centre.nom for pref in animateur.preferences.all()],
+                }
+                for animateur in animateurs
+            ],
+            "documents": [
+                {
+                    **document_to_dict(document),
+                    "taille": _taille_document(document),
+                }
+                for document in documents_qs
+            ],
+            "historique": [_envoi_email_to_dict(envoi) for envoi in historique],
+        })
+
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "JSON invalide."}, status=400)
+
+    objet = str(payload.get("objet", "")).strip()
+    message = str(payload.get("message", "")).strip()
+    animateur_ids = payload.get("animateur_ids", [])
+    document_ids = payload.get("document_ids", [])
+
+    if not objet:
+        return JsonResponse({"error": "L'objet de l'e-mail est obligatoire."}, status=400)
+    if len(objet) > 200:
+        return JsonResponse({"error": "L'objet ne peut pas dépasser 200 caractères."}, status=400)
+    if not message:
+        return JsonResponse({"error": "Le message est obligatoire."}, status=400)
+    if len(message) > 10000:
+        return JsonResponse({"error": "Le message est trop long."}, status=400)
+    if not isinstance(animateur_ids, list) or not animateur_ids:
+        return JsonResponse({"error": "Choisis au moins un salarié."}, status=400)
+    if not isinstance(document_ids, list) or not document_ids:
+        return JsonResponse({"error": "Choisis au moins un document à joindre."}, status=400)
+
+    try:
+        ids_animateurs = list(dict.fromkeys(int(value) for value in animateur_ids))
+        ids_documents = list(dict.fromkeys(int(value) for value in document_ids))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "La sélection contient un identifiant invalide."}, status=400)
+
+    if len(ids_animateurs) > 250:
+        return JsonResponse({"error": "Un envoi est limité à 250 salariés."}, status=400)
+
+    animateurs = list(Animateur.objects.filter(pk__in=ids_animateurs))
+    documents_selectionnes = list(Document.objects.filter(pk__in=ids_documents))
+    animateurs.sort(key=lambda a: (a.prenom.casefold(), a.nom.casefold(), a.pk))
+
+    if len(animateurs) != len(ids_animateurs):
+        return JsonResponse({"error": "Un ou plusieurs salariés n'existent plus."}, status=400)
+    if len(documents_selectionnes) != len(ids_documents):
+        return JsonResponse({"error": "Un ou plusieurs documents n'existent plus."}, status=400)
+
+    sans_email = []
+    for animateur in animateurs:
+        try:
+            validate_email(animateur.email)
+        except ValidationError:
+            sans_email.append(f"{animateur.prenom} {animateur.nom}")
+    if sans_email:
+        return JsonResponse({
+            "error": "Adresse e-mail absente ou invalide pour : " + ", ".join(sans_email) + "."
+        }, status=400)
+
+    emails_utilises = {}
+    for animateur in animateurs:
+        cle_email = animateur.email.strip().casefold()
+        emails_utilises.setdefault(cle_email, []).append(f"{animateur.prenom} {animateur.nom}")
+    doublons_email = [noms for noms in emails_utilises.values() if len(noms) > 1]
+    if doublons_email:
+        groupes = [" / ".join(noms) for noms in doublons_email]
+        return JsonResponse({
+            "error": "Une même adresse e-mail est utilisée par plusieurs salariés : " + "; ".join(groupes) + "."
+        }, status=400)
+
+    configuration = statut_configuration_email()
+    if not configuration["operationnel"]:
+        return JsonResponse({"error": configuration["message"]}, status=503)
+
+    try:
+        pieces = charger_pieces_jointes(documents_selectionnes)
+    except PiecesJointesError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    envoi = EnvoiEmail.objects.create(
+        objet=objet,
+        message=message,
+        documents_titres=[document.titre for document in documents_selectionnes],
+        nombre_destinataires=len(animateurs),
+        mode_test=configuration["mode_test"],
+    )
+    envoi.documents.set(documents_selectionnes)
+
+    resultats = []
+    envoyes = 0
+    echecs = 0
+    try:
+        with connexion_email() as connection:
+            for animateur in animateurs:
+                try:
+                    envoyer_un_message(
+                        animateur=animateur,
+                        objet=objet,
+                        message=message,
+                        pieces=pieces,
+                        connection=connection,
+                    )
+                    statut = DestinataireEnvoiEmail.STATUT_ENVOYE
+                    erreur = ""
+                    envoyes += 1
+                except Exception as exc:  # le détail est historisé destinataire par destinataire
+                    statut = DestinataireEnvoiEmail.STATUT_ECHEC
+                    erreur = str(exc)[:1000] or "Erreur d'envoi inconnue."
+                    echecs += 1
+
+                DestinataireEnvoiEmail.objects.create(
+                    envoi=envoi,
+                    animateur=animateur,
+                    prenom=animateur.prenom,
+                    nom=animateur.nom,
+                    email=animateur.email,
+                    statut=statut,
+                    erreur=erreur,
+                )
+                resultats.append({
+                    "animateur_id": animateur.id,
+                    "nom": f"{animateur.prenom} {animateur.nom}",
+                    "email": animateur.email,
+                    "statut": statut,
+                    "erreur": erreur,
+                })
+    except ConfigurationEmailError as exc:
+        envoi.delete()
+        return JsonResponse({"error": str(exc)}, status=503)
+    except Exception as exc:
+        deja_traites = {resultat["animateur_id"] for resultat in resultats}
+        erreur_connexion = str(exc)[:1000] or "Connexion au serveur e-mail impossible."
+        for animateur in animateurs:
+            if animateur.id in deja_traites:
+                continue
+            DestinataireEnvoiEmail.objects.create(
+                envoi=envoi,
+                animateur=animateur,
+                prenom=animateur.prenom,
+                nom=animateur.nom,
+                email=animateur.email,
+                statut=DestinataireEnvoiEmail.STATUT_ECHEC,
+                erreur=erreur_connexion,
+            )
+            resultats.append({
+                "animateur_id": animateur.id,
+                "nom": f"{animateur.prenom} {animateur.nom}",
+                "email": animateur.email,
+                "statut": DestinataireEnvoiEmail.STATUT_ECHEC,
+                "erreur": erreur_connexion,
+            })
+            echecs += 1
+
+    envoi.nombre_envoyes = envoyes
+    envoi.nombre_echecs = echecs
+    envoi.save(update_fields=["nombre_envoyes", "nombre_echecs"])
+
+    return JsonResponse({
+        "ok": echecs == 0,
+        "mode_test": configuration["mode_test"],
+        "nombre_envoyes": envoyes,
+        "nombre_echecs": echecs,
+        "resultats": resultats,
+        "envoi": _envoi_email_to_dict(
+            EnvoiEmail.objects.prefetch_related("documents", "destinataires").get(pk=envoi.pk)
+        ),
+    })
 
 
 @require_POST

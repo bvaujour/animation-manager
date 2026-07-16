@@ -155,7 +155,7 @@ class PlanningSolverTests(TestCase):
         self.assertEqual(data["unfilled"], 5)
         self.assertFalse(Affectation.objects.filter(centre=autre_centre).exists())
 
-    def test_conserve_la_meme_equipe_sur_la_semaine(self):
+    def test_conserve_la_meme_evenement_sur_la_semaine(self):
         # Deux animateurs sont autorisés et disponibles pour un poste quotidien.
         # Le solveur doit conserver la même personne toute la semaine plutôt
         # que d'alterner entre les deux.

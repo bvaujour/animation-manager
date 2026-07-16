@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Administration - Gestion animation{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/administration.css' %}">{% endblock %}
+
+{% block content %}
+<main class="administration-page">
+    <header class="administration-header">
+        <p class="eyebrow">Exports</p>
+        <h1>Administration</h1>
+        <p>Exportez le planning visuel avec les dates en colonnes, puis les centres et leurs événements en lignes.</p>
+    </header>
+
+    <section class="export-card" aria-labelledby="export-planning-title">
+        <div class="export-card-heading">
+            <div class="export-icon" aria-hidden="true">▦</div>
+            <div>
+                <h2 id="export-planning-title">Planning calendrier par événement</h2>
+                <p>Chaque animateur apparaît dans la case de son événement et de sa journée. Le dimanche est masqué et le PDF est réparti par tranches de six jours.</p>
+            </div>
+        </div>
+
+        <form class="export-form" method="get">
+            <label>
+                Date de début
+                <input type="date" name="debut" value="{{ periode_debut }}" required>
+            </label>
+            <label>
+                Date de fin
+                <input type="date" name="fin" value="{{ periode_fin }}" required>
+            </label>
+            <div class="export-actions">
+                <button class="btn btn-primary" type="submit" formaction="{% url 'export_planning_excel' %}">Télécharger Excel</button>
+                <button class="btn btn-secondary" type="submit" formaction="{% url 'export_planning_pdf' %}">Télécharger PDF</button>
+            </div>
+        </form>
+    </section>
+</main>
+{% endblock %}
