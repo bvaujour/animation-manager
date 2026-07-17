@@ -129,13 +129,31 @@ document.addEventListener("DOMContentLoaded", () =>
         if (!info) return;
         const debut = dateIsoLocale(info.start);
         const fin = dateIsoLocale(info.end);
+
         document.querySelectorAll(".home-event-calendar-card").forEach((card) => {
             const calendar = calendars.find((item) => Number(item.evenementPlanning?.id) === Number(card.dataset.groupeId));
             card.hidden = !calendar || !groupeChevauchePlage(calendar.evenementPlanning, debut, fin);
         });
+
         document.querySelectorAll(".home-calendar-card").forEach((card) => {
             const groupes = Array.from(card.querySelectorAll(".home-event-calendar-card"));
-            card.hidden = groupes.length === 0 || groupes.every((groupe) => groupe.hidden);
+            const visibles = groupes.filter((groupe) => !groupe.hidden);
+            card.hidden = visibles.length === 0;
+
+            const compteur = card.querySelector(".home-calendar-toggle-meta");
+            if (compteur) compteur.textContent = `${visibles.length} groupe${visibles.length > 1 ? "s" : ""}`;
+
+            if (!card.hidden && !card.classList.contains("collapsed"))
+            {
+                window.setTimeout(() => {
+                    visibles.forEach((groupe) => {
+                        const calendar = calendars.find((item) =>
+                            Number(item.evenementPlanning?.id) === Number(groupe.dataset.groupeId)
+                        );
+                        calendar?.updateSize();
+                    });
+                }, 20);
+            }
         });
     }
 
@@ -149,18 +167,18 @@ document.addEventListener("DOMContentLoaded", () =>
     function creerCalendrierEvenement(centre, evenement, liste, calendriersCentre)
     {
         const eventCard = document.createElement("article");
-        eventCard.classList.add("home-event-calendar-card");
+        eventCard.classList.add("home-event-calendar-card", "calendar-group-card");
         eventCard.dataset.groupeId = evenement.id;
 
         const header = document.createElement("header");
-        header.classList.add("home-event-calendar-header");
+        header.classList.add("home-event-calendar-header", "calendar-group-header");
         header.innerHTML = `
-            <h3>${escapeHtml(evenement.nom)}</h3>
-            <span>Objectif ${escapeHtml(evenement.effectif_cible)}</span>
+            <h3 class="calendar-group-name">${escapeHtml(evenement.nom)}</h3>
+            <span class="calendar-group-meta">Objectif ${escapeHtml(evenement.effectif_cible)}</span>
         `;
 
         const calendarEl = document.createElement("div");
-        calendarEl.classList.add("home-calendar");
+        calendarEl.classList.add("home-calendar", "shared-calendar");
 
         eventCard.appendChild(header);
         eventCard.appendChild(calendarEl);
@@ -224,16 +242,16 @@ document.addEventListener("DOMContentLoaded", () =>
             centresAvecEvenements.forEach((centre) =>
             {
                 const card = document.createElement("article");
-                card.classList.add("home-calendar-card");
+                card.classList.add("home-calendar-card", "calendar-site-card");
                 card.style.setProperty("--centre-color", centre.couleur || "#1f6f54");
 
                 const toggle = document.createElement("button");
                 toggle.type = "button";
-                toggle.classList.add("home-calendar-toggle");
+                toggle.classList.add("home-calendar-toggle", "calendar-site-header");
                 toggle.setAttribute("aria-expanded", "true");
                 toggle.innerHTML = `
-                    <span class="home-calendar-toggle-title">${escapeHtml(centre.nom)}</span>
-                    <span class="home-calendar-toggle-meta">
+                    <span class="home-calendar-toggle-title calendar-site-name">${escapeHtml(centre.nom)}</span>
+                    <span class="home-calendar-toggle-meta calendar-site-count">
                         ${centre.evenements.length} groupe${centre.evenements.length > 1 ? "s" : ""}
                     </span>
                     <span class="home-calendar-toggle-icon" aria-hidden="true">⌄</span>
@@ -246,7 +264,7 @@ document.addEventListener("DOMContentLoaded", () =>
                 collapseInner.classList.add("home-calendar-collapse-inner");
 
                 const listeEvenements = document.createElement("div");
-                listeEvenements.classList.add("home-event-calendars");
+                listeEvenements.classList.add("home-event-calendars", "calendar-group-list");
                 collapseInner.appendChild(listeEvenements);
                 collapse.appendChild(collapseInner);
                 card.appendChild(toggle);

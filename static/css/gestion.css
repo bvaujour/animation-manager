@@ -1333,3 +1333,53 @@
 .gestion-page-compact {
     padding-top: 14px;
 }
+
+/* Périodes rangées par année scolaire : blocs compacts et dépliables. */
+.group-periods,
+.period-library {
+    display: grid;
+    gap: 7px;
+}
+
+.group-period-year .period-year-content {
+    padding: 6px;
+}
+
+.group-period-year .group-period-grid {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 5px;
+}
+
+.group-period-option {
+    min-height: 45px;
+    padding: 6px 8px;
+}
+
+.period-library-year-content {
+    gap: 8px;
+}
+
+.period-library .period-saved-row {
+    padding: 7px 9px;
+}
+
+.period-library .period-saved-date {
+    gap: 1px;
+}
+
+.period-library .period-saved-date strong {
+    font-size: .82rem;
+}
+
+.period-library .period-saved-date span {
+    font-size: .72rem;
+}
+
+.period-library-head {
+    margin-top: 18px;
+}
+
+.periods-intro,
+.period-library-head {
+    gap: 10px;
+}

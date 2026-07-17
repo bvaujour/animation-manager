@@ -1,0 +1,270 @@
+/* ========================================================================== 
+   Calendriers partagés — Accueil et Planning
+   --------------------------------------------------------------------------
+   Les deux pages utilisent désormais les mêmes cartes de lieu, les mêmes
+   cartes de groupe et les mêmes réglages FullCalendar. Seule la disposition
+   générale diffère : l'Accueil peut utiliser plusieurs colonnes, tandis que
+   le Planning empile les lieux à droite de la liste des salariés.
+   ========================================================================== */
+
+.calendar-sites {
+    min-width: 0;
+    gap: 8px;
+}
+
+.calendar-site-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 30%, var(--color-border));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 4%, var(--color-surface));
+    box-shadow: var(--shadow-sm);
+}
+
+.calendar-site-card[hidden],
+.calendar-group-card[hidden] {
+    display: none !important;
+}
+
+.calendar-site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 9px;
+    width: 100%;
+    min-height: 40px;
+    padding: 6px 8px;
+    border: 0;
+    border-left: 5px solid var(--centre-color, var(--color-primary));
+    border-radius: 0;
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 14%, white);
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+}
+
+button.calendar-site-header {
+    cursor: pointer;
+}
+
+.calendar-site-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.calendar-site-identity {
+    min-width: 0;
+}
+
+.calendar-site-code {
+    display: block;
+    color: var(--color-text-muted);
+    font-size: .62rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.calendar-site-name {
+    display: block;
+    margin: 1px 0 0;
+    overflow: hidden;
+    color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 76%, black);
+    font-size: .94rem;
+    font-weight: 800;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendar-site-actions,
+.calendar-site-meta {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.calendar-site-count {
+    padding: 3px 7px;
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 34%, var(--color-border));
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: .68rem;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.calendar-group-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 6px;
+}
+
+.calendar-group-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 22%, var(--color-border));
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+}
+
+.calendar-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 32px;
+    padding: 4px 7px;
+    border-bottom: 2px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 52%, var(--color-border));
+    background: var(--color-surface-sunken);
+}
+
+.calendar-group-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.calendar-group-name {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--color-text);
+    font-size: .8rem;
+    font-weight: 800;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendar-group-meta {
+    flex: 0 0 auto;
+    color: var(--color-text-muted);
+    font-size: .65rem;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.shared-calendar {
+    min-width: 0;
+    padding: 0 5px 5px;
+}
+
+.shared-calendar .fc {
+    font-size: .68rem;
+}
+
+.shared-calendar .fc-scrollgrid,
+.shared-calendar .fc-theme-standard td,
+.shared-calendar .fc-theme-standard th {
+    border-color: rgba(30, 42, 34, .16);
+}
+
+.shared-calendar .fc-col-header-cell-cushion,
+.shared-calendar .fc-daygrid-day-number {
+    padding: 1px 2px;
+    font-size: .64rem;
+}
+
+.shared-calendar .fc-daygrid-day-frame {
+    min-height: 58px;
+    padding-bottom: 2px;
+}
+
+.shared-calendar .fc-daygrid-day-events {
+    margin-top: 0;
+}
+
+.shared-calendar .fc-daygrid-event-harness {
+    margin-top: 1px;
+}
+
+.shared-calendar .fc-event {
+    margin: 0 1px;
+    padding: 0 2px;
+    border-radius: 4px;
+    font-size: .62rem;
+    line-height: 1.25;
+    white-space: normal;
+}
+
+.shared-calendar .fc-event-title {
+    overflow: visible;
+    white-space: normal;
+}
+
+/* L'Accueil conserve une grille fluide ; les cartes ont cependant exactement
+   la même présentation que dans le Planning. */
+.home-calendars.calendar-sites {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr));
+}
+
+/* Dans le Planning, les lieux sont toujours les uns sous les autres, dans la
+   colonne située à droite de la liste des salariés. */
+body.page-planning #calendars-container.calendar-sites {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 7px !important;
+    padding: 0 2px 6px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+body.page-planning .calendar-site-card {
+    width: 100%;
+    flex: 0 0 auto;
+}
+
+body.page-planning .calendar-group-card {
+    padding: 0 !important;
+}
+
+body.page-planning .calendar-group-card .calendar {
+    padding: 0 5px 5px;
+}
+
+/* L'ancienne structure de l'Accueil utilise une zone animée pour replier le
+   lieu. On garde cette animation tout en partageant les cartes. */
+.home-calendar-collapse-inner {
+    padding: 0;
+}
+
+@media (max-width: 760px) {
+    .calendar-site-header {
+        min-height: 38px;
+        padding: 5px 7px;
+    }
+
+    .calendar-group-list {
+        padding: 5px;
+    }
+
+    .calendar-group-card {
+        min-width: 720px;
+    }
+
+    .shared-calendar .fc-daygrid-day-frame {
+        min-height: 54px;
+    }
+
+    .home-calendars.calendar-sites {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        overflow-x: auto;
+    }
+
+    .home-calendars .calendar-site-card {
+        min-width: 740px;
+    }
+}

@@ -253,29 +253,43 @@ function bouton(label, classes, onClick)
 			const selectionnees = new Set(
 				groupe ? (groupe.periode_ids || []).map(Number) : periodesScolaires.map((periode) => Number(periode.id))
 			);
-			const ensembles = new Map();
-			let groupesPeriode;
-			periodesScolaires.forEach((periode) => {
-				const cle = `${periode.annee_scolaire} — Zone ${periode.zone}`;
-				if (!ensembles.has(cle)) ensembles.set(cle, []);
-				groupesPeriode = ensembles.get(cle);
-				groupesPeriode.push(periode);
-			});
+			const anneeOuverte = anneePeriodesADeplier(periodesScolaires);
 
-			return [...ensembles.entries()].map(([titre, periodes]) => `
-				<fieldset class="group-period-fieldset">
-					<legend>${escapeHtml(titre)}</legend>
-					<div class="group-period-grid">
-						${periodes.map((periode) => {
-							const id = `${uid}-periode-${periode.id}`;
-							return `<label class="group-period-option" for="${id}">
-								<input type="checkbox" id="${id}" name="${uid}_periode_${periode.id}" class="${prefix}-periode" value="${periode.id}" ${selectionnees.has(Number(periode.id)) ? "checked" : ""}>
-								<span><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><small>${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}</small></span>
-							</label>`;
-						}).join("")}
-					</div>
-				</fieldset>
-			`).join("");
+			return grouperPeriodesParAnnee(periodesScolaires).map(({ annee, periodes }) =>
+			{
+				const zones = new Map();
+				periodes.forEach((periode) =>
+				{
+					const zone = String(periode.zone || "Sans zone");
+					if (!zones.has(zone)) zones.set(zone, []);
+					zones.get(zone).push(periode);
+				});
+				const nbSelectionnees = periodes.filter((periode) => selectionnees.has(Number(periode.id))).length;
+
+				return `
+					<details class="period-year-accordion group-period-year" data-period-year="${escapeHtml(annee)}" ${annee === anneeOuverte ? "open" : ""}>
+						<summary>
+							<span class="period-year-summary"><strong>${escapeHtml(annee)}</strong><small class="group-period-year-count">${nbSelectionnees}/${periodes.length} sélectionnée${nbSelectionnees > 1 ? "s" : ""}</small></span>
+							<span class="period-year-chevron" aria-hidden="true">⌄</span>
+						</summary>
+						<div class="period-year-content">
+							${[...zones.entries()].map(([zone, elements]) => `
+								<section class="period-zone-block">
+									<p class="period-zone-title">Zone ${escapeHtml(zone)}</p>
+									<div class="group-period-grid period-year-list">
+										${elements.map((periode) => {
+											const id = `${uid}-periode-${periode.id}`;
+											return `<label class="group-period-option" for="${id}">
+												<input type="checkbox" id="${id}" name="${uid}_periode_${periode.id}" class="${prefix}-periode" value="${periode.id}" ${selectionnees.has(Number(periode.id)) ? "checked" : ""}>
+												<span><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><small>${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}</small></span>
+											</label>`;
+										}).join("")}
+									</div>
+								</section>
+							`).join("")}
+						</div>
+					</details>`;
+			}).join("");
 		}
 
 		function evenementFormHtml(prefix, groupe = null)
@@ -330,12 +344,29 @@ function bouton(label, classes, onClick)
 
 		function initialiserFormGroupe(root, prefix)
 		{
+			function actualiserCompteursAnnees()
+			{
+				root.querySelectorAll(".group-period-year").forEach((details) =>
+				{
+					const cases = [...details.querySelectorAll(`.${prefix}-periode`)];
+					const nb = cases.filter((input) => input.checked).length;
+					const compteur = details.querySelector(".group-period-year-count");
+					if (compteur) compteur.textContent = `${nb}/${cases.length} sélectionnée${nb > 1 ? "s" : ""}`;
+				});
+			}
+
 			root.querySelector(`.${prefix}-periods-all`)?.addEventListener("click", () => {
 				root.querySelectorAll(`.${prefix}-periode`).forEach((input) => { input.checked = true; });
+				actualiserCompteursAnnees();
 			});
 			root.querySelector(`.${prefix}-periods-none`)?.addEventListener("click", () => {
 				root.querySelectorAll(`.${prefix}-periode`).forEach((input) => { input.checked = false; });
+				actualiserCompteursAnnees();
 			});
+			root.querySelectorAll(`.${prefix}-periode`).forEach((input) =>
+				input.addEventListener("change", actualiserCompteursAnnees)
+			);
+			actualiserCompteursAnnees();
 		}
 
 		function lireEvenementForm(root, prefix)
@@ -728,7 +759,7 @@ function bouton(label, classes, onClick)
 			<div class="period-library-head">
 				<div>
 					<p class="section-title">Périodes enregistrées</p>
-					<p class="section-help">Cette bibliothèque n'est encore reliée à aucune autre fonctionnalité.</p>
+					<p class="section-help">Ces périodes alimentent les groupes, les disponibilités et le récapitulatif.</p>
 				</div>
 				<div class="field period-library-filter">
 					<label for="period-library-year">Afficher</label>
@@ -866,49 +897,64 @@ function bouton(label, classes, onClick)
 				return;
 			}
 
-			const groupes = new Map();
-			visibles.forEach((periode) =>
+			const anneeOuverte = anneeFiltre || anneePeriodesADeplier(visibles);
+			grouperPeriodesParAnnee(visibles).forEach(({ annee, periodes }) =>
 			{
-				const cle = `${periode.annee_scolaire}|${periode.zone}`;
-				if (!groupes.has(cle)) groupes.set(cle, []);
-				groupes.get(cle).push(periode);
-			});
-
-			groupes.forEach((periodes, cle) =>
-			{
-				const [annee, zone] = cle.split("|");
-				const section = document.createElement("section");
-				section.className = "period-year-card";
-				section.innerHTML = `
-					<div class="period-year-head">
-						<div><h3>${escapeHtml(annee)}</h3><p>Zone ${escapeHtml(zone)} · ${periodes.length} période${periodes.length > 1 ? "s" : ""}</p></div>
-					</div>
-					<div class="period-saved-list"></div>
-				`;
-				const list = section.querySelector(".period-saved-list");
+				const zones = new Map();
 				periodes.forEach((periode) =>
 				{
-					const row = document.createElement("div");
-					row.className = "period-saved-row";
-					row.innerHTML = `
-						<div class="period-saved-date"><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><span>${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}</span></div>
-						<div class="entity-actions"></div>
+					const zone = String(periode.zone || "Sans zone");
+					if (!zones.has(zone)) zones.set(zone, []);
+					zones.get(zone).push(periode);
+				});
+
+				const section = document.createElement("details");
+				section.className = "period-year-card period-year-accordion";
+				section.open = annee === anneeOuverte;
+				section.innerHTML = `
+					<summary>
+						<span class="period-year-summary"><strong>${escapeHtml(annee)}</strong><small>${periodes.length} période${periodes.length > 1 ? "s" : ""} · ${zones.size} zone${zones.size > 1 ? "s" : ""}</small></span>
+						<span class="period-year-chevron" aria-hidden="true">⌄</span>
+					</summary>
+					<div class="period-year-content period-library-year-content"></div>
+				`;
+				const content = section.querySelector(".period-library-year-content");
+
+				[...zones.entries()].forEach(([zone, elements]) =>
+				{
+					const zoneSection = document.createElement("section");
+					zoneSection.className = "period-zone-block";
+					zoneSection.innerHTML = `
+						<p class="period-zone-title">Zone ${escapeHtml(zone)}</p>
+						<div class="period-saved-list"></div>
 					`;
-					row.querySelector(".entity-actions").appendChild(bouton("Supprimer", "btn btn-danger-ghost", async () =>
+					const list = zoneSection.querySelector(".period-saved-list");
+
+					elements.forEach((periode) =>
 					{
-						if (!confirm(`Supprimer la période « ${libellePeriodeAvecAnnee(periode)} » ?`)) return;
-						try
+						const row = document.createElement("div");
+						row.className = "period-saved-row";
+						row.innerHTML = `
+							<div class="period-saved-date"><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><span>${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}</span></div>
+							<div class="entity-actions"></div>
+						`;
+						row.querySelector(".entity-actions").appendChild(bouton("Supprimer", "btn btn-danger-ghost", async () =>
 						{
-							await apiFetch(`/api/periodes-scolaires/${periode.id}/`, { method: "DELETE" });
-							afficherToast("Période supprimée.");
-							await chargerBibliotheque();
-						}
-						catch (err)
-						{
-							afficherToast(erreurMessage(err, "Suppression impossible."), true);
-						}
-					}));
-					list.appendChild(row);
+							if (!confirm(`Supprimer la période « ${libellePeriodeAvecAnnee(periode)} » ?`)) return;
+							try
+							{
+								await apiFetch(`/api/periodes-scolaires/${periode.id}/`, { method: "DELETE" });
+								afficherToast("Période supprimée.");
+								await chargerBibliotheque();
+							}
+							catch (err)
+							{
+								afficherToast(erreurMessage(err, "Suppression impossible."), true);
+							}
+						}));
+						list.appendChild(row);
+					});
+					content.appendChild(zoneSection);
 				});
 				library.appendChild(section);
 			});

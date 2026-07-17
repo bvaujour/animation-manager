@@ -4,12 +4,13 @@
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
 <link rel="stylesheet" href="{% static 'css/style.css' %}">
+<link rel="stylesheet" href="{% static 'css/calendars.css' %}">
 {% endblock %}
 {% block content %}
 <main class="home-page">
     <section class="home-section home-planning-section">
         {% include "partials/_week_navigation.html" with container_id="home-period-nav" previous_id="home-prev-week" today_id="home-current-week" next_id="home-next-week" label_id="home-visible-period" %}
-        <div id="home-calendars" class="home-calendars"></div>
+        <div id="home-calendars" class="home-calendars calendar-sites"></div>
     </section>
     <section class="home-section">
         <div class="section-heading">

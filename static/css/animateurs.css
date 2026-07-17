@@ -409,3 +409,29 @@
     padding: 2px;
     cursor: pointer;
 }
+
+/* Disponibilités : une seule année dépliée à la fois par défaut, puis les
+   périodes de cette année restent elles-mêmes repliables. */
+.dispo-annee-content {
+    gap: 6px;
+}
+
+.dispo-annee .dispo-periode {
+    border-radius: 9px;
+}
+
+.dispo-annee .dispo-periode summary {
+    min-height: 38px;
+    padding: 7px 9px;
+}
+
+.dispo-annee .dispo-jours {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 5px;
+    padding: 0 8px 8px;
+}
+
+.dispo-annee .dispo-jour {
+    min-height: 35px;
+    padding: 6px 7px;
+}

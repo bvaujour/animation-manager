@@ -644,14 +644,35 @@ function libelleDate(dateStr)
 		if (!info) return;
 		const debut = formatDateLocal(info.start);
 		const fin = formatDateLocal(info.end);
+
 		document.querySelectorAll(".evenement-calendar-card").forEach((card) => {
 			const groupe = centresPlanning.flatMap((centre) => centre.evenements || [])
 				.find((item) => Number(item.id) === Number(card.dataset.evenementId));
 			card.hidden = !groupe || !groupeChevauchePlage(groupe, debut, fin);
 		});
+
 		document.querySelectorAll(".centre-planning-group").forEach((bloc) => {
 			const cartes = Array.from(bloc.querySelectorAll(".evenement-calendar-card"));
-			bloc.hidden = cartes.length === 0 || cartes.every((card) => card.hidden);
+			const visibles = cartes.filter((card) => !card.hidden);
+			bloc.hidden = visibles.length === 0;
+
+			const compteur = bloc.querySelector(".centre-evenements-count");
+			if (compteur)
+			{
+				compteur.textContent = `${visibles.length} groupe${visibles.length > 1 ? "s" : ""}`;
+			}
+
+			if (!bloc.hidden && !bloc.classList.contains("collapsed"))
+			{
+				window.setTimeout(() => {
+					visibles.forEach((card) => {
+						const calendar = calendars.find((item) =>
+							Number(item.evenementPlanning?.id) === Number(card.dataset.evenementId)
+						);
+						calendar?.updateSize();
+					});
+				}, 20);
+			}
 		});
 	}
 
@@ -820,26 +841,26 @@ function libelleDate(dateStr)
 		if (!evenements.length) return;
 
 		const groupe = document.createElement("section");
-		groupe.classList.add("centre-planning-group");
+		groupe.classList.add("centre-planning-group", "calendar-site-card");
 		groupe.dataset.centreId = centre.id;
 		groupe.style.setProperty("--centre-color", centre.couleur);
 		groupe.innerHTML = `
-			<header class="centre-planning-header">
-				<div class="centre-planning-title">
+			<header class="centre-planning-header calendar-site-header">
+				<div class="centre-planning-title calendar-site-title">
 					<span class="planning-drag-handle centre-drag-handle" draggable="true" role="button" tabindex="0" aria-label="Déplacer le planning du centre ${escapeHtml(centre.nom)}" title="Glisser pour déplacer ce centre">⠿</span>
 					<div>
-						<span class="centre-planning-code">${escapeHtml(centre.code || "")}</span>
-						<h2>${escapeHtml(centre.nom)}</h2>
+						<span class="centre-planning-code calendar-site-code">${escapeHtml(centre.code || "")}</span>
+						<h2 class="calendar-site-name">${escapeHtml(centre.nom)}</h2>
 					</div>
 				</div>
-				<div class="centre-planning-actions">
-					<span class="centre-evenements-count">${evenements.length} groupe${evenements.length > 1 ? "s" : ""}</span>
+				<div class="centre-planning-actions calendar-site-actions">
+					<span class="centre-evenements-count calendar-site-count">${evenements.length} groupe${evenements.length > 1 ? "s" : ""}</span>
 					<button class="centre-collapse-toggle" type="button" aria-expanded="true" aria-label="Replier ce lieu" title="Replier ou déplier ce lieu">
 						<span aria-hidden="true">⌄</span>
 					</button>
 				</div>
 			</header>
-			<div class="evenement-calendars"></div>`;
+			<div class="evenement-calendars calendar-group-list"></div>`;
 
 		calendarsContainer.appendChild(groupe);
 		attacherSurvolCentre(groupe, centre.id);
@@ -856,25 +877,25 @@ function libelleDate(dateStr)
 		evenements.forEach((evenement) =>
 		{
 			const card = document.createElement("article");
-			card.classList.add("calendar-card", "evenement-calendar-card");
+			card.classList.add("calendar-card", "evenement-calendar-card", "calendar-group-card");
 			card.dataset.centreId = centre.id;
 			card.dataset.evenementId = evenement.id;
 			card.style.setProperty("--centre-color", centre.couleur);
 
 			card.innerHTML = `
-				<header class="evenement-calendar-header">
-					<div class="evenement-calendar-title">
+				<header class="evenement-calendar-header calendar-group-header">
+					<div class="evenement-calendar-title calendar-group-title">
 						<span class="planning-drag-handle evenement-drag-handle" draggable="true" role="button" tabindex="0" aria-label="Déplacer le planning ${escapeHtml(evenement.nom)}" title="Glisser pour déplacer ce groupe">⠿</span>
 						<div>
-							<h3>${escapeHtml(evenement.nom)}</h3>
+							<h3 class="calendar-group-name">${escapeHtml(evenement.nom)}</h3>
 						</div>
 					</div>
-					<div class="evenement-calendar-meta">
+					<div class="evenement-calendar-meta calendar-group-meta">
 						<span>Objectif ${escapeHtml(evenement.effectif_cible)}</span>
 						
 					</div>
 				</header>
-				<div class="calendar"></div>`;
+				<div class="calendar shared-calendar"></div>`;
 
 			zoneEvenements.appendChild(card);
 			installerTriEvenement(card, centre, evenement, zoneEvenements);

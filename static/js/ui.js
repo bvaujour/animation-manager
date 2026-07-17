@@ -254,3 +254,36 @@ function initNavigationLaterale() {
 
 document.addEventListener("DOMContentLoaded", initNavigationLaterale);
 
+
+// --- Classement commun des périodes par année scolaire ---
+// Toutes les interfaces qui affichent plusieurs années (groupes,
+// disponibilités, récapitulatif, bibliothèque) utilisent ces helpers afin de
+// garder le même ordre et d'ouvrir la même année par défaut.
+function anneeScolaireCourante(date = new Date()) {
+    const anneeDebut = date.getMonth() >= 6 ? date.getFullYear() : date.getFullYear() - 1;
+    return `${anneeDebut}-${anneeDebut + 1}`;
+}
+
+function grouperPeriodesParAnnee(periodes) {
+    const groupes = new Map();
+    (periodes || []).forEach((periode) => {
+        const annee = String(periode.annee_scolaire || String(periode.debut || "").slice(0, 4) || "Sans année");
+        if (!groupes.has(annee)) groupes.set(annee, []);
+        groupes.get(annee).push(periode);
+    });
+
+    return [...groupes.entries()]
+        .sort(([anneeA], [anneeB]) => anneeB.localeCompare(anneeA, "fr"))
+        .map(([annee, elements]) => ({
+            annee,
+            periodes: [...elements].sort((a, b) => String(a.debut || "").localeCompare(String(b.debut || ""))),
+        }));
+}
+
+function anneePeriodesADeplier(periodes) {
+    const groupes = grouperPeriodesParAnnee(periodes);
+    const courante = anneeScolaireCourante();
+    return groupes.some((groupe) => groupe.annee === courante)
+        ? courante
+        : (groupes[0]?.annee || "");
+}

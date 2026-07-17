@@ -24,6 +24,7 @@ document.addEventListener("DOMContentLoaded", () =>
 
     let periodes = [];
     const periodeIdsSelectionnees = new Set();
+    const anneesPeriodesOuvertes = new Set();
 
     function formatDateFr(dateStr)
     {
@@ -56,28 +57,60 @@ document.addEventListener("DOMContentLoaded", () =>
 
     function rendreOptionsPeriodes()
     {
-        const groupes = new Map();
-        periodes.forEach((periode) =>
+        if (!anneesPeriodesOuvertes.size)
         {
-            const cle = `${periode.annee_scolaire} · Zone ${periode.zone}`;
-            if (!groupes.has(cle)) groupes.set(cle, []);
-            groupes.get(cle).push(periode);
-        });
+            const premiereSelectionnee = periodes.find((periode) => periodeIdsSelectionnees.has(periode.id));
+            anneesPeriodesOuvertes.add(premiereSelectionnee?.annee_scolaire || anneePeriodesADeplier(periodes));
+        }
 
-        selectOptions.innerHTML = [...groupes.entries()].map(([titre, elements]) => `
-            <section class="periode-option-group">
-                <h3>${escapeHtml(titre)}</h3>
-                ${elements.map((periode) => `
-                    <label class="periode-option">
-                        <input type="checkbox" value="${periode.id}" ${periodeIdsSelectionnees.has(periode.id) ? "checked" : ""}>
-                        <span>
-                            <strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong>
-                            <small>${escapeHtml(formatDateFr(periode.debut))} au ${escapeHtml(formatDateFr(periode.fin))}</small>
-                        </span>
-                    </label>
-                `).join("")}
-            </section>
-        `).join("");
+        selectOptions.innerHTML = grouperPeriodesParAnnee(periodes).map(({ annee, periodes: elements }) =>
+        {
+            const zones = new Map();
+            elements.forEach((periode) =>
+            {
+                const zone = String(periode.zone || "Sans zone");
+                if (!zones.has(zone)) zones.set(zone, []);
+                zones.get(zone).push(periode);
+            });
+            const nbSelectionnees = elements.filter((periode) => periodeIdsSelectionnees.has(periode.id)).length;
+
+            return `
+                <details class="periode-option-group period-year-accordion" data-period-year="${escapeHtml(annee)}" ${anneesPeriodesOuvertes.has(annee) ? "open" : ""}>
+                    <summary>
+                        <span class="period-year-summary"><strong>${escapeHtml(annee)}</strong><small>${nbSelectionnees}/${elements.length} sélectionnée${nbSelectionnees > 1 ? "s" : ""}</small></span>
+                        <span class="period-year-chevron" aria-hidden="true">⌄</span>
+                    </summary>
+                    <div class="period-year-content">
+                        ${[...zones.entries()].map(([zone, periodesZone]) => `
+                            <section class="period-zone-block">
+                                <p class="period-zone-title">Zone ${escapeHtml(zone)}</p>
+                                <div class="period-year-list">
+                                    ${periodesZone.map((periode) => `
+                                        <label class="periode-option">
+                                            <input type="checkbox" value="${periode.id}" ${periodeIdsSelectionnees.has(periode.id) ? "checked" : ""}>
+                                            <span>
+                                                <strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong>
+                                                <small>${escapeHtml(formatDateFr(periode.debut))} au ${escapeHtml(formatDateFr(periode.fin))}</small>
+                                            </span>
+                                        </label>
+                                    `).join("")}
+                                </div>
+                            </section>
+                        `).join("")}
+                    </div>
+                </details>
+            `;
+        }).join("");
+
+        selectOptions.querySelectorAll(".periode-option-group").forEach((details) =>
+        {
+            details.addEventListener("toggle", () =>
+            {
+                const annee = details.dataset.periodYear;
+                if (details.open) anneesPeriodesOuvertes.add(annee);
+                else anneesPeriodesOuvertes.delete(annee);
+            });
+        });
 
         selectOptions.querySelectorAll('input[type="checkbox"]').forEach((checkbox) =>
         {
@@ -87,6 +120,15 @@ document.addEventListener("DOMContentLoaded", () =>
                 if (checkbox.checked) periodeIdsSelectionnees.add(id);
                 else periodeIdsSelectionnees.delete(id);
                 mettreAJourLibelleSelection();
+
+                const details = checkbox.closest(".periode-option-group");
+                const compteur = details?.querySelector(".period-year-summary small");
+                if (details && compteur)
+                {
+                    const cases = [...details.querySelectorAll('input[type="checkbox"]')];
+                    const nb = cases.filter((input) => input.checked).length;
+                    compteur.textContent = `${nb}/${cases.length} sélectionnée${nb > 1 ? "s" : ""}`;
+                }
             });
         });
     }

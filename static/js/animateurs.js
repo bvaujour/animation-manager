@@ -305,49 +305,75 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        periodes.forEach((periode) => {
-            const bloc = document.createElement("details");
-            bloc.className = "dispo-periode";
-            if (periode.selectionnee) bloc.open = true;
-            const checkedCount = periode.jours.filter((jour) => jour.disponible).length;
-            bloc.innerHTML = `
+        const anneeOuverte = anneePeriodesADeplier(periodes);
+        grouperPeriodesParAnnee(periodes).forEach(({ annee, periodes: periodesAnnee }) => {
+            const anneeBloc = document.createElement("details");
+            anneeBloc.className = "dispo-annee period-year-accordion";
+            anneeBloc.open = annee === anneeOuverte;
+            anneeBloc.innerHTML = `
                 <summary>
-                    <label class="dispo-periode-check" onclick="event.stopPropagation()">
-                        <input type="checkbox" class="dispo-periode-toggle" ${periode.selectionnee ? "checked" : ""}>
-                        <span><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><small>${escapeHtml(periode.annee_scolaire)} · ${checkedCount}/${periode.jours.length} jours</small></span>
-                    </label>
-                    <span class="dispo-chevron">⌄</span>
+                    <span class="period-year-summary"><strong>${escapeHtml(annee)}</strong><small class="dispo-annee-count"></small></span>
+                    <span class="period-year-chevron" aria-hidden="true">⌄</span>
                 </summary>
-                <div class="dispo-jours">
-                    ${periode.jours.map((jour) => `
-                        <label class="dispo-jour">
-                            <input type="checkbox" value="${escapeHtml(jour.date)}" ${jour.disponible ? "checked" : ""}>
-                            <span>${escapeHtml(formaterJour(jour.date))}</span>
-                        </label>`).join("")}
-                </div>`;
+                <div class="period-year-content dispo-annee-content"></div>`;
 
-            const periodeToggle = bloc.querySelector(".dispo-periode-toggle");
-            const jours = [...bloc.querySelectorAll('.dispo-jour input[type="checkbox"]')];
-            const actualiser = () => {
-                const nb = jours.filter((input) => input.checked).length;
-                periodeToggle.checked = nb > 0;
-                periodeToggle.indeterminate = nb > 0 && nb < jours.length;
-                bloc.querySelector("small").textContent = `${periode.annee_scolaire} · ${nb}/${jours.length} jours`;
-            };
-            periodeToggle.addEventListener("change", async () => {
-                jours.forEach((input) => { input.checked = periodeToggle.checked; });
-                bloc.open = periodeToggle.checked;
+            const content = anneeBloc.querySelector(".dispo-annee-content");
+            const compteurAnnee = anneeBloc.querySelector(".dispo-annee-count");
+
+            function actualiserAnnee() {
+                const jours = [...anneeBloc.querySelectorAll('.dispo-jour input[type="checkbox"]')];
+                const joursCoches = jours.filter((input) => input.checked).length;
+                const periodesActives = [...anneeBloc.querySelectorAll(".dispo-periode-toggle")].filter((input) => input.checked).length;
+                compteurAnnee.textContent = `${periodesActives}/${periodesAnnee.length} période${periodesAnnee.length > 1 ? "s" : ""} · ${joursCoches}/${jours.length} jours`;
+            }
+
+            periodesAnnee.forEach((periode) => {
+                const bloc = document.createElement("details");
+                bloc.className = "dispo-periode";
+                const checkedCount = periode.jours.filter((jour) => jour.disponible).length;
+                bloc.innerHTML = `
+                    <summary>
+                        <label class="dispo-periode-check" onclick="event.stopPropagation()">
+                            <input type="checkbox" class="dispo-periode-toggle" ${periode.selectionnee ? "checked" : ""}>
+                            <span><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><small>${checkedCount}/${periode.jours.length} jours</small></span>
+                        </label>
+                        <span class="dispo-chevron">⌄</span>
+                    </summary>
+                    <div class="dispo-jours">
+                        ${periode.jours.map((jour) => `
+                            <label class="dispo-jour">
+                                <input type="checkbox" value="${escapeHtml(jour.date)}" ${jour.disponible ? "checked" : ""}>
+                                <span>${escapeHtml(formaterJour(jour.date))}</span>
+                            </label>`).join("")}
+                    </div>`;
+
+                const periodeToggle = bloc.querySelector(".dispo-periode-toggle");
+                const jours = [...bloc.querySelectorAll('.dispo-jour input[type="checkbox"]')];
+                const actualiser = () => {
+                    const nb = jours.filter((input) => input.checked).length;
+                    periodeToggle.checked = nb > 0;
+                    periodeToggle.indeterminate = nb > 0 && nb < jours.length;
+                    bloc.querySelector("small").textContent = `${nb}/${jours.length} jours`;
+                    actualiserAnnee();
+                };
+                periodeToggle.addEventListener("change", async () => {
+                    jours.forEach((input) => { input.checked = periodeToggle.checked; });
+                    bloc.open = periodeToggle.checked;
+                    actualiser();
+                    try { await enregistrerDisponibilites(animateurId, target); }
+                    catch (err) { setStatus(erreurMessage(err, "Enregistrement impossible."), true); }
+                });
+                jours.forEach((input) => input.addEventListener("change", async () => {
+                    actualiser();
+                    try { await enregistrerDisponibilites(animateurId, target); }
+                    catch (err) { setStatus(erreurMessage(err, "Enregistrement impossible."), true); }
+                }));
+                content.appendChild(bloc);
                 actualiser();
-                try { await enregistrerDisponibilites(animateurId, target); }
-                catch (err) { setStatus(erreurMessage(err, "Enregistrement impossible."), true); }
             });
-            jours.forEach((input) => input.addEventListener("change", async () => {
-                actualiser();
-                try { await enregistrerDisponibilites(animateurId, target); }
-                catch (err) { setStatus(erreurMessage(err, "Enregistrement impossible."), true); }
-            }));
-            actualiser();
-            target.appendChild(bloc);
+
+            actualiserAnnee();
+            target.appendChild(anneeBloc);
         });
     }
 

@@ -655,3 +655,30 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Le sélecteur multi-périodes reste compact même après plusieurs années. */
+.periode-select-options {
+    display: grid;
+    gap: 5px;
+}
+
+.periode-option-group {
+    margin: 0;
+}
+
+.periode-option-group .period-year-content {
+    padding: 5px;
+}
+
+.periode-option-group .periode-option {
+    min-height: 42px;
+    padding: 6px 7px;
+}
+
+.periode-option-group .periode-option strong {
+    font-size: .8rem;
+}
+
+.periode-option-group .periode-option small {
+    font-size: .7rem;
+}
