@@ -8,7 +8,6 @@ from animateurs.models import (
     Affectation,
     Centre,
     Evenement,
-    EQUIPE_PRINCIPALE_NOM,
 )
 from .disponibilites import animateur_disponible
 
@@ -22,34 +21,17 @@ def _valider_ouverture_evenement(evenement, debut, fin):
     while jour <= dernier:
         if not evenement.est_ouvert_le(jour, dates_exclues):
             raise ValueError(
-                f"L’événement est fermé le {jour.strftime('%d/%m/%Y')}."
+                f"Le groupe est fermé le {jour.strftime('%d/%m/%Y')}."
             )
         jour += datetime.timedelta(days=1)
 
 
 def evenement_par_defaut_pour_centre(centre: Centre) -> Evenement:
-    """Renvoie l'événement utilisée par les écrans encore basés sur le centre.
-
-    À l'étape 1, le front ne choisit pas encore explicitement une événement. On
-    rattache donc les nouvelles affectations à la première événement active du
-    centre, normalement l'« Événement principale » créée par la migration.
-    """
-
-    evenement = (
-        centre.evenements.filter(active=True)
-        .order_by("ordre", "id")
-        .first()
-    )
-    if evenement is not None:
-        return evenement
-
-    return Evenement.objects.create(
-        centre=centre,
-        nom=EQUIPE_PRINCIPALE_NOM,
-        effectif_cible=max(1, centre.effectif_cible),
-        ordre=0,
-        active=True,
-    )
+    """Renvoie le premier groupe du lieu pour les anciens appels sans groupe explicite."""
+    groupe = centre.evenements.order_by("ordre", "id").first()
+    if groupe is None:
+        raise ValueError("Crée d’abord un groupe dans ce lieu.")
+    return groupe
 
 
 def evenements_se_chevauchent(evenement_a=None, evenement_b=None):
@@ -90,15 +72,13 @@ def valider_affectation(animateur, debut, fin, evenement=None, exclude_id=None):
 @transaction.atomic
 def creer_affectation(*, animateur, centre, debut, fin, evenement=None):
     evenement = evenement or evenement_par_defaut_pour_centre(centre)
-    if not evenement.active:
-        raise ValueError("Cet événement est inactif et ne peut pas recevoir de nouvelle affectation.")
     _valider_ouverture_evenement(evenement, debut, fin)
     erreur = valider_affectation(animateur, debut, fin, evenement=evenement)
     if erreur:
         raise ValueError(erreur)
 
     if evenement.centre_id != centre.id:
-        raise ValueError("L'événement sélectionnée n'appartient pas à ce centre.")
+        raise ValueError("Le groupe sélectionné n’appartient pas à ce lieu.")
 
     return Affectation.objects.create(
         animateur=animateur,
@@ -117,8 +97,6 @@ def modifier_affectation(affectation, *, debut=None, fin=None, centre=None, even
         affectation.fin = fin
 
     if evenement is not None:
-        if not evenement.active:
-            raise ValueError("Cette événement est inactive et ne peut pas recevoir d'affectation.")
         affectation.evenement = evenement
         affectation.centre = evenement.centre
     elif centre is not None:

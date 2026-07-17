@@ -2,11 +2,9 @@
 
 Le rendu reprend la structure du planning manuel :
 
-    Centre -> Evenement -> animateurs par date
+    Lieu -> Groupe -> animateurs par date
 
-Les événements actives sont toujours affichées. Une événement inactive reste visible
-si elle possède au moins une affectation sur la période exportée, afin de ne
-pas masquer l'historique.
+Seuls les groupes rattachés à au moins une période sont affichés, sauf si une affectation historique doit rester visible.
 """
 
 from __future__ import annotations
@@ -33,31 +31,27 @@ JOURS_FR = [
 
 
 def dates_visibles(debut: date, fin: date) -> list[date]:
-    """Retourne les dates incluses de la période, en masquant le dimanche."""
+    """Retourne toutes les dates incluses ; chaque groupe gère ses jours ouverts."""
     dates = []
     courant = debut
     while courant <= fin:
-        if courant.weekday() != 6:
-            dates.append(courant)
+        dates.append(courant)
         courant += timedelta(days=1)
     return dates
 
 
 def libelle_evenement(evenement: Evenement) -> str:
-    """Nom lisible de l'événement, complété par ses horaires éventuels."""
-    libelle = evenement.nom
-    if not evenement.active:
-        libelle += "\n(inactive)"
-    return libelle
+    """Nom lisible du groupe."""
+    return evenement.nom
 
 
 def _planning_matrix(debut: date, fin: date):
-    """Construit les lignes et les cellules communes aux exports.
+    """Construit les lignes et cellules communes aux exports.
 
-    La clé d'une cellule est désormais ``(evenement_id, date)`` et non plus
-    ``(centre_id, date)``. Cela évite de mélanger deux événements du même centre.
+    Seules les dates réellement ouvertes pour au moins un groupe sont
+    conservées. Une date portant une affectation historique reste toutefois
+    visible, même si le groupe n'a plus de période configurée.
     """
-    dates = dates_visibles(debut, fin)
     affectations = list(
         Affectation.objects.select_related("animateur", "centre", "evenement")
         .filter(debut__date__lte=fin, fin__date__gt=debut)
@@ -70,12 +64,35 @@ def _planning_matrix(debut: date, fin: date):
         )
     )
 
-    evenements_affectees = {affectation.evenement_id for affectation in affectations}
-    evenements = list(
+    groupes_affectes = {affectation.evenement_id for affectation in affectations}
+    groupes = list(
         Evenement.objects.select_related("centre")
-        .filter(Q(active=True) | Q(id__in=evenements_affectees))
+        .prefetch_related("periodes_scolaires", "dates_exclues")
+        .filter(Q(periodes_scolaires__isnull=False) | Q(id__in=groupes_affectes))
+        .distinct()
         .order_by("centre__nom", "centre_id", "ordre", "nom", "id")
     )
+
+    intervalles_affectes = []
+    for affectation in affectations:
+        intervalles_affectes.append((
+            timezone.localtime(affectation.debut).date(),
+            timezone.localtime(affectation.fin).date(),
+        ))
+
+    dates_exclues = {
+        groupe.id: set(groupe.dates_exclues.values_list("date", flat=True))
+        for groupe in groupes
+    }
+    dates = []
+    for jour in dates_visibles(debut, fin):
+        groupe_ouvert = any(
+            groupe.est_ouvert_le(jour, dates_exclues[groupe.id])
+            for groupe in groupes
+        )
+        affectation_historique = any(debut_aff <= jour < fin_aff for debut_aff, fin_aff in intervalles_affectes)
+        if groupe_ouvert or affectation_historique:
+            dates.append(jour)
 
     noms_par_case: dict[tuple[int, date], list[str]] = defaultdict(list)
     couleurs_par_case: dict[tuple[int, date], list[str]] = defaultdict(list)
@@ -93,7 +110,7 @@ def _planning_matrix(debut: date, fin: date):
                         affectation.animateur.couleur or "#1f6f54"
                     )
 
-    return dates, evenements, noms_par_case, couleurs_par_case
+    return dates, groupes, noms_par_case, couleurs_par_case
 
 
 def _groupes_centres(evenements: list[Evenement]):
@@ -164,7 +181,7 @@ def generer_planning_excel(debut: date, fin: date) -> bytes:
     sheet.set_row(0, 28)
 
     sheet.write(1, 0, "Centre", header)
-    sheet.write(1, 1, "Événement", header)
+    sheet.write(1, 1, "Groupe", header)
     for col, jour in enumerate(dates, start=2):
         sheet.write(1, col, f"{JOURS_FR[jour.weekday()]}\n{jour:%d/%m}", header)
 
@@ -204,7 +221,7 @@ def generer_planning_excel(debut: date, fin: date) -> bytes:
             "valign": "vcenter",
             "border": 1,
         })
-        sheet.merge_range(2, 0, 2, last_col, "Aucune événement à afficher", empty_format)
+        sheet.merge_range(2, 0, 2, last_col, "Aucun groupe à afficher", empty_format)
 
     sheet.set_column(0, 0, 22)
     sheet.set_column(1, 1, 24)
@@ -316,7 +333,7 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
             plage = f"{debut:%d/%m/%Y} - {fin:%d/%m/%Y}"
         story.append(Paragraph(f"Planning - {plage}", title_style))
 
-        data = [[Paragraph("Centre", header_style), Paragraph("Événement", header_style)]]
+        data = [[Paragraph("Centre", header_style), Paragraph("Groupe", header_style)]]
         for jour in jours_page:
             data[0].append(
                 Paragraph(f"{JOURS_FR[jour.weekday()]}<br/>{jour:%d/%m}", header_style)
@@ -327,8 +344,6 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
             row = [Paragraph(centre_texte, centre_style)]
 
             evenement_html = evenement.nom
-            if not evenement.active:
-                evenement_html += '<br/><font name="Helvetica-Oblique" size="7">inactive</font>'
             row.append(Paragraph(evenement_html, evenement_style))
 
             for jour in jours_page:
@@ -342,7 +357,7 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
 
         if not evenements:
             data.append([
-                Paragraph("Aucune événement à afficher", empty_style),
+                Paragraph("Aucun groupe à afficher", empty_style),
                 "",
                 *([""] * len(jours_page)),
             ])

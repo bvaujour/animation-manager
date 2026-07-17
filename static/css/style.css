@@ -490,7 +490,7 @@
     }
 }
 
-/* Accueil : un calendrier distinct par événement, regroupé sous son lieu. */
+/* Accueil : un calendrier distinct par groupe, regroupé sous son lieu. */
 .home-calendar-toggle-title {
     flex: 1 1 auto;
 }
@@ -580,5 +580,60 @@
 
     .home-event-calendar-card {
         padding: 4px;
+    }
+}
+
+
+/* Accueil : vue semaine unique et nom de la période visible au-dessus des calendriers. */
+.home-calendar-tools {
+    align-items: center;
+}
+
+.home-week-indicator {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-bottom: 10px;
+    padding: 9px 12px;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+    text-align: center;
+}
+
+.home-week-indicator .week-indicator-kicker {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+#home-visible-period {
+    color: var(--color-primary-dark);
+    font-size: 0.95rem;
+    line-height: 1.25;
+}
+
+@media (max-width: 900px) {
+    .home-calendar-tools,
+    .home-week-controls {
+        display: grid;
+        width: 100%;
+    }
+
+    .home-week-controls {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .home-week-indicator {
+        padding: 7px 9px;
+    }
+
+    #home-visible-period {
+        width: 100%;
+        font-size: 0.82rem;
     }
 }

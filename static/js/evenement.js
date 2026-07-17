@@ -64,11 +64,11 @@ document.addEventListener("DOMContentLoaded", () => {
             return '<option value="">Choisis d’abord un centre préféré</option>';
         }
         if (!evenements.length) {
-            return '<option value="">Aucune événement active dans ce centre</option>';
+            return '<option value="">Aucun groupe d’accueil active dans ce centre</option>';
         }
 
         return [
-            '<option value="">Aucune préférence d’événement</option>',
+            '<option value="">Aucune préférence d’groupe d’accueil</option>',
             ...evenements.map((evenement) => `
                 <option value="${escapeHtml(evenement.id)}" ${selected === Number(evenement.id) ? "selected" : ""}>
                     ${escapeHtml(evenement.nom)}
@@ -146,11 +146,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     ${centresHtml(a.centre_prefere, a.centres_secondaires || [], `fiche-centre-prefere-${a.id || "new"}`)}
                 </div>
                 <div class="evenement-preferee-field field">
-                    <label for="fiche-evenement-preferee">Événement préférée <span class="label-hint">(facultatif)</span></label>
+                    <label for="fiche-evenement-preferee">Groupe d’accueil préférée <span class="label-hint">(facultatif)</span></label>
                     <select id="fiche-evenement-preferee">
                         ${optionsEvenementPreferee(a.centre_prefere?.id || a.centre_prefere, a.evenement_preferee_id || a.evenement_preferee?.id)}
                     </select>
-                    <p class="form-hint">Le remplissage automatique privilégiera cette événement, sans bloquer les affectations manuelles dans les autres événements.</p>
+                    <p class="form-hint">Le remplissage automatique privilégiera cette groupe d’accueil, sans bloquer les affectations manuelles dans les autres groupes d’accueil.</p>
                 </div>
             </section>
 

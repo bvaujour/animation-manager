@@ -324,7 +324,7 @@
     .dispo-row { grid-template-columns: 1fr; }
 }
 
-/* Étape 4 — événement préférée */
+/* Préférence de groupe */
 .evenement-preferee-field {
     margin-top: 18px;
     max-width: 560px;
@@ -341,4 +341,71 @@
 .evenement-preferee-field .form-hint {
     margin: 7px 0 0;
     font-size: 0.82rem;
+}
+
+/* Disponibilités par périodes enregistrées */
+.dispo-periode { border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface-sunken); overflow: hidden; }
+.dispo-periode summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; cursor: pointer; list-style: none; }
+.dispo-periode summary::-webkit-details-marker { display: none; }
+.dispo-periode-check { display: flex; align-items: center; gap: 10px; cursor: pointer; min-width: 0; }
+.dispo-periode-check input { width: 19px; height: 19px; accent-color: var(--color-primary); }
+.dispo-periode-check span { display: grid; gap: 2px; }
+.dispo-periode-check small { color: var(--color-text-muted); font-size: .76rem; font-weight: 500; }
+.dispo-chevron { color: var(--color-text-muted); transition: transform .18s ease; }
+.dispo-periode[open] .dispo-chevron { transform: rotate(180deg); }
+.dispo-jours { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 7px; padding: 0 12px 12px; }
+.dispo-jour { display: flex; align-items: center; gap: 8px; padding: 8px 9px; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface); cursor: pointer; font-size: .82rem; }
+.dispo-jour input { width: 17px; height: 17px; accent-color: var(--color-primary); }
+
+
+/* Palette de couleurs des salariés */
+.fiche-couleur-field {
+    grid-column: 1 / -1;
+}
+
+.animateur-color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+}
+
+.animateur-color-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.animateur-color-swatch {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--swatch-color);
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, .18);
+    cursor: pointer;
+    transition: transform .12s ease, box-shadow .12s ease;
+}
+
+.animateur-color-swatch:hover {
+    transform: scale(1.08);
+}
+
+.animateur-color-swatch.active {
+    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-primary);
+}
+
+.animateur-color-custom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.animateur-color-custom input[type="color"] {
+    width: 44px;
+    min-width: 44px;
+    height: 34px;
+    padding: 2px;
+    cursor: pointer;
 }

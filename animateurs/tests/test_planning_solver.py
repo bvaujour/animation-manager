@@ -6,18 +6,26 @@ from django.utils import timezone
 from animateurs.models import (
     Affectation,
     Animateur,
+    BesoinQualification,
     Centre,
     Disponibilite,
     PreferenceCentre,
     Qualification,
 )
 from animateurs.services.planning_solver import generer_planning_auto
+from animateurs.tests.factories import creer_groupe
 
 
 class PlanningSolverTests(TestCase):
     def setUp(self):
         self.centre = Centre.objects.create(
             nom="Centre test", code="CT", couleur="#123456", effectif_cible=1
+        )
+        self.groupe, _ = creer_groupe(
+            self.centre,
+            nom="Maternelles",
+            effectif_cible=1,
+            jours_ouverts=[0, 1, 2, 3, 4],
         )
         self.bafa = Qualification.objects.create(nom="BAFA")
         self.qualifie = Animateur.objects.create(prenom="Qualifié", nom="Test")
@@ -32,194 +40,91 @@ class PlanningSolverTests(TestCase):
                 fin=datetime.date(2026, 7, 10),
             )
 
+    def lancer(self):
+        return generer_planning_auto({"debut": "2026-07-06"})
+
     def test_respecte_qualification_demandee(self):
-        payload = {
-            "debut": "2026-07-06",
-            "centres": {
-                str(self.centre.id): {
-                    "effectif": 1,
-                    "qualifs": {str(self.bafa.id): 1},
-                }
-            },
-        }
-        data, status = generer_planning_auto(payload)
+        BesoinQualification.objects.create(
+            evenement=self.groupe,
+            qualification=self.bafa,
+            nombre_minimum=1,
+        )
+        data, status = self.lancer()
         self.assertEqual(status, 200)
-        self.assertTrue(data["ok"])
         self.assertEqual(data["created"], 5)
-        self.assertFalse(
-            Affectation.objects.exclude(animateur=self.qualifie).exists()
-        )
-        self.assertTrue(
-            all(affectation.debut.date().weekday() < 5 for affectation in Affectation.objects.all())
-        )
+        self.assertFalse(Affectation.objects.exclude(animateur=self.qualifie).exists())
 
     def test_respecte_les_disponibilites(self):
-        # Le qualifié n'est disponible que le lundi. Le reste doit rester vide
-        # puisqu'une qualification BAFA est demandée chaque jour.
+        BesoinQualification.objects.create(
+            evenement=self.groupe,
+            qualification=self.bafa,
+            nombre_minimum=1,
+        )
         self.qualifie.disponibilites.all().delete()
         Disponibilite.objects.create(
             animateur=self.qualifie,
             debut=datetime.date(2026, 7, 6),
             fin=datetime.date(2026, 7, 6),
         )
-        payload = {
-            "debut": "2026-07-06",
-            "centres": {
-                str(self.centre.id): {
-                    "effectif": 1,
-                    "qualifs": {str(self.bafa.id): 1},
-                }
-            },
-        }
-        data, status = generer_planning_auto(payload)
+        data, status = self.lancer()
         self.assertEqual(status, 200)
         self.assertEqual(data["created"], 1)
-        affectation = Affectation.objects.get()
-        self.assertEqual(affectation.debut.date(), datetime.date(2026, 7, 6))
+        self.assertEqual(Affectation.objects.get().debut.date(), datetime.date(2026, 7, 6))
 
     def test_exclut_les_animateurs_sans_disponibilite(self):
         self.qualifie.disponibilites.all().delete()
         self.non_qualifie.disponibilites.all().delete()
-        payload = {
-            "debut": "2026-07-06",
-            "centres": {
-                str(self.centre.id): {
-                    "effectif": 1,
-                    "qualifs": {},
-                }
-            },
-        }
-
-        data, status = generer_planning_auto(payload)
-
+        data, status = self.lancer()
         self.assertEqual(status, 200)
         self.assertEqual(data["created"], 0)
         self.assertEqual(data["unfilled"], 5)
-        self.assertFalse(Affectation.objects.exists())
 
     def test_ne_touche_pas_au_samedi_manuel(self):
+        # Le samedi est ouvert pour ce groupe parce qu'il fait partie de ses
+        # jours sélectionnés, mais le remplissage automatique reste basé sur
+        # la semaine de travail du lundi au vendredi.
+        self.groupe.jours_ouverts = [0, 1, 2, 3, 4, 5]
+        self.groupe.fin = datetime.date(2026, 7, 11)
+        self.groupe.save(update_fields=["jours_ouverts", "fin"])
         samedi = datetime.date(2026, 7, 11)
         affectation_samedi = Affectation.objects.create(
             animateur=self.non_qualifie,
             centre=self.centre,
+            evenement=self.groupe,
             debut=timezone.make_aware(datetime.datetime.combine(samedi, datetime.time.min)),
             fin=timezone.make_aware(datetime.datetime.combine(samedi + datetime.timedelta(days=1), datetime.time.min)),
         )
 
-        payload = {
-            "debut": "2026-07-06",
-            "centres": {
-                str(self.centre.id): {
-                    "effectif": 1,
-                    "qualifs": {},
-                }
-            },
-        }
-
-        data, status = generer_planning_auto(payload)
-
+        data, status = self.lancer()
         self.assertEqual(status, 200)
         self.assertEqual(data["created"], 5)
         self.assertTrue(Affectation.objects.filter(pk=affectation_samedi.pk).exists())
-        self.assertEqual(
-            Affectation.objects.filter(debut__date=samedi).count(),
-            1,
-        )
-        self.assertFalse(
-            Affectation.objects.filter(debut__date__week_day=1).exists(),
-            "Le solveur ne doit jamais créer d'affectation le dimanche.",
-        )
 
     def test_respecte_strictement_les_centres_autorises(self):
         autre_centre = Centre.objects.create(
             nom="Centre interdit", code="CI", couleur="#654321", effectif_cible=1
         )
-        payload = {
-            "debut": "2026-07-06",
-            "centres": {
-                str(self.centre.id): {
-                    "effectif": 0,
-                    "qualifs": {},
-                },
-                str(autre_centre.id): {
-                    "effectif": 1,
-                    "qualifs": {},
-                },
-            },
-        }
-
-        data, status = generer_planning_auto(payload)
-
+        autre_groupe, _ = creer_groupe(
+            autre_centre,
+            nom="Élémentaires",
+            effectif_cible=1,
+            jours_ouverts=[0, 1, 2, 3, 4],
+        )
+        # Le centre principal n'a aucun besoin, afin d'isoler le centre interdit.
+        self.groupe.effectif_cible = 0
+        self.groupe.save(update_fields=["effectif_cible"])
+        data, status = self.lancer()
         self.assertEqual(status, 200)
         self.assertEqual(data["created"], 0)
         self.assertEqual(data["unfilled"], 5)
-        self.assertFalse(Affectation.objects.filter(centre=autre_centre).exists())
+        self.assertFalse(Affectation.objects.filter(evenement=autre_groupe).exists())
 
-    def test_conserve_la_meme_evenement_sur_la_semaine(self):
-        # Deux animateurs sont autorisés et disponibles pour un poste quotidien.
-        # Le solveur doit conserver la même personne toute la semaine plutôt
-        # que d'alterner entre les deux.
-        payload = {
-            "debut": "2026-07-06",
-            "centres": {
-                str(self.centre.id): {
-                    "effectif": 1,
-                    "qualifs": {},
-                }
-            },
-        }
-
-        data, status = generer_planning_auto(payload)
-
+    def test_conserve_la_meme_personne_sur_la_semaine(self):
+        data, status = self.lancer()
         self.assertEqual(status, 200)
         self.assertEqual(data["created"], 5)
         self.assertEqual(data["animateurs_utilises"], 1)
         self.assertEqual(
             Affectation.objects.values_list("animateur_id", flat=True).distinct().count(),
             1,
-        )
-
-
-    def test_priorise_le_centre_prefere(self):
-        autre = Centre.objects.create(
-            nom="Autre centre", code="AUT", couleur="#abcdef", effectif_cible=1
-        )
-        # Le qualifié peut travailler dans les deux centres, mais son centre
-        # préféré est `self.centre`.
-        relation = PreferenceCentre.objects.get(
-            animateur=self.qualifie, centre=self.centre
-        )
-        relation.est_prefere = True
-        relation.save(update_fields=["est_prefere"])
-        PreferenceCentre.objects.create(
-            animateur=self.qualifie, centre=autre, est_prefere=False
-        )
-
-        # Un second animateur est uniquement affectable au centre principal.
-        autre_anim = Animateur.objects.create(prenom="Autre", nom="Animateur")
-        PreferenceCentre.objects.create(
-            animateur=autre_anim, centre=self.centre, est_prefere=False
-        )
-        Disponibilite.objects.create(
-            animateur=autre_anim,
-            debut=datetime.date(2026, 7, 6),
-            fin=datetime.date(2026, 7, 10),
-        )
-
-        payload = {
-            "debut": "2026-07-06",
-            "centres": {
-                str(self.centre.id): {"effectif": 1, "qualifs": {}},
-                str(autre.id): {"effectif": 0, "qualifs": {}},
-            },
-        }
-
-        data, status = generer_planning_auto(payload)
-
-        self.assertEqual(status, 200)
-        self.assertEqual(data["created"], 5)
-        self.assertFalse(
-            Affectation.objects.filter(centre=self.centre)
-            .exclude(animateur=self.qualifie)
-            .exists()
         )

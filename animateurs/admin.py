@@ -22,6 +22,7 @@ from .models import (
     EnvoiEmail,
     DestinataireEnvoiEmail,
     PreferenceCentre,
+    PeriodeScolaire,
     Qualification
 )
 
@@ -42,6 +43,15 @@ class QualificationAdmin(admin.ModelAdmin):
 
 
 
+@admin.register(PeriodeScolaire)
+class PeriodeScolaireAdmin(admin.ModelAdmin):
+    list_display = ("nom", "annee_scolaire", "zone", "debut", "fin")
+    list_filter = ("annee_scolaire", "zone")
+    search_fields = ("nom", "description_source")
+    ordering = ("-annee_scolaire", "zone", "debut")
+
+
+
 @admin.register(Centre)
 class CentreAdmin(admin.ModelAdmin):
     list_display = ("nom", "code", "couleur", "effectif_cible")
@@ -59,10 +69,9 @@ class EvenementAdmin(admin.ModelAdmin):
         "nom",
         "centre",
         "effectif_cible",
-        "active",
         "ordre",
     )
-    list_filter = ("centre", "active")
+    list_filter = ("centre", "ferme_jours_feries")
     search_fields = ("nom", "centre__nom")
     ordering = ("centre__nom", "ordre", "nom")
     inlines = [DateExclueEvenementInline]

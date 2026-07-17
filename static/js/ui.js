@@ -110,6 +110,22 @@ function escapeHtml(value) {
 		.replaceAll("'", "&#039;");
 }
 
+// Affiche une semaine avec son année civile, partout de la même façon.
+// Exemple : « Été — Semaine 2 » devient « Été 2026 — Semaine 2 ».
+function libellePeriodeAvecAnnee(periode) {
+	const nom = String(periode?.nom ?? "").trim();
+	if (!nom) return "Période sans nom";
+
+	const annee = String(periode?.debut ?? periode?.annee_scolaire ?? "").slice(0, 4);
+	if (!/^\d{4}$/.test(annee) || nom.includes(annee)) return nom;
+
+	const separateurSemaine = " — Semaine ";
+	if (nom.includes(separateurSemaine)) {
+		return nom.replace(separateurSemaine, ` ${annee}${separateurSemaine}`);
+	}
+	return `${nom} ${annee}`;
+}
+
 // Renvoie les identifiants numériques de cases cochées dans un conteneur.
 function idsCheckboxesCochees(root) {
 	return Array.from(root.querySelectorAll("input:checked"))

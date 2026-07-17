@@ -2,11 +2,9 @@
 
 Le récapitulatif combine deux lectures complémentaires :
 - la charge réellement affectée à chaque salarié ;
-- la couverture des besoins de chaque événement, journée par journée.
+- la couverture des besoins de chaque groupe, journée par journée.
 
-Les besoins sont contrôlés sur les jours visibles dans le planning, du lundi au
-samedi. Le dimanche n'est pas compté comme journée à couvrir puisque les
-calendriers de l'application le masquent actuellement.
+Les besoins sont contrôlés sur tous les jours de la période. Chaque groupe décide ensuite quels jours de la semaine sont ouverts.
 """
 
 from __future__ import annotations
@@ -34,9 +32,8 @@ def _jours_entre(debut: datetime.date, fin_exclusive: datetime.date):
 
 
 def _jours_operationnels(debut: datetime.date, fin_exclusive: datetime.date):
-    """Jours actuellement affichés dans le planning : lundi à samedi."""
-
-    return [jour for jour in _jours_entre(debut, fin_exclusive) if jour.weekday() != 6]
+    """Tous les jours possibles ; l’ouverture dépend ensuite de chaque groupe."""
+    return list(_jours_entre(debut, fin_exclusive))
 
 
 def _date_fr(jour: datetime.date) -> str:
@@ -58,15 +55,10 @@ def _jour_dans_disponibilites(jour, disponibilites):
 
 
 def _evenement_ouvert_selon_configuration(evenement, jour, dates_exclues):
-    if evenement.debut and jour < evenement.debut:
-        return False
-    if evenement.fin and jour > evenement.fin:
-        return False
-    jours_ouverts = {int(numero) for numero in (evenement.jours_ouverts or [])}
-    return jour.weekday() in jours_ouverts and jour not in dates_exclues
+    return evenement.est_ouvert_le(jour, dates_exclues)
 
 
-def generer_recapitulatif(debut, fin):
+def generer_recapitulatif(debut, fin, jours_selectionnes=None):
     """Construit le tableau de charge, les indicateurs et les alertes.
 
     ``debut`` est inclus et ``fin`` est exclusif, conformément aux autres API
@@ -76,6 +68,9 @@ def generer_recapitulatif(debut, fin):
     debut_date = debut.date()
     fin_date = fin.date()
     jours_operationnels = _jours_operationnels(debut_date, fin_date)
+    if jours_selectionnes is not None:
+        jours_selectionnes = set(jours_selectionnes)
+        jours_operationnels = [jour for jour in jours_operationnels if jour in jours_selectionnes]
     jours_operationnels_set = set(jours_operationnels)
 
     centres = list(Centre.objects.all().order_by("ordre", "nom"))
@@ -89,7 +84,7 @@ def generer_recapitulatif(debut, fin):
 
     evenements = list(
         Evenement.objects.select_related("centre")
-        .prefetch_related("besoins_qualifications__qualification", "dates_exclues")
+        .prefetch_related("besoins_qualifications__qualification", "dates_exclues", "periodes_scolaires")
         .filter(
             Q(debut__isnull=True) | Q(debut__lt=fin_date),
             Q(fin__isnull=True) | Q(fin__gte=debut_date),
@@ -128,6 +123,8 @@ def generer_recapitulatif(debut, fin):
         fin_effective = min(affectation.fin.date(), fin_date)
 
         for jour in _jours_entre(debut_effectif, fin_effective):
+            if jour not in jours_operationnels_set:
+                continue
             jours_affectes_par_animateur[affectation.animateur_id].add(jour)
             jours_affectes_par_animateur_centre[
                 (affectation.animateur_id, affectation.centre_id)
@@ -212,9 +209,10 @@ def generer_recapitulatif(debut, fin):
             [
                 jour
                 for jour in _jours_operationnels(debut_evenement, fin_evenement_exclusive)
-                if evenement.est_ouvert_le(jour, dates_exclues_evenement)
+                if jour in jours_operationnels_set
+                and evenement.est_ouvert_le(jour, dates_exclues_evenement)
             ]
-            if evenement.active and debut_evenement < fin_evenement_exclusive
+            if debut_evenement < fin_evenement_exclusive
             else []
         )
 
@@ -348,7 +346,6 @@ def generer_recapitulatif(debut, fin):
             "nom": evenement.nom,
             "lieu": evenement.centre.nom,
             "couleur": evenement.centre.couleur,
-            "actif": evenement.active,
             "debut": evenement.debut.isoformat() if evenement.debut else None,
             "fin": evenement.fin.isoformat() if evenement.fin else None,
             "effectif_cible": evenement.effectif_cible,
@@ -406,7 +403,7 @@ def generer_recapitulatif(debut, fin):
             "type": "double_affectation",
             "titre": f"Double affectation — {animateur.prenom} {animateur.nom}",
             "lieu": "Conflit de planning",
-            "message": f"Cette personne apparaît sur plusieurs événements le même jour ({len(set(dates))} jour(s)).",
+            "message": f"Cette personne apparaît sur plusieurs groupes le même jour ({len(set(dates))} jour(s)).",
             "dates": _liste_dates_courte(dates),
         })
 
@@ -440,25 +437,11 @@ def generer_recapitulatif(debut, fin):
             "lieu": affectation.centre.nom,
             "message": (
                 f"{affectation.animateur.prenom} {affectation.animateur.nom} est affecté(e) "
-                "sur une date non ouverte pour cet événement."
+                "sur une date non ouverte pour ce groupe."
             ),
             "dates": _date_fr(jour),
         })
 
-    affectations_evenements_inactifs = defaultdict(list)
-    for affectation in affectations:
-        if affectation.evenement_id and not affectation.evenement.active:
-            affectations_evenements_inactifs[affectation.evenement].append(affectation)
-
-    for evenement, affectations_inactives in affectations_evenements_inactifs.items():
-        alertes.append({
-            "niveau": "warning",
-            "type": "evenement_inactif",
-            "titre": f"Événement inactif encore planifié — {evenement.nom}",
-            "lieu": evenement.centre.nom,
-            "message": f"{len(affectations_inactives)} affectation(s) existent encore sur la période sélectionnée.",
-            "dates": "Vérifier le planning",
-        })
 
     animateurs_mobilises = sum(1 for ligne in lignes_animateurs if ligne["total"] > 0)
     disponibles_sans_affectation = [

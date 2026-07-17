@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Gestion événement animation{% endblock %}
+{% block title %}Accueil{% endblock %}
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
 <link rel="stylesheet" href="{% static 'css/style.css' %}">
@@ -8,23 +8,7 @@
 {% block content %}
 <main class="home-page">
     <section class="home-section home-planning-section">
-        <div class="section-heading home-calendar-heading">
-            <div>
-                <h2>Planning</h2>
-                <span class="section-note">Période affichée : <strong id="home-visible-period">chargement...</strong></span>
-            </div>
-            <div class="home-calendar-tools">
-                <div class="home-view-toggle" aria-label="Choix de la vue">
-                    <button type="button" class="btn btn-ghost active" id="home-view-week">Semaine</button>
-                    <button type="button" class="btn btn-ghost" id="home-view-month">Mois</button>
-                </div>
-                <div class="home-week-controls" aria-label="Navigation planning">
-                    <button type="button" class="btn btn-ghost" id="home-prev-week">← Précédent</button>
-                    <button type="button" class="btn btn-ghost" id="home-current-week">Aujourd’hui</button>
-                    <button type="button" class="btn btn-ghost" id="home-next-week">Suivant →</button>
-                </div>
-            </div>
-        </div>
+        {% include "partials/_week_navigation.html" with container_id="home-period-nav" previous_id="home-prev-week" today_id="home-current-week" next_id="home-next-week" label_id="home-visible-period" %}
         <div id="home-calendars" class="home-calendars"></div>
     </section>
     <section class="home-section">

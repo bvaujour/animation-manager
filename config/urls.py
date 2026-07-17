@@ -18,7 +18,6 @@ from animateurs.views import (
     accueil,
     administration,
     documents,
-    evenement,
     gestion,
     planning,
     recapitulatif,
@@ -35,13 +34,17 @@ from animateurs.views import (
     api_centres,
     api_centres_reordonner,
     api_centre_detail,
-    api_evenements,
-    api_evenement_detail,
-    api_evenements_reordonner,
+    api_groupes,
+    api_groupe_detail,
+    api_groupes_reordonner,
 )
 from animateurs.views import (
     api_qualifications,
     api_qualification_detail,
+    api_periodes_scolaires,
+    api_periodes_scolaires_previsualiser,
+    api_periodes_scolaires_importer,
+    api_periode_scolaire_detail,
 )
 from animateurs.views import (
     api_planning,
@@ -63,8 +66,6 @@ urlpatterns = [
     path("administration/export-planning.xlsx", export_planning_excel, name="export_planning_excel"),
     path("administration/export-planning.pdf", export_planning_pdf, name="export_planning_pdf"),
     path("planning/", planning, name="planning"),
-    path("evenement/", evenement, name="evenement"),
-    path("equipe/", evenement, name="equipe"),
     path("gestion/", gestion, name="gestion"),
     path("recapitulatif/", recapitulatif, name="recapitulatif"),
 
@@ -78,13 +79,19 @@ urlpatterns = [
     path("api/centres/", api_centres, name="api_centres"),
     path("api/centres/reordonner/", api_centres_reordonner, name="api_centres_reordonner"),
     path("api/centres/<int:centre_id>/", api_centre_detail, name="api_centre_detail"),
-    path("api/centres/<int:centre_id>/evenements/", api_evenements, name="api_evenements"),
-    path("api/centres/<int:centre_id>/evenements/reordonner/", api_evenements_reordonner, name="api_evenements_reordonner"),
-    path("api/evenements/<int:evenement_id>/", api_evenement_detail, name="api_evenement_detail"),
+    path("api/centres/<int:centre_id>/groupes/", api_groupes, name="api_groupes"),
+    path("api/centres/<int:centre_id>/groupes/reordonner/", api_groupes_reordonner, name="api_groupes_reordonner"),
+    path("api/groupes/<int:evenement_id>/", api_groupe_detail, name="api_groupe_detail"),
 
     # --- API : qualifications ---
     path("api/qualifications/", api_qualifications, name="api_qualifications"),
     path("api/qualifications/<int:qualification_id>/", api_qualification_detail, name="api_qualification_detail"),
+
+    # --- API : périodes scolaires (bibliothèque indépendante) ---
+    path("api/periodes-scolaires/", api_periodes_scolaires, name="api_periodes_scolaires"),
+    path("api/periodes-scolaires/previsualiser/", api_periodes_scolaires_previsualiser, name="api_periodes_scolaires_previsualiser"),
+    path("api/periodes-scolaires/importer/", api_periodes_scolaires_importer, name="api_periodes_scolaires_importer"),
+    path("api/periodes-scolaires/<int:periode_id>/", api_periode_scolaire_detail, name="api_periode_scolaire_detail"),
 
     # --- API : planning (lecture + action groupée "vider" + auto) ---
     path("api/planning/", api_planning, name="api_planning"),

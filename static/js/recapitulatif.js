@@ -1,14 +1,19 @@
 // ===========================================================================
 // recapitulatif.js
 // ---------------------------------------------------------------------------
-// Tableau de bord de contrôle du planning : couverture des événements,
+// Tableau de bord de contrôle du planning : couverture des groupes,
 // alertes métier et répartition des journées par salarié.
 // ===========================================================================
 
 document.addEventListener("DOMContentLoaded", () =>
 {
-    const debutInput = document.getElementById("periode-debut");
-    const finInput = document.getElementById("periode-fin");
+    const selectRoot = document.getElementById("periode-select");
+    const selectToggle = document.getElementById("periode-select-toggle");
+    const selectLabel = document.getElementById("periode-select-label");
+    const selectMenu = document.getElementById("periode-select-menu");
+    const selectOptions = document.getElementById("periode-select-options");
+    const btnToutSelectionner = document.getElementById("periodes-tout-selectionner");
+    const btnToutDeselectionner = document.getElementById("periodes-tout-deselectionner");
     const btnAppliquer = document.getElementById("btn-appliquer-periode");
     const periodeAffichee = document.getElementById("periode-affichee");
     const syntheseRoot = document.getElementById("recap-synthese");
@@ -17,17 +22,8 @@ document.addEventListener("DOMContentLoaded", () =>
     const tableEvenements = document.getElementById("table-evenements");
     const tableSalaries = document.getElementById("table-recap");
 
-    function debutMoisCourant()
-    {
-        const now = new Date();
-        return new Date(now.getFullYear(), now.getMonth(), 1);
-    }
-
-    function finMoisCourantInclusive()
-    {
-        const now = new Date();
-        return new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    }
+    let periodes = [];
+    const periodeIdsSelectionnees = new Set();
 
     function formatDateFr(dateStr)
     {
@@ -35,31 +31,85 @@ document.addEventListener("DOMContentLoaded", () =>
         return parseLocalDate(dateStr).toLocaleDateString("fr-FR");
     }
 
-    function initialiserPeriodeParDefaut()
+    function libellePeriode(periode)
     {
-        debutInput.value = formatDateLocal(debutMoisCourant());
-        finInput.value = formatDateLocal(finMoisCourantInclusive());
+        return `${libellePeriodeAvecAnnee(periode)} · ${formatDateFr(periode.debut)} au ${formatDateFr(periode.fin)}`;
+    }
+
+    function mettreAJourLibelleSelection()
+    {
+        const selection = periodes.filter((periode) => periodeIdsSelectionnees.has(periode.id));
+        if (!selection.length)
+        {
+            selectLabel.textContent = "Choisir les périodes";
+            periodeAffichee.textContent = "Aucune période sélectionnée";
+            return;
+        }
+
+        selectLabel.textContent = selection.length === 1
+            ? libellePeriodeAvecAnnee(selection[0])
+            : `${selection.length} périodes sélectionnées`;
+        periodeAffichee.textContent = selection.length === 1
+            ? `${formatDateFr(selection[0].debut)} au ${formatDateFr(selection[0].fin)}`
+            : selection.map((periode) => libellePeriodeAvecAnnee(periode)).join(" · ");
+    }
+
+    function rendreOptionsPeriodes()
+    {
+        const groupes = new Map();
+        periodes.forEach((periode) =>
+        {
+            const cle = `${periode.annee_scolaire} · Zone ${periode.zone}`;
+            if (!groupes.has(cle)) groupes.set(cle, []);
+            groupes.get(cle).push(periode);
+        });
+
+        selectOptions.innerHTML = [...groupes.entries()].map(([titre, elements]) => `
+            <section class="periode-option-group">
+                <h3>${escapeHtml(titre)}</h3>
+                ${elements.map((periode) => `
+                    <label class="periode-option">
+                        <input type="checkbox" value="${periode.id}" ${periodeIdsSelectionnees.has(periode.id) ? "checked" : ""}>
+                        <span>
+                            <strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong>
+                            <small>${escapeHtml(formatDateFr(periode.debut))} au ${escapeHtml(formatDateFr(periode.fin))}</small>
+                        </span>
+                    </label>
+                `).join("")}
+            </section>
+        `).join("");
+
+        selectOptions.querySelectorAll('input[type="checkbox"]').forEach((checkbox) =>
+        {
+            checkbox.addEventListener("change", () =>
+            {
+                const id = Number(checkbox.value);
+                if (checkbox.checked) periodeIdsSelectionnees.add(id);
+                else periodeIdsSelectionnees.delete(id);
+                mettreAJourLibelleSelection();
+            });
+        });
+    }
+
+    function choisirPeriodeParDefaut()
+    {
+        const aujourdHui = formatDateLocal(new Date());
+        const courante = periodes.find((periode) => periode.debut <= aujourdHui && periode.fin >= aujourdHui);
+        const prochaine = periodes.find((periode) => periode.debut > aujourdHui);
+        const choix = courante || prochaine || periodes[periodes.length - 1];
+        if (choix) periodeIdsSelectionnees.add(choix.id);
     }
 
     function construireUrlApi()
     {
-        const debut = debutInput.value;
-        const finInclusive = finInput.value;
-
-        if (!debut || !finInclusive)
+        if (!periodeIdsSelectionnees.size)
         {
-            afficherToast("Renseigne une date de début et une date de fin.", true);
+            afficherToast("Sélectionne au moins une période.", true);
             return null;
         }
-
-        if (debut > finInclusive)
-        {
-            afficherToast("La date de début doit être avant la date de fin.", true);
-            return null;
-        }
-
-        const finExclusive = addDays(finInclusive, 1);
-        const params = new URLSearchParams({ debut, fin: finExclusive });
+        const params = new URLSearchParams({
+            periode_ids: [...periodeIdsSelectionnees].sort((a, b) => a - b).join(","),
+        });
         return `/api/recapitulatif/?${params.toString()}`;
     }
 
@@ -90,7 +140,7 @@ document.addEventListener("DOMContentLoaded", () =>
             carteIndicateur(
                 "Postes manquants",
                 synthese.postes_manquants,
-                `${synthese.journees_sous_tension} journée(s) / événement sous tension`,
+                `${synthese.journees_sous_tension} journée(s) / groupe sous tension`,
                 synthese.postes_manquants > 0 ? "danger" : "ok",
             ),
             carteIndicateur(
@@ -189,7 +239,7 @@ document.addEventListener("DOMContentLoaded", () =>
 
         thead.innerHTML = `
             <tr>
-                <th>Lieu / événement</th>
+                <th>Lieu / groupe</th>
                 <th>Période</th>
                 <th>Besoin</th>
                 <th>Journées complètes</th>
@@ -201,7 +251,7 @@ document.addEventListener("DOMContentLoaded", () =>
 
         if (!evenements.length)
         {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-note">Aucun événement sur cette période.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-note">Aucun groupe sur cette période.</td></tr>';
             return;
         }
 
@@ -301,7 +351,6 @@ document.addEventListener("DOMContentLoaded", () =>
 
     function afficherTableau(data)
     {
-        periodeAffichee.textContent = `Du ${formatDateFr(debutInput.value)} au ${formatDateFr(finInput.value)}`;
         afficherSynthese(data.synthese);
         afficherAlertes(data.alertes);
         afficherEvenements(data.evenements);
@@ -322,15 +371,54 @@ document.addEventListener("DOMContentLoaded", () =>
             .finally(() => { btnAppliquer.disabled = false; });
     }
 
-    btnAppliquer.addEventListener("click", chargerRecap);
-    [debutInput, finInput].forEach((input) =>
+    function definirToutesLesPeriodes(selectionnees)
     {
-        input.addEventListener("keydown", (event) =>
-        {
-            if (event.key === "Enter") chargerRecap();
-        });
+        periodeIdsSelectionnees.clear();
+        if (selectionnees) periodes.forEach((periode) => periodeIdsSelectionnees.add(periode.id));
+        rendreOptionsPeriodes();
+        mettreAJourLibelleSelection();
+    }
+
+    selectToggle.addEventListener("click", () =>
+    {
+        const ouvrir = selectMenu.hidden;
+        selectMenu.hidden = !ouvrir;
+        selectToggle.setAttribute("aria-expanded", String(ouvrir));
     });
 
-    initialiserPeriodeParDefaut();
-    chargerRecap();
+    document.addEventListener("click", (event) =>
+    {
+        if (!selectRoot.contains(event.target))
+        {
+            selectMenu.hidden = true;
+            selectToggle.setAttribute("aria-expanded", "false");
+        }
+    });
+
+    btnToutSelectionner.addEventListener("click", () => definirToutesLesPeriodes(true));
+    btnToutDeselectionner.addEventListener("click", () => definirToutesLesPeriodes(false));
+    btnAppliquer.addEventListener("click", () =>
+    {
+        selectMenu.hidden = true;
+        selectToggle.setAttribute("aria-expanded", "false");
+        chargerRecap();
+    });
+
+    apiFetch("/api/periodes-scolaires/")
+        .then((data) =>
+        {
+            periodes = [...data].sort((a, b) => a.debut.localeCompare(b.debut));
+            choisirPeriodeParDefaut();
+            rendreOptionsPeriodes();
+            mettreAJourLibelleSelection();
+            if (periodes.length) chargerRecap();
+            else
+            {
+                selectLabel.textContent = "Aucune période enregistrée";
+                btnAppliquer.disabled = true;
+                afficherToast("Ajoute d'abord des périodes dans Gestion > Périodes.", true);
+            }
+        })
+        .catch((err) => afficherToast(erreurMessage(err, "Les périodes n'ont pas pu être chargées."), true));
+
 });

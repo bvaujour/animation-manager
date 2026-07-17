@@ -6,9 +6,9 @@
         <span></span>
     </button>
 
-    <a href="{% url 'accueil' %}" class="brand" aria-label="Accueil Gestion animation">
+    <a href="{% url 'accueil' %}" class="brand page-brand" aria-label="Retour à l’accueil">
         <span class="brand-mark">GA</span>
-        <span>Gestion animation</span>
+        <span class="page-brand-title">{% if active == 'planning' %}Planning{% elif active == 'gestion' %}Gestion{% elif active == 'recapitulatif' %}Récapitulatif{% elif active == 'documents' %}Documents{% elif active == 'administration' %}Administration{% else %}Accueil{% endif %}</span>
     </a>
 </header>
 
@@ -30,6 +30,5 @@
         <a href="{% url 'recapitulatif' %}" class="{% if active == 'recapitulatif' %}active{% endif %}">Récapitulatif</a>
         <a href="{% url 'documents' %}" class="{% if active == 'documents' %}active{% endif %}">Documents</a>
         <a href="{% url 'administration' %}" class="{% if active == 'administration' %}active{% endif %}">Administration</a>
-        <a href="/admin/">Administration Django</a>
     </nav>
 </aside>

@@ -238,7 +238,7 @@
     }
 }
 
-/* --- Étape 2 : événements rattachées aux centres --- */
+/* --- Groupes rattachés aux lieux --- */
 .gestion-page {
     max-width: 980px;
 }
@@ -369,11 +369,6 @@
     box-shadow: var(--shadow-sm);
 }
 
-.team-row-inactive {
-    opacity: 0.65;
-    background: var(--color-surface-sunken);
-}
-
 .team-row-editing {
     display: block;
     padding: 14px;
@@ -394,24 +389,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.team-status {
-    flex: 0 0 auto;
-    padding: 2px 7px;
-    border-radius: 999px;
-    font-size: 0.68rem;
-    font-weight: 700;
-}
-
-.team-status.is-active {
-    color: #12613f;
-    background: #dff5e9;
-}
-
-.team-status.is-inactive {
-    color: #6b7280;
-    background: #e5e7eb;
 }
 
 .team-meta {
@@ -444,11 +421,6 @@
     grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(120px, 0.8fr));
     gap: 10px 12px;
     align-items: end;
-}
-
-.team-active-field {
-    align-self: end;
-    min-height: 40px;
 }
 
 .centre-edit-grid {
@@ -547,7 +519,6 @@
     }
 
     .team-name-field,
-    .team-active-field,
     .centre-edit-grid .form-error,
     .centre-total-readonly {
         grid-column: 1 / -1;
@@ -635,7 +606,7 @@
     }
 }
 
-/* --- Ouvertures et fermetures des événements --- */
+/* --- Jours d’ouverture des groupes --- */
 .event-opening-settings {
     margin-top: 16px;
     padding: 14px;
@@ -817,10 +788,10 @@
 }
 
 /* ========================================================================== 
-   Séparation visuelle des lieux et de leurs événements
+   Séparation visuelle des lieux et de leurs groupes
    --------------------------------------------------------------------------
    La couleur choisie pour un lieu habille désormais tout son bloc. L'en-tête
-   utilise la couleur pleine et la zone des événements une teinte claire de la
+   utilise la couleur pleine et la zone des groupes une teinte claire de la
    même couleur, afin de distinguer immédiatement les différents lieux.
    ========================================================================== */
 .lieux-cards {
@@ -969,11 +940,6 @@
     box-shadow: 0 7px 17px color-mix(in srgb, var(--lieu-color) 16%, transparent);
 }
 
-.lieu-card .team-row-inactive {
-    opacity: .72;
-    background: color-mix(in srgb, #eef1ec 88%, var(--lieu-color));
-}
-
 .lieu-card .team-create-form {
     border: 2px dashed color-mix(in srgb, var(--lieu-color) 66%, #ffffff);
     background: color-mix(in srgb, #ffffff 93%, var(--lieu-color));
@@ -1086,4 +1052,284 @@
     .lieu-edit-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* --- Bibliothèque indépendante des périodes scolaires --- */
+.periods-intro,
+.period-library-head,
+.period-preview-head,
+.period-year-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.periods-independent-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 5px 10px;
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: .76rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.period-import-form {
+    margin-top: 14px;
+}
+
+.period-import-grid {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(130px, .55fr) auto;
+    align-items: end;
+    gap: 12px;
+}
+
+.period-import-action {
+    padding-bottom: 1px;
+}
+
+.period-preview-card,
+.period-year-card {
+    overflow: hidden;
+    margin: 18px 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.period-preview-head,
+.period-year-head {
+    padding: 15px 17px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-sunken);
+}
+
+.period-preview-head h3,
+.period-year-head h3 {
+    margin: 0 0 3px;
+    font-size: 1rem;
+}
+
+.period-preview-head p,
+.period-year-head p {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: .82rem;
+}
+
+.period-table-wrap {
+    overflow-x: auto;
+}
+
+.period-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .86rem;
+}
+
+.period-table th,
+.period-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+}
+
+.period-table th {
+    color: var(--color-text-muted);
+    background: rgba(248, 250, 252, .75);
+    font-size: .76rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.period-existing {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: #ecfdf5;
+    color: #047857;
+    font-size: .7rem;
+    font-weight: 800;
+}
+
+.period-preview-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+}
+
+.period-preview-actions .form-error {
+    margin: 0;
+}
+
+.period-library-head {
+    margin-top: 28px;
+}
+
+.period-library-filter {
+    min-width: 210px;
+}
+
+.period-library {
+    display: grid;
+    gap: 16px;
+}
+
+.period-year-card {
+    margin: 0;
+}
+
+.period-saved-list {
+    display: grid;
+}
+
+.period-saved-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.period-saved-row:last-child {
+    border-bottom: 0;
+}
+
+.period-saved-date {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.period-saved-date span {
+    color: var(--color-text-muted);
+    font-size: .8rem;
+}
+
+@media (max-width: 700px) {
+    .period-import-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .period-import-action .btn {
+        width: 100%;
+    }
+
+    .periods-intro,
+    .period-library-head,
+    .period-preview-head,
+    .period-year-head,
+    .period-saved-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .period-library-filter {
+        min-width: 0;
+        width: 100%;
+    }
+}
+
+/* Groupes basés uniquement sur la bibliothèque de périodes */
+.group-period-actions {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+    margin: .75rem 0;
+}
+.group-period-fieldset {
+    border: 1px solid rgba(31, 111, 84, .2);
+    border-radius: 12px;
+    padding: .75rem;
+    margin: 0 0 .75rem;
+    background: rgba(255, 255, 255, .65);
+}
+.group-period-fieldset legend {
+    padding: 0 .4rem;
+    font-weight: 700;
+}
+.group-period-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: .55rem;
+}
+.group-period-option {
+    display: flex;
+    align-items: flex-start;
+    gap: .55rem;
+    padding: .65rem;
+    border: 1px solid rgba(0, 0, 0, .1);
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+}
+.group-period-option:has(input:checked) {
+    border-color: var(--lieu-color, #1f6f54);
+    box-shadow: inset 0 0 0 1px var(--lieu-color, #1f6f54);
+}
+.group-period-option span { display: grid; gap: .15rem; }
+.group-period-option small { opacity: .72; }
+.group-closure-options {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: .85rem;
+}
+
+/* Sélection compacte des jours d'ouverture d'un groupe. */
+.group-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(46px, 1fr));
+    gap: .5rem;
+    margin: .65rem 0 1rem;
+}
+.group-weekday-option {
+    display: block;
+    cursor: pointer;
+}
+.group-weekday-option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+.group-weekday-option span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    color: #475569;
+    font-weight: 700;
+    transition: .15s ease;
+}
+.group-weekday-option input:checked + span {
+    border-color: var(--lieu-color, #1f6f54);
+    background: color-mix(in srgb, var(--lieu-color, #1f6f54) 14%, white);
+    color: #17211b;
+    box-shadow: inset 0 0 0 1px var(--lieu-color, #1f6f54);
+}
+.group-weekday-option input:focus-visible + span {
+    outline: 3px solid color-mix(in srgb, var(--lieu-color, #1f6f54) 28%, transparent);
+    outline-offset: 2px;
+}
+@media (max-width: 720px) {
+    .group-weekdays { grid-template-columns: repeat(4, minmax(46px, 1fr)); }
+}
+
+/* La page Gestion commence directement par ses onglets. */
+.gestion-page-compact {
+    padding-top: 14px;
 }

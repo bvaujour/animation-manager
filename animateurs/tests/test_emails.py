@@ -1,6 +1,5 @@
 import json
 import tempfile
-from pathlib import Path
 
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile

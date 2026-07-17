@@ -1,17 +1,32 @@
 import datetime
 import json
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from animateurs.models import Affectation, Animateur, Centre, Disponibilite
+from animateurs.models import (
+    Affectation,
+    Animateur,
+    Centre,
+    Disponibilite,
+    PreferenceCentre,
+    Qualification,
+)
+from animateurs.tests.factories import creer_groupe
 
 
 class PlanningApiTests(TestCase):
     def setUp(self):
         self.animateur = Animateur.objects.create(prenom="Julie", nom="API")
         self.centre = Centre.objects.create(nom="Centre", code="CTR", couleur="#123456")
+        self.groupe, _ = creer_groupe(
+            self.centre,
+            nom="Groupe principal",
+            jours_ouverts=[0, 1, 2, 3, 4, 5],
+        )
         Disponibilite.objects.create(
             animateur=self.animateur,
             debut=datetime.date(2026, 7, 6),
@@ -23,6 +38,7 @@ class PlanningApiTests(TestCase):
         payload = {
             "animateur_id": self.animateur.id,
             "centre_id": self.centre.id,
+            "evenement_id": self.groupe.id,
             "debut": debut,
             "fin": "2026-07-07",
         }
@@ -46,6 +62,7 @@ class PlanningApiTests(TestCase):
             data=json.dumps({
                 "animateur_id": self.animateur.id,
                 "centre_id": self.centre.id,
+                "evenement_id": self.groupe.id,
                 "debut": "2026-07-06",
                 "fin": "2026-07-07",
             }),
@@ -58,6 +75,7 @@ class PlanningApiTests(TestCase):
         payload = {
             "animateur_id": self.animateur.id,
             "centre_id": self.centre.id,
+            "evenement_id": self.groupe.id,
             "debut": "2026-07-11",
             "fin": "2026-07-12",
         }
@@ -82,6 +100,7 @@ class PlanningApiTests(TestCase):
         Affectation.objects.create(
             animateur=self.animateur,
             centre=self.centre,
+            evenement=self.groupe,
             debut=lundi,
             fin=lundi + datetime.timedelta(days=1),
         )
@@ -89,6 +108,7 @@ class PlanningApiTests(TestCase):
         affectation_samedi = Affectation.objects.create(
             animateur=autre,
             centre=self.centre,
+            evenement=self.groupe,
             debut=samedi,
             fin=samedi + datetime.timedelta(days=1),
         )
@@ -201,7 +221,7 @@ class AnimateurDetailApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
-class EvenementPageAndDisponibiliteApiTests(TestCase):
+class GestionEtDisponibiliteApiTests(TestCase):
     def setUp(self):
         self.animateur = Animateur.objects.create(prenom="Alice", nom="Martin")
         self.disponibilite = Disponibilite.objects.create(
@@ -210,19 +230,11 @@ class EvenementPageAndDisponibiliteApiTests(TestCase):
             fin=datetime.date(2026, 8, 7),
         )
 
-    def test_old_evenement_page_redirects_to_gestion_salaries(self):
-        response = self.client.get("/evenement/")
-        self.assertRedirects(response, "/gestion/?onglet=salaries", fetch_redirect_response=False)
-
-    def test_old_equipe_page_redirects_to_gestion_salaries(self):
-        response = self.client.get("/equipe/")
-        self.assertRedirects(response, "/gestion/?onglet=salaries", fetch_redirect_response=False)
-
     def test_gestion_page_contains_employee_management(self):
         response = self.client.get("/gestion/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Salariés")
-        self.assertContains(response, "Lieux et événements")
+        self.assertContains(response, "Lieux et groupes")
         self.assertContains(response, "Ajouter un salarié")
 
     def test_update_disponibilite(self):
@@ -260,3 +272,71 @@ class PlanningPageLayoutTests(TestCase):
         self.assertContains(response, 'class="page-planning"', html=False)
         self.assertContains(response, 'id="calendars-container"', html=False)
         self.assertContains(response, 'id="planning-actions"', html=False)
+
+
+class AnimateursListPerformanceTests(TestCase):
+    def setUp(self):
+        self.centre = Centre.objects.create(
+            nom="Centre principal",
+            code="CP",
+            couleur="#123456",
+        )
+        self.qualification = Qualification.objects.create(nom="BAFA")
+
+    def creer_animateurs(self, nombre):
+        for index in range(nombre):
+            animateur = Animateur.objects.create(
+                prenom=f"Prénom {index:02d}",
+                nom="Test",
+            )
+            animateur.qualifications.add(self.qualification)
+            PreferenceCentre.objects.create(
+                animateur=animateur,
+                centre=self.centre,
+                est_prefere=True,
+            )
+            Disponibilite.objects.create(
+                animateur=animateur,
+                debut=datetime.date(2027, 7, 1),
+                fin=datetime.date(2027, 7, 31),
+            )
+
+    def test_liste_utilise_un_nombre_fixe_de_requetes(self):
+        self.creer_animateurs(25)
+
+        with CaptureQueriesContext(connection) as contexte:
+            response = self.client.get(reverse("api_animateurs"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 25)
+        self.assertLessEqual(
+            len(contexte),
+            6,
+            f"La liste a effectué {len(contexte)} requêtes au lieu d'un nombre fixe.",
+        )
+
+    def test_consulter_la_liste_ne_modifie_pas_les_disponibilites(self):
+        animateur = Animateur.objects.create(prenom="Aline", nom="Historique")
+        disponibilite = Disponibilite.objects.create(
+            animateur=animateur,
+            debut=datetime.date(2020, 1, 1),
+            fin=datetime.date(2020, 1, 5),
+        )
+
+        response = self.client.get(reverse("api_animateurs"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Disponibilite.objects.filter(pk=disponibilite.pk).exists())
+
+    def test_liste_est_classee_par_prenom_puis_nom(self):
+        Animateur.objects.create(prenom="Zoé", nom="Alpha")
+        Animateur.objects.create(prenom="Alice", nom="Zulu")
+        Animateur.objects.create(prenom="Alice", nom="Beta")
+
+        response = self.client.get(reverse("api_animateurs"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [(item["prenom"], item["nom"]) for item in response.json()],
+            [("Alice", "Beta"), ("Alice", "Zulu"), ("Zoé", "Alpha")],
+        )

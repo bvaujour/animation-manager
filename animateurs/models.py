@@ -19,14 +19,16 @@ Vue d'ensemble des tables et de leurs relations :
 - Disponibilite : plages de dates où un animateur est disponible pour
   travailler. Voir la docstring du modèle plus bas pour la règle
   "par défaut disponible" appliquée quand il n'y a aucune plage.
-- Evenement : sous-groupe opérationnel d'un centre (ex. Maternelles,
-  Élémentaires, Matin, Soir). Chaque centre possède automatiquement une
-  « Événement principale » pour préserver la compatibilité des anciennes données.
+- Evenement : nom technique historique du modèle « Groupe » rattaché à un
+  lieu (ex. Maternelles, Élémentaires, séjour ou renfort).
 - Affectation : LE planning à proprement parler. Une ligne = un
-  animateur travaille dans une événement (et donc dans son centre) entre
+  animateur travaille dans un groupe (et donc dans son centre) entre
   deux dates. Le champ `centre` est conservé temporairement pour ne pas
   casser les écrans et API existants pendant la migration progressive.
 """
+
+import re
+from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -38,7 +40,6 @@ def jours_ouverts_par_defaut():
     return [0, 1, 2, 3, 4, 5]
 
 
-EQUIPE_PRINCIPALE_NOM = "Événement principal"
 
 ANIMATEUR_COLOR_PALETTE = [
     "#2563EB", "#059669", "#DC2626", "#9333EA", "#EA580C",
@@ -46,6 +47,45 @@ ANIMATEUR_COLOR_PALETTE = [
     "#0F766E", "#BE123C", "#7C3AED", "#0284C7", "#16A34A",
     "#C2410C", "#A21CAF", "#0369A1", "#15803D", "#B91C1C",
 ]
+
+
+def _date_paques(annee):
+    """Retourne le dimanche de Pâques (calendrier grégorien)."""
+    a = annee % 19
+    b = annee // 100
+    c = annee % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    correction_dimanche = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * correction_dimanche) // 451
+    mois = (h + correction_dimanche - 7 * m + 114) // 31
+    jour = ((h + correction_dimanche - 7 * m + 114) % 31) + 1
+    from datetime import date
+    return date(annee, mois, jour)
+
+
+def jours_feries_france(annee):
+    """Jours fériés nationaux métropolitains pour une année."""
+    from datetime import date
+    paques = _date_paques(annee)
+    return {
+        date(annee, 1, 1),
+        paques + timedelta(days=1),
+        date(annee, 5, 1),
+        date(annee, 5, 8),
+        paques + timedelta(days=39),
+        paques + timedelta(days=50),
+        date(annee, 7, 14),
+        date(annee, 8, 15),
+        date(annee, 11, 1),
+        date(annee, 11, 11),
+        date(annee, 12, 25),
+    }
 
 
 class Qualification(models.Model):
@@ -63,7 +103,7 @@ class Qualification(models.Model):
 
 
 class Animateur(models.Model):
-    """Un membre de l'événement d'animation.
+    """Un membre du groupe d'animation.
 
     Les coordonnées et la date de naissance sont optionnelles pour ne pas
     bloquer les animateurs déjà créés avant l'ajout de ces champs. L'âge
@@ -95,6 +135,7 @@ class Animateur(models.Model):
     evenement_preferee = models.ForeignKey(
         "Evenement", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="animateurs_preferant",
+        verbose_name="groupe préféré",
     )
 
     @property
@@ -163,7 +204,7 @@ class Centre(models.Model):
 
 
 class Evenement(models.Model):
-    """Un besoin de personnel organisé dans un lieu sur une période donnée."""
+    """Un groupe organisé dans un lieu, éventuellement rattaché à des périodes prédéfinies."""
 
     centre = models.ForeignKey(
         Centre,
@@ -172,8 +213,18 @@ class Evenement(models.Model):
         verbose_name="lieu",
     )
     nom = models.CharField(max_length=100)
-    debut = models.DateField(null=True, blank=True, help_text="Premier jour de l’événement")
-    fin = models.DateField(null=True, blank=True, help_text="Dernier jour de l’événement inclus")
+    periodes_scolaires = models.ManyToManyField(
+        "PeriodeScolaire",
+        related_name="groupes",
+        blank=True,
+        verbose_name="périodes",
+    )
+    ferme_jours_feries = models.BooleanField(
+        default=True,
+        verbose_name="fermé les jours fériés",
+    )
+    debut = models.DateField(null=True, blank=True, help_text="Premier jour du groupe")
+    fin = models.DateField(null=True, blank=True, help_text="Dernier jour du groupe inclus")
     effectif_cible = models.PositiveSmallIntegerField(
         default=1,
         help_text="Nombre de personnes nécessaires chaque jour",
@@ -189,9 +240,10 @@ class Evenement(models.Model):
         blank=True,
     )
     ordre = models.PositiveSmallIntegerField(default=0)
-    active = models.BooleanField(default=True)
 
     class Meta:
+        verbose_name = "groupe"
+        verbose_name_plural = "groupes"
         ordering = ["centre__nom", "ordre", "nom"]
         constraints = [
             models.UniqueConstraint(
@@ -216,16 +268,31 @@ class Evenement(models.Model):
             raise ValidationError({"jours_ouverts": "Choisis au moins un jour d’ouverture valide."})
         self.jours_ouverts = jours
 
+    def fin_ouverture_periode(self, periode):
+        """Dernier jour réellement utilisable pour une période.
+
+        Les périodes scolaires importées vont volontairement du lundi au
+        vendredi. Si le groupe ouvre le samedi ou le dimanche, ces jours qui
+        suivent immédiatement la semaine doivent néanmoins être accessibles.
+        """
+        jours = {int(numero) for numero in (self.jours_ouverts or [])}
+        extension = 2 if 6 in jours else (1 if 5 in jours else 0)
+        return periode.fin + timedelta(days=extension)
+
     def est_ouvert_le(self, jour, dates_exclues=None):
-        """Indique si l’événement doit être planifié à cette date."""
-        if not self.active:
+        """Indique si le groupe est ouvert à cette date.
+
+        Sans période sélectionnée, le groupe existe dans Gestion mais ne doit
+        apparaître ni dans les calendriers ni dans le remplissage automatique.
+        """
+        periodes = list(self.periodes_scolaires.all())
+        if not periodes:
             return False
-        if self.debut and jour < self.debut:
+        if not any(periode.debut <= jour <= self.fin_ouverture_periode(periode) for periode in periodes):
             return False
-        if self.fin and jour > self.fin:
+        if jour.weekday() not in {int(numero) for numero in (self.jours_ouverts or [])}:
             return False
-        jours_ouverts = {int(numero) for numero in (self.jours_ouverts or [])}
-        if jour.weekday() not in jours_ouverts:
+        if self.ferme_jours_feries and jour in jours_feries_france(jour.year):
             return False
         if dates_exclues is None:
             dates_exclues = set(self.dates_exclues.values_list("date", flat=True))
@@ -236,12 +303,13 @@ class Evenement(models.Model):
 
 
 class DateExclueEvenement(models.Model):
-    """Une fermeture ponctuelle à l’intérieur de la période d’un événement."""
+    """Une fermeture ponctuelle à l’intérieur de la période d’un groupe."""
 
     evenement = models.ForeignKey(
         Evenement,
         on_delete=models.CASCADE,
         related_name="dates_exclues",
+        verbose_name="groupe",
     )
     date = models.DateField()
     motif = models.CharField(max_length=120, blank=True, default="")
@@ -258,19 +326,22 @@ class DateExclueEvenement(models.Model):
     def clean(self):
         super().clean()
         if self.evenement.debut and self.date < self.evenement.debut:
-            raise ValidationError("La date exclue doit appartenir à la période de l’événement.")
+            raise ValidationError("La date exclue doit appartenir à la période du groupe.")
         if self.evenement.fin and self.date > self.evenement.fin:
-            raise ValidationError("La date exclue doit appartenir à la période de l’événement.")
+            raise ValidationError("La date exclue doit appartenir à la période du groupe.")
 
     def __str__(self):
         return f"{self.evenement} fermé le {self.date:%d/%m/%Y}"
 
 
 class BesoinQualification(models.Model):
-    """Nombre minimal de titulaires d’une qualification pour un événement."""
+    """Nombre minimal de titulaires d’une qualification pour un groupe."""
 
     evenement = models.ForeignKey(
-        Evenement, on_delete=models.CASCADE, related_name="besoins_qualifications"
+        Evenement,
+        on_delete=models.CASCADE,
+        related_name="besoins_qualifications",
+        verbose_name="groupe",
     )
     qualification = models.ForeignKey(Qualification, on_delete=models.CASCADE)
     nombre_minimum = models.PositiveSmallIntegerField(default=1)
@@ -330,6 +401,65 @@ class PreferenceCentre(models.Model):
     def __str__(self):
         type_centre = "centre préféré" if self.est_prefere else "centre secondaire"
         return f"{self.animateur} - {type_centre} : {self.centre}"
+
+
+class PeriodeScolaire(models.Model):
+    """Semaine de vacances importée et sélectionnable par les groupes.
+
+    Les dates restent centralisées dans cette bibliothèque : un groupe ne
+    saisit pas ses propres bornes et peut simplement référencer zéro, une ou
+    plusieurs périodes.
+    """
+
+    ZONES = [("A", "Zone A"), ("B", "Zone B"), ("C", "Zone C")]
+
+    nom = models.CharField(max_length=140)
+    annee_scolaire = models.CharField(max_length=9, help_text="Ex. 2026-2027")
+    zone = models.CharField(max_length=1, choices=ZONES)
+    debut = models.DateField()
+    fin = models.DateField()
+    description_source = models.CharField(max_length=180, blank=True, default="")
+    ordre = models.PositiveSmallIntegerField(default=0)
+    date_import = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-annee_scolaire", "zone", "debut", "ordre", "nom"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["annee_scolaire", "zone", "debut", "fin"],
+                name="unique_periode_scolaire_zone_dates",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(fin__gte=models.F("debut")),
+                name="periode_scolaire_fin_apres_debut",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not re.fullmatch(r"\d{4}-\d{4}", self.annee_scolaire or ""):
+            raise ValidationError({"annee_scolaire": "Utilise le format 2026-2027."})
+        premiere, seconde = map(int, self.annee_scolaire.split("-"))
+        if seconde != premiere + 1:
+            raise ValidationError({"annee_scolaire": "Les années doivent être consécutives."})
+        if self.fin < self.debut:
+            raise ValidationError({"fin": "La date de fin doit suivre la date de début."})
+        if self.debut.weekday() != 0 or self.fin.weekday() != 4:
+            raise ValidationError("Une période importée doit aller du lundi au vendredi.")
+
+    @property
+    def libelle_avec_annee(self):
+        """Nom court non ambigu, par exemple « Été 2026 — Semaine 2 »."""
+        annee = str(self.debut.year)
+        separateur = " — Semaine "
+        if annee in self.nom:
+            return self.nom
+        if separateur in self.nom:
+            return self.nom.replace(separateur, f" {annee}{separateur}")
+        return f"{self.nom} {annee}"
+
+    def __str__(self):
+        return f"{self.libelle_avec_annee} ({self.debut:%d/%m/%Y} au {self.fin:%d/%m/%Y})"
 
 
 class Disponibilite(models.Model):
@@ -400,6 +530,7 @@ class Affectation(models.Model):
         Evenement,
         on_delete=models.PROTECT,
         related_name="affectations",
+        verbose_name="groupe",
     )
     debut = models.DateTimeField()
     fin = models.DateTimeField()

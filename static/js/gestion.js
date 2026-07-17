@@ -2,7 +2,7 @@
 // gestion.js
 // ---------------------------------------------------------------------------
 // Module CRUD de la page /gestion/ pour les paramètres partagés :
-// salariés, lieux, événements et qualifications sont réunis dans /gestion/.
+// salariés, lieux, groupes et qualifications sont réunis dans /gestion/.
 // ===========================================================================
 
 const GestionApp = (function ()
@@ -45,31 +45,9 @@ function bouton(label, classes, onClick)
 		return actions;
 	}
 
-	function resetFormAnimateur(form)
-	{
-		form.querySelector("#anim-prenom").value = "";
-		form.querySelector("#anim-nom").value = "";
-		form.querySelector("#anim-telephone").value = "";
-		form.querySelector("#anim-email").value = "";
-		form.querySelector("#anim-date-naissance").value = "";
-		form.querySelectorAll("#anim-qualifs input:checked").forEach((el) => { el.checked = false; });
-		form.querySelectorAll("#anim-lieux input").forEach((el) => { el.checked = false; el.disabled = false; });
-	}
 
-	function qualificationCheckboxes(qualifications, cochees = [])
-	{
-		return FormOptionsUtils.qualifications(qualifications, cochees);
-	}
 
-	function lieuxHierarchisesInputs(lieux, centrePrefere = null, lieuxSecondaires = [], groupe = "lieu-prefere")
-	{
-		return FormOptionsUtils.lieuxHierarchises(lieux, centrePrefere, lieuxSecondaires, groupe);
-	}
 
-	function lieuxHierarchisesDepuisForm(root)
-	{
-		return FormOptionsUtils.lireLieuxHierarchises(root);
-	}
 
 	// ------------------------------------------------------------------
 	// Qualifications
@@ -225,9 +203,10 @@ function bouton(label, classes, onClick)
 	function mountCentres(container, options = {})
 	{
 		let qualificationsEvenements = [];
+		let periodesScolaires = [];
 		container.innerHTML = `
-			<p class="section-title">Lieux et événements</p>
-			<p class="section-help">Chaque lieu peut accueillir plusieurs événements sur des périodes différentes.</p>
+			<p class="section-title">Lieux et groupes</p>
+			<p class="section-help">Chaque lieu peut accueillir plusieurs groupes sur les périodes enregistrées.</p>
 			<div class="lieux-cards" id="lieux-list"></div>
 			<p class="section-title">Ajouter un lieu</p>
 			<div class="gestion-form" id="lieu-form">
@@ -266,290 +245,97 @@ function bouton(label, classes, onClick)
 			{ numero: 6, court: "Dim", long: "Dimanche" },
 		];
 
-		function isoDate(date)
+		function periodesFormHtml(uid, prefix, groupe = null)
 		{
-			return formatDateLocal(date);
-		}
+			if (!periodesScolaires.length)
+				return '<p class="empty-note">Aucune période enregistrée. Le groupe peut tout de même être créé et configuré plus tard.</p>';
 
-		function dateDansPeriode(dateStr, debut, fin)
-		{
-			return Boolean(debut && fin && dateStr >= debut && dateStr <= fin);
-		}
-
-		function ajouterJoursDate(date, jours)
-		{
-			const copie = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-			copie.setDate(copie.getDate() + jours);
-			return copie;
-		}
-
-		function paques(annee)
-		{
-			const a = annee % 19;
-			const b = Math.floor(annee / 100);
-			const c = annee % 100;
-			const d = Math.floor(b / 4);
-			const e = b % 4;
-			const f = Math.floor((b + 8) / 25);
-			const g = Math.floor((b - f + 1) / 3);
-			const h = (19 * a + b - d - g + 15) % 30;
-			const i = Math.floor(c / 4);
-			const k = c % 4;
-			const l = (32 + 2 * e + 2 * i - h - k) % 7;
-			const m = Math.floor((a + 11 * h + 22 * l) / 451);
-			const mois = Math.floor((h + l - 7 * m + 114) / 31);
-			const jour = ((h + l - 7 * m + 114) % 31) + 1;
-			return new Date(annee, mois - 1, jour);
-		}
-
-		function joursFeriesFrancais(annee)
-		{
-			const dimanchePaques = paques(annee);
-			return [
-				new Date(annee, 0, 1),
-				ajouterJoursDate(dimanchePaques, 1),
-				new Date(annee, 4, 1),
-				new Date(annee, 4, 8),
-				ajouterJoursDate(dimanchePaques, 39),
-				ajouterJoursDate(dimanchePaques, 50),
-				new Date(annee, 6, 14),
-				new Date(annee, 7, 15),
-				new Date(annee, 10, 1),
-				new Date(annee, 10, 11),
-				new Date(annee, 11, 25),
-			];
-		}
-
-		function initialiserCalendrierExclusions(root, prefix)
-		{
-			const debutInput = root.querySelector(`.${prefix}-debut`);
-			const finInput = root.querySelector(`.${prefix}-fin`);
-			const hiddenInput = root.querySelector(`.${prefix}-dates-exclues`);
-			const calendar = root.querySelector(`.${prefix}-exclusion-calendar`);
-			if (!debutInput || !finInput || !hiddenInput || !calendar) return;
-
-			const titre = calendar.querySelector(".event-calendar-title");
-			const grille = calendar.querySelector(".event-calendar-grid");
-			const compteur = root.querySelector(`.${prefix}-exclusions-count`);
-			let moisCourant = debutInput.value
-				? new Date(parseLocalDate(debutInput.value).getFullYear(), parseLocalDate(debutInput.value).getMonth(), 1)
-				: new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-
-			function datesExclues()
-			{
-				return new Set((hiddenInput.value || "").split(",").filter(Boolean));
-			}
-
-			function enregistrerDates(dates)
-			{
-				const debut = debutInput.value;
-				const fin = finInput.value;
-				const nettoyees = [...dates]
-					.filter((date) => dateDansPeriode(date, debut, fin))
-					.sort();
-				hiddenInput.value = nettoyees.join(",");
-				if (compteur)
-				{
-					compteur.textContent = nettoyees.length
-						? `${nettoyees.length} date${nettoyees.length > 1 ? "s" : ""} exclue${nettoyees.length > 1 ? "s" : ""}`
-						: "Aucune date exclue";
-				}
-			}
-
-			function joursOuverts()
-			{
-				return new Set(Array.from(root.querySelectorAll(`.${prefix}-jour-ouvert:checked`)).map((input) => Number(input.value)));
-			}
-
-			function bornerMois()
-			{
-				if (!debutInput.value || !finInput.value) return;
-				const debut = parseLocalDate(debutInput.value);
-				const fin = parseLocalDate(finInput.value);
-				const premierMois = new Date(debut.getFullYear(), debut.getMonth(), 1);
-				const dernierMois = new Date(fin.getFullYear(), fin.getMonth(), 1);
-				if (moisCourant < premierMois) moisCourant = premierMois;
-				if (moisCourant > dernierMois) moisCourant = dernierMois;
-			}
-
-			function rendreCalendrier()
-			{
-				bornerMois();
-				const debut = debutInput.value;
-				const fin = finInput.value;
-				const exclusions = datesExclues();
-				const ouverts = joursOuverts();
-				titre.textContent = moisCourant.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-				grille.innerHTML = "";
-
-				["L", "M", "M", "J", "V", "S", "D"].forEach((jour) =>
-				{
-					const entete = document.createElement("span");
-					entete.className = "event-calendar-weekday";
-					entete.textContent = jour;
-					grille.appendChild(entete);
-				});
-
-				const premierJour = new Date(moisCourant.getFullYear(), moisCourant.getMonth(), 1);
-				const decalage = (premierJour.getDay() + 6) % 7;
-				const debutGrille = ajouterJoursDate(premierJour, -decalage);
-				for (let index = 0; index < 42; index += 1)
-				{
-					const date = ajouterJoursDate(debutGrille, index);
-					const dateStr = isoDate(date);
-					const numeroJour = (date.getDay() + 6) % 7;
-					const boutonJour = document.createElement("button");
-					boutonJour.type = "button";
-					boutonJour.className = "event-calendar-day";
-					boutonJour.textContent = String(date.getDate());
-					boutonJour.title = date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-					if (date.getMonth() !== moisCourant.getMonth()) boutonJour.classList.add("is-other-month");
-					if (!dateDansPeriode(dateStr, debut, fin))
-					{
-						boutonJour.disabled = true;
-						boutonJour.classList.add("is-outside-period");
-					}
-					else
-					{
-						if (!ouverts.has(numeroJour)) boutonJour.classList.add("is-closed-weekday");
-						if (exclusions.has(dateStr)) boutonJour.classList.add("is-excluded");
-						boutonJour.addEventListener("click", () =>
-						{
-							const dates = datesExclues();
-							if (dates.has(dateStr)) dates.delete(dateStr);
-							else dates.add(dateStr);
-							enregistrerDates(dates);
-							rendreCalendrier();
-						});
-					}
-					grille.appendChild(boutonJour);
-				}
-				enregistrerDates(exclusions);
-			}
-
-			calendar.querySelector("[data-calendar-prev]").addEventListener("click", () =>
-			{
-				moisCourant = new Date(moisCourant.getFullYear(), moisCourant.getMonth() - 1, 1);
-				rendreCalendrier();
-			});
-			calendar.querySelector("[data-calendar-next]").addEventListener("click", () =>
-			{
-				moisCourant = new Date(moisCourant.getFullYear(), moisCourant.getMonth() + 1, 1);
-				rendreCalendrier();
+			const selectionnees = new Set(
+				groupe ? (groupe.periode_ids || []).map(Number) : periodesScolaires.map((periode) => Number(periode.id))
+			);
+			const ensembles = new Map();
+			let groupesPeriode;
+			periodesScolaires.forEach((periode) => {
+				const cle = `${periode.annee_scolaire} — Zone ${periode.zone}`;
+				if (!ensembles.has(cle)) ensembles.set(cle, []);
+				groupesPeriode = ensembles.get(cle);
+				groupesPeriode.push(periode);
 			});
 
-			root.querySelector(`.${prefix}-exclude-holidays`).addEventListener("click", () =>
-			{
-				if (!debutInput.value || !finInput.value) return;
-				const dates = datesExclues();
-				const debut = parseLocalDate(debutInput.value);
-				const fin = parseLocalDate(finInput.value);
-				for (let annee = debut.getFullYear(); annee <= fin.getFullYear(); annee += 1)
-				{
-					joursFeriesFrancais(annee).forEach((date) =>
-					{
-						const dateStr = isoDate(date);
-						if (dateDansPeriode(dateStr, debutInput.value, finInput.value)) dates.add(dateStr);
-					});
-				}
-				enregistrerDates(dates);
-				rendreCalendrier();
-			});
-
-			root.querySelector(`.${prefix}-exclude-weekends`).addEventListener("click", () =>
-			{
-				if (!debutInput.value || !finInput.value) return;
-				const dates = datesExclues();
-				let date = parseLocalDate(debutInput.value);
-				const fin = parseLocalDate(finInput.value);
-				while (date <= fin)
-				{
-					if (date.getDay() === 0 || date.getDay() === 6) dates.add(isoDate(date));
-					date = ajouterJoursDate(date, 1);
-				}
-				enregistrerDates(dates);
-				rendreCalendrier();
-			});
-
-			root.querySelector(`.${prefix}-clear-exclusions`).addEventListener("click", () =>
-			{
-				enregistrerDates(new Set());
-				rendreCalendrier();
-			});
-
-			[debutInput, finInput].forEach((input) => input.addEventListener("change", () =>
-			{
-				if (debutInput.value)
-				{
-					const debut = parseLocalDate(debutInput.value);
-					moisCourant = new Date(debut.getFullYear(), debut.getMonth(), 1);
-				}
-				enregistrerDates(datesExclues());
-				rendreCalendrier();
-			}));
-			root.querySelectorAll(`.${prefix}-jour-ouvert`).forEach((input) => input.addEventListener("change", rendreCalendrier));
-			rendreCalendrier();
+			return [...ensembles.entries()].map(([titre, periodes]) => `
+				<fieldset class="group-period-fieldset">
+					<legend>${escapeHtml(titre)}</legend>
+					<div class="group-period-grid">
+						${periodes.map((periode) => {
+							const id = `${uid}-periode-${periode.id}`;
+							return `<label class="group-period-option" for="${id}">
+								<input type="checkbox" id="${id}" name="${uid}_periode_${periode.id}" class="${prefix}-periode" value="${periode.id}" ${selectionnees.has(Number(periode.id)) ? "checked" : ""}>
+								<span><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><small>${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}</small></span>
+							</label>`;
+						}).join("")}
+					</div>
+				</fieldset>
+			`).join("");
 		}
 
-		function evenementFormHtml(prefix, evenement = null)
+		function evenementFormHtml(prefix, groupe = null)
 		{
-			const uid = identifiantChamp(`evenement-${evenement?.id || "nouveau"}`);
+			const uid = identifiantChamp(`groupe-${groupe?.id || "nouveau"}`);
 			const nomId = `${uid}-nom`;
-			const debutId = `${uid}-debut`;
-			const finId = `${uid}-fin`;
 			const effectifId = `${uid}-effectif`;
-			const activeId = `${uid}-active`;
-			const active = evenement ? evenement.active : true;
-			const besoins = evenement?.qualifications_requises || {};
-			const joursOuverts = new Set((evenement?.jours_ouverts || [0, 1, 2, 3, 4, 5]).map(Number));
-			const datesExclues = evenement?.dates_exclues || [];
-			const joursHtml = JOURS_EVENEMENT.map((jour) =>
-			{
-				const inputId = `${uid}-jour-${jour.numero}`;
-				return `<label class="event-weekday-option" for="${inputId}"><input type="checkbox" id="${inputId}" name="${uid}_jour_${jour.numero}" value="${jour.numero}" class="${prefix}-jour-ouvert" ${joursOuverts.has(jour.numero) ? "checked" : ""}><span>${jour.court}</span></label>`;
-			}).join("");
+			const feriesId = `${uid}-feries`;
+			const besoins = groupe?.qualifications_requises || {};
+			const joursSelectionnes = new Set(
+				(groupe?.jours_ouverts || [0, 1, 2, 3, 4, 5]).map(Number)
+			);
 			const qualifsHtml = qualificationsEvenements.length
 				? qualificationsEvenements.map((q) => {
 					const qualificationId = `${uid}-qualification-${q.id}`;
-					return `
-					<label class="qualification-requirement" for="${qualificationId}">
+					return `<label class="qualification-requirement" for="${qualificationId}">
 						<span>${escapeHtml(q.nom)}</span>
 						<input type="number" id="${qualificationId}" name="${uid}_qualification_${q.id}" min="0" step="1" value="${besoins[String(q.id)] || 0}" data-qualification-id="${q.id}">
 					</label>`;
 				}).join("")
 				: '<p class="empty-note">Aucune qualification configurée.</p>';
+
+			const joursHtml = JOURS_EVENEMENT.map((jour) => {
+				const id = `${uid}-jour-${jour.numero}`;
+				return `<label class="group-weekday-option" for="${id}">
+					<input type="checkbox" id="${id}" name="${uid}_jour_${jour.numero}" class="${prefix}-jour-ouvert" value="${jour.numero}" ${joursSelectionnes.has(jour.numero) ? "checked" : ""}>
+					<span title="${escapeHtml(jour.long)}">${escapeHtml(jour.court)}</span>
+				</label>`;
+			}).join("");
+
 			return `
 				<div class="team-form-grid">
-					<div class="field team-name-field"><label for="${nomId}">Nom de l’événement</label><input type="text" id="${nomId}" name="${uid}_nom" class="${prefix}-nom" value="${escapeHtml(evenement?.nom || "")}" placeholder="ex : Pacaudière maternelles"></div>
-					<div class="field"><label for="${debutId}">Du</label><input type="date" id="${debutId}" name="${uid}_debut" class="${prefix}-debut" value="${escapeHtml(evenement?.debut || "")}"></div>
-					<div class="field"><label for="${finId}">Au</label><input type="date" id="${finId}" name="${uid}_fin" class="${prefix}-fin" value="${escapeHtml(evenement?.fin || "")}"></div>
-					<div class="field"><label for="${effectifId}">Personnel nécessaire par jour</label><input type="number" id="${effectifId}" name="${uid}_effectif" class="${prefix}-effectif" value="${evenement?.effectif_cible || 1}" min="1" step="1"></div>
-					<label class="checkbox-option team-active-field" for="${activeId}"><input type="checkbox" id="${activeId}" name="${uid}_active" class="${prefix}-active" ${active ? "checked" : ""}><span>Événement actif</span></label>
+					<div class="field team-name-field"><label for="${nomId}">Nom du groupe</label><input type="text" id="${nomId}" name="${uid}_nom" class="${prefix}-nom" value="${escapeHtml(groupe?.nom || "")}" placeholder="ex : Maternelles"></div>
+					<div class="field"><label for="${effectifId}">Personnel nécessaire par jour</label><input type="number" id="${effectifId}" name="${uid}_effectif" class="${prefix}-effectif" value="${groupe?.effectif_cible || 1}" min="1" step="1"></div>
 				</div>
 				<section class="event-opening-settings">
-					<div class="event-setting-heading"><strong>Jours habituels d’ouverture</strong><span>Les autres jours seront automatiquement fermés.</span></div>
-					<div class="event-weekdays">${joursHtml}</div>
-					<input type="hidden" class="${prefix}-dates-exclues" name="${uid}_dates_exclues" value="${escapeHtml(datesExclues.join(","))}">
-					<div class="event-exclusions-toolbar">
-						<div><strong>Fermetures ponctuelles</strong><span class="${prefix}-exclusions-count"></span></div>
-						<div class="event-exclusion-actions">
-							<button type="button" class="btn btn-ghost ${prefix}-exclude-holidays">Jours fériés</button>
-							<button type="button" class="btn btn-ghost ${prefix}-exclude-weekends">Week-ends</button>
-							<button type="button" class="btn btn-ghost ${prefix}-clear-exclusions">Tout réactiver</button>
-						</div>
+					<div class="event-setting-heading"><strong>Périodes</strong><span>Facultatif : sans période, le groupe est conservé dans Gestion mais n’apparaît pas dans les calendriers.</span></div>
+					<div class="group-period-actions">
+						<button type="button" class="btn btn-ghost ${prefix}-periods-all">Tout cocher</button>
+						<button type="button" class="btn btn-ghost ${prefix}-periods-none">Tout décocher</button>
 					</div>
-					<div class="event-exclusion-calendar ${prefix}-exclusion-calendar">
-						<div class="event-calendar-nav">
-							<button type="button" class="btn btn-icon btn-ghost" data-calendar-prev aria-label="Mois précédent">‹</button>
-							<strong class="event-calendar-title"></strong>
-							<button type="button" class="btn btn-icon btn-ghost" data-calendar-next aria-label="Mois suivant">›</button>
-						</div>
-						<div class="event-calendar-grid"></div>
+					<div class="group-periods">${periodesFormHtml(uid, prefix, groupe)}</div>
+					<div class="event-setting-heading"><strong>Jours ouverts</strong><span>Lundi à samedi ouverts par défaut ; dimanche fermé.</span></div>
+					<div class="group-weekdays">${joursHtml}</div>
+					<div class="group-closure-options">
+						<label class="checkbox-option" for="${feriesId}"><input type="checkbox" id="${feriesId}" name="${uid}_ferme_jours_feries" class="${prefix}-ferme-feries" ${groupe?.ferme_jours_feries !== false ? "checked" : ""}><span>Fermé les jours fériés</span></label>
 					</div>
-					<p class="event-calendar-help">Clique sur une date pour la fermer ou la rouvrir. Les dates fermées apparaîtront en noir dans le planning.</p>
 				</section>
 				<div class="event-qualifications"><strong>Qualifications requises chaque jour</strong>${qualifsHtml}</div>
 				<p class="form-error ${prefix}-error"></p>`;
+		}
+
+		function initialiserFormGroupe(root, prefix)
+		{
+			root.querySelector(`.${prefix}-periods-all`)?.addEventListener("click", () => {
+				root.querySelectorAll(`.${prefix}-periode`).forEach((input) => { input.checked = true; });
+			});
+			root.querySelector(`.${prefix}-periods-none`)?.addEventListener("click", () => {
+				root.querySelectorAll(`.${prefix}-periode`).forEach((input) => { input.checked = false; });
+			});
 		}
 
 		function lireEvenementForm(root, prefix)
@@ -561,28 +347,28 @@ function bouton(label, classes, onClick)
 			});
 			return {
 				nom: champValeur(root, `.${prefix}-nom`),
-				debut: root.querySelector(`.${prefix}-debut`).value,
-				fin: root.querySelector(`.${prefix}-fin`).value,
+				periode_ids: Array.from(root.querySelectorAll(`.${prefix}-periode:checked`)).map((input) => Number(input.value)),
 				effectif_cible: parseInt(champValeur(root, `.${prefix}-effectif`), 10) || 1,
 				jours_ouverts: Array.from(root.querySelectorAll(`.${prefix}-jour-ouvert:checked`)).map((input) => Number(input.value)),
-				dates_exclues: (root.querySelector(`.${prefix}-dates-exclues`).value || "").split(",").filter(Boolean),
+				ferme_jours_feries: root.querySelector(`.${prefix}-ferme-feries`).checked,
 				qualifications_requises,
-				active: root.querySelector(`.${prefix}-active`).checked,
 			};
 		}
 
-		function periodeLibelle(evenement)
+		function periodeLibelle(groupe)
 		{
-			if (!evenement.debut || !evenement.fin) return "Période à compléter";
-			return `Du ${libelleDate(evenement.debut)} au ${libelleDate(evenement.fin)}`;
+			const periodes = groupe.periodes || [];
+			if (!periodes.length) return "Aucune période — masqué des calendriers";
+			if (periodes.length === 1) return periodes[0].nom;
+			return `${periodes.length} périodes sélectionnées`;
 		}
 
-
-		function joursOuvertureLibelle(evenement)
+		function joursOuvertureLibelle(groupe)
 		{
-			const jours = new Set((evenement.jours_ouverts || [0, 1, 2, 3, 4, 5]).map(Number));
-			const libelles = JOURS_EVENEMENT.filter((jour) => jours.has(jour.numero)).map((jour) => jour.court);
-			return libelles.length === 7 ? "Tous les jours" : libelles.join(" · ");
+			const noms = new Map(JOURS_EVENEMENT.map((jour) => [jour.numero, jour.court]));
+			const jours = (groupe.jours_ouverts || []).map(Number).sort((a, b) => a - b);
+			const libelle = jours.length === 7 ? "Tous les jours" : jours.map((jour) => noms.get(jour)).join(" · ");
+			return groupe.ferme_jours_feries ? `${libelle} · jours fériés fermés` : `${libelle} · jours fériés ouverts`;
 		}
 
 		function couleurTexteLisible(couleur)
@@ -620,7 +406,7 @@ function bouton(label, classes, onClick)
 					<div class="field"><label for="${nomId}">Nom</label><input type="text" id="${nomId}" name="lieu_${c.id}_nom" class="edit-lieu-nom" value="${escapeHtml(c.nom)}"></div>
 					<div class="field"><label for="${codeId}">Code</label><input type="text" id="${codeId}" name="lieu_${c.id}_code" class="edit-lieu-code" value="${escapeHtml(c.code)}" maxlength="10"></div>
 					<div class="field"><label for="${couleurId}">Couleur</label><input type="color" id="${couleurId}" name="lieu_${c.id}_couleur" class="edit-lieu-couleur" value="${escapeHtml(c.couleur)}"></div>
-					<div class="lieu-total-readonly"><span>Effectif global</span><strong>${escapeHtml(c.effectif_cible)}</strong><small>calculé depuis les événements actifs</small></div>
+					<div class="lieu-total-readonly"><span>Effectif global</span><strong>${escapeHtml(c.effectif_cible)}</strong><small>calculé depuis les groupes</small></div>
 					<p class="form-error edit-lieu-error"></p>
 				</div>
 			`;
@@ -652,12 +438,12 @@ function bouton(label, classes, onClick)
 
 		function enregistrerOrdre(lieu, ids)
 		{
-			apiFetch(`/api/centres/${lieu.id}/evenements/reordonner/`, {
+			apiFetch(`/api/centres/${lieu.id}/groupes/reordonner/`, {
 				method: "POST",
 				body: JSON.stringify({ evenement_ids: ids }),
 			}).then(() =>
 			{
-				afficherToast("Ordre des événements enregistré.");
+				afficherToast("Ordre des groupes enregistré.");
 				charger();
 			}).catch((err) => afficherToast(erreurMessage(err, "Réorganisation impossible."), true));
 		}
@@ -696,24 +482,19 @@ function bouton(label, classes, onClick)
 		{
 			row.classList.add("team-row-editing");
 			row.innerHTML = evenementFormHtml("edit-team", evenement);
-			initialiserCalendrierExclusions(row, "edit-team");
+			initialiserFormGroupe(row, "edit-team");
 			const error = row.querySelector(".edit-team-error");
 			row.appendChild(creerFormActions(() =>
 			{
 				const payload = lireEvenementForm(row, "edit-team");
-				if (!payload.nom || !payload.debut || !payload.fin)
+				if (!payload.nom || payload.jours_ouverts.length === 0)
 				{
-					error.textContent = "Le nom et la période sont obligatoires.";
+					error.textContent = "Le nom et au moins un jour d’ouverture sont obligatoires.";
 					return;
 				}
-				if (payload.jours_ouverts.length === 0)
+				enregistrerEvenement(`/api/groupes/${evenement.id}/`, "PATCH", payload, error, () =>
 				{
-					error.textContent = "Choisis au moins un jour habituel d’ouverture.";
-					return;
-				}
-				enregistrerEvenement(`/api/evenements/${evenement.id}/`, "PATCH", payload, error, () =>
-				{
-					afficherToast("Événement modifié.");
+					afficherToast("Groupe modifié.");
 					charger();
 					if (options.onChange) options.onChange();
 				});
@@ -723,19 +504,18 @@ function bouton(label, classes, onClick)
 		function chargerEvenements(c, card)
 		{
 			const teamList = card.querySelector(".team-list");
-			return apiFetch(`/api/centres/${c.id}/evenements/`).then((evenements) =>
+			return apiFetch(`/api/centres/${c.id}/groupes/`).then((evenements) =>
 			{
 				teamList.innerHTML = "";
 				evenements.forEach((evenement, index) =>
 				{
 					const row = document.createElement("div");
-					row.className = `team-row${evenement.active ? "" : " team-row-inactive"}`;
+					row.className = "team-row";
 					row.dataset.evenementId = evenement.id;
 					row.innerHTML = `
 						<div class="team-main">
 							<div class="team-title-line">
 								<strong>${escapeHtml(evenement.nom)}</strong>
-								<span class="team-status ${evenement.active ? "is-active" : "is-inactive"}">${evenement.active ? "Active" : "Inactive"}</span>
 							</div>
 							<div class="team-meta">
 								<span>${evenement.effectif_cible} animateur${evenement.effectif_cible > 1 ? "s" : ""}</span>
@@ -756,11 +536,11 @@ function bouton(label, classes, onClick)
 					actions.appendChild(bouton("Modifier", "btn btn-ghost", () => ouvrirEditionEvenement(evenement, c, row)));
 					const supprimer = bouton("Supprimer", "btn btn-danger-ghost", () =>
 					{
-						if (!confirm(`Supprimer l’événement « ${evenement.nom} » ?`)) return;
-						apiFetch(`/api/evenements/${evenement.id}/`, { method: "DELETE" })
+						if (!confirm(`Supprimer le groupe « ${evenement.nom} » ?`)) return;
+						apiFetch(`/api/groupes/${evenement.id}/`, { method: "DELETE" })
 							.then(() =>
 							{
-								afficherToast("Événement supprimé.");
+								afficherToast("Groupe supprimé.");
 								charger();
 								if (options.onChange) options.onChange();
 							})
@@ -769,9 +549,7 @@ function bouton(label, classes, onClick)
 					supprimer.disabled = !evenement.peut_supprimer;
 					if (!evenement.peut_supprimer)
 					{
-						supprimer.title = evenement.nb_affectations
-							? "Cet événement contient des affectations."
-							: "Un lieu doit conserver au moins un événement.";
+						supprimer.title = "Ce groupe contient des affectations.";
 					}
 					actions.appendChild(supprimer);
 					teamList.appendChild(row);
@@ -796,14 +574,14 @@ function bouton(label, classes, onClick)
 				</div>
 				<div class="lieu-teams-block">
 					<div class="teams-heading">
-						<div><h4>Événements de ce lieu</h4><p>Chaque événement garde sa période, son effectif et ses qualifications propres.</p></div>
-						<button type="button" class="btn btn-secondary team-add-toggle">+ Ajouter un événement</button>
+						<div><h4>Groupes de ce lieu</h4><p>Les périodes sont facultatives ; sans période, le groupe reste uniquement dans Gestion.</p></div>
+						<button type="button" class="btn btn-secondary team-add-toggle">+ Ajouter un groupe</button>
 					</div>
 					<div class="team-list"><p class="empty-note">Chargement…</p></div>
 					<div class="team-create-form" hidden>
 						${evenementFormHtml("new-team")}
 						<div class="edit-actions">
-							<button type="button" class="btn btn-primary team-create-submit">Ajouter l’événement</button>
+							<button type="button" class="btn btn-primary team-create-submit">Ajouter le groupe</button>
 							<button type="button" class="btn btn-ghost team-create-cancel">Annuler</button>
 						</div>
 					</div>
@@ -826,7 +604,7 @@ function bouton(label, classes, onClick)
 			}));
 
 			const form = card.querySelector(".team-create-form");
-			initialiserCalendrierExclusions(form, "new-team");
+			initialiserFormGroupe(form, "new-team");
 			card.querySelector(".team-add-toggle").addEventListener("click", () =>
 			{
 				form.hidden = !form.hidden;
@@ -838,22 +616,17 @@ function bouton(label, classes, onClick)
 				const error = form.querySelector(".new-team-error");
 				error.textContent = "";
 				const payload = lireEvenementForm(form, "new-team");
-				if (!payload.nom || !payload.debut || !payload.fin)
+				if (!payload.nom || payload.jours_ouverts.length === 0)
 				{
-					error.textContent = "Le nom et la période sont obligatoires.";
+					error.textContent = "Le nom et au moins un jour d’ouverture sont obligatoires.";
 					return;
 				}
-				if (payload.jours_ouverts.length === 0)
-				{
-					error.textContent = "Choisis au moins un jour habituel d’ouverture.";
-					return;
-				}
-				apiFetch(`/api/centres/${c.id}/evenements/`, {
+				apiFetch(`/api/centres/${c.id}/groupes/`, {
 					method: "POST",
 					body: JSON.stringify(payload),
 				}).then(() =>
 				{
-					afficherToast("Événement ajouté.");
+					afficherToast("Groupe ajouté.");
 					charger();
 					if (options.onChange) options.onChange();
 				}).catch((err) => { error.textContent = erreurMessage(err, "Ajout impossible."); });
@@ -894,17 +667,273 @@ function bouton(label, classes, onClick)
 				{
 					nomEl.value = "";
 					codeEl.value = "";
-					afficherToast("Lieu ajouté. Tu peux maintenant y créer un événement.");
+					afficherToast("Lieu ajouté. Tu peux maintenant y créer un groupe.");
 					charger();
 					if (options.onChange) options.onChange(nouveau);
 				})
 				.catch((err) => { errorEl.textContent = erreurMessage(err, "Impossible d’ajouter ce lieu."); });
 		});
 
-		apiFetch("/api/qualifications/").then((items) => { qualificationsEvenements = items; return charger(); });
+		Promise.all([apiFetch("/api/qualifications/"), apiFetch("/api/periodes-scolaires/")]).then(([qualifications, periodes]) => { qualificationsEvenements = qualifications; periodesScolaires = periodes; return charger(); });
 		return { charger };
 	}
 
+
 	// ------------------------------------------------------------------
-	return { mountCentres, mountQualifications };
+	// Périodes scolaires indépendantes
+	// ------------------------------------------------------------------
+	function mountPeriodes(container)
+	{
+		function anneeScolaireParDefaut()
+		{
+			const maintenant = new Date();
+			const anneeDebut = maintenant.getMonth() >= 6
+				? maintenant.getFullYear()
+				: maintenant.getFullYear() - 1;
+			return `${anneeDebut}-${anneeDebut + 1}`;
+		}
+
+		container.innerHTML = `
+			<div class="periods-intro">
+				<div>
+					<p class="section-title">Importer les vacances scolaires</p>
+					<p class="section-help">Choisis une année scolaire et une zone. Le logiciel récupère les dates officielles et les découpe en semaines complètes du lundi au vendredi.</p>
+				</div>
+				<span class="periods-independent-badge">Indépendant du planning</span>
+			</div>
+
+			<div class="gestion-form period-import-form">
+				<div class="period-import-grid">
+					<div class="field">
+						<label for="period-school-year">Année scolaire</label>
+						<input type="text" id="period-school-year" name="periode_annee_scolaire" maxlength="9" placeholder="2026-2027" value="${anneeScolaireParDefaut()}">
+					</div>
+					<div class="field">
+						<label for="period-zone">Zone</label>
+						<select id="period-zone" name="periode_zone">
+							<option value="A">Zone A</option>
+							<option value="B">Zone B</option>
+							<option value="C">Zone C</option>
+						</select>
+					</div>
+					<div class="period-import-action">
+						<button class="btn btn-primary" id="period-preview-button" type="button">Rechercher les périodes</button>
+					</div>
+				</div>
+				<p class="form-error" id="period-import-error"></p>
+			</div>
+
+			<div id="period-preview-zone"></div>
+
+			<div class="period-library-head">
+				<div>
+					<p class="section-title">Périodes enregistrées</p>
+					<p class="section-help">Cette bibliothèque n'est encore reliée à aucune autre fonctionnalité.</p>
+				</div>
+				<div class="field period-library-filter">
+					<label for="period-library-year">Afficher</label>
+					<select id="period-library-year" name="periode_filtre_annee">
+						<option value="">Toutes les années</option>
+					</select>
+				</div>
+			</div>
+			<div id="period-library" class="period-library"></div>
+		`;
+
+		const yearInput = container.querySelector("#period-school-year");
+		const zoneInput = container.querySelector("#period-zone");
+		const previewButton = container.querySelector("#period-preview-button");
+		const errorEl = container.querySelector("#period-import-error");
+		const previewZone = container.querySelector("#period-preview-zone");
+		const library = container.querySelector("#period-library");
+		const filterYear = container.querySelector("#period-library-year");
+		let previewData = null;
+		let savedPeriods = [];
+
+		function payloadImport()
+		{
+			return {
+				annee_scolaire: yearInput.value.trim(),
+				zone: zoneInput.value,
+			};
+		}
+
+		function rendrePreview(data)
+		{
+			previewData = data;
+			const rows = data.periodes.map((periode) => `
+				<tr>
+					<td><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong>${periode.deja_enregistree ? '<span class="period-existing">Déjà enregistrée</span>' : ""}</td>
+					<td>${escapeHtml(libelleDate(periode.debut))}</td>
+					<td>${escapeHtml(libelleDate(periode.fin))}</td>
+				</tr>
+			`).join("");
+
+			previewZone.innerHTML = `
+				<section class="period-preview-card">
+					<div class="period-preview-head">
+						<div>
+							<h3>${escapeHtml(data.annee_scolaire)} — Zone ${escapeHtml(data.zone)}</h3>
+							<p>${data.nombre} semaine${data.nombre > 1 ? "s" : ""} complète${data.nombre > 1 ? "s" : ""} trouvée${data.nombre > 1 ? "s" : ""}. Rien n'est enregistré tant que tu ne confirmes pas.</p>
+						</div>
+						<button class="btn btn-ghost" id="period-preview-close" type="button">Fermer</button>
+					</div>
+					<div class="period-table-wrap">
+						<table class="period-table">
+							<thead><tr><th>Période</th><th>Du lundi</th><th>Au vendredi</th></tr></thead>
+							<tbody>${rows}</tbody>
+						</table>
+					</div>
+					<div class="period-preview-actions">
+						<button class="btn btn-primary" id="period-import-button" type="button">Enregistrer toutes les périodes</button>
+						<p class="form-error" id="period-preview-error"></p>
+					</div>
+				</section>
+			`;
+
+			previewZone.querySelector("#period-preview-close").addEventListener("click", () =>
+			{
+				previewData = null;
+				previewZone.innerHTML = "";
+			});
+			previewZone.querySelector("#period-import-button").addEventListener("click", importer);
+		}
+
+		async function previsualiser()
+		{
+			errorEl.textContent = "";
+			previewButton.disabled = true;
+			previewButton.textContent = "Recherche…";
+			try
+			{
+				const data = await apiFetch("/api/periodes-scolaires/previsualiser/", {
+					method: "POST",
+					body: JSON.stringify(payloadImport()),
+				});
+				rendrePreview(data);
+			}
+			catch (err)
+			{
+				errorEl.textContent = erreurMessage(err, "Impossible de récupérer le calendrier scolaire.");
+			}
+			finally
+			{
+				previewButton.disabled = false;
+				previewButton.textContent = "Rechercher les périodes";
+			}
+		}
+
+		async function importer()
+		{
+			if (!previewData) return;
+			const importButton = previewZone.querySelector("#period-import-button");
+			const previewError = previewZone.querySelector("#period-preview-error");
+			previewError.textContent = "";
+			importButton.disabled = true;
+			importButton.textContent = "Enregistrement…";
+			try
+			{
+				const result = await apiFetch("/api/periodes-scolaires/importer/", {
+					method: "POST",
+					body: JSON.stringify(payloadImport()),
+				});
+				afficherToast(result.cree
+					? `${result.cree} période${result.cree > 1 ? "s" : ""} enregistrée${result.cree > 1 ? "s" : ""}.`
+					: "Toutes ces périodes étaient déjà enregistrées.");
+				previewData = null;
+				previewZone.innerHTML = "";
+				await chargerBibliotheque();
+			}
+			catch (err)
+			{
+				previewError.textContent = erreurMessage(err, "Enregistrement impossible.");
+				importButton.disabled = false;
+				importButton.textContent = "Enregistrer toutes les périodes";
+			}
+		}
+
+		function rendreBibliotheque()
+		{
+			const anneeFiltre = filterYear.value;
+			const visibles = anneeFiltre
+				? savedPeriods.filter((periode) => periode.annee_scolaire === anneeFiltre)
+				: savedPeriods;
+
+			library.innerHTML = "";
+			if (!visibles.length)
+			{
+				library.innerHTML = '<p class="empty-note">Aucune période enregistrée pour le moment.</p>';
+				return;
+			}
+
+			const groupes = new Map();
+			visibles.forEach((periode) =>
+			{
+				const cle = `${periode.annee_scolaire}|${periode.zone}`;
+				if (!groupes.has(cle)) groupes.set(cle, []);
+				groupes.get(cle).push(periode);
+			});
+
+			groupes.forEach((periodes, cle) =>
+			{
+				const [annee, zone] = cle.split("|");
+				const section = document.createElement("section");
+				section.className = "period-year-card";
+				section.innerHTML = `
+					<div class="period-year-head">
+						<div><h3>${escapeHtml(annee)}</h3><p>Zone ${escapeHtml(zone)} · ${periodes.length} période${periodes.length > 1 ? "s" : ""}</p></div>
+					</div>
+					<div class="period-saved-list"></div>
+				`;
+				const list = section.querySelector(".period-saved-list");
+				periodes.forEach((periode) =>
+				{
+					const row = document.createElement("div");
+					row.className = "period-saved-row";
+					row.innerHTML = `
+						<div class="period-saved-date"><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><span>${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}</span></div>
+						<div class="entity-actions"></div>
+					`;
+					row.querySelector(".entity-actions").appendChild(bouton("Supprimer", "btn btn-danger-ghost", async () =>
+					{
+						if (!confirm(`Supprimer la période « ${libellePeriodeAvecAnnee(periode)} » ?`)) return;
+						try
+						{
+							await apiFetch(`/api/periodes-scolaires/${periode.id}/`, { method: "DELETE" });
+							afficherToast("Période supprimée.");
+							await chargerBibliotheque();
+						}
+						catch (err)
+						{
+							afficherToast(erreurMessage(err, "Suppression impossible."), true);
+						}
+					}));
+					list.appendChild(row);
+				});
+				library.appendChild(section);
+			});
+		}
+
+		async function chargerBibliotheque()
+		{
+			savedPeriods = await apiFetch("/api/periodes-scolaires/");
+			const current = filterYear.value;
+			const annees = [...new Set(savedPeriods.map((periode) => periode.annee_scolaire))].sort().reverse();
+			filterYear.innerHTML = '<option value="">Toutes les années</option>' + annees.map((annee) => `<option value="${escapeHtml(annee)}">${escapeHtml(annee)}</option>`).join("");
+			if (annees.includes(current)) filterYear.value = current;
+			rendreBibliotheque();
+		}
+
+		previewButton.addEventListener("click", previsualiser);
+		filterYear.addEventListener("change", rendreBibliotheque);
+		chargerBibliotheque().catch((err) =>
+		{
+			library.innerHTML = `<p class="form-error">${escapeHtml(erreurMessage(err, "Impossible de charger les périodes."))}</p>`;
+		});
+
+		return { charger: chargerBibliotheque };
+	}
+
+	// ------------------------------------------------------------------
+	return { mountCentres, mountQualifications, mountPeriodes };
 })();

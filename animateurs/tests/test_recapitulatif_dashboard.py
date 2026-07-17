@@ -14,6 +14,7 @@ from animateurs.models import (
     PreferenceCentre,
     Qualification,
 )
+from animateurs.tests.factories import creer_periode
 
 
 class RecapitulatifDashboardTests(TestCase):
@@ -24,13 +25,16 @@ class RecapitulatifDashboardTests(TestCase):
             couleur="#123456",
         )
         self.bafa = Qualification.objects.create(nom="BAFA")
+        self.periode = creer_periode(debut=datetime.date(2026, 7, 6), nom="Semaine récap")
         self.evenement = Evenement.objects.create(
             centre=self.centre,
             nom="Maternelles",
-            debut=datetime.date(2026, 7, 6),
-            fin=datetime.date(2026, 7, 7),
+            debut=self.periode.debut,
+            fin=self.periode.fin,
             effectif_cible=2,
+            jours_ouverts=[0, 1, 2, 3, 4],
         )
+        self.evenement.periodes_scolaires.add(self.periode)
         BesoinQualification.objects.create(
             evenement=self.evenement,
             qualification=self.bafa,
@@ -130,3 +134,28 @@ class RecapitulatifDashboardTests(TestCase):
         self.assertEqual(data["evenements"][0]["jours_complets"], 2)
         self.assertNotIn("personnel", {alerte["type"] for alerte in data["alertes"]})
         self.assertNotIn("qualification", {alerte["type"] for alerte in data["alertes"]})
+    def test_api_accepte_plusieurs_periodes_discontinues(self):
+        seconde_periode = creer_periode(
+            debut=datetime.date(2026, 7, 20),
+            nom="Deuxième semaine récap",
+        )
+        self.evenement.periodes_scolaires.add(seconde_periode)
+        self.evenement.fin = seconde_periode.fin
+        self.evenement.save(update_fields=["fin"])
+
+        response = self.client.get(
+            reverse("api_recapitulatif")
+            + f"?periode_ids={self.periode.id},{seconde_periode.id}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["periode"]["ids"], [self.periode.id, seconde_periode.id])
+        evenement = next(item for item in data["evenements"] if item["id"] == self.evenement.id)
+        self.assertEqual(evenement["jours_prevus"], 10)
+        self.assertEqual(data["synthese"]["postes_requis"], 20)
+
+    def test_api_refuse_une_selection_de_periode_inconnue(self):
+        response = self.client.get(reverse("api_recapitulatif") + "?periode_ids=999999")
+        self.assertEqual(response.status_code, 400)
+

@@ -418,154 +418,8 @@ html, body {
 }
 
 
-/* --- Fiche animateur sélectionné --- */
-.selected-animateur-card {
-    background: linear-gradient(135deg, var(--color-surface-sunken), var(--color-surface));
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: 12px;
-    margin-bottom: 12px;
-    box-shadow: var(--shadow-sm);
-}
-
-.selected-animateur-card.empty {
-    background: var(--color-surface-sunken);
-}
-
-.selected-title,
-.selected-kicker,
-.selected-help {
-    margin: 0;
-}
-
-.selected-title {
-    font-weight: 700;
-    color: var(--color-text);
-}
-
-.selected-kicker {
-    color: var(--color-text-muted);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 700;
-}
-
-.selected-help {
-    color: var(--color-text-muted);
-    font-size: 0.8rem;
-    margin-top: 8px;
-}
-
-.selected-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 10px;
-    margin-bottom: 10px;
-}
-
-.selected-header h2 {
-    margin: 2px 0 0;
-    font-size: 1.05rem;
-}
-
-.selected-age {
-    background: var(--color-primary);
-    color: #fff;
-    border-radius: 999px;
-    padding: 4px 8px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    white-space: nowrap;
-}
-
-.selected-details {
-    display: grid;
-    gap: 7px;
-    font-size: 0.82rem;
-}
-
-.selected-details p {
-    margin: 0;
-    display: grid;
-    grid-template-columns: 92px minmax(0, 1fr);
-    gap: 8px;
-}
-
-.selected-details strong {
-    color: var(--color-text-muted);
-}
-
-.selected-details span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
 .modal-box-small {
     max-width: 460px;
-}
-
-@media (max-width: 640px) {
-    .selected-details p {
-        grid-template-columns: 1fr;
-        gap: 2px;
-    }
-}
-
-/* Fiche animateur sélectionné placée au-dessus des calendriers */
-.selected-animateur-card-wide {
-    margin-bottom: 0;
-}
-
-.selected-animateur-card-wide:not(.empty) .selected-details {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-@media (max-width: 900px) {
-    .selected-animateur-card-wide:not(.empty) .selected-details {
-        grid-template-columns: 1fr;
-    }
-}
-
-/* --- Fiche déroulante sous l'étiquette animateur sélectionnée --- */
-.animateur-detail {
-    overflow: hidden;
-    max-height: 0;
-    opacity: 0;
-    transform: translateY(-6px);
-    margin: 0;
-    padding: 0 10px;
-    background: linear-gradient(135deg, var(--color-surface-sunken), var(--color-surface));
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    box-shadow: none;
-    transition:
-        max-height 0.28s ease,
-        opacity 0.2s ease,
-        transform 0.2s ease,
-        margin 0.2s ease,
-        padding 0.2s ease,
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
-}
-
-.animateur-detail.open {
-    max-height: 620px;
-    opacity: 1;
-    transform: translateY(0);
-    margin: 4px 0 8px;
-    padding: 12px;
-    border-color: var(--color-border);
-    box-shadow: var(--shadow-sm);
-}
-
-.animateur-detail .selected-header h2 {
-    font-size: 1rem;
-}
-
-.animateur-detail .selected-details {
-    grid-template-columns: 1fr;
 }
 
 /* Mode "jour sélectionné" : clic sur une case calendrier sans animateur actif */
@@ -791,12 +645,6 @@ html, body {
         font-size: 7px;
     }
 
-    .animateur-detail,
-    .animateur-detail.open,
-    .selected-animateur-card,
-    .selected-animateur-card-wide {
-        display: none !important;
-    }
 
     #calendars-section {
         gap: 6px;
@@ -1901,9 +1749,9 @@ body.page-planning #calendars-container {
 }
 
 /* ========================================================================== 
-   Étape 3 — planning manuel par événement
+   Étape 3 — planning manuel par groupe
    --------------------------------------------------------------------------
-   Un bloc correspond à un centre. À l'intérieur, chaque événement dispose de
+   Un bloc correspond à un centre. À l'intérieur, chaque groupe dispose de
    son propre calendrier et constitue une zone de dépôt précise.
    ========================================================================== */
 body.page-planning #calendars-container {
@@ -2072,7 +1920,7 @@ body.page-planning #calendars-container {
     opacity: 0.58;
 }
 
-/* Étape 4 — remplissage automatique par événement */
+/* Étape 4 — remplissage automatique par groupe */
 #modal-auto-remplissage .modal-box {
     width: min(760px, calc(100vw - 28px));
     max-width: 760px;
@@ -2178,7 +2026,7 @@ body.page-planning #calendars-container {
 /* ========================================================================== 
    Tri manuel des blocs du planning
    --------------------------------------------------------------------------
-   Les poignées ⠿ permettent de classer les centres entre eux et les événements
+   Les poignées ⠿ permettent de classer les centres entre eux et les groupes
    à l'intérieur de leur centre. Le drag est volontairement limité à ces
    poignées pour ne pas entrer en conflit avec le déplacement des animateurs.
    ========================================================================== */
@@ -2296,10 +2144,10 @@ body.planning-sort-active .planning-drag-handle {
 }
 
 /* ========================================================================== 
-   Jours fermés d'un événement
+   Jours fermés d'un groupe
    --------------------------------------------------------------------------
    Chaque calendrier reste visible lorsqu'on navigue dans les semaines/mois,
-   mais les dates situées avant le début ou après la fin de l'événement sont
+   mais les dates situées avant le début ou après la fin du groupe sont
    rendues entièrement noires et ne peuvent recevoir aucune interaction.
    ========================================================================== */
 .calendar .fc-daygrid-day.evenement-hors-periode,
@@ -2322,7 +2170,7 @@ body.planning-sort-active .planning-drag-handle {
     visibility: hidden !important;
 }
 
-/* Remplissage automatique : besoins en lecture seule, issus des événements. */
+/* Remplissage automatique : besoins en lecture seule, issus des groupes. */
 .auto-centre-total-readonly {
 	display: flex;
 	align-items: center;
@@ -2592,5 +2440,379 @@ body.planning-sort-active .planning-drag-handle {
     .centre-collapse-toggle {
         width: 32px;
         height: 32px;
+    }
+}
+
+
+/* Vue unique par semaine et indication de la période au-dessus des calendriers. */
+#planning-period-nav {
+    display: grid !important;
+    grid-template-columns: auto minmax(100px, auto) auto !important;
+    justify-content: center !important;
+    gap: 6px !important;
+}
+
+.planning-week-indicator {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    padding: 9px 12px;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+    text-align: center;
+}
+
+.week-indicator-kicker {
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.planning-week-indicator .toolbar-label {
+    margin: 0 !important;
+    max-width: 100%;
+    color: var(--color-primary-dark);
+    font-size: 0.95rem !important;
+    line-height: 1.25;
+    white-space: normal !important;
+    text-transform: none !important;
+}
+
+#calendars-container.planning-view-week {
+    align-items: start;
+}
+
+#calendars-container.planning-view-week .calendar-card {
+    height: auto;
+}
+
+#calendars-container.planning-view-week .calendar-card .calendar {
+    flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+    .planning-week-indicator {
+        padding: 7px 9px;
+    }
+
+    .planning-week-indicator .toolbar-label {
+        width: 100%;
+        font-size: 0.82rem !important;
+    }
+}
+
+
+/* Sur ordinateur, la liste des salariés devient une vraie colonne latérale. */
+@media (min-width: 1024px) {
+    #layout {
+        display: grid;
+        grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+        align-items: stretch;
+    }
+
+    #animateurs-panel {
+        min-width: 0;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    #animateurs-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding: 3px 2px 6px;
+    }
+
+    #animateurs-list .animateur {
+        width: 100%;
+        justify-content: flex-start;
+        border-radius: 10px;
+    }
+
+    #animateurs-list .anim-name {
+        max-width: none;
+    }
+}
+
+/* ==========================================================================\n   Colonne salariés réellement latérale et redimensionnable sur ordinateur\n   ========================================================================== */
+.page-planning {
+    --planning-sidebar-width: 280px;
+}
+
+.animateurs-panel-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.animateurs-visible-count {
+    color: var(--color-text-muted);
+    font-size: .72rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.animateurs-search {
+    display: block;
+    flex: 0 0 auto;
+}
+
+.animateurs-search input {
+    width: 100%;
+    min-width: 0;
+    height: 34px;
+    padding: 6px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 9px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font: inherit;
+    font-size: .84rem;
+}
+
+.animateurs-search input:focus {
+    outline: 2px solid color-mix(in srgb, var(--color-primary) 32%, transparent);
+    border-color: var(--color-primary);
+}
+
+.planning-sidebar-resizer {
+    display: none;
+}
+
+@media (min-width: 1024px) {
+    .page-planning #layout {
+        display: grid !important;
+        grid-template-columns: minmax(220px, var(--planning-sidebar-width)) 7px minmax(0, 1fr) !important;
+        grid-template-rows: minmax(0, 1fr);
+        gap: 0 !important;
+        align-items: stretch;
+        padding: 6px 8px 8px !important;
+        overflow: hidden;
+    }
+
+    .page-planning #animateurs-panel {
+        grid-column: 1;
+        grid-row: 1;
+        width: auto !important;
+        min-width: 0;
+        max-width: none !important;
+        height: 100% !important;
+        max-height: none !important;
+        flex: none !important;
+        overflow: hidden !important;
+        padding: 7px !important;
+        border-radius: 10px 0 0 10px;
+        gap: 6px;
+    }
+
+    .page-planning #animateurs-list {
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        width: 100%;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 5px;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        padding: 1px 1px 4px !important;
+        scrollbar-width: thin;
+    }
+
+    .page-planning #animateurs-list .animateur {
+        width: 100% !important;
+        min-width: 0;
+        min-height: 34px;
+        flex: 0 0 auto !important;
+        justify-content: flex-start;
+        padding: 6px 8px;
+        border-radius: 8px;
+    }
+
+    .page-planning #animateurs-list .anim-name {
+        min-width: 0;
+        max-width: none !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .page-planning #animateurs-list .anim-prefs {
+        margin-left: auto;
+        flex: 0 0 auto;
+    }
+
+    .page-planning .planning-sidebar-resizer {
+        grid-column: 2;
+        grid-row: 1;
+        display: block;
+        width: 7px;
+        height: 100%;
+        padding: 0;
+        border: 0;
+        border-left: 2px solid transparent;
+        border-right: 2px solid transparent;
+        background: color-mix(in srgb, var(--color-border) 48%, transparent);
+        cursor: col-resize;
+        touch-action: none;
+        transition: background-color .15s ease;
+    }
+
+    .page-planning .planning-sidebar-resizer:hover,
+    .page-planning .planning-sidebar-resizer.is-resizing {
+        background: color-mix(in srgb, var(--color-primary) 48%, transparent);
+    }
+
+    .page-planning #calendars-section {
+        grid-column: 3;
+        grid-row: 1;
+        width: auto !important;
+        min-width: 0;
+        min-height: 0;
+        margin-left: 7px;
+        overflow: hidden !important;
+    }
+
+    .page-planning #planning-period-nav,
+    .page-planning #planning-actions,
+    .page-planning #calendars-container {
+        width: 100% !important;
+        max-width: none !important;
+    }
+
+    .page-planning #planning-period-nav {
+        margin-bottom: 5px !important;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
+    }
+
+    .page-planning #planning-actions {
+        margin-top: 5px !important;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
+    }
+
+    .page-planning #calendars-container {
+        padding: 0 !important;
+        scrollbar-gutter: stable both-edges;
+    }
+
+    body.planning-sidebar-resizing {
+        cursor: col-resize !important;
+        user-select: none !important;
+    }
+}
+
+@media (max-width: 1023px) {
+    .animateurs-search {
+        display: none;
+    }
+
+    .animateurs-visible-count {
+        display: none;
+    }
+}
+
+/* ========================================================================== 
+   Correctif final : vraie barre latérale sur ordinateur
+   --------------------------------------------------------------------------
+   Ces règles doivent rester en toute fin de fichier. Elles neutralisent les
+   anciens correctifs `display:flex !important` appliqués à #layout.
+   ========================================================================== */
+@media (min-width: 1024px) {
+    body.page-planning > main#layout {
+        display: grid !important;
+        grid-template-columns: clamp(220px, var(--planning-sidebar-width), 450px) 7px minmax(0, 1fr) !important;
+        grid-template-rows: minmax(0, 1fr) !important;
+        gap: 0 !important;
+        align-items: stretch !important;
+        padding: 6px 8px 8px !important;
+    }
+
+    body.page-planning > main#layout > #animateurs-panel {
+        grid-column: 1 !important;
+        grid-row: 1 !important;
+        width: auto !important;
+        height: 100% !important;
+        max-height: none !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        border-radius: 10px 0 0 10px !important;
+        overflow: hidden !important;
+    }
+
+    body.page-planning > main#layout > #planning-sidebar-resizer {
+        grid-column: 2 !important;
+        grid-row: 1 !important;
+        display: block !important;
+        align-self: stretch !important;
+        height: auto !important;
+        min-height: 100% !important;
+    }
+
+    body.page-planning > main#layout > #calendars-section {
+        grid-column: 3 !important;
+        grid-row: 1 !important;
+        width: auto !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        margin-left: 7px !important;
+        display: grid !important;
+        grid-template-rows: auto minmax(0, 1fr) auto !important;
+        gap: 5px !important;
+        overflow: hidden !important;
+    }
+
+    body.page-planning #animateurs-list {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+
+    body.page-planning #animateurs-list .animateur {
+        width: 100% !important;
+        flex: 0 0 auto !important;
+        justify-content: flex-start !important;
+    }
+
+    body.page-planning #planning-period-nav {
+        grid-row: 1 !important;
+    }
+
+    body.page-planning #calendars-container {
+        grid-row: 2 !important;
+        min-height: 0 !important;
+        overflow: auto !important;
+    }
+
+    body.page-planning #planning-actions {
+        grid-row: 3 !important;
+    }
+}
+
+@media (max-width: 1023px) {
+    body.page-planning > main#layout {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    body.page-planning > main#layout > #planning-sidebar-resizer {
+        display: none !important;
     }
 }

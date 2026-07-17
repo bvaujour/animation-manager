@@ -17,20 +17,21 @@ code HTTP adapté (400 = requête invalide, 404 = introuvable,
 import datetime
 import json
 import re
+import secrets
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .models import (
     Affectation, Animateur, Centre, DestinataireEnvoiEmail, Disponibilite,
-    Document, EnvoiEmail, Evenement, Qualification,
+    Document, EnvoiEmail, Evenement, PeriodeScolaire, Qualification,
 )
 
 from .services.affectations import creer_affectation, modifier_affectation
@@ -40,10 +41,7 @@ from .services.animateurs import (
     normaliser_evenement_preferee,
 )
 from .services.dates import parse_to_aware_datetime
-from .services.disponibilites import (
-    fusionner_et_nettoyer_disponibilites,
-    nettoyer_disponibilites_tous_animateurs,
-)
+from .services.disponibilites import fusionner_et_nettoyer_disponibilites
 from .services.documents import valider_periode_document
 from .services.emails import (
     ConfigurationEmailError,
@@ -52,6 +50,10 @@ from .services.emails import (
     connexion_email,
     envoyer_un_message,
     statut_configuration_email,
+)
+from .services.calendrier_scolaire import (
+    CalendrierScolaireError,
+    recuperer_semaines,
 )
 from .services.centres import prochain_ordre_centre, reordonner_centres
 from .services.evenements import (
@@ -73,6 +75,13 @@ from .services.serializers import (
 )
 
 
+
+ANIMATEUR_COLOR_PALETTE = (
+    "#2563EB", "#7C3AED", "#DB2777", "#DC2626",
+    "#EA580C", "#CA8A04", "#16A34A", "#059669",
+    "#0891B2", "#4F46E5", "#9333EA", "#475569",
+)
+
 # ---------------------------------------------------------------------------
 # Pages HTML
 # ---------------------------------------------------------------------------
@@ -90,13 +99,9 @@ def planning(request):
     return render(request, "planning.html", {"active_page": "planning"})
 
 
-def evenement(request):
-    """Ancienne URL conservée : les salariés sont désormais gérés dans Gestion."""
-    return redirect("/gestion/?onglet=salaries")
-
 
 def gestion(request):
-    """Page unique de gestion : salariés, lieux, événements et qualifications."""
+    """Page unique de gestion : salariés, lieux, groupes et qualifications."""
     return render(request, "gestion.html", {"active_page": "gestion"})
 
 
@@ -170,20 +175,21 @@ def api_animateurs(request):
     POST : crée un animateur avec ses coordonnées, qualifications, un centre préféré et des centres secondaires."""
 
     if request.method == "GET":
-        # Nettoyage opportuniste : on supprime les anciennes disponibilités
-        # et on fusionne celles qui se chevauchent avant de les renvoyer au front.
-        nettoyer_disponibilites_tous_animateurs()
-
-        # prefetch_related évite le classique problème "N+1 requêtes" :
-        # sans ça, chaque animateur referait une requête pour ses
-        # qualifications et une pour ses centres autorisés.
+        # Cette route est volontairement en lecture seule. L'ancienne version
+        # nettoyait et réécrivait les disponibilités de chaque salarié à
+        # chaque affichage de la liste, ce qui provoquait des centaines de
+        # requêtes sur PostgreSQL/Supabase.
+        #
+        # Les disponibilités sont déjà normalisées lorsqu'elles sont ajoutées
+        # ou modifiées dans les routes dédiées. Ici, on charge simplement
+        # toutes les relations utiles en un nombre fixe de requêtes.
         animateurs = Animateur.objects.select_related(
             "evenement_preferee__centre",
         ).prefetch_related(
             "qualifications",
             "preferences__centre",
             "disponibilites",
-        ).all()
+        ).order_by("prenom", "nom", "id")
 
         return JsonResponse([animateur_to_dict(a) for a in animateurs], safe=False)
 
@@ -196,7 +202,7 @@ def api_animateurs(request):
         email = payload.get("email", "").strip()
         date_naissance_raw = payload.get("date_naissance") or None
         date_naissance = parse_date(date_naissance_raw) if date_naissance_raw else None
-        couleur = (payload.get("couleur") or "").strip()
+        couleur = (payload.get("couleur") or "").strip() or secrets.choice(ANIMATEUR_COLOR_PALETTE)
         qualification_ids = payload.get("qualifications", [])
         centre_prefere, centres_secondaires, erreur_centres = normaliser_centres_hierarchises(payload)
         if erreur_centres:
@@ -356,48 +362,109 @@ def api_animateur_detail(request, animateur_id):
     return JsonResponse(animateur_to_dict(animateur))
 
 
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "PUT"])
 def api_disponibilites(request, animateur_id):
-    """GET : renvoie les plages de disponibilité d'un animateur.
-    POST : ajoute rapidement une nouvelle plage de disponibilité.
+    """Gère les disponibilités à partir de la bibliothèque des périodes.
 
-    Payload POST attendu : {"debut": "YYYY-MM-DD", "fin": "YYYY-MM-DD"}.
-    Les bornes sont incluses côté métier.
+    GET renvoie les périodes regroupées avec leurs jours et l'état de chaque
+    case. PUT remplace les disponibilités de l'animateur par la liste des
+    journées cochées reçue dans ``jours_disponibles``.
     """
-
     try:
         animateur = Animateur.objects.get(pk=animateur_id)
     except Animateur.DoesNotExist:
         return JsonResponse({"error": "Animateur introuvable."}, status=404)
 
-    if request.method == "POST":
+    def jours_ouvres(debut, fin):
+        jour = debut
+        while jour <= fin:
+            if jour.weekday() < 5:
+                yield jour
+            jour += datetime.timedelta(days=1)
+
+    def periodes_regroupees():
+        groupes = {}
+        for periode in PeriodeScolaire.objects.order_by("debut", "ordre", "id"):
+            cle = (periode.nom, periode.annee_scolaire, periode.zone)
+            groupe = groupes.setdefault(cle, {
+                "id": f"{periode.annee_scolaire}-{periode.zone}-{periode.nom}",
+                "nom": periode.nom,
+                "annee_scolaire": periode.annee_scolaire,
+                "zone": periode.zone,
+                "debut": periode.debut,
+                "fin": periode.fin,
+                "jours": set(),
+            })
+            groupe["debut"] = min(groupe["debut"], periode.debut)
+            groupe["fin"] = max(groupe["fin"], periode.fin)
+            groupe["jours"].update(jours_ouvres(periode.debut, periode.fin))
+        return sorted(groupes.values(), key=lambda item: (item["debut"], item["nom"]))
+
+    if request.method == "PUT":
         try:
-            payload = json.loads(request.body)
-            debut = parse_date(payload["debut"])
-            fin = parse_date(payload.get("fin") or payload["debut"])
+            payload = json.loads(request.body or b"{}")
+            valeurs = payload.get("jours_disponibles", [])
+            if not isinstance(valeurs, list):
+                raise ValueError
+            jours = sorted({parse_date(str(valeur)) for valeur in valeurs})
+            if any(jour is None for jour in jours):
+                raise ValueError
+        except (ValueError, TypeError, json.JSONDecodeError):
+            return JsonResponse({"error": "Liste de jours invalide."}, status=400)
 
-            if debut is None or fin is None:
-                raise ValueError("date invalide")
-            if fin < debut:
-                return JsonResponse({"error": "La date de fin doit être après la date de début."}, status=400)
-
-        except (KeyError, ValueError, TypeError, json.JSONDecodeError):
-            return JsonResponse({"error": "Requête invalide."}, status=400)
-
-        Disponibilite.objects.create(animateur=animateur, debut=debut, fin=fin)
-
-    fusionner_et_nettoyer_disponibilites(animateur)
-
-    plages = [
-        {
-            "id": disponibilite.id,
-            "debut": disponibilite.debut.isoformat(),
-            "fin": disponibilite.fin.isoformat(),
+        jours_autorises = {
+            jour
+            for groupe in periodes_regroupees()
+            for jour in groupe["jours"]
         }
-        for disponibilite in animateur.disponibilites.all()
-    ]
+        if any(jour not in jours_autorises for jour in jours):
+            return JsonResponse({"error": "Un jour ne correspond à aucune période enregistrée."}, status=400)
 
-    return JsonResponse({"disponibilites": plages})
+        plages = []
+        if jours:
+            debut = precedent = jours[0]
+            for jour in jours[1:]:
+                if jour == precedent + datetime.timedelta(days=1):
+                    precedent = jour
+                    continue
+                plages.append((debut, precedent))
+                debut = precedent = jour
+            plages.append((debut, precedent))
+
+        with transaction.atomic():
+            animateur.disponibilites.all().delete()
+            Disponibilite.objects.bulk_create([
+                Disponibilite(animateur=animateur, debut=debut, fin=fin)
+                for debut, fin in plages
+            ])
+
+    disponibilites = list(animateur.disponibilites.all())
+    def est_disponible(jour):
+        return any(plage.debut <= jour <= plage.fin for plage in disponibilites)
+
+    resultat = []
+    for groupe in periodes_regroupees():
+        jours = sorted(groupe["jours"])
+        jours_json = [
+            {"date": jour.isoformat(), "disponible": est_disponible(jour)}
+            for jour in jours
+        ]
+        resultat.append({
+            "id": groupe["id"],
+            "nom": groupe["nom"],
+            "annee_scolaire": groupe["annee_scolaire"],
+            "zone": groupe["zone"],
+            "debut": groupe["debut"].isoformat(),
+            "fin": groupe["fin"].isoformat(),
+            "selectionnee": any(item["disponible"] for item in jours_json),
+            "jours": jours_json,
+        })
+
+    plages_json = [
+        {"id": dispo.id, "debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()}
+        for dispo in animateur.disponibilites.all()
+    ]
+    return JsonResponse({"periodes": resultat, "disponibilites": plages_json})
 
 
 @require_http_methods(["PATCH", "DELETE"])
@@ -438,7 +505,7 @@ def api_disponibilite_detail(request, animateur_id, disponibilite_id):
 
 
 # ---------------------------------------------------------------------------
-# API - Planning (lecture des évènements + écriture individuelle)
+# API - Planning (lecture des groupes + écriture individuelle)
 # ---------------------------------------------------------------------------
 
 def api_planning(request):
@@ -494,19 +561,19 @@ def api_affectation_create(request):
             centre = evenement.centre
             if centre_id is not None and int(centre_id) != centre.id:
                 return JsonResponse(
-                    {"error": "L'événement sélectionnée n'appartient pas à ce centre."},
+                    {"error": "Le groupe sélectionné n'appartient pas à ce centre."},
                     status=400,
                 )
         elif centre_id is not None:
             centre = Centre.objects.get(pk=centre_id)
         else:
-            return JsonResponse({"error": "Une événement ou un centre doit être indiqué."}, status=400)
+            return JsonResponse({"error": "Un groupe ou un centre doit être indiqué."}, status=400)
 
         debut = parse_to_aware_datetime(payload["debut"])
         # Si "fin" n'est pas fourni, on suppose une affectation d'un seul
         # jour. ATTENTION : la convention "allDay" de FullCalendar veut une
         # borne de fin EXCLUSIVE, donc une journée = debut + 1 jour. Mettre
-        # fin = debut donnerait un évènement de durée nulle (start == end)
+        # fin = debut donnerait un groupe de durée nulle (start == end)
         # qui ne s'affiche pas dans le calendrier.
         if payload.get("fin"):
             fin = parse_to_aware_datetime(payload["fin"])
@@ -514,7 +581,7 @@ def api_affectation_create(request):
             fin = debut + datetime.timedelta(days=1)
 
     except (Animateur.DoesNotExist, Centre.DoesNotExist, Evenement.DoesNotExist):
-        return JsonResponse({"error": "Animateur, centre ou événement introuvable."}, status=404)
+        return JsonResponse({"error": "Animateur, centre ou groupe introuvable."}, status=404)
     except (KeyError, ValueError, TypeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
@@ -532,7 +599,7 @@ def api_affectation_create(request):
 def api_affectation_detail(request, affectation_id):
     """PATCH : déplacement ou redimensionnement d'une affectation existante
     dans le calendrier (revalidée comme à la création).
-    DELETE : suppression d'une affectation (clic sur l'évènement)."""
+    DELETE : suppression d'une affectation (clic sur le groupe)."""
 
     try:
         affectation = Affectation.objects.get(pk=affectation_id)
@@ -563,14 +630,14 @@ def api_affectation_detail(request, affectation_id):
             nouvelle_evenement = Evenement.objects.select_related("centre").get(pk=payload["evenement_id"])
             if "centre_id" in payload and int(payload["centre_id"]) != nouvelle_evenement.centre_id:
                 return JsonResponse(
-                    {"error": "L'événement sélectionnée n'appartient pas à ce centre."},
+                    {"error": "Le groupe sélectionné n'appartient pas à ce centre."},
                     status=400,
                 )
         elif "centre_id" in payload:
             nouveau_centre = Centre.objects.get(pk=payload["centre_id"])
 
     except (Centre.DoesNotExist, Evenement.DoesNotExist):
-        return JsonResponse({"error": "Centre ou événement introuvable."}, status=404)
+        return JsonResponse({"error": "Centre ou groupe introuvable."}, status=404)
     except (ValueError, TypeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
@@ -633,7 +700,7 @@ def api_planning_plage(request):
 
 
 # ---------------------------------------------------------------------------
-# API - Gestion (CRUD centres / événements / qualifications)
+# API - Gestion (CRUD centres / groupes / qualifications)
 # ---------------------------------------------------------------------------
 
 
@@ -756,8 +823,8 @@ def api_centre_detail(request, centre_id):
 
 
 @require_http_methods(["GET", "POST"])
-def api_evenements(request, centre_id):
-    """Liste ou crée les événements d'un centre."""
+def api_groupes(request, centre_id):
+    """Liste ou crée les groupes d’un lieu."""
 
     try:
         centre = Centre.objects.get(pk=centre_id)
@@ -767,7 +834,7 @@ def api_evenements(request, centre_id):
     if request.method == "GET":
         evenements = (
             centre.evenements
-            .prefetch_related("dates_exclues", "besoins_qualifications__qualification")
+            .prefetch_related("periodes_scolaires", "dates_exclues", "besoins_qualifications__qualification")
             .annotate(nb_affectations=Count("affectations", distinct=True))
             .order_by("ordre", "nom")
         )
@@ -783,23 +850,21 @@ def api_evenements(request, centre_id):
         evenement = creer_evenement(
             centre=centre,
             nom=payload.get("nom", ""),
-            debut=payload.get("debut"),
-            fin=payload.get("fin"),
+            periode_ids=payload.get("periode_ids", []),
             effectif_cible=int(payload.get("effectif_cible", 1) or 1),
-            active=payload.get("active", True) is not False,
             qualifications=payload.get("qualifications_requises", {}),
-            jours_ouverts=payload.get("jours_ouverts"),
-            dates_exclues=payload.get("dates_exclues", []),
+            jours_ouverts=payload.get("jours_ouverts", [0, 1, 2, 3, 4, 5]),
+            ferme_jours_feries=payload.get("ferme_jours_feries", True) is not False,
         )
     except (TypeError, ValueError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
     except ValidationError as exc:
         return JsonResponse({"error": _message_validation(exc)}, status=400)
     except IntegrityError:
-        return JsonResponse({"error": "Une événement de ce nom existe déjà dans ce centre."}, status=409)
+        return JsonResponse({"error": "Un groupe de ce nom existe déjà dans ce lieu."}, status=409)
 
     evenement = Evenement.objects.select_related("centre").prefetch_related(
-        "dates_exclues", "besoins_qualifications__qualification"
+        "periodes_scolaires", "dates_exclues", "besoins_qualifications__qualification"
     ).get(pk=evenement.pk)
     evenement.nb_affectations = 0
     evenement.nb_evenements_centre = centre.evenements.count()
@@ -807,13 +872,13 @@ def api_evenements(request, centre_id):
 
 
 @require_http_methods(["PATCH", "DELETE"])
-def api_evenement_detail(request, evenement_id):
-    """Modifie ou supprime une événement sans détruire ses affectations."""
+def api_groupe_detail(request, evenement_id):
+    """Modifie ou supprime un groupe sans détruire ses affectations."""
 
     try:
         evenement = Evenement.objects.select_related("centre").get(pk=evenement_id)
     except Evenement.DoesNotExist:
-        return JsonResponse({"error": "Événement introuvable."}, status=404)
+        return JsonResponse({"error": "Groupe introuvable."}, status=404)
 
     if request.method == "DELETE":
         try:
@@ -827,16 +892,13 @@ def api_evenement_detail(request, evenement_id):
         evenement = modifier_evenement(
             evenement,
             nom=payload.get("nom") if "nom" in payload else None,
-            debut=payload.get("debut") if "debut" in payload else None,
-            fin=payload.get("fin") if "fin" in payload else None,
+            periode_ids=payload.get("periode_ids", []),
+            periodes_fournies="periode_ids" in payload,
             effectif_cible=payload.get("effectif_cible") if "effectif_cible" in payload else None,
-            active=payload.get("active") if "active" in payload else None,
             qualifications=payload.get("qualifications_requises", {}),
             qualifications_fournies="qualifications_requises" in payload,
-            jours_ouverts=payload.get("jours_ouverts"),
-            jours_ouverts_fournis="jours_ouverts" in payload,
-            dates_exclues=payload.get("dates_exclues", []),
-            dates_exclues_fournies="dates_exclues" in payload,
+            jours_ouverts=payload.get("jours_ouverts") if "jours_ouverts" in payload else None,
+            ferme_jours_feries=payload.get("ferme_jours_feries") if "ferme_jours_feries" in payload else None,
             supprimer_affectations_dates_fermees=bool(
                 payload.get("supprimer_affectations_dates_fermees", False)
             ),
@@ -853,10 +915,10 @@ def api_evenement_detail(request, evenement_id):
     except ValidationError as exc:
         return JsonResponse({"error": _message_validation(exc)}, status=400)
     except IntegrityError:
-        return JsonResponse({"error": "Une événement de ce nom existe déjà dans ce centre."}, status=409)
+        return JsonResponse({"error": "Un groupe de ce nom existe déjà dans ce lieu."}, status=409)
 
     evenement = Evenement.objects.select_related("centre").prefetch_related(
-        "dates_exclues", "besoins_qualifications__qualification"
+        "periodes_scolaires", "dates_exclues", "besoins_qualifications__qualification"
     ).get(pk=evenement.pk)
     evenement.nb_affectations = evenement.affectations.count()
     evenement.nb_evenements_centre = evenement.centre.evenements.count()
@@ -864,7 +926,7 @@ def api_evenement_detail(request, evenement_id):
 
 
 @require_POST
-def api_evenements_reordonner(request, centre_id):
+def api_groupes_reordonner(request, centre_id):
     try:
         centre = Centre.objects.get(pk=centre_id)
     except Centre.DoesNotExist:
@@ -952,52 +1014,210 @@ def api_qualification_detail(request, qualification_id):
 
 
 # ---------------------------------------------------------------------------
+# API - Périodes scolaires indépendantes
+# ---------------------------------------------------------------------------
+
+def _periode_scolaire_to_dict(periode):
+    return {
+        "id": periode.id,
+        "nom": periode.nom,
+        "libelle": periode.libelle_avec_annee,
+        "annee_scolaire": periode.annee_scolaire,
+        "zone": periode.zone,
+        "debut": periode.debut.isoformat(),
+        "fin": periode.fin.isoformat(),
+        "description_source": periode.description_source,
+        "ordre": periode.ordre,
+    }
+
+
+def _payload_import_periodes(request):
+    try:
+        payload = json.loads(request.body or b"{}")
+    except json.JSONDecodeError as exc:
+        raise CalendrierScolaireError("Requête invalide.") from exc
+    return (
+        str(payload.get("annee_scolaire", "")).strip(),
+        str(payload.get("zone", "")).strip().upper(),
+    )
+
+
+@require_http_methods(["GET"])
+def api_periodes_scolaires(request):
+    """Liste les semaines importées, sans effet sur les autres modules."""
+    periodes = PeriodeScolaire.objects.all()
+    annee_scolaire = request.GET.get("annee_scolaire", "").strip()
+    zone = request.GET.get("zone", "").strip().upper()
+    if annee_scolaire:
+        periodes = periodes.filter(annee_scolaire=annee_scolaire)
+    if zone:
+        periodes = periodes.filter(zone=zone)
+    return JsonResponse(
+        [_periode_scolaire_to_dict(periode) for periode in periodes],
+        safe=False,
+    )
+
+
+@require_POST
+def api_periodes_scolaires_previsualiser(request):
+    """Interroge l'API officielle sans rien enregistrer en base."""
+    try:
+        annee_scolaire, zone = _payload_import_periodes(request)
+        semaines = recuperer_semaines(annee_scolaire, zone)
+    except CalendrierScolaireError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    existantes = set(
+        PeriodeScolaire.objects.filter(
+            annee_scolaire=annee_scolaire, zone=zone
+        ).values_list("debut", "fin")
+    )
+    resultat = []
+    for semaine in semaines:
+        item = semaine.to_dict()
+        item["deja_enregistree"] = (semaine.debut, semaine.fin) in existantes
+        resultat.append(item)
+
+    return JsonResponse({
+        "annee_scolaire": annee_scolaire,
+        "zone": zone,
+        "periodes": resultat,
+        "nombre": len(resultat),
+    })
+
+
+@require_POST
+def api_periodes_scolaires_importer(request):
+    """Enregistre toutes les semaines officielles de façon idempotente."""
+    try:
+        annee_scolaire, zone = _payload_import_periodes(request)
+        semaines = recuperer_semaines(annee_scolaire, zone)
+    except CalendrierScolaireError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    creees = 0
+    mises_a_jour = 0
+    with transaction.atomic():
+        for ordre, semaine in enumerate(semaines):
+            periode, creee = PeriodeScolaire.objects.get_or_create(
+                annee_scolaire=annee_scolaire,
+                zone=zone,
+                debut=semaine.debut,
+                fin=semaine.fin,
+                defaults={
+                    "nom": semaine.nom,
+                    "description_source": semaine.description_source,
+                    "ordre": ordre,
+                },
+            )
+            if creee:
+                creees += 1
+                continue
+            champs = []
+            if periode.nom != semaine.nom:
+                periode.nom = semaine.nom
+                champs.append("nom")
+            if periode.description_source != semaine.description_source:
+                periode.description_source = semaine.description_source
+                champs.append("description_source")
+            if periode.ordre != ordre:
+                periode.ordre = ordre
+                champs.append("ordre")
+            if champs:
+                periode.save(update_fields=champs)
+                mises_a_jour += 1
+
+    periodes = PeriodeScolaire.objects.filter(
+        annee_scolaire=annee_scolaire, zone=zone
+    )
+    return JsonResponse({
+        "ok": True,
+        "cree": creees,
+        "mis_a_jour": mises_a_jour,
+        "periodes": [_periode_scolaire_to_dict(p) for p in periodes],
+    }, status=201 if creees else 200)
+
+
+@require_http_methods(["DELETE"])
+def api_periode_scolaire_detail(request, periode_id):
+    try:
+        periode = PeriodeScolaire.objects.get(pk=periode_id)
+    except PeriodeScolaire.DoesNotExist:
+        return JsonResponse({"error": "Période introuvable."}, status=404)
+    periode.delete()
+    return JsonResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # API - Récapitulatif (statistiques pour la page de suivi)
 # ---------------------------------------------------------------------------
 
 def api_recapitulatif(request):
-    """Tableau de bord du planning sur une période donnée.
+    """Tableau de bord du planning sur une ou plusieurs périodes enregistrées.
 
-    L’API renvoie la charge par salarié, la couverture des événements, les
-    qualifications manquantes et les principales anomalies de planning.
-
-    Convention de dates :
-      - `debut` est inclus ;
-      - `fin` est exclusif, comme FullCalendar.
-
-    Si aucune période n'est fournie, on utilise par défaut le mois courant.
+    Le paramètre ``periode_ids`` contient les identifiants séparés par des
+    virgules. Les semaines peuvent être discontinues : seules leurs dates sont
+    intégrées aux calculs. L'ancien couple ``debut``/``fin`` reste accepté pour
+    compatibilité avec les appels existants.
     """
 
-    debut_str = request.GET.get("debut")
-    fin_str = request.GET.get("fin")
+    periode_ids_bruts = request.GET.get("periode_ids", "").strip()
+    periodes = []
+    jours_selectionnes = None
 
-    aujourd_hui = timezone.localdate()
+    if periode_ids_bruts:
+        try:
+            periode_ids = [int(valeur) for valeur in periode_ids_bruts.split(",") if valeur.strip()]
+        except ValueError:
+            return JsonResponse({"error": "La sélection de périodes est invalide."}, status=400)
 
-    if debut_str:
-        debut = parse_to_aware_datetime(debut_str)
+        if not periode_ids:
+            return JsonResponse({"error": "Sélectionne au moins une période."}, status=400)
+
+        periodes = list(PeriodeScolaire.objects.filter(pk__in=periode_ids).order_by("debut", "ordre", "nom"))
+        if len(periodes) != len(set(periode_ids)):
+            return JsonResponse({"error": "Une période sélectionnée est introuvable."}, status=400)
+
+        jours_selectionnes = {
+            periode.debut + datetime.timedelta(days=decalage)
+            for periode in periodes
+            for decalage in range((periode.fin - periode.debut).days + 1)
+        }
+        debut_date = min(jours_selectionnes)
+        fin_date = max(jours_selectionnes) + datetime.timedelta(days=1)
+        debut = timezone.make_aware(datetime.datetime.combine(debut_date, datetime.time.min))
+        fin = timezone.make_aware(datetime.datetime.combine(fin_date, datetime.time.min))
     else:
-        premier_jour = aujourd_hui.replace(day=1)
-        debut = timezone.make_aware(datetime.datetime.combine(premier_jour, datetime.time.min))
+        debut_str = request.GET.get("debut")
+        fin_str = request.GET.get("fin")
+        aujourd_hui = timezone.localdate()
 
-    if fin_str:
-        fin = parse_to_aware_datetime(fin_str)
-    else:
-        if aujourd_hui.month == 12:
-            mois_suivant = aujourd_hui.replace(year=aujourd_hui.year + 1, month=1, day=1)
+        if debut_str:
+            debut = parse_to_aware_datetime(debut_str)
         else:
-            mois_suivant = aujourd_hui.replace(month=aujourd_hui.month + 1, day=1)
-        fin = timezone.make_aware(datetime.datetime.combine(mois_suivant, datetime.time.min))
+            premier_jour = aujourd_hui.replace(day=1)
+            debut = timezone.make_aware(datetime.datetime.combine(premier_jour, datetime.time.min))
+
+        if fin_str:
+            fin = parse_to_aware_datetime(fin_str)
+        else:
+            if aujourd_hui.month == 12:
+                mois_suivant = aujourd_hui.replace(year=aujourd_hui.year + 1, month=1, day=1)
+            else:
+                mois_suivant = aujourd_hui.replace(month=aujourd_hui.month + 1, day=1)
+            fin = timezone.make_aware(datetime.datetime.combine(mois_suivant, datetime.time.min))
 
     if debut >= fin:
         return JsonResponse({"error": "La date de début doit être avant la date de fin."}, status=400)
 
-    recap = generer_recapitulatif(debut, fin)
+    recap = generer_recapitulatif(debut, fin, jours_selectionnes=jours_selectionnes)
 
     return JsonResponse({
         "periode": {
             "debut": debut.date().isoformat(),
-            # On renvoie aussi la fin exclusive pour rester cohérent avec l'API.
             "fin": fin.date().isoformat(),
+            "ids": [periode.id for periode in periodes],
+            "libelles": [periode.libelle_avec_annee for periode in periodes],
         },
         "centres": [
             {

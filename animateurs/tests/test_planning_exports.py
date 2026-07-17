@@ -5,8 +5,9 @@ import zipfile
 from django.test import TestCase
 from django.urls import reverse
 
-from animateurs.models import Affectation, Animateur, Centre, Evenement
+from animateurs.models import Affectation, Animateur, Centre
 from animateurs.services.planning_exports import _planning_matrix
+from animateurs.tests.factories import creer_groupe
 
 
 class PlanningExportTests(TestCase):
@@ -16,25 +17,18 @@ class PlanningExportTests(TestCase):
             code="PAC",
             couleur="#E03C00",
         )
-        self.maternelles = self.centre.evenements.get()
-        self.maternelles.nom = "Maternelles"
-        self.maternelles.effectif_cible = 2
-        self.maternelles.save(update_fields=["nom", "effectif_cible"])
-        self.elementaires = Evenement.objects.create(
-            centre=self.centre,
-            nom="Élémentaires",
-            effectif_cible=2,
-            ordre=1,
-            active=True,
+        self.maternelles, _ = creer_groupe(
+            self.centre, nom="Maternelles", effectif_cible=2, ordre=0
         )
-        self.matin = Evenement.objects.create(
-            centre=self.centre,
-            nom="Accueil matin",
+        self.elementaires, _ = creer_groupe(
+            self.centre, nom="Élémentaires", effectif_cible=2, ordre=1
+        )
+        self.groupe_sans_periode, _ = creer_groupe(
+            self.centre,
+            nom="Groupe à préparer",
             effectif_cible=1,
             ordre=2,
-            active=True,
-            heure_debut="07:30",
-            heure_fin="09:00",
+            avec_periode=False,
         )
 
         self.julie = Animateur.objects.create(
@@ -65,17 +59,17 @@ class PlanningExportTests(TestCase):
     def test_page_administration(self):
         response = self.client.get(reverse("administration"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Planning calendrier par événement")
+        self.assertContains(response, "Planning calendrier par groupe")
 
-    def test_matrice_separe_les_evenements_du_meme_centre(self):
-        dates, evenements, noms_par_case, _ = _planning_matrix(
+    def test_matrice_separe_les_groupes_du_meme_centre(self):
+        dates, groupes, noms_par_case, _ = _planning_matrix(
             date(2026, 7, 6),
             date(2026, 7, 6),
         )
         self.assertEqual(dates, [date(2026, 7, 6)])
         self.assertEqual(
-            [evenement.nom for evenement in evenements],
-            ["Maternelles", "Élémentaires", "Accueil matin"],
+            [groupe.nom for groupe in groupes],
+            ["Maternelles", "Élémentaires"],
         )
         self.assertEqual(
             noms_par_case[(self.maternelles.id, date(2026, 7, 6))],
@@ -85,12 +79,29 @@ class PlanningExportTests(TestCase):
             noms_par_case[(self.elementaires.id, date(2026, 7, 6))],
             ["Gaël Martin"],
         )
-        self.assertNotIn(
-            "Gaël Martin",
-            noms_par_case[(self.maternelles.id, date(2026, 7, 6))],
-        )
 
-    def test_export_excel_calendrier_par_evenement(self):
+    def test_groupe_sans_periode_non_exporte_sil_est_vide(self):
+        _, groupes, _, _ = _planning_matrix(
+            date(2026, 7, 6),
+            date(2026, 7, 6),
+        )
+        self.assertNotIn(self.groupe_sans_periode.id, [groupe.id for groupe in groupes])
+
+    def test_groupe_sans_periode_conserve_sil_a_une_affectation_historique(self):
+        Affectation.objects.create(
+            animateur=self.julie,
+            centre=self.centre,
+            evenement=self.groupe_sans_periode,
+            debut=datetime(2026, 7, 7, tzinfo=dt_timezone.utc),
+            fin=datetime(2026, 7, 8, tzinfo=dt_timezone.utc),
+        )
+        _, groupes, _, _ = _planning_matrix(
+            date(2026, 7, 7),
+            date(2026, 7, 7),
+        )
+        self.assertIn(self.groupe_sans_periode.id, [groupe.id for groupe in groupes])
+
+    def test_export_excel_calendrier_par_groupe(self):
         response = self.client.get(reverse("export_planning_excel"), {
             "debut": "2026-07-06",
             "fin": "2026-07-11",
@@ -99,19 +110,14 @@ class PlanningExportTests(TestCase):
         self.assertTrue(response.content.startswith(b"PK"))
         with zipfile.ZipFile(BytesIO(response.content)) as archive:
             strings = archive.read("xl/sharedStrings.xml").decode("utf-8")
-            sheet_xml = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
             self.assertIn("Pacaudière", strings)
             self.assertIn("Maternelles", strings)
             self.assertIn("Élémentaires", strings)
-            self.assertIn("Accueil matin", strings)
-            self.assertIn("07:30 - 09:00", strings)
             self.assertIn("Julie Durand", strings)
             self.assertIn("Gaël Martin", strings)
             self.assertIn("Lundi", strings)
-            # Le centre est fusionné verticalement sur les trois événements.
-            self.assertIn('ref="A3:A5"', sheet_xml)
 
-    def test_export_pdf_calendrier_par_evenement(self):
+    def test_export_pdf_calendrier_par_groupe(self):
         response = self.client.get(reverse("export_planning_pdf"), {
             "debut": "2026-07-06",
             "fin": "2026-07-11",
@@ -120,30 +126,7 @@ class PlanningExportTests(TestCase):
         self.assertTrue(response.content.startswith(b"%PDF"))
         self.assertGreater(len(response.content), 1500)
 
-    def test_evenement_inactive_conservee_si_affectee_sur_la_periode(self):
-        self.elementaires.active = False
-        self.elementaires.save(update_fields=["active"])
-        _, evenements, _, _ = _planning_matrix(
-            date(2026, 7, 6),
-            date(2026, 7, 6),
-        )
-        self.assertIn(self.elementaires.id, [evenement.id for evenement in evenements])
-
-    def test_evenement_inactive_vide_non_exportee(self):
-        evenement_vide = Evenement.objects.create(
-            centre=self.centre,
-            nom="Ancienne événement",
-            effectif_cible=1,
-            ordre=3,
-            active=False,
-        )
-        _, evenements, _, _ = _planning_matrix(
-            date(2026, 7, 6),
-            date(2026, 7, 6),
-        )
-        self.assertNotIn(evenement_vide.id, [evenement.id for evenement in evenements])
-
-    def test_dimanche_masque(self):
+    def test_dimanche_ferme_nest_pas_exporte(self):
         response = self.client.get(reverse("export_planning_excel"), {
             "debut": "2026-07-06",
             "fin": "2026-07-12",

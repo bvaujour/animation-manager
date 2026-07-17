@@ -13,6 +13,7 @@ from animateurs.models import (
     PreferenceCentre,
     Qualification,
 )
+from animateurs.tests.factories import creer_periode
 from animateurs.services.planning_solver import generer_planning_auto
 from animateurs.services.serializers import evenement_to_dict
 
@@ -24,13 +25,16 @@ class ConfigurationEvenementRemplissageAutoTests(TestCase):
             code="PAC",
             couleur="#123456",
         )
+        self.periode = creer_periode(debut=datetime.date(2026, 7, 6), nom="Semaine auto")
         self.evenement = Evenement.objects.create(
             centre=self.centre,
             nom="Maternelles",
-            debut=datetime.date(2026, 7, 6),
-            fin=datetime.date(2026, 7, 10),
+            debut=self.periode.debut,
+            fin=self.periode.fin,
             effectif_cible=1,
+            jours_ouverts=[0, 1, 2, 3, 4],
         )
+        self.evenement.periodes_scolaires.add(self.periode)
         self.bafa = Qualification.objects.create(
             nom="BAFA",
             selectionnable_remplissage_auto=False,

@@ -77,7 +77,7 @@ def generer_export_planning_xlsx(debut: datetime.date, fin: datetime.date) -> by
 
     sheet = workbook.add_worksheet("Planning détaillé")
     sheet.hide_gridlines(2)
-    sheet.write("A1", "Planning des événements", title_fmt)
+    sheet.write("A1", "Planning des groupes", title_fmt)
     sheet.write("A2", f"Période : du {debut:%d/%m/%Y} au {fin:%d/%m/%Y}", subtitle_fmt)
 
     headers = [

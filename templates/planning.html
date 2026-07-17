@@ -11,9 +11,9 @@
 <main id="layout">
     <aside id="animateurs-panel">
         <div class="animateurs-panel-header">
-            <div>
+            <div class="animateurs-panel-title-row">
                 <h2 class="section-title">Salariés</h2>
-                <span class="animateurs-order-note">Classés par prénom</span>
+                <span id="animateurs-visible-count" class="animateurs-visible-count" aria-live="polite"></span>
             </div>
             <details id="animateurs-filters" class="animateurs-filter-control">
                 <summary>
@@ -39,20 +39,16 @@
                 </div>
             </details>
         </div>
+        <label class="animateurs-search" for="animateurs-search-input">
+            <span class="sr-only">Rechercher un salarié</span>
+            <input id="animateurs-search-input" type="search" placeholder="Rechercher…" autocomplete="off">
+        </label>
         <div id="animateurs-list"></div>
     </aside>
+    <button id="planning-sidebar-resizer" class="planning-sidebar-resizer" type="button" aria-label="Redimensionner la liste des salariés" title="Faire glisser pour redimensionner"></button>
     <section id="calendars-section">
-        <div id="planning-view-switcher" class="planning-control-block toolbar-views" role="group" aria-label="Changer de vue">
-            <button class="btn btn-ghost view-btn active" data-view="dayGridWeek" type="button">Semaine</button>
-            <button class="btn btn-ghost view-btn" data-view="dayGridMonth" type="button">Mois</button>
-        </div>
-        <div id="planning-period-nav" class="planning-control-block toolbar-period">
-            <button id="btn-prev" class="btn btn-ghost" type="button" aria-label="Période précédente">‹</button>
-            <span id="toolbar-label" class="toolbar-label"></span>
-            <button id="btn-next" class="btn btn-ghost" type="button" aria-label="Période suivante">›</button>
-            <button id="btn-today" class="btn btn-ghost" type="button">Aujourd'hui</button>
-        </div>
-        <div id="calendars-container"></div>
+        {% include "partials/_week_navigation.html" with container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
+        <div id="calendars-container" class="planning-view-week"></div>
         <div id="planning-actions" class="planning-control-block toolbar-actions">
             <button id="btn-auto-semaine" class="btn btn-primary" type="button">Remplir auto</button>
             <button id="btn-vider-semaine" class="btn btn-danger-solid" type="button">Vider la semaine</button>

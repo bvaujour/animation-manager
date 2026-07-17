@@ -4,6 +4,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from animateurs.models import Animateur, Centre, Disponibilite
+from animateurs.tests.factories import creer_groupe
 from animateurs.services.affectations import creer_affectation, modifier_affectation
 
 
@@ -12,6 +13,8 @@ class AffectationServiceTests(TestCase):
         self.animateur = Animateur.objects.create(prenom="Julie", nom="Test")
         self.centre_a = Centre.objects.create(nom="Centre A", code="A", couleur="#123456")
         self.centre_b = Centre.objects.create(nom="Centre B", code="B", couleur="#654321")
+        self.groupe_a, _ = creer_groupe(self.centre_a, nom="Groupe A")
+        self.groupe_b, _ = creer_groupe(self.centre_b, nom="Groupe B")
         self.jour = timezone.make_aware(datetime.datetime(2026, 7, 6))
         Disponibilite.objects.create(
             animateur=self.animateur,

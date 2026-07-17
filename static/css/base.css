@@ -650,3 +650,81 @@ a {
         --top-nav-height: 46px;
     }
 }
+
+/* --- Navigation de semaine partagée : Accueil et Planning --- */
+.week-navigation {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 100%;
+    padding: 7px 10px;
+    margin-bottom: 12px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.week-navigation-label {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-size: 1rem;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.week-navigation-controls {
+    display: grid;
+    grid-template-columns: 34px minmax(92px, auto) 34px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    max-width: 100%;
+}
+
+.week-navigation-button {
+    min-width: 34px;
+    min-height: 30px;
+    padding: 2px 7px;
+    justify-content: center;
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.week-navigation-today {
+    min-height: 30px;
+    padding: 3px 10px;
+    justify-content: center;
+    font-size: 0.82rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+    .week-navigation {
+        padding: 6px 8px;
+    }
+
+    .week-navigation-label {
+        font-size: 0.9rem;
+    }
+
+    .week-navigation-controls {
+        grid-template-columns: 32px minmax(88px, auto) 32px;
+        gap: 3px;
+    }
+
+    .week-navigation-button {
+        min-width: 32px;
+        min-height: 29px;
+    }
+}
+
+

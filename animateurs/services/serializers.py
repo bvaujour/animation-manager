@@ -1,5 +1,7 @@
 """Sérialisation JSON centralisée des modèles de l'application."""
 
+from animateurs.models import jours_feries_france
+
 
 def affectation_to_event(affectation):
     return {
@@ -14,6 +16,9 @@ def affectation_to_event(affectation):
         "extendedProps": {
             "animateur_id": affectation.animateur_id,
             "centre_id": affectation.centre_id,
+            # Noms modernes et alias historiques pour ne pas casser un ancien cache JS.
+            "groupe_id": affectation.evenement_id,
+            "groupe_nom": affectation.evenement.nom,
             "evenement_id": affectation.evenement_id,
             "evenement_nom": affectation.evenement.nom,
         },
@@ -48,7 +53,6 @@ def animateur_to_dict(animateur):
             "nom": evenement.nom,
             "centre_id": evenement.centre_id,
             "centre_nom": evenement.centre.nom,
-            "active": evenement.active,
         }
 
     return {
@@ -91,19 +95,39 @@ def centre_to_dict(centre):
 def evenement_to_dict(evenement):
     besoins = list(evenement.besoins_qualifications.select_related("qualification").all())
     nb_affectations = getattr(evenement, "nb_affectations", evenement.affectations.count())
+    periodes = list(evenement.periodes_scolaires.all())
     return {
         "id": evenement.id,
         "centre_id": evenement.centre_id,
         "nom": evenement.nom,
         "debut": evenement.debut.isoformat() if evenement.debut else None,
         "fin": evenement.fin.isoformat() if evenement.fin else None,
+        "periode_ids": [periode.id for periode in periodes],
+        "periodes": [
+            {
+                "id": periode.id,
+                "nom": periode.nom,
+                "libelle": periode.libelle_avec_annee,
+                "annee_scolaire": periode.annee_scolaire,
+                "zone": periode.zone,
+                "debut": periode.debut.isoformat(),
+                "fin": periode.fin.isoformat(),
+                "fin_ouverture": evenement.fin_ouverture_periode(periode).isoformat(),
+            }
+            for periode in periodes
+        ],
+        "ferme_jours_feries": evenement.ferme_jours_feries,
+        "dates_feriees_fermees": sorted({
+            jour.isoformat()
+            for periode in periodes
+            for annee in range(periode.debut.year, evenement.fin_ouverture_periode(periode).year + 1)
+            for jour in jours_feries_france(annee)
+            if evenement.ferme_jours_feries and periode.debut <= jour <= evenement.fin_ouverture_periode(periode)
+        }),
         "effectif_cible": evenement.effectif_cible,
         "jours_ouverts": [int(numero) for numero in (evenement.jours_ouverts or [])],
-        "dates_exclues": [
-            fermeture.date.isoformat() for fermeture in evenement.dates_exclues.all()
-        ],
+        "dates_exclues": [fermeture.date.isoformat() for fermeture in evenement.dates_exclues.all()],
         "ordre": evenement.ordre,
-        "active": evenement.active,
         "qualifications_requises": {
             str(b.qualification_id): b.nombre_minimum for b in besoins
         },
@@ -112,7 +136,9 @@ def evenement_to_dict(evenement):
         ],
         "nb_affectations": nb_affectations,
         "peut_supprimer": nb_affectations == 0,
+        "a_des_periodes": bool(periodes),
     }
+
 
 def qualification_to_dict(qualification):
     return {

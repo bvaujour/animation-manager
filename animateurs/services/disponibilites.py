@@ -5,7 +5,7 @@ import datetime
 from django.db import transaction
 from django.utils import timezone
 
-from animateurs.models import Animateur, Disponibilite
+from animateurs.models import Disponibilite
 from .dates import jours_couverts
 
 
@@ -49,8 +49,3 @@ def fusionner_et_nettoyer_disponibilites(animateur, aujourd_hui=None):
             for debut, fin in groupes
         ])
     return groupes
-
-
-def nettoyer_disponibilites_tous_animateurs():
-    for animateur in Animateur.objects.prefetch_related("disponibilites"):
-        fusionner_et_nettoyer_disponibilites(animateur)

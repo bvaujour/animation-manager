@@ -117,7 +117,7 @@ class OrdreAffichagePlanningApiTests(TestCase):
 
         nouvel_ordre = [evenement_c.id, evenement_a.id, evenement_b.id]
         response = self.client.post(
-            reverse("api_evenements_reordonner", args=[self.centre_a.id]),
+            reverse("api_groupes_reordonner", args=[self.centre_a.id]),
             data=json.dumps({"evenement_ids": nouvel_ordre}),
             content_type="application/json",
         )

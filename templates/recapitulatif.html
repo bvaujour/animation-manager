@@ -7,15 +7,30 @@
     <header class="recap-header">
         <div>
             <h1>Récapitulatif</h1>
-            <p class="page-intro">Couverture des événements, alertes de planning et répartition des journées par salarié.</p>
+            <p class="page-intro">Couverture des groupes, alertes de planning et répartition des journées par salarié.</p>
         </div>
     </header>
 
-    <section class="periode-card" aria-label="Choix de la période">
-        <label for="periode-debut">Début</label>
-        <input type="date" id="periode-debut" name="periode_debut">
-        <label for="periode-fin">Fin</label>
-        <input type="date" id="periode-fin" name="periode_fin">
+    <section class="periode-card" aria-label="Choix des périodes">
+        <div class="periode-select" id="periode-select">
+            <button
+                id="periode-select-toggle"
+                class="periode-select-toggle"
+                type="button"
+                aria-haspopup="true"
+                aria-expanded="false"
+            >
+                <span id="periode-select-label">Choisir les périodes</span>
+                <span aria-hidden="true">⌄</span>
+            </button>
+            <div id="periode-select-menu" class="periode-select-menu" hidden>
+                <div class="periode-select-actions">
+                    <button id="periodes-tout-selectionner" type="button">Tout sélectionner</button>
+                    <button id="periodes-tout-deselectionner" type="button">Tout désélectionner</button>
+                </div>
+                <div id="periode-select-options" class="periode-select-options"></div>
+            </div>
+        </div>
         <button id="btn-appliquer-periode" class="btn" type="button">Afficher</button>
         <p id="periode-affichee" class="periode-affichee"></p>
     </section>
@@ -36,7 +51,7 @@
     <section class="recap-card">
         <div class="section-header">
             <div>
-                <h2>Couverture par événement</h2>
+                <h2>Couverture par groupe</h2>
                 <p>Comparaison entre le besoin défini dans Gestion et les affectations du planning, du lundi au samedi.</p>
             </div>
         </div>

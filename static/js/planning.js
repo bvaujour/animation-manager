@@ -31,12 +31,17 @@ document.addEventListener("DOMContentLoaded", function ()
 	const filtresCentresConteneur = document.getElementById("animateurs-filter-centres");
 	const compteurFiltresAnimateurs = document.getElementById("animateurs-filter-count");
 	const boutonEffacerFiltresAnimateurs = document.getElementById("animateurs-filter-reset");
+	const rechercheAnimateursInput = document.getElementById("animateurs-search-input");
+	const compteurAnimateursVisibles = document.getElementById("animateurs-visible-count");
+	const redimensionneurSidebar = document.getElementById("planning-sidebar-resizer");
 	const toolbarLabel = document.getElementById("toolbar-label");
 
 	// Un FullCalendar.Calendar par centre, dans le même ordre que les
 	// centres reçus de l'API. On s'en sert pour synchroniser la
-	// navigation (prev/next/today/changeView) sur les 3 à la fois.
+	// navigation (précédent/suivant/aujourd’hui) sur tous les calendriers.
 	const calendars = [];
+	// Date de la période ciblée par la barre de navigation.
+	let datePeriodeCourante = null;
 
 	// Petits caches front : ils évitent de refaire des appels API quand on
 	// modifie un animateur ou qu'on affiche ses informations. Ils sont mis à jour
@@ -62,9 +67,10 @@ document.addEventListener("DOMContentLoaded", function ()
 
 	let filtresQualificationsAnimateurs = lireIdsFiltres("planning-filtres-qualifications");
 	let filtresCentresAnimateurs = lireIdsFiltres("planning-filtres-centres");
+	let rechercheAnimateurs = "";
 	localStorage.removeItem("planning-tri-animateurs");
 
-	// Identifiant de la "source d'évènements" utilisée pour afficher les
+	// Identifiant de la "source d'affectations" utilisée pour afficher les
 	// disponibilités en fond de calendrier (voir afficherDisponibilites).
 	const DISPO_SOURCE_ID = "disponibilites";
 
@@ -75,7 +81,6 @@ document.addEventListener("DOMContentLoaded", function ()
 	//     glisser-déposer, plus fiable au doigt sur téléphone).
 	let animateurActif = null;
 	let selectedChip = null;
-	let selectedDetail = null;
 
 	// Animateur dont on affiche temporairement les disponibilités pendant
 	// un glisser-déposer depuis la liste.
@@ -92,7 +97,7 @@ document.addEventListener("DOMContentLoaded", function ()
 
 	// Tri visuel des blocs du planning. Le déplacement ne modifie aucune
 	// affectation : il enregistre uniquement l'ordre des centres et des
-	// événements afin de retrouver la même disposition au prochain chargement.
+	// groupes afin de retrouver la même disposition au prochain chargement.
 	let triPlanningActif = null;
 
 	// Les lieux peuvent être repliés pour libérer de la place. Le choix est
@@ -253,7 +258,7 @@ document.addEventListener("DOMContentLoaded", function ()
 
 		const url = etat.type === "centre"
 			? "/api/centres/reordonner/"
-			: `/api/centres/${etat.centreId}/evenements/reordonner/`;
+			: `/api/centres/${etat.centreId}/groupes/reordonner/`;
 		const payload = etat.type === "centre"
 			? { centre_ids: ids }
 			: { evenement_ids: ids };
@@ -264,7 +269,7 @@ document.addEventListener("DOMContentLoaded", function ()
 				mettreAJourCacheOrdre(etat.type, ids, etat.centreId);
 				afficherToast(etat.type === "centre"
 					? "Ordre des centres enregistré."
-					: "Ordre des événements enregistré.");
+					: "Ordre des groupes enregistré.");
 			})
 			.catch((err) =>
 			{
@@ -342,86 +347,6 @@ function libelleDate(dateStr)
 		return "Période non définie";
 	}
 
-	function disponibilitesTexte(disponibilites)
-	{
-		if (!disponibilites || disponibilites.length === 0)
-		{
-			return "Aucune disponibilité renseignée";
-		}
-
-		return disponibilites.map((plage) => `${libelleDate(plage.debut)} → ${libelleDate(plage.fin)}`).join(" · ");
-	}
-
-	function centresAutorisesTexte(animateur)
-	{
-		const morceaux = [];
-		if (animateur.centre_prefere) morceaux.push(`Préféré : ${animateur.centre_prefere.nom}`);
-		if (animateur.centres_secondaires && animateur.centres_secondaires.length)
-		{
-			morceaux.push(`Secondaires : ${animateur.centres_secondaires.map((centre) => centre.nom).join(" · ")}`);
-		}
-		return morceaux.length ? morceaux.join(" — ") : "Aucun centre renseigné";
-	}
-
-	function retirerFicheAnimateurSelectionne()
-	{
-		if (selectedDetail)
-		{
-			selectedDetail.classList.remove("open");
-			const detailARetirer = selectedDetail;
-			selectedDetail = null;
-
-			window.setTimeout(() => detailARetirer.remove(), 180);
-		}
-	}
-
-	function rendreFicheAnimateurSelectionne(disponibilites = null)
-	{
-		if (!animateurActif || !selectedChip)
-		{
-			retirerFicheAnimateurSelectionne();
-			return;
-		}
-
-		const animateur = animateurActif;
-		const plages = disponibilites || animateur.disponibilites || [];
-		const age = animateur.age !== null && animateur.age !== undefined ? `${animateur.age} ans` : "Âge non renseigné";
-		const qualifications = animateur.qualifications && animateur.qualifications.length ? animateur.qualifications.join(", ") : "Aucune qualification";
-
-		if (!selectedDetail)
-		{
-			selectedDetail = document.createElement("div");
-			selectedDetail.classList.add("animateur-detail");
-		}
-
-		selectedDetail.innerHTML = `
-			<div class="selected-header">
-				<div>
-					<p class="selected-kicker">Animateur sélectionné</p>
-					<h2>${escapeHtml(animateur.prenom)} ${escapeHtml(animateur.nom)}</h2>
-				</div>
-				<span class="selected-age">${escapeHtml(age)}</span>
-			</div>
-			<div class="selected-details">
-				<p><strong>Tél.</strong><span>${escapeHtml(animateur.telephone || "Non renseigné")}</span></p>
-				<p><strong>Email</strong><span>${escapeHtml(animateur.email || "Non renseigné")}</span></p>
-				<p><strong>Qualifications</strong><span>${escapeHtml(qualifications)}</span></p>
-				<p><strong>Centres possibles</strong><span>${escapeHtml(centresAutorisesTexte(animateur))}</span></p>
-				<p><strong>Événement préféré</strong><span>${escapeHtml(animateur.evenement_preferee?.nom || "Aucune préférence")}</span></p>
-				<p><strong>Disponibilités</strong><span>${escapeHtml(disponibilitesTexte(plages))}</span></p>
-			</div>
-			<p class="selected-help">Clique sur un jour d'un calendrier pour affecter ${escapeHtml(animateur.prenom)}. Sa fiche et ses disponibilités se modifient dans Gestion > Salariés.</p>
-		`;
-
-		selectedChip.insertAdjacentElement("afterend", selectedDetail);
-
-		// requestAnimationFrame laisse le navigateur insérer l'élément avant
-		// d'ajouter la classe .open : l'animation CSS peut ainsi se déclencher.
-		requestAnimationFrame(() => selectedDetail.classList.add("open"));
-
-	}
-
-
 
 	function animateurDisponibleCeJour(animateur, dateStr)
 	{
@@ -442,17 +367,33 @@ function libelleDate(dateStr)
 		return (jourJs + 6) % 7; // 0=lundi ... 6=dimanche
 	}
 
-	function evenementOuvertCeJour(evenement, dateStr)
+	function evenementOuvertCeJour(groupe, dateStr)
 	{
-		if (!evenement || !dateStr || evenement.active === false) return false;
-		if (evenement.debut && dateStr < evenement.debut) return false;
-		if (evenement.fin && dateStr > evenement.fin) return false;
-		const joursOuverts = Array.isArray(evenement.jours_ouverts)
-			? evenement.jours_ouverts.map(Number)
+		if (!groupe || !dateStr) return false;
+		const periodes = Array.isArray(groupe.periodes) ? groupe.periodes : [];
+		if (!periodes.some((periode) => dateStr >= periode.debut && dateStr <= (periode.fin_ouverture || periode.fin))) return false;
+		const joursOuverts = Array.isArray(groupe.jours_ouverts)
+			? groupe.jours_ouverts.map(Number)
 			: [0, 1, 2, 3, 4, 5];
 		if (!joursOuverts.includes(numeroJourSemaine(dateStr))) return false;
-		if ((evenement.dates_exclues || []).includes(dateStr)) return false;
+		if ((groupe.dates_exclues || []).includes(dateStr)) return false;
+		if ((groupe.dates_feriees_fermees || []).includes(dateStr)) return false;
 		return true;
+	}
+
+	function groupeChevauchePlage(groupe, debutStr, finExclusiveStr)
+	{
+		const periodes = Array.isArray(groupe?.periodes) ? groupe.periodes : [];
+		return periodes.some((periode) => periode.debut < finExclusiveStr && (periode.fin_ouverture || periode.fin) >= debutStr);
+	}
+
+	function joursCachesFullCalendar(groupe)
+	{
+		const ouverts = new Set((groupe.jours_ouverts || [0, 1, 2, 3, 4, 5]).map(Number));
+		return [0, 1, 2, 3, 4, 5, 6].filter((jourJs) => {
+			const jourPython = (jourJs + 6) % 7;
+			return !ouverts.has(jourPython);
+		});
 	}
 
 	function intervalleDansPeriodeEvenement(evenement, debutStr, finExclusiveStr)
@@ -561,11 +502,6 @@ function libelleDate(dateStr)
 	{
 		if (!evenementOuvertCeJour(evenement, info.dateStr)) return;
 
-		if (!evenement.active)
-		{
-			afficherToast(`L’événement ${evenement.nom} est inactif : réactive-la dans Gestion pour y ajouter des animateurs.`, true);
-			return;
-		}
 
 		const memeJour = jourSelectionnePourPlacement
 			&& jourSelectionnePourPlacement.date === info.dateStr
@@ -598,7 +534,7 @@ function libelleDate(dateStr)
 	{
 		if (!evenementOuvertCeJour(evenement, debut))
 		{
-			return Promise.reject({ error: "Ce jour est en dehors de la période de l’événement." });
+			return Promise.reject({ error: "Ce jour est en dehors des périodes du groupe." });
 		}
 
 		const fin = addDays(debut, 1);
@@ -663,7 +599,7 @@ function libelleDate(dateStr)
 	// Calendriers (un par centre)
 	// -----------------------------------------------------------------
 
-	// Appelée quand on déplace ou redimensionne un évènement existant
+	// Appelée quand on déplace ou redimensionne une affectation existante
 	// (glisser-déposer classique). On enregistre le nouveau créneau côté
 	// serveur, et si le serveur refuse (conflit, indisponibilité...) on
 	// annule visuellement le déplacement avec info.revert().
@@ -701,8 +637,24 @@ function libelleDate(dateStr)
 		});
 	}
 
-	// Une instance FullCalendar par événement. Toutes les événements d'un même
-	// centre restent regroupées visuellement dans le même bloc.
+	// Une instance FullCalendar par groupe. Tous les groupes d'un même
+	// centre restent regroupés visuellement dans le même bloc.
+	function mettreAJourVisibiliteCalendriers(info)
+	{
+		if (!info) return;
+		const debut = formatDateLocal(info.start);
+		const fin = formatDateLocal(info.end);
+		document.querySelectorAll(".evenement-calendar-card").forEach((card) => {
+			const groupe = centresPlanning.flatMap((centre) => centre.evenements || [])
+				.find((item) => Number(item.id) === Number(card.dataset.evenementId));
+			card.hidden = !groupe || !groupeChevauchePlage(groupe, debut, fin);
+		});
+		document.querySelectorAll(".centre-planning-group").forEach((bloc) => {
+			const cartes = Array.from(bloc.querySelectorAll(".evenement-calendar-card"));
+			bloc.hidden = cartes.length === 0 || cartes.every((card) => card.hidden);
+		});
+	}
+
 	function creerCalendar(centre, evenement, card)
 	{
 		const calendarEl = card.querySelector(".calendar");
@@ -713,10 +665,10 @@ function libelleDate(dateStr)
 			height: "auto",
 			locale: "fr",
 			firstDay: 1,
-			hiddenDays: [0],
+			hiddenDays: joursCachesFullCalendar(evenement),
 			editable: true,
-			droppable: Boolean(evenement.active),
-			selectable: Boolean(evenement.active),
+			droppable: true,
+			selectable: true,
 
 			dayCellClassNames: function (arg)
 			{
@@ -732,7 +684,7 @@ function libelleDate(dateStr)
 				if (!evenementOuvertCeJour(evenement, dateStr))
 				{
 					arg.el.setAttribute("aria-disabled", "true");
-					arg.el.title = "Événement fermé à cette date (hors période, jour habituel non ouvert ou date exclue)";
+					arg.el.title = "Groupe fermé à cette date (hors période, jour habituel non ouvert ou date exclue)";
 				}
 			},
 
@@ -752,7 +704,8 @@ function libelleDate(dateStr)
 
 			datesSet: function (info)
 			{
-				toolbarLabel.textContent = info.view.title;
+				mettreAJourLibelleSemaine(info);
+				mettreAJourVisibiliteCalendriers(info);
 				if (animateurActif)
 				{
 					afficherDisponibilites(animateurActif, animateurActif.disponibilites || []);
@@ -767,11 +720,6 @@ function libelleDate(dateStr)
 			{
 				if (!evenementOuvertCeJour(evenement, info.dateStr)) return;
 
-				if (!evenement.active)
-				{
-					afficherToast(`L’événement ${evenement.nom} est inactif.`, true);
-					return;
-				}
 
 				if (!animateurActif)
 				{
@@ -785,7 +733,6 @@ function libelleDate(dateStr)
 
 			eventAllow: function (dropInfo, draggedEvent)
 			{
-				if (!evenement.active) return false;
 
 				const debut = formatDateLocal(dropInfo.start);
 				const fin = dropInfo.end ? formatDateLocal(dropInfo.end) : addDays(debut, 1);
@@ -815,12 +762,6 @@ function libelleDate(dateStr)
 					return;
 				}
 
-				if (!evenement.active)
-				{
-					info.event.remove();
-					afficherToast(`L’événement ${evenement.nom} est inactif.`, true);
-					return;
-				}
 
 				if (info.event.id)
 				{
@@ -875,12 +816,13 @@ function libelleDate(dateStr)
 
 	function ajouterCentreAuPlanning(centre)
 	{
+		const evenements = (centre.evenements || []).filter((groupe) => (groupe.periodes || []).length > 0);
+		if (!evenements.length) return;
+
 		const groupe = document.createElement("section");
 		groupe.classList.add("centre-planning-group");
 		groupe.dataset.centreId = centre.id;
 		groupe.style.setProperty("--centre-color", centre.couleur);
-
-		const evenements = centre.evenements || [];
 		groupe.innerHTML = `
 			<header class="centre-planning-header">
 				<div class="centre-planning-title">
@@ -891,7 +833,7 @@ function libelleDate(dateStr)
 					</div>
 				</div>
 				<div class="centre-planning-actions">
-					<span class="centre-evenements-count">${evenements.length} événement${evenements.length > 1 ? "s" : ""}</span>
+					<span class="centre-evenements-count">${evenements.length} groupe${evenements.length > 1 ? "s" : ""}</span>
 					<button class="centre-collapse-toggle" type="button" aria-expanded="true" aria-label="Replier ce lieu" title="Replier ou déplier ce lieu">
 						<span aria-hidden="true">⌄</span>
 					</button>
@@ -910,21 +852,11 @@ function libelleDate(dateStr)
 		});
 
 		const zoneEvenements = groupe.querySelector(".evenement-calendars");
-		if (evenements.length === 0)
-		{
-			zoneEvenements.innerHTML = '<p class="empty-note">Aucun événement dans ce lieu.</p>';
-			if (centresReplies.has(Number(centre.id)))
-			{
-				reglerCentreReplie(groupe, centre.id, true);
-			}
-			return;
-		}
 
 		evenements.forEach((evenement) =>
 		{
 			const card = document.createElement("article");
 			card.classList.add("calendar-card", "evenement-calendar-card");
-			if (!evenement.active) card.classList.add("evenement-inactive");
 			card.dataset.centreId = centre.id;
 			card.dataset.evenementId = evenement.id;
 			card.style.setProperty("--centre-color", centre.couleur);
@@ -932,14 +864,14 @@ function libelleDate(dateStr)
 			card.innerHTML = `
 				<header class="evenement-calendar-header">
 					<div class="evenement-calendar-title">
-						<span class="planning-drag-handle evenement-drag-handle" draggable="true" role="button" tabindex="0" aria-label="Déplacer le planning ${escapeHtml(evenement.nom)}" title="Glisser pour déplacer cet événement">⠿</span>
+						<span class="planning-drag-handle evenement-drag-handle" draggable="true" role="button" tabindex="0" aria-label="Déplacer le planning ${escapeHtml(evenement.nom)}" title="Glisser pour déplacer ce groupe">⠿</span>
 						<div>
 							<h3>${escapeHtml(evenement.nom)}</h3>
 						</div>
 					</div>
 					<div class="evenement-calendar-meta">
 						<span>Objectif ${escapeHtml(evenement.effectif_cible)}</span>
-						${evenement.active ? "" : '<span class="evenement-inactive-badge">Inactive</span>'}
+						
 					</div>
 				</header>
 				<div class="calendar"></div>`;
@@ -960,7 +892,7 @@ function libelleDate(dateStr)
 	{
 		return apiFetch("/api/centres/")
 			.then((centres) => Promise.all(centres.map((centre) =>
-				apiFetch(`/api/centres/${centre.id}/evenements/`)
+				apiFetch(`/api/centres/${centre.id}/groupes/`)
 					.then((evenements) => ({ ...centre, evenements }))
 			)))
 			.then((centres) =>
@@ -978,7 +910,19 @@ function libelleDate(dateStr)
 				}
 
 				centres.forEach((centre) => ajouterCentreAuPlanning(centre));
-				appliquerModeVue(document.querySelector(".view-btn.active")?.dataset.view || "dayGridWeek");
+				if (!calendars.length)
+				{
+					calendarsContainer.innerHTML = '<p class="empty-note">Aucun groupe n’a encore de période ouverte. Configure les groupes depuis Gestion.</p>';
+					return;
+				}
+				const periodes = periodesOuvertesPlanning();
+				if (calendars.length && periodes.length)
+				{
+					const aujourdHui = formatDateLocal(new Date());
+					const ouverte = periodes.find((periode) => periode.debut <= aujourdHui && periode.fin >= aujourdHui);
+					const prochaine = periodes.find((periode) => periode.debut > aujourdHui);
+					allerDateTous((ouverte || prochaine || periodes[0]).debut);
+				}
 			});
 	}
 
@@ -988,39 +932,73 @@ function libelleDate(dateStr)
 	// simplement sur le tableau `calendars`.
 	// -----------------------------------------------------------------
 
-	document.getElementById("btn-prev").addEventListener("click", () => calendars.forEach((c) => c.prev()));
-	document.getElementById("btn-next").addEventListener("click", () => calendars.forEach((c) => c.next()));
-	document.getElementById("btn-today").addEventListener("click", () => calendars.forEach((c) => c.today()));
-
-	function appliquerModeVue(viewName)
+	function periodesOuvertesPlanning()
 	{
-		// Sur la page planning, les calendriers doivent se comporter comme sur
-		// l'accueil : en vue semaine ils restent compacts, et en vue mois ils
-		// grandissent naturellement avec toutes les lignes du mois.
-		const vueMois = viewName === "dayGridMonth";
-		calendarsContainer.classList.toggle("planning-view-month", vueMois);
-		calendarsContainer.classList.toggle("planning-view-week", !vueMois);
-
-		requestAnimationFrame(() =>
-		{
-			calendars.forEach((calendar) => calendar.updateSize());
-		});
+		const uniques = new Map();
+		centresPlanning.flatMap((centre) => centre.evenements || []).forEach((groupe) =>
+			(groupe.periodes || []).forEach((periode) =>
+			{
+				const cle = periode.id || `${periode.debut}|${periode.fin}`;
+				const finOuverture = periode.fin_ouverture || periode.fin;
+				const existante = uniques.get(cle);
+				if (!existante)
+				{
+					uniques.set(cle, { ...periode, fin_periode: periode.fin, fin: finOuverture });
+				}
+				else if (finOuverture > existante.fin)
+				{
+					existante.fin = finOuverture;
+				}
+			})
+		);
+		return [...uniques.values()].sort((a, b) => a.debut.localeCompare(b.debut));
 	}
 
-	document.querySelectorAll(".view-btn").forEach((btn) =>
+	function periodePourDate(dateStr)
 	{
-		btn.addEventListener("click", () =>
-		{
-			document.querySelectorAll(".view-btn").forEach((b) => b.classList.remove("active"));
-			btn.classList.add("active");
-			calendars.forEach((c) => c.changeView(btn.dataset.view));
-			appliquerModeVue(btn.dataset.view);
-		});
+		return periodesOuvertesPlanning().find((periode) => periode.debut <= dateStr && periode.fin >= dateStr) || null;
+	}
+
+	function mettreAJourLibelleSemaine(info = null)
+	{
+		if (!toolbarLabel) return;
+		const dateReference = datePeriodeCourante
+			|| (info?.start ? formatDateLocal(info.start) : null)
+			|| (calendars[0] ? formatDateLocal(calendars[0].getDate()) : null);
+		const periode = dateReference ? periodePourDate(dateReference) : null;
+		toolbarLabel.textContent = periode
+			? libellePeriodeAvecAnnee(periode)
+			: "Aucune période ouverte";
+	}
+
+	function allerDateTous(dateStr)
+	{
+		datePeriodeCourante = dateStr;
+		calendars.forEach((calendar) => calendar.gotoDate(dateStr));
+		mettreAJourLibelleSemaine();
+	}
+
+	function naviguerVersPeriode(direction)
+	{
+		const periodes = periodesOuvertesPlanning();
+		if (!periodes.length || !calendars.length) return;
+		const dateCourante = datePeriodeCourante || formatDateLocal(calendars[0].getDate());
+		const cible = direction > 0
+			? periodes.find((periode) => periode.debut > dateCourante)
+			: [...periodes].reverse().find((periode) => periode.debut < dateCourante);
+		if (cible) allerDateTous(cible.debut);
+	}
+
+	document.getElementById("btn-prev").addEventListener("click", () => naviguerVersPeriode(-1));
+	document.getElementById("btn-next").addEventListener("click", () => naviguerVersPeriode(1));
+	document.getElementById("btn-today").addEventListener("click", () => {
+		const aujourdHui = formatDateLocal(new Date());
+		const periodes = periodesOuvertesPlanning();
+		const courante = periodes.find((periode) => periode.debut <= aujourdHui && periode.fin >= aujourdHui);
+		const prochaine = periodes.find((periode) => periode.debut > aujourdHui);
+		const cible = courante?.debut || prochaine?.debut || periodes.at(-1)?.debut;
+		if (cible) allerDateTous(cible);
 	});
-
-	// Mode initial : semaine compacte.
-	appliquerModeVue("dayGridWeek");
-
 
 	// NB : le formatage en "YYYY-MM-DD" utilise formatDateLocal() (définie
 	// dans ui.js), PAS toISOString(). Ce fichier manipule des dates en
@@ -1060,8 +1038,8 @@ function libelleDate(dateStr)
 
 				calendars.forEach((calendar) =>
 				{
-					// refetchEvents() recharge les événements venus de l'API,
-					// mais ne supprime pas toujours les événements ajoutés
+					// refetchEvents() recharge les groupes venus de l'API,
+					// mais ne supprime pas toujours les groupes ajoutés
 					// manuellement par drag & drop dans la session courante.
 					// On retire donc explicitement toutes les affectations
 					// visibles de la semaine avant de relire la base.
@@ -1129,7 +1107,7 @@ function libelleDate(dateStr)
 
 		// Début de prise en main de l'étiquette : on affiche tout de suite
 		// les disponibilités, avant même que l'animateur soit déposé.
-		// On écoute plusieurs évènements car FullCalendar peut initier le
+		// On écoute plusieurs signaux car FullCalendar peut initier le
 		// déplacement différemment selon souris/tactile/navigateur.
 		["pointerdown", "mousedown", "touchstart"].forEach((eventName) =>
 		{
@@ -1272,10 +1250,21 @@ function libelleDate(dateStr)
 		rendreListeAnimateurs();
 	}
 
+	function animateurCorrespondARecherche(animateur)
+	{
+		if (!rechercheAnimateurs) return true;
+		const texte = [animateur.prenom, animateur.nom, animateur.email, animateur.telephone]
+			.filter(Boolean)
+			.join(" ")
+			.toLocaleLowerCase("fr");
+		return texte.includes(rechercheAnimateurs);
+	}
+
 	function animateursFiltresEtTries()
 	{
 		return animateursPlanning
 			.filter(animateurCorrespondAuxFiltres)
+			.filter(animateurCorrespondARecherche)
 			.sort(comparerAnimateursParPrenom);
 	}
 
@@ -1297,7 +1286,6 @@ function libelleDate(dateStr)
 			effacerDisponibilitesAffichees();
 			animateurActif = null;
 			selectedChip = null;
-			retirerFicheAnimateurSelectionne();
 		}
 
 		selectedChip = null;
@@ -1318,7 +1306,72 @@ function libelleDate(dateStr)
 			animList.innerHTML = '<p class="empty-note">Aucun salarié ne correspond aux filtres cochés.</p>';
 		}
 		mettreAJourResumeFiltresAnimateurs(animateursAffiches.length);
+		if (compteurAnimateursVisibles)
+		{
+			compteurAnimateursVisibles.textContent = `${animateursAffiches.length}/${animateursPlanning.length}`;
+		}
 	}
+
+	if (rechercheAnimateursInput)
+	{
+		rechercheAnimateursInput.addEventListener("input", () =>
+		{
+			rechercheAnimateurs = rechercheAnimateursInput.value.trim().toLocaleLowerCase("fr");
+			rendreListeAnimateurs();
+		});
+	}
+
+	function initialiserRedimensionnementSidebar()
+	{
+		if (!redimensionneurSidebar) return;
+		const cle = "planning-largeur-sidebar";
+		const largeurSauvegardee = Number(localStorage.getItem(cle));
+		if (Number.isFinite(largeurSauvegardee) && largeurSauvegardee >= 220 && largeurSauvegardee <= 450)
+		{
+			document.body.style.setProperty("--planning-sidebar-width", `${largeurSauvegardee}px`);
+		}
+
+		let enCours = false;
+		const reglerLargeur = (clientX) =>
+		{
+			const layout = document.getElementById("layout");
+			if (!layout) return;
+			const largeur = Math.min(450, Math.max(220, Math.round(clientX - layout.getBoundingClientRect().left)));
+			document.body.style.setProperty("--planning-sidebar-width", `${largeur}px`);
+			localStorage.setItem(cle, String(largeur));
+			calendars.forEach((calendar) => calendar.updateSize());
+		};
+
+		redimensionneurSidebar.addEventListener("pointerdown", (event) =>
+		{
+			if (window.innerWidth < 1024) return;
+			enCours = true;
+			redimensionneurSidebar.setPointerCapture(event.pointerId);
+			redimensionneurSidebar.classList.add("is-resizing");
+			document.body.classList.add("planning-sidebar-resizing");
+		});
+
+		redimensionneurSidebar.addEventListener("pointermove", (event) =>
+		{
+			if (enCours) reglerLargeur(event.clientX);
+		});
+
+		const terminer = (event) =>
+		{
+			if (!enCours) return;
+			enCours = false;
+			if (redimensionneurSidebar.hasPointerCapture(event.pointerId))
+			{
+				redimensionneurSidebar.releasePointerCapture(event.pointerId);
+			}
+			redimensionneurSidebar.classList.remove("is-resizing");
+			document.body.classList.remove("planning-sidebar-resizing");
+		};
+		redimensionneurSidebar.addEventListener("pointerup", terminer);
+		redimensionneurSidebar.addEventListener("pointercancel", terminer);
+	}
+
+	initialiserRedimensionnementSidebar();
 
 	// (Re)charge la liste des animateurs dans la barre latérale. Appelée
 	// au chargement initial, et à nouveau après un ajout/suppression.
@@ -1454,7 +1507,7 @@ function libelleDate(dateStr)
 
 			const couleur = couleurDisponibilitePourCentre(animateur, centre);
 
-			// FullCalendar affiche les évènements "display: background" comme
+			// FullCalendar affiche les éléments "display: background" comme
 			// une simple teinte de fond, sans les traiter comme de vraies
 			// affectations (pas cliquables, pas de titre affiché).
 			const events = plagesDisponibilitesPourVue(calendar, animateur.disponibilites).map((plage) => ({
@@ -1544,7 +1597,6 @@ function libelleDate(dateStr)
 		effacerDisponibilitesAffichees();
 		animateurActif = null;
 		selectedChip = null;
-		retirerFicheAnimateurSelectionne();
 
 		// Un second clic sur le même animateur = désélectionner et s'arrêter là.
 		if (dejaSelectionne) return;
@@ -1660,7 +1712,7 @@ function libelleDate(dateStr)
 		});
 	});
 	// Placement automatique de la semaine affichée (lundi -> vendredi),
-	// désormais calculé événement par événement.
+	// désormais calculé groupe par groupe.
 	const btnAutoSemaine = document.getElementById("btn-auto-semaine");
 
 	function lancerRemplissageAuto(boutonValider)
@@ -1707,13 +1759,13 @@ function libelleDate(dateStr)
 	{
 		const evenementsActives = centresPlanning.flatMap((centre) =>
 			(centre.evenements || [])
-				.filter((evenement) => evenement.active)
-				.map((evenement) => ({ ...evenement, centre }))
+				.filter((groupe) => (groupe.periodes || []).length > 0)
+				.map((groupe) => ({ ...groupe, centre }))
 		);
 
 		if (evenementsActives.length === 0)
 		{
-			afficherToast("Ajoute d'abord au moins un événement actif dans Gestion.", true);
+			afficherToast("Ajoute d'abord au moins un groupe avec une période dans Gestion.", true);
 			return;
 		}
 
@@ -1725,7 +1777,7 @@ function libelleDate(dateStr)
 
 			const centresHtml = centresPlanning.map((centre) =>
 			{
-				const evenements = (centre.evenements || []).filter((evenement) => evenement.active);
+				const evenements = (centre.evenements || []).filter((groupe) => (groupe.periodes || []).length > 0);
 				if (!evenements.length) return "";
 
 				const evenementsHtml = evenements.map((evenement) =>
@@ -1765,14 +1817,14 @@ function libelleDate(dateStr)
 					<section class="auto-centre-groupe">
 						<header class="auto-centre-groupe-head">
 							<span class="centre-pastille" style="background:${escapeHtml(centre.couleur)}"></span>
-							<div><strong>${escapeHtml(centre.nom)}</strong><span>${evenements.length} événement${evenements.length > 1 ? "s" : ""}</span></div>
+							<div><strong>${escapeHtml(centre.nom)}</strong><span>${evenements.length} groupe${evenements.length > 1 ? "s" : ""}</span></div>
 						</header>
 						<div class="auto-evenements-liste">${evenementsHtml}</div>
 					</section>`;
 			}).join("");
 
 			modalAutoContent.innerHTML = `
-				<p class="form-hint">Le remplissage automatique utilisera directement le personnel et les qualifications définis pour chaque événement dans <strong>Gestion</strong>. Ces besoins ne sont pas modifiables depuis le planning.</p>
+				<p class="form-hint">Le remplissage automatique utilisera directement le personnel et les qualifications définis pour chaque groupe dans <strong>Gestion</strong>. Ces besoins ne sont pas modifiables depuis le planning.</p>
 				<div class="auto-centres-liste">${centresHtml}</div>
 				<div class="edit-actions">
 					<button class="btn btn-primary" id="auto-valider" type="button">Remplir la semaine</button>
@@ -1781,7 +1833,7 @@ function libelleDate(dateStr)
 
 			modalAutoContent.querySelector("#auto-valider").addEventListener("click", () =>
 			{
-				if (!confirm("Remplir automatiquement tous les événements du lundi au vendredi avec les besoins enregistrés dans Gestion ? Les affectations existantes de ces jours seront remplacées.")) return;
+				if (!confirm("Remplir automatiquement tous les groupes du lundi au vendredi avec les besoins enregistrés dans Gestion ? Les affectations existantes de ces jours seront remplacées.")) return;
 				lancerRemplissageAuto(modalAutoContent.querySelector("#auto-valider"));
 			});
 

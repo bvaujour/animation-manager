@@ -1,6 +1,6 @@
-"""Solveur de remplissage automatique du planning par événement.
+"""Solveur de remplissage automatique du planning par groupe.
 
-Le solveur travaille sur des groupes ``jour + événement``. Les qualifications
+Le solveur travaille sur des groupes ``jour + groupe``. Les qualifications
 sont vérifiées sur l'ensemble des animateurs retenus dans le groupe : une même
 personne peut donc couvrir simultanément plusieurs exigences (par exemple BAFA
 et permis), tandis qu'une exigence ``2 BAFA`` nécessite bien deux titulaires.
@@ -24,16 +24,16 @@ def _evenements_se_chevauchent(evenement_a, evenement_b):
 
 
 def generer_planning_auto(payload):
-    """Remplit la semaine affichée du lundi au vendredi, événement par événement.
+    """Remplit la semaine affichée du lundi au vendredi, groupe par groupe.
 
     Priorités du score :
       1. remplir le plus de places ;
-      2. remplir complètement le plus de groupes jour/événement ;
-      3. respecter l'événement préférée, puis le centre préféré ;
-      4. conserver les mêmes personnes dans la même événement sur la semaine ;
+      2. remplir complètement le plus de groupes jour/groupe ;
+      3. respecter le groupe préféré, puis le centre préféré ;
+      4. conserver les mêmes personnes dans la même groupe sur la semaine ;
       5. limiter la rotation globale.
 
-    Contraintes strictes : disponibilité, lieu autorisé, événement actif,
+    Contraintes strictes : disponibilité, lieu autorisé,
     absence de double affectation le même jour et couverture complète des
     qualifications demandées pour chaque groupe non vide.
     """
@@ -50,9 +50,8 @@ def generer_planning_auto(payload):
     fin_dt = parse_to_aware_datetime(samedi.isoformat())
 
     centres = list(Centre.objects.all().order_by("nom"))
-    evenements_actives = list(
-        Evenement.objects.select_related("centre").prefetch_related("besoins_qualifications", "dates_exclues")
-        .filter(active=True)
+    groupes_configures = list(
+        Evenement.objects.select_related("centre").prefetch_related("besoins_qualifications", "dates_exclues", "periodes_scolaires")
         .order_by("centre__nom", "ordre", "nom")
     )
     animateurs = list(
@@ -63,15 +62,15 @@ def generer_planning_auto(payload):
 
     if not centres:
         return {"error": "Aucun centre n'est configuré."}, 400
-    if not evenements_actives:
-        return {"error": "Aucune événement active n'est configurée."}, 400
+    if not groupes_configures:
+        return {"error": "Aucun groupe avec une période ouverte n’est configuré."}, 400
     if not animateurs:
         return {"error": "Aucun animateur n'est configuré."}, 400
 
     qualifs_existantes = set(Qualification.objects.values_list("id", flat=True))
 
     besoins = {}
-    for evenement in evenements_actives:
+    for evenement in groupes_configures:
         qualifs = {
             besoin.qualification_id: besoin.nombre_minimum
             for besoin in evenement.besoins_qualifications.all()
@@ -81,12 +80,12 @@ def generer_planning_auto(payload):
 
     dates_exclues_par_evenement = {
         evenement.id: {fermeture.date for fermeture in evenement.dates_exclues.all()}
-        for evenement in evenements_actives
+        for evenement in groupes_configures
     }
 
     groupes = []
     for jour in jours:
-        for evenement in evenements_actives:
+        for evenement in groupes_configures:
             if not evenement.est_ouvert_le(
                 jour, dates_exclues_par_evenement[evenement.id]
             ):
@@ -103,7 +102,7 @@ def generer_planning_auto(payload):
             })
 
     if not groupes:
-        return {"error": "Aucune place à remplir : vérifie les effectifs des événements."}, 400
+        return {"error": "Aucune place à remplir : vérifie les effectifs des groupes."}, 400
 
     qualifs_animateur = {
         animateur.id: {q.id for q in animateur.qualifications.all()}
@@ -150,7 +149,7 @@ def generer_planning_auto(payload):
             and centre_autorise(animateur, groupe["centre"].id)
         ]
 
-    # Jour après jour, et d'abord les événements les plus contraintes du jour.
+    # Jour après jour, et d'abord les groupes les plus contraintes du jour.
     groupes.sort(key=lambda groupe: (
         groupe["jour"],
         len(groupe["candidats"]),
@@ -168,7 +167,7 @@ def generer_planning_auto(payload):
     meilleur_choix = [tuple() for _ in groupes]
     meilleur_score = None
 
-    # jour -> animateur_id -> événements déjà attribuées ce jour
+    # jour -> animateur_id -> groupes déjà attribuées ce jour
     occupation = {jour: defaultdict(list) for jour in jours}
     placements_par_animateur = defaultdict(int)
     placements_par_anim_evenement = defaultdict(int)
@@ -287,7 +286,7 @@ def generer_planning_auto(payload):
         return candidats
 
     def options_groupe(groupe):
-        """Génère des événements candidates, complètes d'abord, sous limite."""
+        """Génère des groupes candidates, complètes d'abord, sous limite."""
 
         candidats = candidats_ordonnes(groupe)
         effectif = groupe["effectif"]
@@ -318,7 +317,7 @@ def generer_planning_auto(payload):
             return True
 
         # Taille cible décroissante : une solution pleine est essayée avant une
-        # solution partielle. Une événement non vide n'est proposée que lorsque
+        # solution partielle. Un groupe non vide n'est proposée que lorsque
         # toutes ses qualifications sont couvertes.
         for taille in range(min(effectif, len(candidats)), 0, -1):
             if len(options) >= limite:
@@ -346,7 +345,7 @@ def generer_planning_auto(payload):
             combiner(0, [])
 
         # Laisser tout le groupe vide est toujours autorisé. Cela évite de
-        # créer une événement partielle qui ne respecterait pas les exigences.
+        # créer un groupe partielle qui ne respecterait pas les exigences.
         options.append(tuple())
         return options
 
@@ -432,7 +431,7 @@ def generer_planning_auto(payload):
         details_non_remplis.append(texte)
 
     message = (
-        f"{creees}/{total_places} place(s) remplie(s) dans les événements, "
+        f"{creees}/{total_places} place(s) remplie(s) dans les groupes, "
         f"{supprimees} ancienne(s) affectation(s) remplacée(s). "
         f"{animateurs_utilises}/{len(animateurs)} animateur(s) utilisé(s)."
     )

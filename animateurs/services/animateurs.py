@@ -1,4 +1,4 @@
-"""Règles de mise à jour des centres et de l'événement préférée d'un animateur."""
+"""Règles de mise à jour des lieux et du groupe préféré d'un animateur."""
 
 from animateurs.models import Centre, Evenement, PreferenceCentre
 
@@ -84,9 +84,9 @@ def normaliser_centres_hierarchises(payload):
 
 
 def normaliser_evenement_preferee(payload, centre_prefere_id):
-    """Valide l'événement préférée transmise dans une fiche animateur.
+    """Valide le groupe préféré transmise dans une fiche animateur.
 
-    ``(None, None)`` signifie soit « aucune événement préférée », soit « ce champ
+    ``(None, None)`` signifie soit « aucun groupe préféré », soit « ce champ
     n'est pas présent ». Le booléen ``fournie`` permet au code appelant de
     distinguer les deux situations lors d'un PATCH partiel.
     """
@@ -101,19 +101,17 @@ def normaliser_evenement_preferee(payload, centre_prefere_id):
     try:
         evenement_id = int(brut)
     except (TypeError, ValueError):
-        return None, True, "L'événement préférée est invalide."
+        return None, True, "Le groupe préféré est invalide."
 
     try:
         evenement = Evenement.objects.select_related("centre").get(pk=evenement_id)
     except Evenement.DoesNotExist:
-        return None, True, "L'événement préférée est introuvable."
+        return None, True, "Le groupe préféré est introuvable."
 
-    if not evenement.active:
-        return None, True, "L'événement préférée doit être active."
     if centre_prefere_id is None:
         return None, True, "Choisis d'abord un centre préféré."
     if evenement.centre_id != centre_prefere_id:
-        return None, True, "L'événement préférée doit appartenir au centre préféré."
+        return None, True, "Le groupe préféré doit appartenir au centre préféré."
 
     return evenement, True, None
 
@@ -147,7 +145,7 @@ def appliquer_centres_hierarchises(animateur, centre_prefere_id, centres_seconda
 
     PreferenceCentre.objects.bulk_create(relations)
 
-    # Une préférence d'événement devenue incohérente après un changement de
+    # Une préférence de groupe devenue incohérente après un changement de
     # centre préféré est retirée automatiquement plutôt que de conserver une
     # valeur trompeuse.
     if (
