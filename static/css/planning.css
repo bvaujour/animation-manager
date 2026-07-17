@@ -2816,3 +2816,12 @@ body.planning-sort-active .planning-drag-handle {
         display: none !important;
     }
 }
+
+/* Drag des lieux adapté à la grille responsive. */
+body.planning-sort-active #calendars-container {
+    scroll-behavior: auto;
+}
+body.planning-sort-active .centre-planning-group:not(.planning-dragging) {
+    outline: 1px dashed color-mix(in srgb, var(--color-primary) 24%, transparent);
+    outline-offset: -2px;
+}

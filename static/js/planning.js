@@ -290,17 +290,55 @@ document.addEventListener("DOMContentLoaded", function ()
 			dataKey: "centreId",
 		}));
 		poignee.addEventListener("dragend", terminerTriPlanning);
-		groupe.addEventListener("dragover", (event) =>
-		{
-			if (triPlanningActif?.type === "centre") deplacerTriPlanning(event, groupe);
-		});
-		groupe.addEventListener("drop", (event) =>
-		{
-			if (triPlanningActif?.type !== "centre") return;
-			event.preventDefault();
-			terminerTriPlanning();
-		});
 	}
+
+	function trierCentreSelonPointeur(event)
+	{
+		if (triPlanningActif?.type !== "centre") return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = "move";
+
+		const element = triPlanningActif.element;
+		const autres = Array.from(calendarsContainer.querySelectorAll(":scope > .centre-planning-group"))
+			.filter((item) => item !== element);
+		if (!autres.length) return;
+
+		// Recherche en ordre visuel (ligne puis colonne), ce qui reste fiable
+		// quand la grille passe de 1 à 2 ou 3 colonnes.
+		const infos = autres.map((item) => ({ item, rect: item.getBoundingClientRect() }))
+			.sort((a, b) => Math.abs(a.rect.top - b.rect.top) > 12
+				? a.rect.top - b.rect.top
+				: a.rect.left - b.rect.left);
+
+		let cible = null;
+		for (const info of infos)
+		{
+			const milieuY = info.rect.top + info.rect.height / 2;
+			const milieuX = info.rect.left + info.rect.width / 2;
+			if (event.clientY < milieuY - 12 ||
+				(Math.abs(event.clientY - milieuY) <= info.rect.height / 2 && event.clientX < milieuX))
+			{
+				cible = info.item;
+				break;
+			}
+		}
+
+		if (cible) calendarsContainer.insertBefore(element, cible);
+		else calendarsContainer.appendChild(element);
+
+		const rectConteneur = calendarsContainer.getBoundingClientRect();
+		const marge = 70;
+		if (event.clientY > rectConteneur.bottom - marge) calendarsContainer.scrollTop += 22;
+		else if (event.clientY < rectConteneur.top + marge) calendarsContainer.scrollTop -= 22;
+	}
+
+	calendarsContainer.addEventListener("dragover", trierCentreSelonPointeur);
+	calendarsContainer.addEventListener("drop", (event) =>
+	{
+		if (triPlanningActif?.type !== "centre") return;
+		event.preventDefault();
+		terminerTriPlanning();
+	});
 
 	function installerTriEvenement(card, centre, evenement, zoneEvenements)
 	{
@@ -654,15 +692,21 @@ function libelleDate(dateStr)
 		document.querySelectorAll(".centre-planning-group").forEach((bloc) => {
 			const cartes = Array.from(bloc.querySelectorAll(".evenement-calendar-card"));
 			const visibles = cartes.filter((card) => !card.hidden);
-			bloc.hidden = visibles.length === 0;
+			// Le lieu reste toujours visible : seuls ses groupes dépendent de la période.
+			bloc.hidden = false;
 
 			const compteur = bloc.querySelector(".centre-evenements-count");
 			if (compteur)
 			{
-				compteur.textContent = `${visibles.length} groupe${visibles.length > 1 ? "s" : ""}`;
+				compteur.textContent = visibles.length
+					? `${visibles.length} groupe${visibles.length > 1 ? "s" : ""}`
+					: "Aucun groupe";
 			}
 
-			if (!bloc.hidden && !bloc.classList.contains("collapsed"))
+			const etatVide = bloc.querySelector(".calendar-site-empty");
+			if (etatVide) etatVide.hidden = visibles.length > 0;
+
+			if (!bloc.classList.contains("collapsed"))
 			{
 				window.setTimeout(() => {
 					visibles.forEach((card) => {
@@ -838,7 +882,6 @@ function libelleDate(dateStr)
 	function ajouterCentreAuPlanning(centre)
 	{
 		const evenements = (centre.evenements || []).filter((groupe) => (groupe.periodes || []).length > 0);
-		if (!evenements.length) return;
 
 		const groupe = document.createElement("section");
 		groupe.classList.add("centre-planning-group", "calendar-site-card");
@@ -860,7 +903,8 @@ function libelleDate(dateStr)
 					</button>
 				</div>
 			</header>
-			<div class="evenement-calendars calendar-group-list"></div>`;
+			<div class="evenement-calendars calendar-group-list"></div>
+			<p class="calendar-site-empty" ${evenements.length ? "hidden" : ""}>Aucun groupe ouvert cette semaine.</p>`;
 
 		calendarsContainer.appendChild(groupe);
 		attacherSurvolCentre(groupe, centre.id);
@@ -933,7 +977,7 @@ function libelleDate(dateStr)
 				centres.forEach((centre) => ajouterCentreAuPlanning(centre));
 				if (!calendars.length)
 				{
-					calendarsContainer.innerHTML = '<p class="empty-note">Aucun groupe n’a encore de période ouverte. Configure les groupes depuis Gestion.</p>';
+					// Les lieux restent visibles même lorsqu’aucun groupe n’a de période.
 					return;
 				}
 				const periodes = periodesOuvertesPlanning();

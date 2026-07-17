@@ -138,12 +138,18 @@ document.addEventListener("DOMContentLoaded", () =>
         document.querySelectorAll(".home-calendar-card").forEach((card) => {
             const groupes = Array.from(card.querySelectorAll(".home-event-calendar-card"));
             const visibles = groupes.filter((groupe) => !groupe.hidden);
-            card.hidden = visibles.length === 0;
+            // Le lieu reste affiché en permanence ; seuls les groupes sont filtrés.
+            card.hidden = false;
 
             const compteur = card.querySelector(".home-calendar-toggle-meta");
-            if (compteur) compteur.textContent = `${visibles.length} groupe${visibles.length > 1 ? "s" : ""}`;
+            if (compteur) compteur.textContent = visibles.length
+                ? `${visibles.length} groupe${visibles.length > 1 ? "s" : ""}`
+                : "Aucun groupe";
 
-            if (!card.hidden && !card.classList.contains("collapsed"))
+            const etatVide = card.querySelector(".calendar-site-empty");
+            if (etatVide) etatVide.hidden = visibles.length > 0;
+
+            if (!card.classList.contains("collapsed"))
             {
                 window.setTimeout(() => {
                     visibles.forEach((groupe) => {
@@ -223,18 +229,18 @@ document.addEventListener("DOMContentLoaded", () =>
         try
         {
             const centres = await chargerJson("/api/centres/");
-            const centresAvecEvenements = (await Promise.all(centres.map(async (centre) => ({
+            const centresAvecEvenements = await Promise.all(centres.map(async (centre) => ({
                 ...centre,
                 evenements: (await chargerJson(`/api/centres/${centre.id}/groupes/`))
                     .filter((groupe) => (groupe.periodes || []).length > 0),
-            })))).filter((centre) => centre.evenements.length > 0);
+            })));
 
             calendarsContainer.innerHTML = "";
             calendars.length = 0;
 
             if (!centresAvecEvenements.length)
             {
-                message(calendarsContainer, "Aucun groupe n’a encore de période ouverte.");
+                message(calendarsContainer, "Aucun lieu n’est encore enregistré.");
                 if (visiblePeriod) visiblePeriod.textContent = "aucun planning";
                 return;
             }
@@ -267,8 +273,14 @@ document.addEventListener("DOMContentLoaded", () =>
                 listeEvenements.classList.add("home-event-calendars", "calendar-group-list");
                 collapseInner.appendChild(listeEvenements);
                 collapse.appendChild(collapseInner);
+                const etatVide = document.createElement("p");
+                etatVide.className = "calendar-site-empty";
+                etatVide.textContent = "Aucun groupe ouvert cette semaine.";
+                etatVide.hidden = centre.evenements.length > 0;
+
                 card.appendChild(toggle);
                 card.appendChild(collapse);
+                card.appendChild(etatVide);
                 calendarsContainer.appendChild(card);
 
                 const calendriersCentre = [];

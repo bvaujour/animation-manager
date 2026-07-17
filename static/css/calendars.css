@@ -268,3 +268,72 @@ body.page-planning .calendar-group-card .calendar {
         min-width: 740px;
     }
 }
+
+/* ========================================================================== 
+   Grille responsive commune — Accueil et Planning
+   --------------------------------------------------------------------------
+   Les lieux se placent côte à côte tant qu'une carte garde une largeur
+   confortable. En dessous de 500 px disponibles par carte, la grille revient
+   naturellement à une seule colonne. Les deux pages suivent la même règle.
+   ========================================================================== */
+.home-calendars.calendar-sites,
+body.page-planning #calendars-container.calendar-sites {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr)) !important;
+    align-items: start !important;
+    align-content: start !important;
+    gap: 9px !important;
+    min-width: 0 !important;
+}
+
+body.page-planning #calendars-container.calendar-sites {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    padding: 0 2px 8px !important;
+}
+
+.home-calendars .calendar-site-card,
+body.page-planning .calendar-site-card {
+    width: auto !important;
+    min-width: 0 !important;
+    align-self: start;
+}
+
+.calendar-site-empty {
+    margin: 0;
+    padding: 12px 10px;
+    color: var(--color-text-muted);
+    font-size: .76rem;
+    font-weight: 650;
+    text-align: center;
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 3%, var(--color-surface));
+}
+
+.calendar-site-empty[hidden] {
+    display: none !important;
+}
+
+/* La zone de groupes conserve une seule colonne dans chaque lieu : les
+   calendriers restent suffisamment larges, même lorsque deux lieux partagent
+   la ligne. */
+.calendar-group-list {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+@media (min-width: 1700px) {
+    .home-calendars.calendar-sites,
+    body.page-planning #calendars-container.calendar-sites {
+        grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)) !important;
+    }
+}
+
+@media (max-width: 760px) {
+    .home-calendars.calendar-sites,
+    body.page-planning #calendars-container.calendar-sites {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        overflow-x: auto !important;
+    }
+}

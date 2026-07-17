@@ -90,9 +90,11 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoise doit rester actif sur Render, même si DEBUG a été laissé à True
+    # par erreur dans les variables d'environnement. Sans lui, Gunicorn renvoie
+    # une page HTML 404 pour chaque fichier /static/.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
-if not DEBUG:
-    MIDDLEWARE.append("whitenoise.middleware.WhiteNoiseMiddleware")
 MIDDLEWARE += [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -189,7 +191,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 
