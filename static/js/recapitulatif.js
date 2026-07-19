@@ -1,466 +1,179 @@
-// ===========================================================================
-// recapitulatif.js
-// ---------------------------------------------------------------------------
-// Tableau de bord de contrôle du planning : couverture des groupes,
-// alertes métier et répartition des journées par salarié.
-// ===========================================================================
+document.addEventListener("DOMContentLoaded", () => {
+    const pickerRoot = document.getElementById("periode-select");
+    const picker = WeekPicker.get(pickerRoot);
+    const applyButton = document.getElementById("btn-appliquer-periode");
+    const displayedPeriod = document.getElementById("periode-affichee");
+    const centresRoot = document.getElementById("recap-centres");
+    const employeesRoot = document.getElementById("recap-salaries");
+    const legendRoot = document.getElementById("recap-legende");
+    const tabButtons = Array.from(document.querySelectorAll("[data-recap-tab]"));
+    const tabPanels = Array.from(document.querySelectorAll("[data-recap-panel]"));
 
-document.addEventListener("DOMContentLoaded", () =>
-{
-    const selectRoot = document.getElementById("periode-select");
-    const selectToggle = document.getElementById("periode-select-toggle");
-    const selectLabel = document.getElementById("periode-select-label");
-    const selectMenu = document.getElementById("periode-select-menu");
-    const selectOptions = document.getElementById("periode-select-options");
-    const btnToutSelectionner = document.getElementById("periodes-tout-selectionner");
-    const btnToutDeselectionner = document.getElementById("periodes-tout-deselectionner");
-    const btnAppliquer = document.getElementById("btn-appliquer-periode");
-    const periodeAffichee = document.getElementById("periode-affichee");
-    const syntheseRoot = document.getElementById("recap-synthese");
-    const alertesRoot = document.getElementById("recap-alertes");
-    const alertesCompteur = document.getElementById("alertes-compteur");
-    const tableEvenements = document.getElementById("table-evenements");
-    const tableSalaries = document.getElementById("table-recap");
+    const currencyFormatter = new Intl.NumberFormat("fr-FR", {
+        style: "currency",
+        currency: "EUR",
+        minimumFractionDigits: 2,
+    });
 
-    let periodes = [];
-    const periodeIdsSelectionnees = new Set();
-    const anneesPeriodesOuvertes = new Set();
-
-    function formatDateFr(dateStr)
-    {
-        if (!dateStr) return "Non précisée";
-        return parseLocalDate(dateStr).toLocaleDateString("fr-FR");
+    function formatDateFr(dateStr) {
+        return dateStr ? parseLocalDate(dateStr).toLocaleDateString("fr-FR") : "";
     }
 
-    function libellePeriode(periode)
-    {
-        return `${libellePeriodeAvecAnnee(periode)} · ${formatDateFr(periode.debut)} au ${formatDateFr(periode.fin)}`;
+    function formatMoney(value) {
+        if (value === null || value === undefined || value === "") return null;
+        const number = Number(value);
+        return Number.isFinite(number) ? currencyFormatter.format(number) : null;
     }
 
-    function mettreAJourLibelleSelection()
-    {
-        const selection = periodes.filter((periode) => periodeIdsSelectionnees.has(periode.id));
-        if (!selection.length)
-        {
-            selectLabel.textContent = "Choisir les périodes";
-            periodeAffichee.textContent = "Aucune période sélectionnée";
-            return;
-        }
-
-        selectLabel.textContent = selection.length === 1
-            ? libellePeriodeAvecAnnee(selection[0])
-            : `${selection.length} périodes sélectionnées`;
-        periodeAffichee.textContent = selection.length === 1
-            ? `${formatDateFr(selection[0].debut)} au ${formatDateFr(selection[0].fin)}`
-            : selection.map((periode) => libellePeriodeAvecAnnee(periode)).join(" · ");
+    function textColorFor(background) {
+        const hex = String(background || "").replace("#", "");
+        if (!/^[0-9a-f]{6}$/i.test(hex)) return "#1f2937";
+        const r = Number.parseInt(hex.slice(0, 2), 16);
+        const g = Number.parseInt(hex.slice(2, 4), 16);
+        const b = Number.parseInt(hex.slice(4, 6), 16);
+        return ((r * 299 + g * 587 + b * 114) / 1000) >= 150 ? "#172033" : "#ffffff";
     }
 
-    function rendreOptionsPeriodes()
-    {
-        if (!anneesPeriodesOuvertes.size)
-        {
-            const premiereSelectionnee = periodes.find((periode) => periodeIdsSelectionnees.has(periode.id));
-            anneesPeriodesOuvertes.add(premiereSelectionnee?.annee_scolaire || anneePeriodesADeplier(periodes));
-        }
-
-        selectOptions.innerHTML = grouperPeriodesParAnnee(periodes).map(({ annee, periodes: elements }) =>
-        {
-            const zones = new Map();
-            elements.forEach((periode) =>
-            {
-                const zone = String(periode.zone || "Sans zone");
-                if (!zones.has(zone)) zones.set(zone, []);
-                zones.get(zone).push(periode);
-            });
-            const nbSelectionnees = elements.filter((periode) => periodeIdsSelectionnees.has(periode.id)).length;
-
-            return `
-                <details class="periode-option-group period-year-accordion" data-period-year="${escapeHtml(annee)}" ${anneesPeriodesOuvertes.has(annee) ? "open" : ""}>
-                    <summary>
-                        <span class="period-year-summary"><strong>${escapeHtml(annee)}</strong><small>${nbSelectionnees}/${elements.length} sélectionnée${nbSelectionnees > 1 ? "s" : ""}</small></span>
-                        <span class="period-year-chevron" aria-hidden="true">⌄</span>
-                    </summary>
-                    <div class="period-year-content">
-                        ${[...zones.entries()].map(([zone, periodesZone]) => `
-                            <section class="period-zone-block">
-                                <p class="period-zone-title">Zone ${escapeHtml(zone)}</p>
-                                <div class="period-year-list">
-                                    ${periodesZone.map((periode) => `
-                                        <label class="periode-option">
-                                            <input type="checkbox" value="${periode.id}" ${periodeIdsSelectionnees.has(periode.id) ? "checked" : ""}>
-                                            <span>
-                                                <strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong>
-                                                <small>${escapeHtml(formatDateFr(periode.debut))} au ${escapeHtml(formatDateFr(periode.fin))}</small>
-                                            </span>
-                                        </label>
-                                    `).join("")}
-                                </div>
-                            </section>
-                        `).join("")}
-                    </div>
-                </details>
-            `;
-        }).join("");
-
-        selectOptions.querySelectorAll(".periode-option-group").forEach((details) =>
-        {
-            details.addEventListener("toggle", () =>
-            {
-                const annee = details.dataset.periodYear;
-                if (details.open) anneesPeriodesOuvertes.add(annee);
-                else anneesPeriodesOuvertes.delete(annee);
-            });
-        });
-
-        selectOptions.querySelectorAll('input[type="checkbox"]').forEach((checkbox) =>
-        {
-            checkbox.addEventListener("change", () =>
-            {
-                const id = Number(checkbox.value);
-                if (checkbox.checked) periodeIdsSelectionnees.add(id);
-                else periodeIdsSelectionnees.delete(id);
-                mettreAJourLibelleSelection();
-
-                const details = checkbox.closest(".periode-option-group");
-                const compteur = details?.querySelector(".period-year-summary small");
-                if (details && compteur)
-                {
-                    const cases = [...details.querySelectorAll('input[type="checkbox"]')];
-                    const nb = cases.filter((input) => input.checked).length;
-                    compteur.textContent = `${nb}/${cases.length} sélectionnée${nb > 1 ? "s" : ""}`;
-                }
-            });
-        });
+    function centreBadge(centre) {
+        const background = centre.couleur || "#e5e7eb";
+        return `<span class="place-badge" style="--place-color:${escapeHtml(background)};--place-text:${textColorFor(background)}">${escapeHtml(centre.nom)}</span>`;
     }
 
-    function choisirPeriodeParDefaut()
-    {
-        const aujourdHui = formatDateLocal(new Date());
-        const courante = periodes.find((periode) => periode.debut <= aujourdHui && periode.fin >= aujourdHui);
-        const prochaine = periodes.find((periode) => periode.debut > aujourdHui);
-        const choix = courante || prochaine || periodes[periodes.length - 1];
-        if (choix) periodeIdsSelectionnees.add(choix.id);
+    function updateSelectionSummary() {
+        const selected = picker?.getSelectedPeriods() || [];
+        displayedPeriod.textContent = !selected.length
+            ? "Aucune semaine sélectionnée"
+            : selected.length === 1
+                ? `${formatDateFr(selected[0].debut)} au ${formatDateFr(selected[0].fin)}`
+                : selected.map(libellePeriodeAvecAnnee).join(" · ");
     }
 
-    function construireUrlApi()
-    {
-        if (!periodeIdsSelectionnees.size)
-        {
-            afficherToast("Sélectionne au moins une période.", true);
+    function buildApiUrl() {
+        const ids = picker?.getSelectedIds() || [];
+        if (!ids.length) {
+            afficherToast("Sélectionne au moins une semaine.", true);
             return null;
         }
-        const params = new URLSearchParams({
-            periode_ids: [...periodeIdsSelectionnees].sort((a, b) => a - b).join(","),
-        });
-        return `/api/recapitulatif/?${params.toString()}`;
+        return `/api/recapitulatif/?periode_ids=${ids.join(",")}`;
     }
 
-    function carteIndicateur(label, valeur, precision, ton = "neutre")
-    {
-        return `
-            <article class="indicator-card indicator-${escapeHtml(ton)}">
-                <span class="indicator-label">${escapeHtml(label)}</span>
-                <strong class="indicator-value">${escapeHtml(valeur)}</strong>
-                <span class="indicator-detail">${escapeHtml(precision)}</span>
-            </article>
-        `;
+    function displayLegend(centres) {
+        legendRoot.innerHTML = centres.length ? centres.map(centreBadge).join("") : "";
     }
 
-    function afficherSynthese(synthese)
-    {
-        const couvertureTon = synthese.postes_manquants > 0 ? "danger" : "ok";
-        const qualificationTon = synthese.qualifications_manquantes > 0 ? "danger" : "ok";
-        const disponibiliteTon = synthese.disponibles_sans_affectation > 0 ? "info" : "neutre";
-
-        syntheseRoot.innerHTML = [
-            carteIndicateur(
-                "Couverture globale",
-                `${synthese.couverture}%`,
-                `${synthese.postes_couverts} poste(s) couvert(s) sur ${synthese.postes_requis}`,
-                couvertureTon,
-            ),
-            carteIndicateur(
-                "Postes manquants",
-                synthese.postes_manquants,
-                `${synthese.journees_sous_tension} journée(s) / groupe sous tension`,
-                synthese.postes_manquants > 0 ? "danger" : "ok",
-            ),
-            carteIndicateur(
-                "Qualifications manquantes",
-                synthese.qualifications_manquantes,
-                "Minimums définis dans Gestion",
-                qualificationTon,
-            ),
-            carteIndicateur(
-                "Sureffectif",
-                synthese.sureffectif,
-                "Présences au-delà du besoin déclaré",
-                synthese.sureffectif > 0 ? "warning" : "neutre",
-            ),
-            carteIndicateur(
-                "Salariés mobilisés",
-                `${synthese.animateurs_mobilises}/${synthese.animateurs_total}`,
-                `Charge moyenne : ${synthese.charge_moyenne} jour(s)`,
-                "neutre",
-            ),
-            carteIndicateur(
-                "Disponibles sans affectation",
-                synthese.disponibles_sans_affectation,
-                `Charge constatée : de ${synthese.charge_min} à ${synthese.charge_max} jour(s)`,
-                disponibiliteTon,
-            ),
-        ].join("");
+    function missingRateCell() {
+        return '<span class="missing-rate" title="Renseigne la paie par jour dans la fiche salarié">Tarif manquant</span>';
     }
 
-    function iconeAlerte(niveau)
-    {
-        if (niveau === "danger") return "!";
-        if (niveau === "warning") return "⚠";
-        return "i";
-    }
-
-    function afficherAlertes(alertes)
-    {
-        const alertesPrioritaires = alertes.filter((alerte) => alerte.niveau !== "info");
-        alertesCompteur.textContent = alertes.length
-            ? `${alertesPrioritaires.length} point(s) prioritaire(s) · ${alertes.length} élément(s) au total`
-            : "Aucune alerte";
-
-        if (!alertes.length)
-        {
-            alertesRoot.innerHTML = `
-                <div class="alert-empty">
-                    <span class="alert-icon">✓</span>
-                    <div>
-                        <strong>Aucun point de vigilance sur cette période</strong>
-                        <p>Les effectifs et qualifications déclarés sont couverts.</p>
-                    </div>
-                </div>
-            `;
+    function displayCentres(data) {
+        const centres = data.centres || [];
+        displayLegend(centres);
+        if (!data.animateurs.length) {
+            centresRoot.innerHTML = '<div class="empty-state"><strong>Aucun jour planifié</strong><span>Aucun animateur n’est affecté sur cette période.</span></div>';
             return;
         }
 
-        alertesRoot.innerHTML = alertes.map((alerte) => `
-            <article class="alert-item alert-${escapeHtml(alerte.niveau)}">
-                <span class="alert-icon" aria-hidden="true">${escapeHtml(iconeAlerte(alerte.niveau))}</span>
-                <div class="alert-content">
-                    <div class="alert-title-row">
-                        <strong>${escapeHtml(alerte.titre)}</strong>
-                        <span class="alert-location">${escapeHtml(alerte.lieu)}</span>
-                    </div>
-                    <p>${escapeHtml(alerte.message)}</p>
-                    <span class="alert-dates">${escapeHtml(alerte.dates)}</span>
-                </div>
-            </article>
-        `).join("");
-    }
+        const firstHeader = centres.map((centre) => `
+            <th class="centre-heading" colspan="2" scope="colgroup" style="--centre-color:${escapeHtml(centre.couleur || "#64748b")}">
+                <span>${escapeHtml(centre.code || centre.nom)}</span><small>${escapeHtml(centre.nom)}</small>
+            </th>`).join("");
+        const secondHeader = centres.map(() => '<th class="metric-heading" scope="col">Jours</th><th class="metric-heading" scope="col">Paie</th>').join("");
 
-    function periodeEvenement(evenement)
-    {
-        if (!evenement.debut && !evenement.fin) return "Toute la période";
-        if (evenement.debut && evenement.fin)
-        {
-            return `${formatDateFr(evenement.debut)} → ${formatDateFr(evenement.fin)}`;
-        }
-        if (evenement.debut) return `À partir du ${formatDateFr(evenement.debut)}`;
-        return `Jusqu’au ${formatDateFr(evenement.fin)}`;
-    }
-
-    function qualificationsEvenement(evenement)
-    {
-        if (!evenement.qualifications.length) return '<span class="muted-value">Aucune</span>';
-        return evenement.qualifications.map((qualification) => `
-            <span class="qualification-pill">${escapeHtml(qualification.minimum)} × ${escapeHtml(qualification.nom)}</span>
-        `).join("");
-    }
-
-    function afficherEvenements(evenements)
-    {
-        const thead = tableEvenements.querySelector("thead");
-        const tbody = tableEvenements.querySelector("tbody");
-
-        thead.innerHTML = `
-            <tr>
-                <th>Lieu / groupe</th>
-                <th>Période</th>
-                <th>Besoin</th>
-                <th>Journées complètes</th>
-                <th>Couverture</th>
-                <th>Manques</th>
-                <th>Qualifications requises</th>
-            </tr>
-        `;
-
-        if (!evenements.length)
-        {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-note">Aucun groupe sur cette période.</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = evenements.map((evenement) =>
-        {
-            const manques = [];
-            if (evenement.postes_manquants > 0) manques.push(`${evenement.postes_manquants} poste(s)`);
-            if (evenement.qualifications_manquantes > 0) manques.push(`${evenement.qualifications_manquantes} qualification(s)`);
-            if (evenement.sureffectif > 0) manques.push(`${evenement.sureffectif} en trop`);
-
-            return `
-                <tr class="event-row event-${escapeHtml(evenement.statut)}">
-                    <td class="event-name-cell">
-                        <span class="centre-dot" style="--c:${escapeHtml(evenement.couleur)}"></span>
-                        <span>
-                            <strong>${escapeHtml(evenement.nom)}</strong>
-                            <small>${escapeHtml(evenement.lieu)}${evenement.actif ? "" : " · inactif"}</small>
-                        </span>
-                    </td>
-                    <td>${escapeHtml(periodeEvenement(evenement))}</td>
-                    <td class="number-cell">${escapeHtml(evenement.effectif_cible)} / jour</td>
-                    <td class="number-cell">${escapeHtml(evenement.jours_complets)} / ${escapeHtml(evenement.jours_prevus)}</td>
-                    <td class="coverage-cell">
-                        <div class="coverage-value"><strong>${escapeHtml(evenement.couverture)}%</strong><span>${escapeHtml(evenement.postes_couverts)} / ${escapeHtml(evenement.postes_requis)}</span></div>
-                        <div class="coverage-track"><span style="width:${Math.min(100, Math.max(0, evenement.couverture))}%"></span></div>
-                    </td>
-                    <td>${manques.length ? `<span class="issues-value">${escapeHtml(manques.join(" · "))}</span>` : '<span class="ok-value">Complet</span>'}</td>
-                    <td><div class="qualification-list">${qualificationsEvenement(evenement)}</div></td>
-                </tr>
-            `;
-        }).join("");
-    }
-
-    function afficherSalaries(data)
-    {
-        const thead = tableSalaries.querySelector("thead");
-        const tbody = tableSalaries.querySelector("tbody");
-
-        thead.innerHTML = `
-            <tr>
-                <th class="animateur-header">Salarié</th>
-                ${data.centres.map((centre) => `
-                    <th
-                        class="centre-header"
-                        style="--centre-color:${escapeHtml(centre.couleur)}; --centre-bg:${ColorUtils.rgba(centre.couleur, 0.16)};"
-                    >
-                        <span class="centre-dot" style="--c:${escapeHtml(centre.couleur)}"></span>
-                        <span>${escapeHtml(centre.code || centre.nom)}</span>
-                    </th>
-                `).join("")}
-                <th class="total-header">Total</th>
-                <th class="availability-header">Disponible</th>
-                <th class="availability-header">Libre</th>
-            </tr>
-        `;
-
-        if (data.animateurs.length === 0)
-        {
-            tbody.innerHTML = `<tr><td colspan="${data.centres.length + 4}" class="empty-note">Aucun salarié.</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = data.animateurs.map((animateur) =>
-        {
-            const cellulesCentres = animateur.centres.map((centreRecap, index) =>
-            {
-                const centre = data.centres[index];
-                const classe = centreRecap.jours > 0 ? "jours-value has-days" : "jours-value";
-                return `
-                    <td
-                        class="number-cell centre-cell"
-                        style="--centre-color:${escapeHtml(centre.couleur)}; --centre-bg:${ColorUtils.rgba(centre.couleur, 0.08)};"
-                    >
-                        <span class="${classe}">${escapeHtml(centreRecap.jours)}</span>
-                    </td>
-                `;
+        const rows = data.animateurs.map((animateur) => {
+            const byCentre = new Map((animateur.centres || []).map((item) => [String(item.centre_id), item]));
+            const cells = centres.map((centre) => {
+                const result = byCentre.get(String(centre.id)) || { jours_travailles: 0, paie: animateur.paie_jour === null ? null : "0.00" };
+                return `<td class="days-value">${result.jours_travailles}</td><td class="money-value">${formatMoney(result.paie) || missingRateCell()}</td>`;
             }).join("");
-
-            const libreClasse = animateur.jours_libres > 0 ? "availability-value has-free-days" : "availability-value";
             return `
                 <tr>
-                    <td class="animateur-cell">${escapeHtml(animateur.prenom)} ${escapeHtml(animateur.nom)}</td>
-                    ${cellulesCentres}
-                    <td class="number-cell total-cell">${escapeHtml(animateur.total)}</td>
-                    <td class="number-cell"><span class="availability-value">${escapeHtml(animateur.jours_disponibles)}</span></td>
-                    <td class="number-cell"><span class="${libreClasse}">${escapeHtml(animateur.jours_libres)}</span></td>
-                </tr>
-            `;
+                    <th scope="row" class="employee-cell"><strong>${escapeHtml(animateur.prenom)}</strong> ${escapeHtml(animateur.nom)}<small>${formatMoney(animateur.paie_jour) ? `${formatMoney(animateur.paie_jour)} / jour` : "Tarif journalier non renseigné"}</small></th>
+                    ${cells}
+                    <td class="days-value total-column">${animateur.jours_travailles}</td>
+                    <td class="money-value total-column">${formatMoney(animateur.paie_totale) || missingRateCell()}</td>
+                </tr>`;
         }).join("");
+
+        centresRoot.innerHTML = `
+            <table class="recap-table recap-centres-table">
+                <thead>
+                    <tr><th class="employee-cell employee-cell--header" rowspan="2" scope="col">Animateur</th>${firstHeader}<th class="total-heading" colspan="2" scope="colgroup">Total</th></tr>
+                    <tr>${secondHeader}<th class="metric-heading total-column" scope="col">Jours</th><th class="metric-heading total-column" scope="col">Paie</th></tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
     }
 
-    function afficherChargement()
-    {
-        syntheseRoot.innerHTML = '<div class="loading-note">Calcul du récapitulatif…</div>';
-        alertesRoot.innerHTML = '<div class="loading-note">Analyse des alertes…</div>';
+    function displayEmployees(data) {
+        if (!data.animateurs.length) {
+            employeesRoot.innerHTML = '<div class="empty-state"><strong>Aucun jour planifié</strong><span>Aucun animateur n’est affecté sur cette période.</span></div>';
+            return;
+        }
+        const rows = data.animateurs.map((animateur) => `
+            <tr>
+                <td>${escapeHtml(animateur.prenom)} ${escapeHtml(animateur.nom)}</td>
+                <td class="jours-cell">${animateur.jours_travailles}</td>
+                <td class="jours-cell">${formatMoney(animateur.paie_jour) || "Non renseigné"}</td>
+                <td class="jours-cell">${formatMoney(animateur.paie_totale) || missingRateCell()}</td>
+            </tr>`).join("");
+        const warning = data.tarifs_manquants
+            ? `<span class="recap-warning">${data.tarifs_manquants} tarif${data.tarifs_manquants > 1 ? "s" : ""} journalier${data.tarifs_manquants > 1 ? "s" : ""} manquant${data.tarifs_manquants > 1 ? "s" : ""}</span>`
+            : "";
+        employeesRoot.innerHTML = `
+            <table class="recap-table">
+                <thead><tr><th>Animateur</th><th>Jours travaillés</th><th>Paie par jour</th><th>Paie totale</th></tr></thead>
+                <tbody>${rows}</tbody>
+                <tfoot><tr><th>Total ${warning}</th><th class="jours-cell">${data.total_jours}</th><th></th><th class="jours-cell">${formatMoney(data.total_paie_connue)}</th></tr></tfoot>
+            </table>`;
     }
 
-    function afficherTableau(data)
-    {
-        afficherSynthese(data.synthese);
-        afficherAlertes(data.alertes);
-        afficherEvenements(data.evenements);
-        afficherSalaries(data);
+    function openTab(tabName) {
+        const selected = tabName === "totaux" ? "totaux" : "centres";
+        tabButtons.forEach((button) => {
+            const active = button.dataset.recapTab === selected;
+            button.classList.toggle("active", active);
+            button.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        tabPanels.forEach((panel) => {
+            panel.hidden = panel.dataset.recapPanel !== selected;
+        });
     }
 
-    function chargerRecap()
-    {
-        const url = construireUrlApi();
+    async function loadRecap() {
+        const url = buildApiUrl();
         if (!url) return;
-
-        afficherChargement();
-        btnAppliquer.disabled = true;
-
-        apiFetch(url)
-            .then(afficherTableau)
-            .catch((err) => afficherToast(erreurMessage(err, "Le récapitulatif n'a pas pu être chargé."), true))
-            .finally(() => { btnAppliquer.disabled = false; });
+        picker?.close();
+        centresRoot.innerHTML = '<div class="loading-note">Calcul des jours et de la paie par centre…</div>';
+        employeesRoot.innerHTML = '<div class="loading-note">Calcul des totaux…</div>';
+        legendRoot.innerHTML = "";
+        applyButton.disabled = true;
+        try {
+            const data = await apiFetch(url);
+            displayCentres(data);
+            displayEmployees(data);
+        } catch (error) {
+            const message = erreurMessage(error, "Le récapitulatif n’a pas pu être chargé.");
+            centresRoot.innerHTML = `<div class="empty-state"><strong>Chargement impossible</strong><span>${escapeHtml(message)}</span></div>`;
+            employeesRoot.innerHTML = "";
+            afficherToast(message, true);
+        } finally {
+            applyButton.disabled = false;
+        }
     }
 
-    function definirToutesLesPeriodes(selectionnees)
-    {
-        periodeIdsSelectionnees.clear();
-        if (selectionnees) periodes.forEach((periode) => periodeIdsSelectionnees.add(periode.id));
-        rendreOptionsPeriodes();
-        mettreAJourLibelleSelection();
-    }
-
-    selectToggle.addEventListener("click", () =>
-    {
-        const ouvrir = selectMenu.hidden;
-        selectMenu.hidden = !ouvrir;
-        selectToggle.setAttribute("aria-expanded", String(ouvrir));
-    });
-
-    document.addEventListener("click", (event) =>
-    {
-        if (!selectRoot.contains(event.target))
-        {
-            selectMenu.hidden = true;
-            selectToggle.setAttribute("aria-expanded", "false");
+    tabButtons.forEach((button) => button.addEventListener("click", () => openTab(button.dataset.recapTab)));
+    pickerRoot?.addEventListener("week-picker:change", updateSelectionSummary);
+    pickerRoot?.addEventListener("week-picker:ready", () => {
+        updateSelectionSummary();
+        if (picker?.periods.length) {
+            const prompt = '<div class="empty-state"><strong>Sélectionne une ou plusieurs semaines</strong><span>Puis clique sur Afficher.</span></div>';
+            centresRoot.innerHTML = prompt;
+            employeesRoot.innerHTML = prompt;
+        } else {
+            applyButton.disabled = true;
         }
     });
-
-    btnToutSelectionner.addEventListener("click", () => definirToutesLesPeriodes(true));
-    btnToutDeselectionner.addEventListener("click", () => definirToutesLesPeriodes(false));
-    btnAppliquer.addEventListener("click", () =>
-    {
-        selectMenu.hidden = true;
-        selectToggle.setAttribute("aria-expanded", "false");
-        chargerRecap();
-    });
-
-    apiFetch("/api/periodes-scolaires/")
-        .then((data) =>
-        {
-            periodes = [...data].sort((a, b) => a.debut.localeCompare(b.debut));
-            choisirPeriodeParDefaut();
-            rendreOptionsPeriodes();
-            mettreAJourLibelleSelection();
-            if (periodes.length) chargerRecap();
-            else
-            {
-                selectLabel.textContent = "Aucune période enregistrée";
-                btnAppliquer.disabled = true;
-                afficherToast("Ajoute d'abord des périodes dans Gestion > Périodes.", true);
-            }
-        })
-        .catch((err) => afficherToast(erreurMessage(err, "Les périodes n'ont pas pu être chargées."), true));
-
+    applyButton.addEventListener("click", loadRecap);
+    openTab("centres");
+    updateSelectionSummary();
 });

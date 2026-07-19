@@ -5,18 +5,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Gestion équipe animation{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="icon" href="{% static 'favicon.ico' %}" sizes="any">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20260718-week-period-1">
     {% block extra_head %}{% endblock %}
+    <link rel="stylesheet" href="{% static 'css/components.css' %}?v=20260718-week-period-1">
 </head>
 <body class="{% block body_class %}{% endblock %}">
     {% csrf_token %}
     {% include "partials/_nav.html" with active=active_page %}
     {% block content %}{% endblock %}
 
-    <script src="{% static 'js/ui.js' %}"></script>
-    <script src="{% static 'js/common/documents.js' %}"></script>
-    <script src="{% static 'js/common/colors.js' %}"></script>
-    <script src="{% static 'js/common/forms.js' %}"></script>
+    <script src="{% static 'js/ui.js' %}?v=20260719-effectifs-persistants-4"></script>
+    <script src="{% static 'js/common/documents.js' %}?v=20260718-week-period-1"></script>
+    <script src="{% static 'js/common/colors.js' %}?v=20260718-week-period-1"></script>
+    <script src="{% static 'js/common/forms.js' %}?v=20260718-week-period-1"></script>
+    <script src="{% static 'js/common/week-picker.js' %}?v=20260718-week-period-1"></script>
+    <script src="{% static 'js/common/staff-filter.js' %}?v=20260718-week-period-1"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

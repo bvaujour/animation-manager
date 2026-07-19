@@ -14,43 +14,61 @@
 // {% csrf_token %} dans le template. Django en a besoin pour accepter les
 // requêtes POST/PATCH/DELETE (sans ça : erreur 403 Forbidden).
 function csrfToken() {
-	return document.querySelector("[name=csrfmiddlewaretoken]").value;
+	return document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
 }
 
-// Petit wrapper autour de fetch() qui :
-//   - ajoute automatiquement les en-têtes CSRF + Content-Type JSON ;
-//   - transforme une réponse HTTP en erreur (status non-2xx) en exception
-//     JS rejetée avec le corps JSON de l'erreur (donc utilisable avec
-//     .catch((err) => ... err.error ...) partout dans le code) ;
-//   - renvoie directement l'objet JS déjà parsé (plus besoin de faire
-//     .then(r => r.json()) à chaque appel).
-function apiFetch(url, options = {}) {
-	options.headers = Object.assign(
-		{
-			"Content-Type": "application/json",
-			"X-CSRFToken": csrfToken(),
-		},
-		options.headers || {}
-	);
+// Wrapper commun autour de fetch(). Il respecte les envois multipart
+// (FormData), ajoute le CSRF uniquement aux méthodes qui modifient les
+// données et produit une erreur lisible même si le serveur renvoie du texte
+// ou une page HTML au lieu du JSON attendu.
+async function apiFetch(url, options = {}) {
+	const config = { ...options };
+	const headers = new Headers(options.headers || {});
+	const method = String(config.method || "GET").toUpperCase();
+	const bodyIsFormData = typeof FormData !== "undefined" && config.body instanceof FormData;
 
-	return fetch(url, options).then((response) =>
-	{
-		if (!response.ok)
-		{
-			// Le corps de la réponse d'erreur est du JSON {"error": "..."}
-			// (convention utilisée par toutes les vues API, voir views.py).
-			return response.json().then((err) => { throw err; });
+	if (!headers.has("Accept")) headers.set("Accept", "application/json");
+	if (config.body != null && !bodyIsFormData && !headers.has("Content-Type")) {
+		headers.set("Content-Type", "application/json");
+	}
+	if (!["GET", "HEAD", "OPTIONS", "TRACE"].includes(method) && !headers.has("X-CSRFToken")) {
+		const token = csrfToken();
+		if (token) headers.set("X-CSRFToken", token);
+	}
+	config.headers = headers;
+
+	// Les écrans de gestion doivent toujours relire les données courantes.
+	// Sans cette option, certains navigateurs peuvent réutiliser une ancienne
+	// réponse GET après un enregistrement (notamment les effectifs enfants),
+	// ce qui donne l'impression que la donnée a disparu après actualisation.
+	if ((method === "GET" || method === "HEAD") && config.cache == null) {
+		config.cache = "no-store";
+	}
+
+	const response = await fetch(url, config);
+	let payload = null;
+	if (response.status !== 204) {
+		const text = await response.text();
+		if (text) {
+			try {
+				payload = JSON.parse(text);
+			} catch {
+				payload = { error: text };
+			}
 		}
-		// Les réponses 204 (No Content) n'ont pas de corps JSON à parser.
-		return response.status === 204 ? null : response.json();
-	});
+	}
+
+	if (!response.ok) {
+		throw payload || { error: `Erreur HTTP ${response.status}` };
+	}
+	return payload;
 }
 
 // Extrait un message d'erreur lisible d'un objet d'erreur venant
 // d'apiFetch (ou renvoie un message de repli si la forme est inattendue,
 // par exemple en cas d'erreur réseau plutôt que d'erreur métier).
 function erreurMessage(err, repli) {
-	return (err && err.error) ? err.error : repli;
+	return err?.error || err?.message || repli;
 }
 
 // Ajoute `days` jours à une date "YYYY-MM-DD" et renvoie le résultat dans
@@ -124,6 +142,37 @@ function libellePeriodeAvecAnnee(periode) {
 		return nom.replace(separateurSemaine, ` ${annee}${separateurSemaine}`);
 	}
 	return `${nom} ${annee}`;
+}
+
+// Ajoute les dates de début et de fin juste après le nom de la semaine,
+// sans modifier la structure ni les boutons de la barre de navigation.
+function libellePeriodeAvecDates(periode) {
+	const libelle = libellePeriodeAvecAnnee(periode);
+	const debutStr = periode?.debut;
+	const finStr = periode?.fin_periode || periode?.fin;
+	if (!debutStr || !finStr) return libelle;
+
+	const debut = parseLocalDate(debutStr);
+	const fin = parseLocalDate(finStr);
+	if (Number.isNaN(debut.getTime()) || Number.isNaN(fin.getTime())) return libelle;
+
+	const jourDebut = debut.getDate();
+	const jourFin = fin.getDate();
+	const moisDebut = debut.toLocaleDateString("fr-FR", { month: "long" });
+	const moisFin = fin.toLocaleDateString("fr-FR", { month: "long" });
+	const anneeDebut = debut.getFullYear();
+	const anneeFin = fin.getFullYear();
+
+	let dates;
+	if (anneeDebut !== anneeFin) {
+		dates = `du ${jourDebut} ${moisDebut} ${anneeDebut} au ${jourFin} ${moisFin} ${anneeFin}`;
+	} else if (debut.getMonth() !== fin.getMonth()) {
+		dates = `du ${jourDebut} ${moisDebut} au ${jourFin} ${moisFin} ${anneeFin}`;
+	} else {
+		dates = `du ${jourDebut} au ${jourFin} ${moisFin} ${anneeFin}`;
+	}
+
+	return `${libelle} · ${dates}`;
 }
 
 // Renvoie les identifiants numériques de cases cochées dans un conteneur.

@@ -1,0 +1,55 @@
+<div class="compact-search-filter{% if toolbar_class %} {{ toolbar_class }}{% endif %}" data-staff-filter>
+    <div class="compact-search-filter__search">
+        <svg class="compact-search-filter__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input
+            aria-label="{{ search_aria|default:'Rechercher un salarié' }}"
+            id="{{ search_id }}"
+            {% if search_name %}name="{{ search_name }}"{% endif %}
+            type="search"
+            placeholder="{{ search_placeholder|default:'Rechercher' }}"
+            autocomplete="off"
+        >
+    </div>
+    <details id="{{ details_id }}" class="compact-filter animateurs-filter-control">
+        <summary class="compact-filter__button" aria-label="Filtrer les salariés" title="Filtrer les salariés">
+            <svg class="compact-filter__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h7M15 6h5M11 3v6M4 12h3M11 12h9M7 9v6M4 18h10M18 18h2M14 15v6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span id="{{ count_id }}" class="compact-filter__count" hidden>0</span>
+        </summary>
+        <div class="compact-filter__panel animateurs-filter-panel" aria-label="Filtres des salariés">
+            <fieldset class="animateurs-filter-group">
+                <legend>Qualifications</legend>
+                <div id="{{ qualifications_id }}" class="animateurs-filter-options">
+                    <span class="empty-note">Chargement…</span>
+                </div>
+            </fieldset>
+            <div class="compact-filter-status-grid">
+                <div class="field compact-field">
+                    <label for="{{ availability_id }}">Disponibilité</label>
+                    <select id="{{ availability_id }}">
+                        <option value="">Toutes</option>
+                        <option value="disponible">Disponible</option>
+                        <option value="indisponible">Indisponible</option>
+                    </select>
+                </div>
+                <div class="field compact-field">
+                    <label for="{{ assignment_id }}">Affectation</label>
+                    <select id="{{ assignment_id }}">
+                        <option value="">Toutes</option>
+                        <option value="affecte">Affecté</option>
+                        <option value="non-affecte">Non affecté</option>
+                    </select>
+                </div>
+            </div>
+            <fieldset class="animateurs-filter-group">
+                <legend>Centre préféré</legend>
+                <div id="{{ centres_id }}" class="animateurs-filter-options">
+                    <span class="empty-note">Chargement…</span>
+                </div>
+            </fieldset>
+            {% if info_id %}<p class="compact-filter__result" id="{{ info_id }}">Tous les salariés sont affichés.</p>{% endif %}
+            <div class="animateurs-filter-actions">
+                <button id="{{ reset_id }}" class="btn btn-ghost btn-small" type="button">Tout afficher</button>
+            </div>
+        </div>
+    </details>
+</div>

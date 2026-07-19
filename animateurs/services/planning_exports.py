@@ -18,7 +18,6 @@ from django.utils import timezone
 
 from ..models import Affectation, Evenement
 
-
 JOURS_FR = [
     "Lundi",
     "Mardi",
@@ -68,7 +67,7 @@ def _planning_matrix(debut: date, fin: date):
     groupes = list(
         Evenement.objects.select_related("centre")
         .prefetch_related("periodes_scolaires", "dates_exclues")
-        .filter(Q(periodes_scolaires__isnull=False) | Q(id__in=groupes_affectes))
+        .filter(Q(permanent=True) | Q(periodes_scolaires__isnull=False) | Q(id__in=groupes_affectes))
         .distinct()
         .order_by("centre__nom", "centre_id", "ordre", "nom", "id")
     )
@@ -251,7 +250,13 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Table, TableStyle
+    from reportlab.platypus import (
+        PageBreak,
+        Paragraph,
+        SimpleDocTemplate,
+        Table,
+        TableStyle,
+    )
 
     dates, evenements, noms_par_case, couleurs_par_case = _planning_matrix(debut, fin)
     output = BytesIO()
@@ -350,7 +355,7 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
                 noms = noms_par_case.get((evenement.id, jour), [])
                 couleurs_anim = couleurs_par_case.get((evenement.id, jour), [])
                 lignes = []
-                for nom, couleur in zip(noms, couleurs_anim):
+                for nom, couleur in zip(noms, couleurs_anim, strict=True):
                     lignes.append(f'<font color="{couleur}"><b>●</b></font> {nom}')
                 row.append(Paragraph("<br/>".join(lignes) if lignes else "", name_style))
             data.append(row)

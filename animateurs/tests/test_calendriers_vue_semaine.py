@@ -1,11 +1,12 @@
 from pathlib import Path
 
 from django.conf import settings
-from django.test import SimpleTestCase
 from django.urls import reverse
 
+from animateurs.tests.base import ConnexionTestCase
 
-class CalendriersVueSemaineTests(SimpleTestCase):
+
+class CalendriersVueSemaineTests(ConnexionTestCase):
     def test_planning_ne_propose_plus_la_vue_mois(self):
         response = self.client.get(reverse("planning"))
         self.assertEqual(response.status_code, 200)

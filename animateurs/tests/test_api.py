@@ -2,7 +2,6 @@ import datetime
 import json
 
 from django.db import connection
-from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -15,10 +14,11 @@ from animateurs.models import (
     PreferenceCentre,
     Qualification,
 )
+from animateurs.tests.base import ConnexionTestCase
 from animateurs.tests.factories import creer_groupe
 
 
-class PlanningApiTests(TestCase):
+class PlanningApiTests(ConnexionTestCase):
     def setUp(self):
         self.animateur = Animateur.objects.create(prenom="Julie", nom="API")
         self.centre = Centre.objects.create(nom="Centre", code="CTR", couleur="#123456")
@@ -123,7 +123,7 @@ class PlanningApiTests(TestCase):
 
 
 
-class QualificationApiTests(TestCase):
+class QualificationApiTests(ConnexionTestCase):
     def test_creation_et_modification_visibilite_auto(self):
         response = self.client.post(
             reverse("api_qualifications"),
@@ -163,7 +163,7 @@ class QualificationApiTests(TestCase):
         self.assertEqual(response.json()[0]["selectionnable_remplissage_auto"], False)
 
 
-class QualificationDefaultTests(TestCase):
+class QualificationDefaultTests(ConnexionTestCase):
     def test_nouvelle_qualification_non_selectionnable_par_defaut(self):
         response = self.client.post(
             reverse("api_qualifications"),
@@ -174,7 +174,7 @@ class QualificationDefaultTests(TestCase):
         self.assertFalse(response.json()["selectionnable_remplissage_auto"])
 
 
-class AnimateurCentresHierarchisesApiTests(TestCase):
+class AnimateurCentresHierarchisesApiTests(ConnexionTestCase):
     def test_creation_avec_centre_prefere_et_secondaires(self):
         from animateurs.models import Centre
 
@@ -198,7 +198,7 @@ class AnimateurCentresHierarchisesApiTests(TestCase):
         self.assertEqual([c["id"] for c in data["centres_secondaires"]], [secondaire.id])
         self.assertEqual([c["id"] for c in data["centres_autorises"]], [prefere.id, secondaire.id])
 
-class AnimateurDetailApiTests(TestCase):
+class AnimateurDetailApiTests(ConnexionTestCase):
     def setUp(self):
         self.animateur = Animateur.objects.create(prenom="Alice", nom="Couleur")
 
@@ -220,8 +220,43 @@ class AnimateurDetailApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_creation_et_modification_informations_administratives(self):
+        response = self.client.post(
+            reverse("api_animateurs"),
+            data=json.dumps({
+                "prenom": "Lina",
+                "nom": "Admin",
+                "adresse": "12 rue des Écoles\n42370 Saint-Haon",
+                "numero_securite_sociale": "2 06 07 42 123 456 78",
+                "paie_jour": "65,50",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["adresse"], "12 rue des Écoles\n42370 Saint-Haon")
+        self.assertEqual(data["numero_securite_sociale"], "2 06 07 42 123 456 78")
+        self.assertEqual(data["paie_jour"], "65.50")
 
-class GestionEtDisponibiliteApiTests(TestCase):
+        response = self.client.patch(
+            reverse("api_animateur_detail", args=[data["id"]]),
+            data=json.dumps({"paie_jour": "70.00", "adresse": "Nouvelle adresse"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["paie_jour"], "70.00")
+        self.assertEqual(response.json()["adresse"], "Nouvelle adresse")
+
+    def test_refuse_paie_jour_negative(self):
+        response = self.client.patch(
+            reverse("api_animateur_detail", args=[self.animateur.id]),
+            data=json.dumps({"paie_jour": "-1"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+
+class GestionEtDisponibiliteApiTests(ConnexionTestCase):
     def setUp(self):
         self.animateur = Animateur.objects.create(prenom="Alice", nom="Martin")
         self.disponibilite = Disponibilite.objects.create(
@@ -230,12 +265,34 @@ class GestionEtDisponibiliteApiTests(TestCase):
             fin=datetime.date(2026, 8, 7),
         )
 
-    def test_gestion_page_contains_employee_management(self):
+    def test_employees_are_separate_from_management(self):
         response = self.client.get("/gestion/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Salariés")
         self.assertContains(response, "Lieux et groupes")
+        self.assertNotContains(response, "Ajouter un salarié")
+        self.assertNotContains(response, 'data-tab="salaries"')
+
+        response = self.client.get("/employes/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Salariés")
         self.assertContains(response, "Ajouter un salarié")
+        self.assertContains(response, "employees-workspace")
+        self.assertContains(response, "employee-editor")
+
+    def test_old_employee_pages_redirect_to_master_detail_view(self):
+        detail = self.client.get(f"/employes/{self.animateur.id}/")
+        creation = self.client.get("/employes/nouveau/")
+
+        self.assertRedirects(
+            detail,
+            f"/employes/?salarie={self.animateur.id}",
+            fetch_redirect_response=False,
+        )
+        self.assertRedirects(
+            creation,
+            "/employes/?nouveau=1",
+            fetch_redirect_response=False,
+        )
 
     def test_update_disponibilite(self):
         response = self.client.patch(
@@ -256,7 +313,7 @@ class GestionEtDisponibiliteApiTests(TestCase):
         self.assertFalse(Disponibilite.objects.filter(pk=self.disponibilite.id).exists())
 
 
-class PlanningPageLayoutTests(TestCase):
+class PlanningPageLayoutTests(ConnexionTestCase):
     def test_planning_page_uses_fixed_viewport_layout(self):
         response = self.client.get("/planning/")
         self.assertEqual(response.status_code, 200)
@@ -274,7 +331,7 @@ class PlanningPageLayoutTests(TestCase):
         self.assertContains(response, 'id="planning-actions"', html=False)
 
 
-class AnimateursListPerformanceTests(TestCase):
+class AnimateursListPerformanceTests(ConnexionTestCase):
     def setUp(self):
         self.centre = Centre.objects.create(
             nom="Centre principal",
@@ -309,9 +366,13 @@ class AnimateursListPerformanceTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 25)
+        # Le but est de garantir l'absence de N+1 : le nombre de requêtes doit
+        # rester constant quel que soit le nombre d'animateurs. Sur les 8, deux
+        # sont le coût fixe de l'authentification (session + utilisateur) apporté
+        # par ConnexionTestCase ; les 6 autres sont la sérialisation de la liste.
         self.assertLessEqual(
             len(contexte),
-            6,
+            8,
             f"La liste a effectué {len(contexte)} requêtes au lieu d'un nombre fixe.",
         )
 
@@ -340,3 +401,15 @@ class AnimateursListPerformanceTests(TestCase):
             [(item["prenom"], item["nom"]) for item in response.json()],
             [("Alice", "Beta"), ("Alice", "Zulu"), ("Zoé", "Alpha")],
         )
+
+class AnimateursApiOptionsTests(ConnexionTestCase):
+    def test_liste_avec_prefetch_des_affectations(self):
+        Animateur.objects.create(prenom="Ambre", nom="Test")
+
+        response = self.client.get(
+            reverse("api_animateurs"),
+            {"include_affectations": "1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 1)

@@ -38,8 +38,6 @@ def creer_groupe(
     groupe = Evenement.objects.create(
         centre=centre,
         nom=nom,
-        debut=periode.debut if periode else None,
-        fin=(periode.fin + datetime.timedelta(days=2 if 6 in jours else 1)) if periode and (5 in jours or 6 in jours) else (periode.fin if periode else None),
         effectif_cible=effectif_cible,
         jours_ouverts=jours,
         ferme_jours_feries=ferme_jours_feries,

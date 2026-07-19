@@ -1,8 +1,1 @@
-<div{% if container_id %} id="{{ container_id }}"{% endif %} class="week-navigation" aria-label="Navigation entre les semaines">
-    <strong id="{{ label_id }}" class="week-navigation-label" aria-live="polite">Chargement…</strong>
-    <div class="week-navigation-controls">
-        <button id="{{ previous_id }}" class="btn btn-ghost week-navigation-button" type="button" aria-label="Période précédente">‹</button>
-        <button id="{{ today_id }}" class="btn btn-ghost week-navigation-today" type="button">Aujourd’hui</button>
-        <button id="{{ next_id }}" class="btn btn-ghost week-navigation-button" type="button" aria-label="Période suivante">›</button>
-    </div>
-</div>
+{% include "partials/_week_picker.html" with picker_id=container_id picker_class="week-navigation" mode="single" placeholder="Chargement…" previous_id=previous_id today_id=today_id next_id=next_id label_id=label_id label_class="week-navigation-label" %}

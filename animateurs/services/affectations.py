@@ -9,9 +9,8 @@ from animateurs.models import (
     Centre,
     Evenement,
 )
+
 from .disponibilites import animateur_disponible
-
-
 
 
 def _valider_ouverture_evenement(evenement, debut, fin):
@@ -34,7 +33,7 @@ def evenement_par_defaut_pour_centre(centre: Centre) -> Evenement:
     return groupe
 
 
-def evenements_se_chevauchent(evenement_a=None, evenement_b=None):
+def evenements_se_chevauchent(_evenement_a=None, _evenement_b=None):
     return True
 
 

@@ -1,16 +1,17 @@
-from datetime import date, datetime, timezone as dt_timezone
-from io import BytesIO
 import zipfile
+from datetime import date, datetime
+from datetime import timezone as dt_timezone
+from io import BytesIO
 
-from django.test import TestCase
 from django.urls import reverse
 
 from animateurs.models import Affectation, Animateur, Centre
 from animateurs.services.planning_exports import _planning_matrix
+from animateurs.tests.base import ConnexionTestCase
 from animateurs.tests.factories import creer_groupe
 
 
-class PlanningExportTests(TestCase):
+class PlanningExportTests(ConnexionTestCase):
     def setUp(self):
         self.centre = Centre.objects.create(
             nom="Pacaudière",

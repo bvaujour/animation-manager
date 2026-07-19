@@ -4,14 +4,6 @@ window.PlanningUtils = Object.freeze({
         return debutStr <= dateStr && dateStr <= finStr;
     },
 
-    evenementCouvreJour(event, dateStr) {
-        const debut = event.start ? formatDateLocal(event.start) : event.startStr;
-        const finExclusive = event.end
-            ? formatDateLocal(event.end)
-            : (event.endStr || addDays(debut, 1));
-        return debut <= dateStr && dateStr < finExclusive;
-    },
-
     estVraieAffectation(event) {
         return Boolean(event && event.display !== "background");
     },

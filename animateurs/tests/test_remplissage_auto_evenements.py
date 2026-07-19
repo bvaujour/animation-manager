@@ -13,9 +13,9 @@ from animateurs.models import (
     PreferenceCentre,
     Qualification,
 )
-from animateurs.tests.factories import creer_periode
 from animateurs.services.planning_solver import generer_planning_auto
 from animateurs.services.serializers import evenement_to_dict
+from animateurs.tests.factories import creer_periode
 
 
 class ConfigurationEvenementRemplissageAutoTests(TestCase):
@@ -29,8 +29,6 @@ class ConfigurationEvenementRemplissageAutoTests(TestCase):
         self.evenement = Evenement.objects.create(
             centre=self.centre,
             nom="Maternelles",
-            debut=self.periode.debut,
-            fin=self.periode.fin,
             effectif_cible=1,
             jours_ouverts=[0, 1, 2, 3, 4],
         )

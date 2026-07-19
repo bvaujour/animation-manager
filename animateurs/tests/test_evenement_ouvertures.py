@@ -1,7 +1,7 @@
 import datetime
 import json
+from pathlib import Path
 
-from django.test import TestCase
 from django.utils import timezone
 
 from animateurs.models import (
@@ -15,10 +15,10 @@ from animateurs.models import (
     PreferenceCentre,
 )
 from animateurs.services.planning_solver import generer_planning_auto
-from animateurs.services.recapitulatif import generer_recapitulatif
+from animateurs.tests.base import ConnexionTestCase
 
 
-class OuverturesGroupeTests(TestCase):
+class OuverturesGroupeTests(ConnexionTestCase):
     def setUp(self):
         self.centre = Centre.objects.create(nom="La Pacaudière", code="PAC")
         self.periode = PeriodeScolaire.objects.create(
@@ -31,8 +31,6 @@ class OuverturesGroupeTests(TestCase):
         self.groupe = Evenement.objects.create(
             centre=self.centre,
             nom="Maternelles",
-            debut=self.periode.debut,
-            fin=self.periode.fin,
             effectif_cible=1,
             jours_ouverts=[0, 1, 2, 3, 4],
         )
@@ -90,22 +88,9 @@ class OuverturesGroupeTests(TestCase):
             Affectation.objects.filter(debut__date=datetime.date(2026, 7, 8)).exists()
         )
 
-    def test_recapitulatif_ne_compte_pas_le_jour_ferme(self):
-        DateExclueEvenement.objects.create(
-            evenement=self.groupe, date=datetime.date(2026, 7, 8)
-        )
-        recap = generer_recapitulatif(
-            self._aware(datetime.date(2026, 7, 6)),
-            self._aware(datetime.date(2026, 7, 11)),
-        )
-        ligne = next(item for item in recap["evenements"] if item["id"] == self.groupe.id)
-        self.assertEqual(ligne["jours_prevus"], 4)
-        self.assertEqual(ligne["postes_requis"], 4)
-
-
-class InterfaceOuverturesGroupeTests(TestCase):
+class InterfaceOuverturesGroupeTests(ConnexionTestCase):
     def test_gestion_contient_jours_et_periodes_facultatives(self):
-        contenu = open("static/js/gestion.js", encoding="utf-8").read()
+        contenu = Path("static/js/gestion.js").read_text(encoding="utf-8")
         self.assertIn("Jours ouverts", contenu)
         self.assertIn("sans période", contenu)
         self.assertIn("Fermé les jours fériés", contenu)

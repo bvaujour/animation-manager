@@ -1,12 +1,11 @@
 import datetime
 import json
 
-from django.test import TestCase
-
 from animateurs.models import Animateur, Disponibilite, PeriodeScolaire
+from animateurs.tests.base import ConnexionTestCase
 
 
-class DisponibilitesParPeriodesApiTests(TestCase):
+class DisponibilitesParPeriodesApiTests(ConnexionTestCase):
     def setUp(self):
         self.animateur = Animateur.objects.create(prenom="Lina", nom="Test")
         PeriodeScolaire.objects.create(

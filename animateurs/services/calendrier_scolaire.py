@@ -159,13 +159,17 @@ def recuperer_semaines(
         ("refine", f'annee_scolaire:"{annee_scolaire}"'),
     ]
     url = f"{API_URL}?{urllib.parse.urlencode(params)}"
+    parsed_url = urllib.parse.urlsplit(url)
+    if parsed_url.scheme != "https" or parsed_url.hostname != "data.education.gouv.fr":
+        raise CalendrierScolaireError("La source du calendrier scolaire est invalide.")
     request = urllib.request.Request(
         url,
         headers={"User-Agent": "AnimationManager/1.0 (+calendrier scolaire)"},
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        # URL HTTPS et hôte officiel validés juste au-dessus.
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
             payload = json.loads(response.read().decode("utf-8"))
     except (
         urllib.error.URLError,

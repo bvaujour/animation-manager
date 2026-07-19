@@ -1,0 +1,42 @@
+<div
+    id="{{ picker_id }}"
+    class="week-picker{% if picker_class %} {{ picker_class }}{% endif %}"
+    data-week-picker
+    data-week-picker-mode="{{ mode|default:'multiple' }}"
+    data-week-picker-placeholder="{{ placeholder|default:'Choisir des semaines' }}"
+    data-week-picker-default-current="true"
+    {% if selected_ids %}data-week-picker-selected="{{ selected_ids }}"{% endif %}
+>
+    <div class="week-picker__select">
+        <button
+            {% if toggle_id %}id="{{ toggle_id }}"{% endif %}
+            class="week-picker__toggle"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+            {% if title_id and label_id %}aria-labelledby="{{ title_id }} {{ label_id }}"{% endif %}
+        >
+            <span{% if label_id %} id="{{ label_id }}"{% endif %} class="week-picker__label{% if label_class %} {{ label_class }}{% endif %}" aria-live="polite">{{ placeholder|default:'Choisir des semaines' }}</span>
+            <span class="week-picker__chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div{% if menu_id %} id="{{ menu_id }}"{% endif %} class="week-picker__menu" hidden>
+            <div class="week-picker__heading">
+                <strong>Année → Vacances → Semaines</strong>
+                {% if show_select_all or clear_id %}
+                <div class="week-picker__actions">
+                    {% if show_select_all %}<button class="btn btn-ghost btn-small" type="button" data-week-picker-select-all>Tout sélectionner</button>{% endif %}
+                    {% if clear_id %}<button id="{{ clear_id }}" class="btn btn-ghost btn-small" type="button" data-week-picker-clear>Tout décocher</button>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <div{% if tree_id %} id="{{ tree_id }}"{% endif %} class="week-picker__tree"><p class="empty-note">Chargement des semaines…</p></div>
+        </div>
+    </div>
+    {% if previous_id or today_id or next_id %}
+    <div class="week-navigation-controls">
+        {% if previous_id %}<button id="{{ previous_id }}" class="btn btn-ghost week-navigation-button" type="button" aria-label="Semaine précédente">‹</button>{% endif %}
+        {% if today_id %}<button id="{{ today_id }}" class="btn btn-ghost week-navigation-today" type="button">Aujourd’hui</button>{% endif %}
+        {% if next_id %}<button id="{{ next_id }}" class="btn btn-ghost week-navigation-button" type="button" aria-label="Semaine suivante">›</button>{% endif %}
+    </div>
+    {% endif %}
+</div>

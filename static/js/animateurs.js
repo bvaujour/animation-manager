@@ -1,10 +1,26 @@
 document.addEventListener("DOMContentLoaded", () => {
+    const pageRoot = document.querySelector("[data-animateur-page]");
+    if (!pageRoot) return;
     const listEl = document.getElementById("evenement-list");
     const detailEl = document.getElementById("evenement-detail");
     const searchEl = document.getElementById("evenement-search");
     const addBtn = document.getElementById("evenement-add");
+    const filterQualificationsEl = document.getElementById("salaries-filter-qualifications");
+    const filterCentresEl = document.getElementById("salaries-filter-centres");
+    const filterDisponibiliteEl = document.getElementById("salaries-filter-disponibilite");
+    const filterAffectationEl = document.getElementById("salaries-filter-affectation");
+    const filterCountEl = document.getElementById("salaries-filter-count");
+    const filterResetBtn = document.getElementById("salaries-filter-reset");
+    const initialParams = new URLSearchParams(window.location.search);
+    const requestedId = Number(initialParams.get("salarie") || 0) || null;
+    const creationMode = initialParams.get("nouveau") === "1";
+    const countEl = document.getElementById("employees-count");
 
     let animateurs = [];
+    const selectedQualificationIds = new Set();
+    const selectedCentreIds = new Set();
+    let selectedDisponibilite = "";
+    let selectedAffectation = "";
 
     const PALETTE_ANIMATEURS = [
         "#2563EB", "#7C3AED", "#DB2777", "#DC2626",
@@ -31,6 +47,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let qualifications = [];
     let centres = [];
     let selectedId = null;
+    let previousSelectedId = null;
+    let activeDetailTab = "fiche";
 
     function fullName(a) { return `${a.prenom || ""} ${a.nom || ""}`.trim(); }
     function centreCodes(a) {
@@ -38,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function setStatus(message = "", error = false) {
+        if (!detailEl) return;
         const el = detailEl.querySelector(".fiche-status");
         if (!el) return;
         el.textContent = message;
@@ -45,9 +64,30 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function renderList() {
+        if (!listEl || !searchEl) return;
         const query = searchEl.value.trim().toLocaleLowerCase("fr");
+        const matchesDirectoryFilter = (a) => {
+            const qualificationIds = new Set((a.qualification_ids || []).map(Number));
+            const matchesQualifications = [...selectedQualificationIds].every((id) => qualificationIds.has(id));
+            if (!matchesQualifications) return false;
+            if (selectedCentreIds.size && !selectedCentreIds.has(Number(a.centre_prefere?.id))) return false;
+            const today = new Date();
+            const day = today.getDay();
+            const monday = new Date(today); monday.setHours(0,0,0,0); monday.setDate(today.getDate() - ((day + 6) % 7));
+            const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
+            const start = formatDateLocal(monday), end = formatDateLocal(friday);
+            const overlap = (range, exclusive=false) => range && String(range.debut||"") <= end && (exclusive ? String(range.fin||"") > start : String(range.fin||"") >= start);
+            const available = (a.disponibilites || []).some((range) => overlap(range));
+            const assigned = (a.affectations || []).some((range) => overlap(range, true));
+            if (selectedDisponibilite === "disponible" && !available) return false;
+            if (selectedDisponibilite === "indisponible" && available) return false;
+            if (selectedAffectation === "affecte" && !assigned) return false;
+            if (selectedAffectation === "non-affecte" && assigned) return false;
+            return true;
+        };
         const filtered = animateurs
             .filter((a) => fullName(a).toLocaleLowerCase("fr").includes(query))
+            .filter(matchesDirectoryFilter)
             .sort((a, b) => {
                 const prenom = (a.prenom || "").localeCompare(b.prenom || "", "fr", { sensitivity: "base" });
                 if (prenom !== 0) return prenom;
@@ -55,6 +95,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 return nom !== 0 ? nom : Number(a.id) - Number(b.id);
             });
         listEl.innerHTML = "";
+        if (countEl) {
+            countEl.textContent = filtered.length === animateurs.length
+                ? `${animateurs.length} salarié${animateurs.length > 1 ? "s" : ""}`
+                : `${filtered.length} sur ${animateurs.length}`;
+        }
 
         if (!filtered.length) {
             listEl.innerHTML = '<p class="empty-note">Aucun salarié trouvé.</p>';
@@ -62,21 +107,63 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         filtered.forEach((a) => {
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = `evenement-list-item ${a.id === selectedId ? "active" : ""}`;
-            btn.style.setProperty("--anim-color", a.couleur || "#94a3b8");
-            btn.innerHTML = `
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `salarie-directory-item ${Number(a.id) === Number(selectedId) ? "active" : ""}`;
+            button.style.setProperty("--anim-color", a.couleur || "#94a3b8");
+            button.setAttribute("role", "option");
+            button.setAttribute("aria-selected", Number(a.id) === Number(selectedId) ? "true" : "false");
+            button.innerHTML = `
                 <span class="evenement-list-color"></span>
-                <span>
-                    <span class="evenement-list-name">${escapeHtml(fullName(a))}</span>
-                    <span class="evenement-list-meta">${escapeHtml(centreCodes(a) || "Aucun lieu renseigné")}</span>
+                <span class="salarie-directory-main">
+                    <strong>${escapeHtml(fullName(a))}</strong>
+                    <small>${escapeHtml(centreCodes(a) || "Aucun lieu renseigné")}</small>
                 </span>`;
-            btn.addEventListener("click", () => selectAnimateur(a.id));
-            listEl.appendChild(btn);
+            button.addEventListener("click", () => selectAnimateur(a.id));
+            listEl.appendChild(button);
         });
     }
 
+
+    function updateFilterCount() {
+        const count = selectedQualificationIds.size + selectedCentreIds.size + (selectedDisponibilite ? 1 : 0) + (selectedAffectation ? 1 : 0);
+        StaffFilterUI.updateCount(filterCountEl, count);
+    }
+
+    function renderDirectoryFilters() {
+        StaffFilterUI.renderOptions(filterQualificationsEl, qualifications, {
+            selected: selectedQualificationIds,
+            emptyText: "Aucune qualification",
+            name: "salaries_filter_qualification",
+            onChange: (input) => {
+                const id = Number(input.value);
+                if (input.checked) selectedQualificationIds.add(id);
+                else selectedQualificationIds.delete(id);
+                updateFilterCount();
+                renderList();
+            },
+        });
+        StaffFilterUI.renderOptions(filterCentresEl, centres, {
+            selected: selectedCentreIds,
+            emptyText: "Aucun centre",
+            name: "salaries_filter_centre",
+            onChange: (input) => {
+                const id = Number(input.value);
+                if (input.checked) selectedCentreIds.add(id);
+                else selectedCentreIds.delete(id);
+                updateFilterCount();
+                renderList();
+            },
+        });
+        updateFilterCount();
+    }
+
+    [filterDisponibiliteEl, filterAffectationEl].forEach((select) => select?.addEventListener("change", () => {
+        selectedDisponibilite = filterDisponibiliteEl?.value || "";
+        selectedAffectation = filterAffectationEl?.value || "";
+        updateFilterCount();
+        renderList();
+    }));
     function qualificationsHtml(checked = [], group = "fiche-qualifications") {
         return FormOptionsUtils.qualifications(qualifications, checked, group);
     }
@@ -121,20 +208,29 @@ document.addEventListener("DOMContentLoaded", () => {
     function blankAnimateur() {
         return {
             id: null, prenom: "", nom: "", telephone: "", email: "",
-            date_naissance: null, age: null, couleur: couleurAleatoireAnimateur(),
+            date_naissance: null, adresse: "", numero_securite_sociale: "",
+            paie_jour: null, age: null, couleur: couleurAleatoireAnimateur(),
             qualification_ids: [], centre_prefere: null, centres_secondaires: [],
             evenement_preferee: null, evenement_preferee_id: null, disponibilites: [],
+            role: "animateur", access: { exists: false, username: null, active: false },
         };
     }
 
     function renderFiche(a, isNew = false) {
         const title = isNew ? "Nouveau salarié" : fullName(a);
+        if (isNew) activeDetailTab = "fiche";
         detailEl.style.setProperty("--anim-color", a.couleur || "#94a3b8");
         detailEl.innerHTML = `
-            <div class="fiche-head">
+            <div class="fiche-head employee-editor-head">
                 <div class="fiche-title">
                     <span class="fiche-color"></span>
-                    <div><h2>${escapeHtml(title)}</h2><p>${isNew ? "Complète la fiche puis enregistre." : `Identifiant ${a.id}`}</p></div>
+                    <div class="employee-title-copy">
+                        <h2>${escapeHtml(title)}</h2>
+                        <div class="employee-title-meta">
+                            <span>${isNew ? "Création d’une fiche" : `Salarié n°${a.id}`}</span>
+                            <span class="fiche-status" aria-live="polite"></span>
+                        </div>
+                    </div>
                 </div>
                 <div class="fiche-actions">
                     <button class="btn btn-primary" type="button" id="fiche-save">Enregistrer</button>
@@ -142,67 +238,158 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
             </div>
 
-            <section class="fiche-section fiche-card">
-                <div class="fiche-section-head"><div><h3>Informations personnelles</h3><p>Coordonnées et identité du salarié.</p></div></div>
-                <div class="fiche-grid">
-                    <div class="field"><label for="fiche-prenom">Prénom</label><input id="fiche-prenom" name="prenom" autocomplete="given-name" value="${escapeHtml(a.prenom || "")}"></div>
-                    <div class="field"><label for="fiche-nom">Nom</label><input id="fiche-nom" name="nom" autocomplete="family-name" value="${escapeHtml(a.nom || "")}"></div>
-                    <div class="field"><label for="fiche-telephone">Téléphone</label><input id="fiche-telephone" name="telephone" type="tel" autocomplete="tel" value="${escapeHtml(a.telephone || "")}"></div>
-                    <div class="field"><label for="fiche-email">E-mail</label><input id="fiche-email" name="email" type="email" autocomplete="email" value="${escapeHtml(a.email || "")}"></div>
-                    <div class="field"><label for="fiche-naissance">Date de naissance</label><input id="fiche-naissance" name="date_naissance" type="date" autocomplete="bday" value="${escapeHtml(a.date_naissance || "")}"></div>
-                    <div class="field"><label>Âge</label><div class="fiche-readonly">${a.age ? `${a.age} ans` : "Non calculé"}</div></div>
-                    <div class="field fiche-couleur-field">
-                        <label for="fiche-couleur">Couleur planning</label>
-                        <div class="animateur-color-picker">
-                            <div class="animateur-color-palette" id="fiche-couleur-palette">${paletteCouleursHtml(a.couleur || "#2563EB")}</div>
-                            <div class="animateur-color-custom">
-                                <input id="fiche-couleur" name="couleur" type="color" value="${escapeHtml(a.couleur || "#2563EB")}" aria-label="Choisir une couleur personnalisée">
-                                <button class="btn btn-ghost btn-small" id="fiche-couleur-random" type="button">Aléatoire</button>
+            <nav class="employee-detail-tabs" aria-label="Rubriques de la fiche">
+                <button type="button" data-employee-tab="fiche">Fiche</button>
+                <button type="button" data-employee-tab="affectations">Affectations</button>
+                <button type="button" data-employee-tab="acces">Accès</button>
+                ${isNew ? "" : '<button type="button" data-employee-tab="disponibilites">Disponibilités</button><button type="button" data-employee-tab="email">E-mail</button>'}
+            </nav>
+
+            <div class="employee-detail-panels">
+                <div class="employee-detail-panel" data-employee-panel="fiche">
+                    <section class="fiche-section fiche-card employee-compact-card">
+                        <div class="fiche-section-head"><h3>Informations personnelles</h3></div>
+                        <div class="fiche-grid employee-profile-grid">
+                            <div class="field"><label for="fiche-prenom">Prénom</label><input id="fiche-prenom" name="prenom" autocomplete="given-name" value="${escapeHtml(a.prenom || "")}"></div>
+                            <div class="field"><label for="fiche-nom">Nom</label><input id="fiche-nom" name="nom" autocomplete="family-name" value="${escapeHtml(a.nom || "")}"></div>
+                            <div class="field"><label for="fiche-telephone">Téléphone</label><input id="fiche-telephone" name="telephone" type="tel" autocomplete="tel" value="${escapeHtml(a.telephone || "")}"></div>
+                            <div class="field employee-span-2"><label for="fiche-email">E-mail</label><input id="fiche-email" name="email" type="email" autocomplete="email" value="${escapeHtml(a.email || "")}"></div>
+                            <div class="field"><label for="fiche-naissance">Naissance</label><input id="fiche-naissance" name="date_naissance" type="date" autocomplete="bday" value="${escapeHtml(a.date_naissance || "")}"></div>
+                            <div class="field"><label>Âge</label><div class="fiche-readonly">${a.age ? `${a.age} ans` : "—"}</div></div>
+                            <div class="field"><label for="fiche-paie-jour">Paie / jour (€)</label><input id="fiche-paie-jour" name="paie_jour" type="number" min="0" step="0.01" inputmode="decimal" value="${escapeHtml(a.paie_jour ?? "")}"></div>
+                            <div class="field employee-span-2"><label for="fiche-securite-sociale">N° de sécurité sociale</label><input id="fiche-securite-sociale" name="numero_securite_sociale" maxlength="21" autocomplete="off" value="${escapeHtml(a.numero_securite_sociale || "")}"></div>
+                            <div class="field employee-span-2"><label for="fiche-adresse">Adresse</label><textarea id="fiche-adresse" name="adresse" rows="2" autocomplete="street-address">${escapeHtml(a.adresse || "")}</textarea></div>
+                            <div class="field employee-span-2 fiche-couleur-field">
+                                <label for="fiche-couleur">Couleur planning</label>
+                                <div class="animateur-color-picker employee-color-picker">
+                                    <div class="animateur-color-palette" id="fiche-couleur-palette">${paletteCouleursHtml(a.couleur || "#2563EB")}</div>
+                                    <div class="animateur-color-custom">
+                                        <input id="fiche-couleur" name="couleur" type="color" value="${escapeHtml(a.couleur || "#2563EB")}" aria-label="Choisir une couleur personnalisée">
+                                        <button class="btn btn-ghost btn-small" id="fiche-couleur-random" type="button">Aléatoire</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            </section>
+                    </section>
 
-            <section class="fiche-section fiche-card">
-                <div class="fiche-section-head">
-                    <div>
-                        <h3>Qualifications</h3>
-                        <p>Compétences et diplômes du salarié.</p>
-                    </div>
+                    <section class="fiche-section fiche-card employee-compact-card">
+                        <div class="fiche-section-head"><h3>Qualifications</h3></div>
+                        <div class="evenement-qualifs employee-qualifications" id="fiche-qualifs">${qualificationsHtml(a.qualification_ids || [], `fiche-qualifications-${a.id || "new"}`)}</div>
+                    </section>
                 </div>
-                <div class="evenement-qualifs" id="fiche-qualifs">${qualificationsHtml(a.qualification_ids || [], `fiche-qualifications-${a.id || "new"}`)}</div>
-            </section>
 
-            <section class="fiche-section fiche-card centres-card">
-                <div class="fiche-section-head">
-                    <div>
-                        <h3>Lieux d’affectation</h3>
-                        <p>Choisis un lieu principal et, si besoin, plusieurs lieux secondaires.</p>
-                    </div>
+                <div class="employee-detail-panel" data-employee-panel="affectations" hidden>
+                    <section class="fiche-section fiche-card employee-compact-card centres-card">
+                        <div class="fiche-section-head"><h3>Lieux d’affectation</h3></div>
+                        <div class="centre-hierarchy-grid evenement-centres" id="fiche-centres">
+                            ${centresHtml(a.centre_prefere, a.centres_secondaires || [], `fiche-centre-prefere-${a.id || "new"}`)}
+                        </div>
+                        <div class="evenement-preferee-field field employee-group-preference">
+                            <label for="fiche-evenement-preferee">Groupe préféré <span class="label-hint">(facultatif)</span></label>
+                            <select id="fiche-evenement-preferee" name="evenement_preferee">
+                                ${optionsEvenementPreferee(a.centre_prefere?.id || a.centre_prefere, a.evenement_preferee_id || a.evenement_preferee?.id)}
+                            </select>
+                            
+                        </div>
+                    </section>
                 </div>
-                <div class="centre-hierarchy-grid evenement-centres" id="fiche-centres">
-                    ${centresHtml(a.centre_prefere, a.centres_secondaires || [], `fiche-centre-prefere-${a.id || "new"}`)}
-                </div>
-                <div class="evenement-preferee-field field">
-                    <label for="fiche-evenement-preferee">Groupe préféré <span class="label-hint">(facultatif)</span></label>
-                    <select id="fiche-evenement-preferee" name="evenement_preferee">
-                        ${optionsEvenementPreferee(a.centre_prefere?.id || a.centre_prefere, a.evenement_preferee_id || a.evenement_preferee?.id)}
-                    </select>
-                    <p class="form-hint">Le remplissage automatique privilégiera cet groupe, sans bloquer les affectations manuelles dans les autres groupes.</p>
-                </div>
-            </section>
 
-            <section class="fiche-section fiche-card disponibilites-card" ${isNew ? 'hidden' : ''}>
-                <div class="fiche-section-head">
-                    <div>
-                        <h3>Disponibilités</h3>
-                        <p>Coche une période entière, puis décoche seulement les jours où le salarié n’est pas disponible.</p>
-                    </div>
+                <div class="employee-detail-panel" data-employee-panel="acces" hidden>
+                    <section class="fiche-section fiche-card employee-compact-card access-card">
+                        <div class="fiche-section-head"><h3>Accès au site</h3></div>
+                        <div class="fiche-grid access-grid">
+                            <div class="field">
+                                <label>Rôle</label>
+                                <div class="fiche-readonly">Animateur</div>
+                                
+                            </div>
+                            ${isNew ? `
+                            <label class="access-create-option">
+                                <input type="checkbox" id="fiche-create-access">
+                                <span><strong>Créer son accès au site</strong></span>
+                            </label>` : `
+                            <div class="access-account-state">
+                                ${a.access?.exists ? `
+                                    <p><strong>Compte :</strong> ${escapeHtml(a.access.username || "")}</p>
+                                    <label class="access-toggle"><input type="checkbox" id="fiche-access-active" ${a.access.active ? "checked" : ""}> <span>Accès actif</span></label>
+                                    <div class="access-actions">
+                                        <button type="button" class="btn btn-ghost btn-small" id="fiche-reset-password">Réinitialiser le mot de passe</button>
+                                        <button type="button" class="btn-danger btn-small" id="fiche-remove-access">Supprimer l’accès</button>
+                                    </div>
+                                ` : `
+                                    <p class="empty-note">Aucun compte de connexion associé.</p>
+                                    <button type="button" class="btn btn-primary btn-small" id="fiche-create-access-now">Créer l’accès</button>
+                                `}
+                            </div>`}
+                        </div>
+                        <div id="temporary-credentials" class="temporary-credentials" hidden></div>
+                    </section>
                 </div>
-                <div class="dispo-items" id="dispo-items"></div>
-            </section>
-            <p class="fiche-status"></p>`;
+
+                ${isNew ? "" : `
+                <div class="employee-detail-panel" data-employee-panel="disponibilites" hidden>
+                    <section class="fiche-section fiche-card employee-compact-card disponibilites-card">
+                        <div class="fiche-section-head"><h3>Disponibilités</h3></div>
+                        
+                        <div class="dispo-items" id="dispo-items"></div>
+                    </section>
+                </div>
+                <div class="employee-detail-panel" data-employee-panel="email" hidden>
+                    <section class="fiche-section fiche-card employee-compact-card communication-card">
+                        <div class="fiche-section-head"><h3>Envoyer un e-mail à ${escapeHtml(a.prenom || "ce salarié")}</h3></div>
+                        <div id="employee-email-configuration" class="employee-email-configuration" role="status">Vérification de la configuration…</div>
+                        <div class="communication-grid">
+                            <div class="field"><label>Destinataire</label><div class="fiche-readonly">${escapeHtml(a.email || "Aucune adresse e-mail")}</div></div>
+                            <div class="field">
+                                <label for="employee-email-template">Modèle</label>
+                                <select id="employee-email-template">
+                                    <option value="">Message personnalisé</option>
+                                </select>
+                                
+                            </div>
+                            <div class="field"><label for="employee-email-object">Objet</label><input id="employee-email-object" maxlength="200" value="Information AJS"></div>
+                            <div class="field communication-message-field"><label for="employee-email-message">Message</label><textarea id="employee-email-message" rows="7" maxlength="10000"></textarea></div>
+                        </div>
+                        <div class="email-variable-guide employee-email-variable-guide">
+                            <strong>Variables disponibles</strong>
+                            <div id="employee-email-variables" class="email-variable-list"></div>
+                            
+                        </div>
+                        <details class="employee-email-attachments">
+                            <summary>Pièces jointes <span class="label-hint">(facultatif)</span></summary>
+                            <div id="employee-email-documents" class="employee-email-document-list"><p class="empty-note">Chargement…</p></div>
+                        </details>
+                        <p class="form-error" id="employee-email-error"></p>
+                        <div id="employee-email-result" class="email-resultat" hidden></div>
+                        <div class="communication-actions">
+                            <button class="btn btn-primary" type="button" id="employee-email-send" disabled>Envoyer depuis le site</button>
+                        </div>
+                    </section>
+                    <section class="fiche-section fiche-card employee-compact-card communication-history-card">
+                        <div class="fiche-section-head"><h3>Historique des e-mails</h3><button class="btn btn-ghost btn-small" type="button" id="employee-email-refresh">Actualiser</button></div>
+                        <div id="employee-email-history" class="communication-history"><p class="empty-note">Chargement…</p></div>
+                    </section>
+                </div>`}
+            </div>`;
+
+        const activerOnglet = (onglet) => {
+            const disponible = detailEl.querySelector(`[data-employee-tab="${onglet}"]`) ? onglet : "fiche";
+            activeDetailTab = disponible;
+            detailEl.querySelectorAll("[data-employee-tab]").forEach((button) => {
+                const active = button.dataset.employeeTab === disponible;
+                button.classList.toggle("active", active);
+                button.setAttribute("aria-selected", active ? "true" : "false");
+            });
+            detailEl.querySelectorAll("[data-employee-panel]").forEach((panel) => {
+                panel.hidden = panel.dataset.employeePanel !== disponible;
+            });
+            const panels = detailEl.querySelector(".employee-detail-panels");
+            if (panels) panels.scrollTop = 0;
+        };
+        detailEl.querySelectorAll("[data-employee-tab]").forEach((button) => {
+            button.addEventListener("click", () => activerOnglet(button.dataset.employeeTab));
+        });
+        activerOnglet(activeDetailTab);
 
         FormOptionsUtils.activerCentresHierarchises(detailEl.querySelector("#fiche-centres"));
         detailEl.querySelectorAll('#fiche-centres input[data-role="prefere"]').forEach((radio) => {
@@ -224,11 +411,187 @@ document.addEventListener("DOMContentLoaded", () => {
         detailEl.querySelector("#fiche-couleur-random").addEventListener("click", () => appliquerCouleur(couleurAleatoireAnimateur()));
         detailEl.querySelector("#fiche-save").addEventListener("click", () => saveFiche(a, isNew));
 
-        if (isNew) detailEl.querySelector("#fiche-cancel").addEventListener("click", () => selectedId ? selectAnimateur(selectedId) : showEmpty());
-        else {
+        if (!isNew) {
+            initialiserEmailAnimateur(a);
+            detailEl.querySelector("#fiche-create-access-now")?.addEventListener("click", () => actionCompte(a, { create_access: true }));
+            detailEl.querySelector("#fiche-reset-password")?.addEventListener("click", () => actionCompte(a, { reset_password: true }, "Créer un nouveau mot de passe provisoire ?"));
+            detailEl.querySelector("#fiche-remove-access")?.addEventListener("click", () => actionCompte(a, { remove_access: true }, "Supprimer uniquement son accès au site ? La fiche salarié sera conservée."));
+            detailEl.querySelector("#fiche-access-active")?.addEventListener("change", (event) => actionCompte(a, { access_active: event.target.checked }));
+            const storedCredentials = sessionStorage.getItem("temporaryCredentials");
+            if (storedCredentials) {
+                sessionStorage.removeItem("temporaryCredentials");
+                try { afficherIdentifiants(JSON.parse(storedCredentials)); } catch {}
+            }
+        }
+
+        if (isNew) {
+            detailEl.querySelector("#fiche-cancel").addEventListener("click", () => {
+                const fallback = animateurs.find((item) => Number(item.id) === Number(previousSelectedId)) || animateurs[0];
+                if (fallback) selectAnimateur(fallback.id); else showEmpty();
+            });
+        } else {
             detailEl.querySelector("#fiche-delete").addEventListener("click", () => deleteAnimateur(a));
             renderDisponibilites(a.id);
         }
+    }
+
+
+    let modelesEmailAnimateur = [];
+    let champVariableEmailActif = null;
+    const identifiantsProvisoires = new Map();
+
+    function insererVariableEmail(champ, code) {
+        if (!champ) return;
+        const debut = Number.isInteger(champ.selectionStart) ? champ.selectionStart : champ.value.length;
+        const fin = Number.isInteger(champ.selectionEnd) ? champ.selectionEnd : debut;
+        champ.value = `${champ.value.slice(0, debut)}${code}${champ.value.slice(fin)}`;
+        const position = debut + code.length;
+        champ.focus();
+        champ.setSelectionRange?.(position, position);
+    }
+
+    function afficherModelesEmailAnimateur(modeles) {
+        const select = detailEl.querySelector("#employee-email-template");
+        if (!select) return;
+        modelesEmailAnimateur = Array.isArray(modeles) ? modeles : [];
+        select.innerHTML = '<option value="">Message personnalisé</option>' + modelesEmailAnimateur
+            .map((modele) => `<option value="${Number(modele.id)}">${escapeHtml(modele.nom)}</option>`)
+            .join("");
+    }
+
+    function afficherVariablesEmailAnimateur(variables) {
+        const zone = detailEl.querySelector("#employee-email-variables");
+        if (!zone) return;
+        zone.innerHTML = "";
+        (variables || []).forEach((variable) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "email-variable-chip";
+            button.textContent = variable.code;
+            button.title = variable.libelle;
+            button.addEventListener("click", () => {
+                insererVariableEmail(
+                    champVariableEmailActif || detailEl.querySelector("#employee-email-message"),
+                    variable.code,
+                );
+            });
+            zone.appendChild(button);
+        });
+    }
+
+    function formatTailleEmail(octets) {
+        const valeur = Number(octets);
+        if (!Number.isFinite(valeur)) return "taille inconnue";
+        if (valeur < 1024) return `${valeur} o`;
+        if (valeur < 1048576) return `${Math.round(valeur / 1024)} Ko`;
+        return `${(valeur / 1048576).toFixed(1).replace(".", ",")} Mo`;
+    }
+
+    function afficherHistoriqueEmails(items) {
+        const zone = detailEl.querySelector("#employee-email-history");
+        if (!zone) return;
+        zone.innerHTML = items.length ? items.map((item) => `
+            <article class="communication-history-item ${item.statut === "echec" ? "is-error" : ""}">
+                <div><strong>${escapeHtml(item.objet || "Sans objet")}</strong><span>${escapeHtml(item.statut_libelle)}${item.mode_test ? " · Test" : ""}</span></div>
+                <p>${escapeHtml(item.message).replace(/\n/g, "<br>")}</p>
+                ${item.documents?.length ? `<small>Pièces jointes : ${item.documents.map(escapeHtml).join(", ")}</small>` : ""}
+                ${item.erreur ? `<small class="communication-error">${escapeHtml(item.erreur)}</small>` : ""}
+                <small>${new Date(item.date_creation).toLocaleString("fr-FR")}</small>
+            </article>`).join("") : '<p class="empty-note">Aucun e-mail envoyé à ce salarié.</p>';
+    }
+
+    function afficherDocumentsEmail(documents) {
+        const zone = detailEl.querySelector("#employee-email-documents");
+        if (!zone) return;
+        zone.innerHTML = documents.length ? documents.map((document) => `
+            <label class="employee-email-document-option">
+                <input type="checkbox" value="${Number(document.id)}">
+                <span><strong>${escapeHtml(document.titre)}</strong><small>${escapeHtml(document.libelle_periode || "Permanent")} · ${escapeHtml(formatTailleEmail(document.taille))}</small></span>
+            </label>`).join("") : '<p class="empty-note">Aucun document disponible. Les pièces jointes restent facultatives.</p>';
+    }
+
+    async function chargerEmailsAnimateur(a) {
+        const configuration = detailEl.querySelector("#employee-email-configuration");
+        const envoyer = detailEl.querySelector("#employee-email-send");
+        const zoneHistorique = detailEl.querySelector("#employee-email-history");
+        try {
+            const data = await apiFetch(`/api/animateurs/${a.id}/emails/`);
+            const statut = data.configuration || {};
+            configuration.className = `employee-email-configuration ${statut.operationnel ? (statut.mode_test ? "test" : "success") : "error"}`;
+            configuration.textContent = statut.message || "Configuration e-mail inconnue.";
+            envoyer.disabled = !statut.operationnel || !a.email;
+            afficherModelesEmailAnimateur(data.modeles || []);
+            afficherVariablesEmailAnimateur(data.variables || []);
+            afficherDocumentsEmail(data.documents || []);
+            afficherHistoriqueEmails(data.historique || []);
+        } catch (error) {
+            configuration.className = "employee-email-configuration error";
+            const message = erreurMessage(error, "Impossible de préparer l’envoi d’e-mail.");
+            configuration.textContent = message;
+            envoyer.disabled = true;
+            if (zoneHistorique) zoneHistorique.innerHTML = `<p class="empty-note">${escapeHtml(message)}</p>`;
+        }
+    }
+
+    function initialiserEmailAnimateur(a) {
+        const objetEl = detailEl.querySelector("#employee-email-object");
+        const messageEl = detailEl.querySelector("#employee-email-message");
+        const modeleEl = detailEl.querySelector("#employee-email-template");
+        const envoyer = detailEl.querySelector("#employee-email-send");
+        const erreurEl = detailEl.querySelector("#employee-email-error");
+        const resultatEl = detailEl.querySelector("#employee-email-result");
+        if (!messageEl || !envoyer) return;
+
+        [objetEl, messageEl].forEach((champ) => {
+            champ?.addEventListener("focus", () => { champVariableEmailActif = champ; });
+        });
+        champVariableEmailActif = messageEl;
+        modeleEl?.addEventListener("change", () => {
+            const modele = modelesEmailAnimateur.find((item) => Number(item.id) === Number(modeleEl.value));
+            if (!modele) return;
+            objetEl.value = modele.objet;
+            messageEl.value = modele.message;
+            messageEl.focus();
+        });
+        detailEl.querySelector("#employee-email-refresh")?.addEventListener("click", () => chargerEmailsAnimateur(a));
+        envoyer.addEventListener("click", async () => {
+            erreurEl.textContent = "";
+            resultatEl.hidden = true;
+            const objet = objetEl.value.trim();
+            const message = messageEl.value.trim();
+            const document_ids = [...detailEl.querySelectorAll('#employee-email-documents input[type="checkbox"]:checked')].map((input) => Number(input.value));
+            if (!objet || !message) {
+                erreurEl.textContent = "L’objet et le message sont obligatoires.";
+                return;
+            }
+            if (!a.email) {
+                erreurEl.textContent = "Ajoute d’abord une adresse e-mail valide dans la fiche.";
+                return;
+            }
+            if (!confirm(`Envoyer maintenant cet e-mail à ${a.prenom} ${a.nom} (${a.email}) ?`)) return;
+
+            const texteInitial = envoyer.textContent;
+            envoyer.disabled = true;
+            envoyer.textContent = "Envoi en cours…";
+            try {
+                const data = await apiFetch(`/api/animateurs/${a.id}/emails/`, {
+                    method: "POST",
+                    body: JSON.stringify({ objet, message, document_ids }),
+                });
+                resultatEl.hidden = false;
+                resultatEl.className = "email-resultat success";
+                resultatEl.textContent = data.mode_test ? "E-mail intercepté en mode test." : "E-mail envoyé directement depuis le site.";
+                setStatus("E-mail envoyé.");
+                await chargerEmailsAnimateur(a);
+            } catch (error) {
+                erreurEl.textContent = erreurMessage(error, "L’envoi a échoué.");
+                setStatus("Échec de l’envoi.", true);
+                await chargerEmailsAnimateur(a);
+            } finally {
+                envoyer.textContent = texteInitial;
+            }
+        });
+        chargerEmailsAnimateur(a);
     }
 
     function payloadFiche() {
@@ -239,12 +602,47 @@ document.addEventListener("DOMContentLoaded", () => {
             telephone: detailEl.querySelector("#fiche-telephone").value.trim(),
             email: detailEl.querySelector("#fiche-email").value.trim(),
             date_naissance: detailEl.querySelector("#fiche-naissance").value || null,
+            paie_jour: detailEl.querySelector("#fiche-paie-jour").value || null,
+            numero_securite_sociale: detailEl.querySelector("#fiche-securite-sociale").value.trim(),
+            adresse: detailEl.querySelector("#fiche-adresse").value.trim(),
             couleur: detailEl.querySelector("#fiche-couleur").value,
             qualifications: idsCheckboxesCochees(detailEl.querySelector("#fiche-qualifs")),
             centre_prefere: centresChoisis.centre_prefere,
             centres_secondaires: centresChoisis.centres_secondaires,
             evenement_preferee: detailEl.querySelector("#fiche-evenement-preferee")?.value || null,
+            role: "animateur",
+            create_access: Boolean(detailEl.querySelector("#fiche-create-access")?.checked),
+            access_active: detailEl.querySelector("#fiche-access-active") ? detailEl.querySelector("#fiche-access-active").checked : undefined,
         };
+    }
+
+    function afficherIdentifiants(credentials) {
+        if (!credentials) return;
+        if (selectedId) identifiantsProvisoires.set(Number(selectedId), credentials);
+        const texte = `Identifiant : ${credentials.username}\nMot de passe provisoire : ${credentials.temporary_password}`;
+        const zone = detailEl.querySelector("#temporary-credentials");
+        if (zone) {
+            zone.hidden = false;
+            zone.innerHTML = `<strong>Accès créé</strong><p>Identifiant : <code>${escapeHtml(credentials.username)}</code></p><p>Mot de passe provisoire : <code>${escapeHtml(credentials.temporary_password)}</code></p><div class="communication-actions"><button type="button" class="btn btn-ghost btn-small" id="copy-credentials">Copier les accès</button></div>`;
+            zone.querySelector("#copy-credentials")?.addEventListener("click", async () => {
+                await navigator.clipboard.writeText(texte);
+                afficherToast("Accès copiés.");
+            });
+        }
+        return texte;
+    }
+
+    async function actionCompte(a, action, confirmation = null) {
+        if (confirmation && !confirm(confirmation)) return;
+        setStatus("Mise à jour de l’accès…");
+        try {
+            const saved = await apiFetch(`/api/animateurs/${a.id}/`, { method: "PATCH", body: JSON.stringify({ role: "animateur", ...action }) });
+            await loadAnimateurs();
+            const current = animateurs.find((item) => item.id === saved.id) || saved;
+            renderFiche(current);
+            if (saved.temporary_credentials) afficherIdentifiants(saved.temporary_credentials);
+            setStatus("Accès mis à jour.");
+        } catch (err) { setStatus(erreurMessage(err, "Modification de l’accès impossible."), true); }
     }
 
     async function saveFiche(a, isNew) {
@@ -256,12 +654,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 method: isNew ? "POST" : "PATCH",
                 body: JSON.stringify(payload),
             });
+            if (isNew && saved.temporary_credentials) activeDetailTab = "acces";
             await loadAnimateurs();
             selectedId = saved.id;
-            const current = animateurs.find((item) => item.id === saved.id) || saved;
+            previousSelectedId = saved.id;
+            const current = animateurs.find((item) => Number(item.id) === Number(saved.id)) || saved;
+            mettreAJourUrl(saved.id);
             renderList();
             renderFiche(current);
-            setStatus("Fiche enregistrée.");
+            if (saved.temporary_credentials) afficherIdentifiants(saved.temporary_credentials);
+            setStatus(isNew ? "Salarié créé." : "Fiche enregistrée.");
         } catch (err) { setStatus(erreurMessage(err, "Enregistrement impossible."), true); }
     }
 
@@ -269,11 +671,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!confirm(`Supprimer ${fullName(a)} ? Ses affectations et disponibilités seront également supprimées.`)) return;
         try {
             await apiFetch(`/api/animateurs/${a.id}/`, { method: "DELETE" });
-            selectedId = null;
-            await loadAnimateurs();
-            renderList();
-            showEmpty();
+            animateurs = animateurs.filter((item) => Number(item.id) !== Number(a.id));
             afficherToast("Salarié supprimé.");
+            const suivant = animateurs[0] || null;
+            if (suivant) selectAnimateur(suivant.id);
+            else { selectedId = null; mettreAJourUrl(); renderList(); showEmpty(); }
         } catch (err) { setStatus(erreurMessage(err, "Suppression impossible."), true); }
     }
 
@@ -378,65 +780,104 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function showEmpty() {
+        if (!detailEl) return;
         detailEl.innerHTML = '<div class="evenement-empty"><strong>Sélectionne un salarié</strong><p>Sa fiche complète apparaîtra ici.</p></div>';
     }
 
+    function mettreAJourUrl(id = null, nouveau = false) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("salarie");
+        url.searchParams.delete("nouveau");
+        if (nouveau) url.searchParams.set("nouveau", "1");
+        else if (id) url.searchParams.set("salarie", String(id));
+        window.history.replaceState({}, "", url);
+    }
+
     function selectAnimateur(id) {
-        selectedId = id;
-        const a = animateurs.find((item) => item.id === id);
+        const a = animateurs.find((item) => Number(item.id) === Number(id));
+        if (!a) return;
+        selectedId = a.id;
+        previousSelectedId = a.id;
+        activeDetailTab = "fiche";
+        mettreAJourUrl(a.id);
         renderList();
-        if (a) renderFiche(a);
+        renderFiche(a);
     }
 
     async function loadAnimateurs() {
-        animateurs = await apiFetch("/api/animateurs/");
+        animateurs = await apiFetch("/api/animateurs/?include_affectations=1");
         return animateurs;
     }
 
     async function init() {
-        listEl.innerHTML = '<p class="empty-note">Chargement des salariés…</p>';
-
-        // La liste principale est indépendante des données nécessaires à la
-        // fiche. Ainsi, une lenteur ou une erreur sur les lieux/groupes
-        // n'empêche plus les noms de s'afficher.
-        const animateursPromise = loadAnimateurs()
-            .then(() => {
-                renderList();
-                return true;
-            })
-            .catch((err) => {
-                listEl.innerHTML = "";
-                detailEl.innerHTML = `<div class="evenement-empty"><strong>Chargement impossible</strong><p>${escapeHtml(erreurMessage(err, "Erreur inconnue"))}</p></div>`;
-                return false;
-            });
-
-        const referencesPromise = Promise.all([
-            apiFetch("/api/qualifications/"),
-            apiFetch("/api/centres/").then((centresCharges) =>
-                Promise.all(centresCharges.map(async (centre) => ({
+        if (listEl) listEl.innerHTML = '<p class="empty-note">Chargement des salariés…</p>';
+        try {
+            const [animateursCharges, qualificationsChargees, centresCharges] = await Promise.all([
+                loadAnimateurs(),
+                apiFetch("/api/qualifications/"),
+                apiFetch("/api/centres/").then((items) => Promise.all(items.map(async (centre) => ({
                     ...centre,
                     evenements: await apiFetch(`/api/centres/${centre.id}/groupes/`),
-                })))
-            ),
-        ])
-            .then((data) => ({ ok: true, data }))
-            .catch((error) => ({ ok: false, error }));
+                })))),
+            ]);
+            qualifications = qualificationsChargees;
+            centres = centresCharges;
+            renderDirectoryFilters();
 
-        const animateursCharges = await animateursPromise;
-        if (!animateursCharges) return;
+            if (creationMode) {
+                previousSelectedId = animateursCharges[0]?.id || null;
+                selectedId = null;
+                renderList();
+                renderFiche(blankAnimateur(), true);
+                return;
+            }
 
-        const references = await referencesPromise;
-        if (!references.ok) {
-            detailEl.innerHTML = `<div class="evenement-empty"><strong>Fiche momentanément indisponible</strong><p>La liste est chargée, mais les lieux ou qualifications n’ont pas pu être récupérés.</p></div>`;
-            return;
+            const employee = animateursCharges.find((item) => Number(item.id) === Number(requestedId)) || animateursCharges[0];
+            if (!employee) {
+                renderList();
+                showEmpty();
+                return;
+            }
+            selectedId = employee.id;
+            previousSelectedId = employee.id;
+            mettreAJourUrl(employee.id);
+            renderList();
+            renderFiche(employee);
+        } catch (err) {
+            if (listEl) listEl.innerHTML = `<p class="empty-note">${escapeHtml(erreurMessage(err, "Chargement impossible."))}</p>`;
+            detailEl.innerHTML = `<div class="evenement-empty"><strong>Chargement impossible</strong><p>${escapeHtml(erreurMessage(err, "Erreur inconnue"))}</p></div>`;
         }
-
-        [qualifications, centres] = references.data;
-        if (animateurs.length) selectAnimateur(animateurs[0].id);
-        else showEmpty();
     }
 
-    searchEl.addEventListener("input", renderList);
-    addBtn.addEventListener("click", () => { selectedId = null; renderList(); renderFiche(blankAnimateur(), true); });
+
+    if (addBtn) {
+        addBtn.addEventListener("click", () => {
+            previousSelectedId = selectedId || previousSelectedId;
+            selectedId = null;
+            activeDetailTab = "fiche";
+            mettreAJourUrl(null, true);
+            renderList();
+            renderFiche(blankAnimateur(), true);
+        });
+    }
+
+    if (searchEl) searchEl.addEventListener("input", renderList);
+
+    if (filterResetBtn) {
+        filterResetBtn.addEventListener("click", () => {
+            selectedQualificationIds.clear();
+            selectedCentreIds.clear();
+            selectedDisponibilite = "";
+            selectedAffectation = "";
+            if (filterDisponibiliteEl) filterDisponibiliteEl.value = "";
+            if (filterAffectationEl) filterAffectationEl.value = "";
+            document.querySelectorAll('#salaries-filter input[type="checkbox"]').forEach((input) => { input.checked = false; });
+            updateFilterCount();
+            renderList();
+        });
+    }
+
+
+
     init();
 });

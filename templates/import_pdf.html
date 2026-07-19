@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Import PDF{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/import-pdf.css' %}?v=20260718-2">{% endblock %}
+{% block content %}
+<main class="page-shell page-shell--wide import-page">
+    <header class="page-header import-header">
+        <div>
+            <h1>Import PDF</h1>
+            <p class="page-intro">Dépose un export hebdomadaire pour lire et vérifier ses informations avant un futur enregistrement dans le logiciel.</p>
+        </div>
+        <span class="local-badge">Lecture locale uniquement</span>
+    </header>
+
+    <section class="ui-card ui-section import-drop-section">
+        <div id="pdf-drop-zone" class="pdf-drop-zone" tabindex="0" role="button" aria-controls="pdf-file-input">
+            <div class="drop-icon" aria-hidden="true">PDF</div>
+            <div>
+                <h2>Déposer un fichier PDF</h2>
+                <p>Glisse le fichier ici ou clique pour le choisir. Il n’est pas envoyé au serveur.</p>
+            </div>
+            <button class="btn" type="button" id="choose-pdf-button">Choisir un PDF</button>
+            <input id="pdf-file-input" type="file" accept="application/pdf,.pdf" hidden>
+        </div>
+        <div id="import-progress" class="import-progress" hidden>
+            <div class="progress-spinner" aria-hidden="true"></div>
+            <div><strong id="progress-title">Lecture du PDF…</strong><p id="progress-detail">Préparation du document</p></div>
+        </div>
+        <div id="import-error" class="import-message import-message--error" hidden></div>
+    </section>
+
+    <div id="import-results" hidden>
+        <section class="import-summary-grid" aria-label="Résumé du document">
+            <article class="ui-card summary-card"><span>Centre</span><strong id="summary-centre">—</strong></article>
+            <article class="ui-card summary-card"><span>Vacances</span><strong id="summary-vacances">—</strong></article>
+            <article class="ui-card summary-card"><span>Période</span><strong id="summary-periode">—</strong></article>
+            <article class="ui-card summary-card"><span>Inscrits</span><strong id="summary-inscrits">—</strong></article>
+        </section>
+
+        <section class="ui-card ui-section">
+            <div class="ui-section-heading import-section-heading">
+                <div><h2>Effectifs de la semaine</h2><p>Totaux et répartition par tranche d’âge détectés dans le document.</p></div>
+            </div>
+            <div id="effectifs-table" class="table-scroll"></div>
+        </section>
+
+        <section class="ui-card ui-section">
+            <div class="ui-section-heading import-section-heading">
+                <div><h2>Enfants et présences</h2><p id="children-count">Informations détectées dans le PDF.</p></div>
+                <input id="children-search" class="search-input" type="search" placeholder="Rechercher un enfant…" aria-label="Rechercher un enfant">
+            </div>
+            <div id="children-list" class="children-list"></div>
+        </section>
+
+        <section class="ui-card ui-section">
+            <div class="ui-section-heading import-section-heading">
+                <div><h2>Informations particulières</h2><p>Régimes, allergies, AEEH et autres mentions repérées.</p></div>
+            </div>
+            <div id="special-info" class="special-info-grid"></div>
+        </section>
+
+        <section class="ui-card ui-section">
+            <div class="ui-section-heading import-section-heading">
+                <div><h2>Vérification du document</h2><p>Le PDF original et le texte extrait restent visibles pour contrôler les informations.</p></div>
+                <button id="toggle-raw-text" class="btn btn-secondary" type="button">Afficher le texte extrait</button>
+            </div>
+            <div class="verification-grid">
+                <iframe id="pdf-preview" class="pdf-preview" title="Aperçu du PDF"></iframe>
+                <pre id="raw-text" class="raw-text" hidden></pre>
+            </div>
+        </section>
+    </div>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+<script src="{% static 'js/import-pdf.js' %}?v=20260718-2" type="module"></script>
+{% endblock %}

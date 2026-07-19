@@ -1,82 +1,47 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Récapitulatif{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}?v=20260719-clean-ui-1">{% endblock %}
 {% block content %}
-<main class="recap-page">
-    <header class="recap-header">
+<main class="page-shell page-shell--wide recap-page">
+    <header class="page-header recap-header">
         <div>
             <h1>Récapitulatif</h1>
-            <p class="page-intro">Couverture des groupes, alertes de planning et répartition des journées par salarié.</p>
+            
         </div>
     </header>
 
-    <section class="periode-card" aria-label="Choix des périodes">
-        <div class="periode-select" id="periode-select">
-            <button
-                id="periode-select-toggle"
-                class="periode-select-toggle"
-                type="button"
-                aria-haspopup="true"
-                aria-expanded="false"
-            >
-                <span id="periode-select-label">Choisir les périodes</span>
-                <span aria-hidden="true">⌄</span>
-            </button>
-            <div id="periode-select-menu" class="periode-select-menu" hidden>
-                <div class="periode-select-actions">
-                    <button id="periodes-tout-selectionner" type="button">Tout sélectionner</button>
-                    <button id="periodes-tout-deselectionner" type="button">Tout désélectionner</button>
-                </div>
-                <div id="periode-select-options" class="periode-select-options"></div>
-            </div>
-        </div>
+    <section class="ui-card ui-section periode-card" aria-label="Choix des périodes">
+        {% include "partials/_week_picker.html" with picker_id="periode-select" picker_class="periode-select" toggle_id="periode-select-toggle" label_id="periode-select-label" menu_id="periode-select-menu" tree_id="periode-select-options" clear_id="periodes-tout-deselectionner" show_select_all=True mode="multiple" placeholder="Choisir les semaines" %}
         <button id="btn-appliquer-periode" class="btn" type="button">Afficher</button>
         <p id="periode-affichee" class="periode-affichee"></p>
     </section>
 
-    <section class="synthese-grid" id="recap-synthese" aria-label="Indicateurs principaux"></section>
+    <div class="tabs recap-tabs" id="recap-tabs" role="tablist" aria-label="Vues du récapitulatif">
+        <button class="tab-btn active" data-recap-tab="centres" type="button" role="tab" aria-selected="true">Jours et paie par centre</button>
+        <button class="tab-btn" data-recap-tab="totaux" type="button" role="tab" aria-selected="false">Totaux par animateur</button>
+    </div>
 
-    <section class="recap-card alertes-card">
-        <div class="section-header">
+    <section class="ui-card ui-section recap-card recap-tab-panel" data-recap-panel="centres" aria-labelledby="recap-centres-title">
+        <div class="ui-section-heading section-header recap-section-heading">
             <div>
-                <h2>Alertes et points de vigilance</h2>
-                <p>Les manques de personnel et de qualifications sont affichés en priorité.</p>
+                <h2 id="recap-centres-title">Jours travaillés et paie par centre</h2>
+                
             </div>
-            <span id="alertes-compteur" class="section-count"></span>
+            <div id="recap-legende" class="recap-legend" aria-label="Légende des centres"></div>
         </div>
-        <div id="recap-alertes" class="alertes-list"></div>
+        <div id="recap-centres" class="recap-table-wrap"></div>
     </section>
 
-    <section class="recap-card">
-        <div class="section-header">
+    <section class="ui-card ui-section recap-card recap-tab-panel" data-recap-panel="totaux" hidden aria-labelledby="recap-totaux-title">
+        <div class="ui-section-heading section-header">
             <div>
-                <h2>Couverture par groupe</h2>
-                <p>Comparaison entre le besoin défini dans Gestion et les affectations du planning, du lundi au samedi.</p>
+                <h2 id="recap-totaux-title">Totaux par animateur</h2>
+                
             </div>
         </div>
-        <div class="table-scroll">
-            <table class="recap-table evenements-table" id="table-evenements">
-                <thead></thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </section>
-
-    <section class="recap-card">
-        <div class="section-header">
-            <div>
-                <h2>Répartition des journées par salarié</h2>
-                <p>Les colonnes « disponible » et « libre » permettent d’identifier les ressources encore mobilisables.</p>
-            </div>
-        </div>
-        <div class="table-scroll">
-            <table class="recap-table" id="table-recap">
-                <thead></thead>
-                <tbody></tbody>
-            </table>
-        </div>
+        <div id="recap-salaries" class="recap-table-wrap"></div>
     </section>
 </main>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/recapitulatif.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/recapitulatif.js' %}?v=20260719-clean-ui-1"></script>{% endblock %}

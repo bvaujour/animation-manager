@@ -11,10 +11,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 
+import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
@@ -85,7 +86,7 @@ STORAGES = {
 }
 
 # Utilisé uniquement par le stockage local ci-dessus (ignoré avec S3).
-MEDIA_URL = "media/"
+MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 MIDDLEWARE = [
@@ -100,6 +101,9 @@ MIDDLEWARE += [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'animateurs.middleware.JournalAuditMiddleware',
+    'animateurs.middleware.ConnexionObligatoireMiddleware',
+    'animateurs.middleware.MotDePasseProvisoireMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -116,6 +120,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'animateurs.context_processors.droits_application',
             ],
         },
     },
@@ -180,7 +185,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'fr-fr'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = os.getenv('TIME_ZONE', 'Europe/Paris')
 
 USE_I18N = True
 
@@ -222,7 +227,43 @@ DEFAULT_FROM_EMAIL = os.getenv(
 ).strip()
 EMAIL_REPLY_TO = os.getenv("EMAIL_REPLY_TO", "").strip()
 
+
+# Les tentatives d’envoi SMTP sont toujours visibles dans la console Django.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "loggers": {
+        "animateurs.emails": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Durcissement production (activé automatiquement lorsque DEBUG=False).
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() in {"1", "true", "yes", "on"}
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
+
+LOGIN_URL = "/connexion/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/connexion/"
+
+TESTING = "test" in sys.argv

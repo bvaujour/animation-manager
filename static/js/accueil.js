@@ -7,6 +7,28 @@ document.addEventListener("DOMContentLoaded", () =>
     const btnNextWeek = document.getElementById("home-next-week");
     const visiblePeriod = document.getElementById("home-visible-period");
 
+
+    const CENTRES_REPLIES_KEY = "calendar-centres-replies";
+
+    function lireCentresReplies()
+    {
+        try
+        {
+            const ids = JSON.parse(localStorage.getItem(CENTRES_REPLIES_KEY) || "[]");
+            return new Set(Array.isArray(ids) ? ids.map(Number).filter(Number.isFinite) : []);
+        }
+        catch
+        {
+            return new Set();
+        }
+    }
+
+    const centresReplies = lireCentresReplies();
+
+    function sauvegarderCentresReplies()
+    {
+        localStorage.setItem(CENTRES_REPLIES_KEY, JSON.stringify([...centresReplies]));
+    }
     const calendars = [];
     const today = new Date();
     let currentDate = new Date(today);
@@ -18,12 +40,6 @@ document.addEventListener("DOMContentLoaded", () =>
 
 
 
-    function parseDateLocale(dateStr)
-    {
-        const [annee, mois, jour] = dateStr.split("-").map(Number);
-        return new Date(annee, mois - 1, jour, 12, 0, 0);
-    }
-
     function periodePourDate(dateStr)
     {
         return periodesOuvertes().find((periode) => periode.debut <= dateStr && periode.fin >= dateStr) || null;
@@ -31,10 +47,12 @@ document.addEventListener("DOMContentLoaded", () =>
 
     function mettreAJourPeriodeVisible()
     {
+        const dateCourante = dateIsoLocale(currentDate);
+        WeekPicker.get("home-period-nav")?.setActiveDate(dateCourante);
         if (!visiblePeriod) return;
-        const periode = periodePourDate(dateIsoLocale(currentDate));
+        const periode = periodePourDate(dateCourante);
         visiblePeriod.textContent = periode
-            ? libellePeriodeAvecAnnee(periode)
+            ? libellePeriodeAvecDates(periode)
             : "Aucune période ouverte";
     }
 
@@ -56,6 +74,12 @@ document.addEventListener("DOMContentLoaded", () =>
         currentDate = new Date(`${cible.debut}T12:00:00`);
         synchroniserCalendriers();
     }
+
+    document.getElementById("home-period-nav")?.addEventListener("week-picker:select", (event) => {
+        if (!event.detail?.date) return;
+        currentDate = new Date(`${event.detail.date}T12:00:00`);
+        synchroniserCalendriers();
+    });
 
     function retourPeriodeActuelle()
     {
@@ -165,9 +189,7 @@ document.addEventListener("DOMContentLoaded", () =>
 
     async function chargerJson(url)
     {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
-        return response.json();
+        return apiFetch(url);
     }
 
     function creerCalendrierEvenement(centre, evenement, liste, calendriersCentre)
@@ -249,6 +271,7 @@ document.addEventListener("DOMContentLoaded", () =>
             {
                 const card = document.createElement("article");
                 card.classList.add("home-calendar-card", "calendar-site-card");
+                card.dataset.centreId = centre.id;
                 card.style.setProperty("--centre-color", centre.couleur || "#1f6f54");
 
                 const toggle = document.createElement("button");
@@ -289,10 +312,19 @@ document.addEventListener("DOMContentLoaded", () =>
                     creerCalendrierEvenement(centre, evenement, listeEvenements, calendriersCentre);
                 });
 
+                if (centresReplies.has(Number(centre.id)))
+                {
+                    card.classList.add("collapsed");
+                    toggle.setAttribute("aria-expanded", "false");
+                }
+
                 toggle.addEventListener("click", () =>
                 {
                     const ferme = card.classList.toggle("collapsed");
                     toggle.setAttribute("aria-expanded", String(!ferme));
+                    if (ferme) centresReplies.add(Number(centre.id));
+                    else centresReplies.delete(Number(centre.id));
+                    sauvegarderCentresReplies();
 
                     if (!ferme)
                     {
@@ -315,7 +347,7 @@ document.addEventListener("DOMContentLoaded", () =>
             }
             mettreAJourPeriodeVisible();
         }
-        catch (_erreur)
+        catch
         {
             message(calendarsContainer, "Impossible de charger le planning.");
             if (visiblePeriod) visiblePeriod.textContent = "indisponible";
@@ -328,9 +360,9 @@ document.addEventListener("DOMContentLoaded", () =>
         card.classList.add("home-document-card");
 
         card.innerHTML = `
-            <div class="home-document-icon">${DocumentUtils.typeCourt(doc.url)}</div>
-            <h3 class="home-document-title" title="${doc.titre}">${doc.titre}</h3>
-            <a class="btn btn-ghost" href="${doc.url}" target="_blank" rel="noopener" download>
+            <div class="home-document-icon">${escapeHtml(DocumentUtils.typeCourt(doc.url))}</div>
+            <h3 class="home-document-title" title="${escapeHtml(doc.titre)}">${escapeHtml(doc.titre)}</h3>
+            <a class="btn btn-ghost" href="${escapeHtml(doc.url)}" target="_blank" rel="noopener" download>
                 Télécharger
             </a>
         `;
@@ -340,8 +372,7 @@ document.addEventListener("DOMContentLoaded", () =>
 
     function chargerDocuments()
     {
-        fetch("/api/documents/")
-            .then((response) => response.json())
+        apiFetch("/api/documents/")
             .then((documents) =>
             {
                 documentsContainer.innerHTML = "";
@@ -372,7 +403,7 @@ document.addEventListener("DOMContentLoaded", () =>
                 {
                     const section = document.createElement("section");
                     section.classList.add("home-document-group");
-                    section.innerHTML = `<h3>${groupe.titre}</h3><div class="home-document-group-grid"></div>`;
+                    section.innerHTML = `<h3>${escapeHtml(groupe.titre)}</h3><div class="home-document-group-grid"></div>`;
                     const groupGrid = section.querySelector(".home-document-group-grid");
                     groupe.documents.forEach((doc) => groupGrid.appendChild(carteDocument(doc)));
                     documentsContainer.appendChild(section);

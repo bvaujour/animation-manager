@@ -1,5 +1,5 @@
 from django.test import SimpleTestCase
-from django.urls import resolve, Resolver404, reverse
+from django.urls import Resolver404, resolve, reverse
 
 
 class RoutesNettoyeesTests(SimpleTestCase):

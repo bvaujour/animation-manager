@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Salariés{% endblock %}
+{% block body_class %}page-employes{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v=20260718-audit-1">
+{% endblock %}
+{% block content %}
+<main class="page-shell page-shell--fluid employees-workspace" data-animateur-page>
+    <aside class="ui-card employees-sidebar" aria-label="Liste des salariés">
+        <div class="employees-sidebar-head">
+            <div>
+                <h1>Salariés</h1>
+                <p id="employees-count">Chargement…</p>
+            </div>
+            <button class="btn btn-primary btn-small" id="evenement-add" type="button">+ Ajouter un salarié</button>
+        </div>
+
+        {% include "partials/_staff_filter.html" with toolbar_class="employees-sidebar-toolbar" search_id="evenement-search" search_name="recherche_salarie" details_id="salaries-filter" count_id="salaries-filter-count" qualifications_id="salaries-filter-qualifications" availability_id="salaries-filter-disponibilite" assignment_id="salaries-filter-affectation" centres_id="salaries-filter-centres" reset_id="salaries-filter-reset" %}
+
+        <div id="evenement-list" class="employees-list" role="listbox" aria-label="Salariés"></div>
+    </aside>
+
+    <section class="ui-card employee-editor evenement-detail" id="evenement-detail" aria-live="polite">
+        <div class="evenement-empty"><strong>Chargement de la fiche…</strong></div>
+    </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/animateurs.js' %}?v=20260718-audit-1"></script>
+{% endblock %}

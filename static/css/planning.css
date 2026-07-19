@@ -287,7 +287,7 @@ html, body {
 
 
 /* --- Hauteur dynamique des calendriers selon la vue ---
-/* Avant, les cartes avaient une hauteur fixe : semaine et mois avaient donc
+   Avant, les cartes avaient une hauteur fixe : semaine et mois avaient donc
    exactement la même taille. Ici on laisse FullCalendar calculer sa hauteur :
    une semaine = une seule ligne, un mois = 5/6 lignes, donc la carte grandit. */
 #calendars-container.planning-view-week,
@@ -313,22 +313,6 @@ html, body {
     min-height: 54px;
 }
 
-@media (min-width: 641px) {
-    #calendars-container.planning-view-week .calendar-card,
-    #calendars-container.planning-view-month .calendar-card {
-        height: auto;
-    }
-}
-
-@media (max-width: 640px) {
-    #calendars-container.planning-view-week .fc .fc-daygrid-day-frame {
-        min-height: 58px;
-    }
-
-    #calendars-container.planning-view-month .fc .fc-daygrid-day-frame {
-        min-height: 46px;
-    }
-}
 
 /* --- Bouton d'ajout rapide --- */
 
@@ -999,9 +983,6 @@ html, body {
         width: 100%;
     }
 
-    #calendars-scroll-top {
-        display: none !important;
-    }
 }
 
 /* ---------------------------------------------------------------------------
@@ -2201,189 +2182,6 @@ body.planning-sort-active .planning-drag-handle {
 	margin-top: .25rem;
 }
 
-/* ========================================================================== 
-   Filtres de la liste des salariés
-   ========================================================================== */
-.animateurs-panel-header {
-    position: relative;
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    min-width: 0;
-}
-
-.animateurs-order-note {
-    display: block;
-    margin-top: 1px;
-    color: var(--color-text-muted);
-    font-size: 0.72rem;
-    font-weight: 500;
-}
-
-.animateurs-filter-control {
-    position: relative;
-    flex: 0 0 auto;
-}
-
-.animateurs-filter-control > summary {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 32px;
-    padding: 5px 10px;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-surface);
-    color: var(--color-text);
-    font-size: 0.78rem;
-    font-weight: 700;
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
-}
-
-.animateurs-filter-control > summary::-webkit-details-marker {
-    display: none;
-}
-
-.animateurs-filter-control > summary::before {
-    content: "☷";
-    color: var(--color-text-muted);
-    font-size: 0.95rem;
-}
-
-.animateurs-filter-control[open] > summary,
-.animateurs-filter-control > summary:focus-visible {
-    border-color: var(--color-primary);
-    outline: 2px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
-    outline-offset: 1px;
-}
-
-.animateurs-filter-count {
-    display: inline-grid;
-    place-items: center;
-    min-width: 19px;
-    height: 19px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: var(--color-primary);
-    color: #fff;
-    font-size: 0.68rem;
-}
-
-.animateurs-filter-count[hidden] {
-    display: none;
-}
-
-.animateurs-filter-panel {
-    position: fixed;
-    z-index: 120;
-    top: 72px;
-    right: 10px;
-    width: min(360px, calc(100vw - 28px));
-    max-height: min(520px, 72vh);
-    overflow: auto;
-    padding: 12px;
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    background: var(--color-surface);
-    box-shadow: 0 16px 38px rgba(15, 23, 42, 0.18);
-}
-
-.animateurs-filter-group {
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-}
-
-.animateurs-filter-group + .animateurs-filter-group {
-    margin-top: 13px;
-    padding-top: 13px;
-    border-top: 1px solid var(--color-border);
-}
-
-.animateurs-filter-group legend {
-    margin-bottom: 7px;
-    color: var(--color-text);
-    font-size: 0.78rem;
-    font-weight: 800;
-}
-
-.animateurs-filter-options {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 5px 8px;
-}
-
-.animateurs-filter-option {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    min-width: 0;
-    padding: 5px 6px;
-    border-radius: 7px;
-    color: var(--color-text);
-    font-size: 0.76rem;
-    cursor: pointer;
-}
-
-.animateurs-filter-option:hover {
-    background: var(--color-surface-soft, #f1f5f9);
-}
-
-.animateurs-filter-option input {
-    flex: 0 0 auto;
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    accent-color: var(--color-primary);
-}
-
-.animateurs-filter-option span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.animateurs-filter-actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 13px;
-    padding-top: 10px;
-    border-top: 1px solid var(--color-border);
-}
-
-.animateurs-filter-summary {
-    min-height: 1em;
-    margin: 3px 0 6px;
-    color: var(--color-text-muted);
-    font-size: 0.72rem;
-}
-
-@media (max-width: 640px) {
-    .animateurs-panel-header {
-        align-items: flex-start;
-        gap: 6px;
-    }
-
-    .animateurs-filter-panel {
-        position: fixed;
-        top: 72px;
-        right: 10px;
-        left: 10px;
-        width: auto;
-        max-height: calc(100vh - 92px);
-    }
-
-    .animateurs-filter-options {
-        grid-template-columns: 1fr;
-    }
-}
-
-
 /* Lieux repliables dans le planning. */
 .centre-planning-actions {
     flex: 0 0 auto;
@@ -2824,4 +2622,316 @@ body.planning-sort-active #calendars-container {
 body.planning-sort-active .centre-planning-group:not(.planning-dragging) {
     outline: 1px dashed color-mix(in srgb, var(--color-primary) 24%, transparent);
     outline-offset: -2px;
+}
+
+
+/* Tri SortableJS : fiable dans la grille responsive et avec des cartes de
+   hauteurs différentes. Le fantôme garde une vraie zone d'insertion visible. */
+.planning-sort-ghost {
+    opacity: .22 !important;
+    min-height: 76px;
+    border: 2px dashed var(--color-primary) !important;
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface)) !important;
+}
+
+.planning-sort-chosen {
+    outline: 2px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 60%, transparent);
+    outline-offset: 2px;
+}
+
+.planning-sort-drag {
+    opacity: .94 !important;
+    transform: rotate(.3deg);
+    box-shadow: 0 14px 34px rgba(15, 23, 42, .22) !important;
+}
+
+body.planning-sort-active #calendars-container {
+    overflow: auto !important;
+}
+
+body.planning-sort-active .centre-collapse-toggle,
+body.planning-sort-active .shared-calendar {
+    pointer-events: none;
+}
+
+/* Drag & drop des lieux en mode échange pur (swap). */
+.centre-planning-group.planning-swap-target {
+    outline: 3px solid var(--centre-color, var(--color-primary)) !important;
+    outline-offset: 3px;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--centre-color, var(--color-primary)) 16%, transparent),
+                0 12px 28px rgba(15, 23, 42, .16) !important;
+    transform: translateY(-2px);
+}
+
+body.planning-sort-active .planning-sort-ghost {
+    display: none !important;
+}
+
+/* Le clone de fallback SortableJS ne doit jamais masquer la carte réellement
+   survolée lors du swap des lieux. */
+body.planning-sort-active .planning-sort-drag,
+body.planning-sort-active .sortable-fallback {
+    pointer-events: none !important;
+}
+
+/* Drag personnalisé des lieux dans la grille : la carte source reste dans sa
+   cellule, seule une étiquette suit le pointeur. Cela évite tout déplacement
+   intermédiaire et garantit un swap pur au relâchement. */
+.centre-planning-group.planning-dragging {
+    opacity: .48;
+    outline: 2px dashed var(--centre-color, var(--color-primary));
+    outline-offset: -2px;
+}
+
+.planning-centre-drag-preview {
+    position: fixed;
+    z-index: 100000;
+    max-width: min(300px, 70vw);
+    padding: 9px 13px;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 42%, transparent);
+    border-radius: 10px;
+    background: var(--color-surface, #fff);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, .22);
+    color: var(--color-text, #152019);
+    font-size: .82rem;
+    font-weight: 750;
+    line-height: 1.2;
+    pointer-events: none;
+    user-select: none;
+}
+
+body.planning-sort-active,
+body.planning-sort-active * {
+    cursor: grabbing !important;
+}
+
+/* ========================================================================== 
+   Barre de semaine du Planning
+   --------------------------------------------------------------------------
+   Le planning réutilise exactement le composant de l'accueil. Ces règles,
+   placées en fin de fichier, neutralisent les anciens styles de toolbar qui
+   transformaient encore #planning-period-nav en grille horizontale.
+   ========================================================================== */
+body.page-planning #planning-period-nav.week-navigation {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 3px !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    padding: 7px 10px !important;
+    margin: 0 0 12px !important;
+    overflow: visible !important;
+    background: var(--color-surface) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--radius-md) !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+body.page-planning #planning-period-nav .week-navigation-label {
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    color: var(--color-text) !important;
+    font-family: var(--font-display) !important;
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    line-height: 1.25 !important;
+    text-align: center !important;
+    text-overflow: ellipsis !important;
+    text-transform: none !important;
+    white-space: nowrap !important;
+}
+
+body.page-planning #planning-period-nav .week-navigation-controls {
+    display: grid !important;
+    grid-template-columns: 34px minmax(92px, auto) 34px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    width: auto !important;
+    max-width: 100% !important;
+}
+
+body.page-planning #planning-period-nav .week-navigation-button {
+    min-width: 34px !important;
+    min-height: 30px !important;
+    padding: 2px 7px !important;
+    justify-content: center !important;
+    font-size: 1.35rem !important;
+    line-height: 1 !important;
+}
+
+body.page-planning #planning-period-nav .week-navigation-today {
+    min-width: 0 !important;
+    min-height: 30px !important;
+    padding: 3px 10px !important;
+    justify-content: center !important;
+    font-size: 0.82rem !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+}
+
+@media (max-width: 420px) {
+    body.page-planning #planning-period-nav.week-navigation {
+        padding: 6px 8px !important;
+    }
+
+    body.page-planning #planning-period-nav .week-navigation-label {
+        font-size: 0.9rem !important;
+    }
+
+    body.page-planning #planning-period-nav .week-navigation-controls {
+        grid-template-columns: 32px minmax(88px, auto) 32px !important;
+        gap: 3px !important;
+    }
+
+    body.page-planning #planning-period-nav .week-navigation-button {
+        min-width: 32px !important;
+        min-height: 29px !important;
+    }
+}
+
+/* La barre partagée occupe toute la largeur de la colonne salariés. */
+.page-planning .planning-animateurs-toolbar {
+    width: 100%;
+    padding: 0;
+}
+
+/* Bandeau de période compact : une seule ligne pour préserver la hauteur des calendriers. */
+body.page-planning #planning-period-nav.week-navigation {
+    flex-direction: row !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 3px 6px !important;
+    margin-bottom: 4px !important;
+    min-height: 38px !important;
+}
+
+body.page-planning #planning-period-nav .week-picker__select {
+    flex: 0 1 430px !important;
+    min-width: 210px !important;
+    max-width: 430px !important;
+}
+
+body.page-planning #planning-period-nav .week-picker__toggle {
+    min-height: 30px !important;
+    padding: 3px 9px !important;
+}
+
+body.page-planning #planning-period-nav .week-navigation-label {
+    font-size: .86rem !important;
+    line-height: 1.1 !important;
+}
+
+body.page-planning #planning-period-nav .week-navigation-controls {
+    display: flex !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+}
+
+body.page-planning #planning-period-nav .week-navigation-button,
+body.page-planning #planning-period-nav .week-navigation-today {
+    min-height: 28px !important;
+}
+
+body.page-planning #planning-period-nav .week-navigation-button {
+    min-width: 30px !important;
+    padding: 1px 6px !important;
+}
+
+body.page-planning #planning-period-nav .week-navigation-today {
+    padding: 2px 8px !important;
+    font-size: .76rem !important;
+}
+
+@media (max-width: 640px) {
+    body.page-planning #planning-period-nav.week-navigation {
+        flex-wrap: nowrap !important;
+    }
+
+    body.page-planning #planning-period-nav .week-picker__select {
+        min-width: 0 !important;
+    }
+
+    body.page-planning #planning-period-nav .week-navigation-today {
+        display: none !important;
+    }
+}
+
+/* Effectifs enfants par groupe et par jour */
+.btn-effectifs-enfants {
+    padding: .32rem .58rem;
+    font-size: .78rem;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+.planning-effectif-enfants-zone {
+    display: flex;
+    justify-content: center;
+    min-height: 1.45rem;
+    padding: .12rem .18rem .08rem;
+}
+.planning-effectif-enfants {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: .18rem .4rem;
+    margin: 0;
+    padding: .24rem .42rem;
+    border-radius: .55rem;
+    border: 1px solid transparent;
+    font-size: .7rem;
+    font-weight: 800;
+    line-height: 1.05;
+    text-align: center;
+}
+.planning-effectif-enfants strong,
+.planning-effectif-enfants small { white-space: nowrap; }
+.planning-effectif-enfants small { font-size: .62rem; font-weight: 800; opacity: .88; }
+.planning-effectif-enfants--manque {
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #991b1b;
+}
+.planning-effectif-enfants--ok {
+    background: #dcfce7;
+    border-color: #22c55e;
+    color: #166534;
+}
+.planning-effectif-enfants--surplus {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    color: #1e40af;
+}
+.effectifs-enfants-fields {
+    display: grid;
+    gap: .55rem;
+    margin-top: .8rem;
+}
+.effectif-enfants-row {
+    display: grid;
+    grid-template-columns: minmax(145px, 1fr) minmax(85px, 105px) minmax(105px, 125px);
+    align-items: center;
+    gap: .8rem;
+    padding: .55rem .65rem;
+    border: 1px solid var(--border-color, #d9dee8);
+    border-radius: .65rem;
+}
+.effectif-enfants-row > span { text-transform: capitalize; font-weight: 700; }
+.effectif-enfants-row label { display: grid; gap: .2rem; }
+.effectif-enfants-row label small { font-size: .7rem; font-weight: 700; color: var(--text-muted, #667085); }
+.effectif-enfants-row input { width: 100%; text-align: center; }
+.planning-effectifs-modal .modal-actions { margin-top: 1rem; }
+@media (max-width: 700px) {
+    .calendar-group-meta { align-items: flex-end; }
+    .btn-effectifs-enfants { font-size: .72rem; }
+    .effectif-enfants-row { grid-template-columns: 1fr 1fr; }
+    .effectif-enfants-row > span { grid-column: 1 / -1; }
 }

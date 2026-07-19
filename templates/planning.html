@@ -4,46 +4,15 @@
 {% block body_class %}page-planning{% endblock %}
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
-<link rel="stylesheet" href="{% static 'css/gestion.css' %}">
-<link rel="stylesheet" href="{% static 'css/planning.css' %}">
-<link rel="stylesheet" href="{% static 'css/calendars.css' %}">
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v=20260719-clean-ui-1">
+<link rel="stylesheet" href="{% static 'css/planning.css' %}?v=20260719-clean-ui-1">
+<link rel="stylesheet" href="{% static 'css/calendars.css' %}?v=20260719-clean-ui-1">
 {% endblock %}
 {% block content %}
 <main id="layout">
     <aside id="animateurs-panel">
-        <div class="animateurs-panel-header">
-            <div class="animateurs-panel-title-row">
-                <h2 class="section-title">Salariés</h2>
-                <span id="animateurs-visible-count" class="animateurs-visible-count" aria-live="polite"></span>
-            </div>
-            <details id="animateurs-filters" class="animateurs-filter-control">
-                <summary>
-                    Filtres
-                    <span id="animateurs-filter-count" class="animateurs-filter-count" hidden>0</span>
-                </summary>
-                <div class="animateurs-filter-panel">
-                    <fieldset class="animateurs-filter-group">
-                        <legend>Qualifications</legend>
-                        <div id="animateurs-filter-qualifications" class="animateurs-filter-options">
-                            <span class="empty-note">Chargement…</span>
-                        </div>
-                    </fieldset>
-                    <fieldset class="animateurs-filter-group">
-                        <legend>Lieux / centres</legend>
-                        <div id="animateurs-filter-centres" class="animateurs-filter-options">
-                            <span class="empty-note">Chargement…</span>
-                        </div>
-                    </fieldset>
-                    <div class="animateurs-filter-actions">
-                        <button id="animateurs-filter-reset" class="btn btn-ghost btn-small" type="button">Effacer les filtres</button>
-                    </div>
-                </div>
-            </details>
-        </div>
-        <label class="animateurs-search" for="animateurs-search-input">
-            <span class="sr-only">Rechercher un salarié</span>
-            <input id="animateurs-search-input" type="search" placeholder="Rechercher…" autocomplete="off">
-        </label>
+        {% include "partials/_staff_filter.html" with toolbar_class="planning-animateurs-toolbar" search_id="animateurs-search-input" details_id="animateurs-filters" count_id="animateurs-filter-count" qualifications_id="animateurs-filter-qualifications" availability_id="animateurs-filter-disponibilite" assignment_id="animateurs-filter-affectation" centres_id="animateurs-filter-centres" reset_id="animateurs-filter-reset" %}
         <div id="animateurs-list"></div>
     </aside>
     <button id="planning-sidebar-resizer" class="planning-sidebar-resizer" type="button" aria-label="Redimensionner la liste des salariés" title="Faire glisser pour redimensionner"></button>
@@ -56,6 +25,19 @@
         </div>
     </section>
 </main>
+<div class="modal-backdrop" id="modal-effectifs-enfants" hidden>
+    <div class="modal-box modal-box-small planning-effectifs-modal">
+        <div class="modal-header"><h2 id="effectifs-enfants-title">Effectifs enfants</h2><button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button></div>
+        <form id="effectifs-enfants-form" class="modal-body">
+            
+            <div id="effectifs-enfants-fields" class="effectifs-enfants-fields"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" data-modal-close type="button">Annuler</button>
+                <button class="btn btn-primary" type="submit">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
 <div class="modal-backdrop" id="modal-auto-remplissage" hidden>
     <div class="modal-box modal-box-small">
         <div class="modal-header"><h2>Remplissage automatique</h2><button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button></div>
@@ -64,6 +46,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/planning/utils.js' %}"></script>
-<script src="{% static 'js/planning.js' %}"></script>
+<script src="{% static 'js/planning/utils.js' %}?v=20260719-clean-ui-1"></script>
+<script src="{% static 'js/planning.js' %}?v=20260719-clean-ui-1"></script>
 {% endblock %}

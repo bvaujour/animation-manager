@@ -1,6 +1,6 @@
 """Sérialisation JSON centralisée des modèles de l'application."""
 
-from animateurs.models import jours_feries_france
+from animateurs.models import EquivalenceQualification, jours_feries_france
 
 
 def affectation_to_event(affectation):
@@ -29,6 +29,7 @@ def animateur_to_dict(animateur):
     qualifications = list(animateur.qualifications.all())
     preferences = list(animateur.preferences.all())
     disponibilites = list(animateur.disponibilites.all())
+    affectations = list(getattr(animateur, "_filtre_affectations", []))
 
     pref_relation = next((pref for pref in preferences if pref.est_prefere), None)
     secondaires_relations = [pref for pref in preferences if not pref.est_prefere]
@@ -62,6 +63,9 @@ def animateur_to_dict(animateur):
         "telephone": animateur.telephone,
         "email": animateur.email,
         "date_naissance": animateur.date_naissance.isoformat() if animateur.date_naissance else None,
+        "adresse": animateur.adresse,
+        "numero_securite_sociale": animateur.numero_securite_sociale,
+        "paie_jour": str(animateur.paie_jour) if animateur.paie_jour is not None else None,
         "age": animateur.age,
         "couleur": animateur.couleur,
         "qualification_ids": [q.id for q in qualifications],
@@ -77,6 +81,17 @@ def animateur_to_dict(animateur):
             {"debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()}
             for dispo in disponibilites
         ],
+        "affectations": [
+            {"debut": affectation.debut.isoformat(), "fin": affectation.fin.isoformat(), "centre_id": affectation.centre_id}
+            for affectation in affectations
+        ],
+        "role": "animateur",
+        "role_label": "Animateur",
+        "access": {
+            "exists": bool(animateur.utilisateur_id),
+            "username": animateur.utilisateur.username if animateur.utilisateur_id else None,
+            "active": animateur.utilisateur.is_active if animateur.utilisateur_id else False,
+        },
     }
 
 
@@ -96,12 +111,12 @@ def evenement_to_dict(evenement):
     besoins = list(evenement.besoins_qualifications.select_related("qualification").all())
     nb_affectations = getattr(evenement, "nb_affectations", evenement.affectations.count())
     periodes = list(evenement.periodes_scolaires.all())
+    effectifs_enfants = list(evenement.effectifs_enfants.all())
     return {
         "id": evenement.id,
         "centre_id": evenement.centre_id,
         "nom": evenement.nom,
-        "debut": evenement.debut.isoformat() if evenement.debut else None,
-        "fin": evenement.fin.isoformat() if evenement.fin else None,
+        "permanent": evenement.permanent,
         "periode_ids": [periode.id for periode in periodes],
         "periodes": [
             {
@@ -125,6 +140,18 @@ def evenement_to_dict(evenement):
             if evenement.ferme_jours_feries and periode.debut <= jour <= evenement.fin_ouverture_periode(periode)
         }),
         "effectif_cible": evenement.effectif_cible,
+        "enfants_par_animateur_defaut": evenement.enfants_par_animateur_defaut,
+        # Inclus dans la réponse des groupes pour que le Planning dispose déjà
+        # des valeurs persistées au premier rendu, avant même l'appel ciblé par
+        # semaine. Cela évite tout écran vide après un refresh.
+        "effectifs_enfants": [
+            {
+                "date": effectif.date.isoformat(),
+                "nombre": effectif.nombre,
+                "enfants_par_animateur": effectif.enfants_par_animateur,
+            }
+            for effectif in effectifs_enfants
+        ],
         "jours_ouverts": [int(numero) for numero in (evenement.jours_ouverts or [])],
         "dates_exclues": [fermeture.date.isoformat() for fermeture in evenement.dates_exclues.all()],
         "ordre": evenement.ordre,
@@ -136,19 +163,53 @@ def evenement_to_dict(evenement):
         ],
         "nb_affectations": nb_affectations,
         "peut_supprimer": nb_affectations == 0,
-        "a_des_periodes": bool(periodes),
+        "a_des_periodes": evenement.permanent or bool(periodes),
     }
 
 
 def qualification_to_dict(qualification):
+    relations = []
+
+    for relation in qualification.relations_equivalence_a.all():
+        sens = {
+            EquivalenceQualification.SENS_A_VERS_B: "sortante",
+            EquivalenceQualification.SENS_B_VERS_A: "entrante",
+            EquivalenceQualification.SENS_DOUBLE: "double",
+        }[relation.sens]
+        relations.append({
+            "qualification_id": relation.qualification_b_id,
+            "id": relation.qualification_b_id,
+            "nom": relation.qualification_b.nom,
+            "sens": sens,
+        })
+
+    for relation in qualification.relations_equivalence_b.all():
+        sens = {
+            EquivalenceQualification.SENS_A_VERS_B: "entrante",
+            EquivalenceQualification.SENS_B_VERS_A: "sortante",
+            EquivalenceQualification.SENS_DOUBLE: "double",
+        }[relation.sens]
+        relations.append({
+            "qualification_id": relation.qualification_a_id,
+            "id": relation.qualification_a_id,
+            "nom": relation.qualification_a.nom,
+            "sens": sens,
+        })
+
+    relations.sort(key=lambda item: (item["nom"].casefold(), item["id"]))
     return {
         "id": qualification.id,
         "nom": qualification.nom,
         "selectionnable_remplissage_auto": qualification.selectionnable_remplissage_auto,
+        # Compatibilité de lecture avec l'ancien écran : tous les liens connus.
+        "equivalence_ids": [relation["qualification_id"] for relation in relations],
+        "equivalences": relations,
+        "relations_equivalence": relations,
     }
 
 
 def document_to_dict(document):
+    periodes = list(document.periodes.all())
     return {
         "id": document.id,
         "titre": document.titre,
@@ -158,4 +219,6 @@ def document_to_dict(document):
         "periode_debut": document.periode_debut.isoformat() if document.periode_debut else None,
         "periode_fin": document.periode_fin.isoformat() if document.periode_fin else None,
         "libelle_periode": document.libelle_periode,
+        "periode_ids": [periode.id for periode in periodes],
+        "periodes": [{"id": periode.id, "nom": periode.nom, "libelle": periode.libelle_avec_annee, "debut": periode.debut.isoformat(), "fin": periode.fin.isoformat(), "annee_scolaire": periode.annee_scolaire, "vacances": periode.vacances} for periode in periodes],
     }

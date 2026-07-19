@@ -2,39 +2,107 @@
 {% load static %}
 
 {% block title %}Administration - Gestion animation{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/administration.css' %}">{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/administration.css' %}?v=20260718-audit-1">
+<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260718-audit-1">
+{% endblock %}
 
 {% block content %}
-<main class="administration-page">
-    <header class="administration-header">
-        <p class="eyebrow">Exports</p>
-        <h1>Administration</h1>
-        <p>Exportez le planning visuel avec les dates en colonnes, puis les centres et leurs groupes en lignes.</p>
-    </header>
+<main class="page-shell page-shell--wide administration-page" data-active-tab="{{ active_tab|default:'export' }}">
+    {% if message_admin %}<div class="admin-message success" role="status">{{ message_admin }}</div>{% endif %}
+    {% if erreur_admin %}<div class="admin-message error" role="alert">{{ erreur_admin }}</div>{% endif %}
 
-    <section class="export-card" aria-labelledby="export-planning-title">
-        <div class="export-card-heading">
-            <div class="export-icon" aria-hidden="true">▦</div>
-            <div>
-                <h2 id="export-planning-title">Planning calendrier par groupe</h2>
-                <p>Chaque animateur apparaît dans la case de son groupe et de sa journée. le PDF est réparti par tranches de six jours.</p>
-            </div>
-        </div>
+    <div class="tabs admin-tabs" id="administration-tabs" role="tablist" aria-label="Administration">
+        <button class="tab-btn" data-admin-tab="export" type="button" role="tab">Export calendrier</button>
+        <button class="tab-btn" data-admin-tab="emails" type="button" role="tab">E-mails</button>
+        <button class="tab-btn" data-admin-tab="superusers" type="button" role="tab">Superusers</button>
+        <button class="tab-btn" data-admin-tab="historique" type="button" role="tab">Historique</button>
+        <button class="tab-btn" data-admin-tab="mot-de-passe" type="button" role="tab">Mot de passe</button>
+    </div>
 
-        <form class="export-form" method="get">
-            <label>
-                Date de début
-                <input type="date" name="debut" value="{{ periode_debut }}" required>
-            </label>
-            <label>
-                Date de fin
-                <input type="date" name="fin" value="{{ periode_fin }}" required>
-            </label>
-            <div class="export-actions">
-                <button class="btn btn-primary" type="submit" formaction="{% url 'export_planning_excel' %}">Télécharger Excel</button>
-                <button class="btn btn-secondary" type="submit" formaction="{% url 'export_planning_pdf' %}">Télécharger PDF</button>
+    <div class="admin-tab-panel" data-admin-panel="export" hidden>
+        <section class="ui-card administration-section export-card" aria-labelledby="export-planning-title">
+            <div class="admin-compact-heading">
+                <div>
+                    <h1 id="export-planning-title">Planning calendrier par groupe</h1>
+                    
+                </div>
             </div>
-        </form>
-    </section>
+            <form class="export-form" method="get">
+                <input type="hidden" name="onglet" value="export">
+                <label>Date de début<select name="debut" id="export-date-debut" required>{% for option in options_dates %}<option value="{{ option.value }}"{% if option.value == periode_debut %} selected{% endif %}>{{ option.label }}</option>{% endfor %}</select></label>
+                <label>Date de fin<select name="fin" id="export-date-fin" required>{% for option in options_dates %}<option value="{{ option.value }}"{% if option.value == periode_fin %} selected{% endif %}>{{ option.label }}</option>{% endfor %}</select></label>
+                <div class="export-actions"><button class="btn btn-primary" type="submit" formaction="{% url 'export_planning_excel' %}">Télécharger Excel</button><button class="btn btn-secondary" type="submit" formaction="{% url 'export_planning_pdf' %}">Télécharger PDF</button></div>
+            </form>
+        </section>
+    </div>
+
+    <div class="admin-tab-panel" data-admin-panel="emails" hidden>
+        {% include "partials/_emails_admin.html" %}
+    </div>
+
+    <div class="admin-tab-panel" data-admin-panel="superusers" hidden>
+        <section class="ui-card administration-section admin-users-section" aria-labelledby="superusers-title">
+            <div class="admin-compact-heading"><div><h1 id="superusers-title">Superusers</h1></div></div>
+            <div class="superuser-layout">
+                <div class="admin-card">
+                    <h2>Comptes existants</h2>
+                    <div class="superuser-list">
+                        {% for compte in superusers %}
+                        <div class="superuser-row">
+                            <div><strong>{{ compte.username }}</strong><small>{{ compte.email|default:"Aucune adresse e-mail" }}{% if compte.pk == request.user.pk %} · compte actuel{% endif %}</small></div>
+                            {% if compte.pk != request.user.pk %}
+                            <form method="post" onsubmit="return confirm('Supprimer ce superuser ?');">{% csrf_token %}<input type="hidden" name="onglet" value="superusers"><input type="hidden" name="action" value="delete_superuser"><input type="hidden" name="user_id" value="{{ compte.pk }}"><button class="btn-danger btn-small" type="submit">Supprimer</button></form>
+                            {% else %}<span class="status-badge">Connecté</span>{% endif %}
+                        </div>
+                        {% empty %}<p>Aucun superuser enregistré.</p>{% endfor %}
+                    </div>
+                </div>
+                <form class="ui-form admin-card admin-form" method="post">
+                    {% csrf_token %}<input type="hidden" name="onglet" value="superusers"><input type="hidden" name="action" value="create_superuser">
+                    <h2>Ajouter un superuser</h2>
+                    <label>Nom d’utilisateur<input name="username" autocomplete="username" required></label>
+                    <label>Adresse e-mail<input name="email" type="email" autocomplete="email"></label>
+                    <label>Mot de passe<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+                    <label>Confirmation<input name="confirmation" type="password" autocomplete="new-password" minlength="8" required></label>
+                    <button class="btn btn-primary" type="submit">Créer le superuser</button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="admin-tab-panel" data-admin-panel="historique" hidden>
+        <section class="ui-card administration-section" aria-labelledby="journal-audit-title">
+            <div class="admin-compact-heading"><div><h1 id="journal-audit-title">Historique des actions</h1></div></div>
+            <div class="audit-table-wrap">
+                <table class="audit-table">
+                    <thead><tr><th>Date</th><th>Compte</th><th>Action</th><th>Chemin</th><th>Statut</th></tr></thead>
+                    <tbody>
+                        {% for entree in journal_audit %}
+                        <tr><td>{{ entree.date_creation|date:"d/m/Y H:i" }}</td><td>{{ entree.utilisateur.username|default:"Système" }}</td><td>{{ entree.description }}</td><td><code>{{ entree.methode }} {{ entree.chemin }}</code></td><td>{{ entree.statut_http }}</td></tr>
+                        {% empty %}<tr><td colspan="5">Aucune action enregistrée pour le moment.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div class="admin-tab-panel" data-admin-panel="mot-de-passe" hidden>
+        <section class="ui-card administration-section" aria-labelledby="password-title">
+            <div class="admin-compact-heading"><div><h1 id="password-title">Modifier mon mot de passe</h1><p>Compte connecté : <strong>{{ request.user.username }}</strong></p></div></div>
+            <form class="ui-form admin-card admin-form password-form" method="post">
+                {% csrf_token %}<input type="hidden" name="onglet" value="mot-de-passe"><input type="hidden" name="action" value="change_own_password">
+                <label>Mot de passe actuel<input name="old_password" type="password" autocomplete="current-password" required></label>
+                <label>Nouveau mot de passe<input name="new_password" type="password" autocomplete="new-password" minlength="8" required></label>
+                <label>Confirmation<input name="new_password_confirmation" type="password" autocomplete="new-password" minlength="8" required></label>
+                <button class="btn btn-primary" type="submit">Modifier mon mot de passe</button>
+            </form>
+        </section>
+    </div>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/administration.js' %}?v=20260718-audit-1"></script>
+<script src="{% static 'js/emails.js' %}?v=20260718-audit-1"></script>
 {% endblock %}

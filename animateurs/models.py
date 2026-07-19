@@ -28,8 +28,10 @@ Vue d'ensemble des tables et de leurs relations :
 """
 
 import re
+import unicodedata
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -88,18 +90,107 @@ def jours_feries_france(annee):
     }
 
 
+def normaliser_cle_unique(*valeurs):
+    """Clé stable pour comparer les noms sans accents, casse ni espaces parasites."""
+    texte = " ".join(str(v or "").strip() for v in valeurs)
+    texte = unicodedata.normalize("NFKD", texte)
+    texte = "".join(c for c in texte if not unicodedata.combining(c))
+    texte = texte.casefold()
+    texte = re.sub(r"[^a-z0-9]+", " ", texte)
+    return " ".join(texte.split())
+
+
 class Qualification(models.Model):
     """Un diplôme/une compétence qu'un animateur peut avoir (ex: BAFA,
     permis B, PSC1...). Purement déclaratif pour l’instant."""
 
     nom = models.CharField(max_length=100)
+    cle_unique = models.CharField(max_length=120, unique=True, editable=False)
     selectionnable_remplissage_auto = models.BooleanField(
         default=False,
         help_text="Affiche cette qualification parmi les exigences du remplissage automatique.",
     )
 
+    def save(self, *args, **kwargs):
+        self.nom = self.nom.strip()
+        self.cle_unique = normaliser_cle_unique(self.nom)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.nom
+
+
+class EquivalenceQualification(models.Model):
+    """Règle d'équivalence entre deux qualifications.
+
+    Une règle A → B signifie qu'un salarié possédant A satisfait également
+    un besoin B. Le sens inverse n'est appliqué que lorsque la règle est
+    déclarée bidirectionnelle.
+    """
+
+    SENS_A_VERS_B = "a_vers_b"
+    SENS_B_VERS_A = "b_vers_a"
+    SENS_DOUBLE = "double"
+    CHOIX_SENS = (
+        (SENS_A_VERS_B, "A vers B"),
+        (SENS_B_VERS_A, "B vers A"),
+        (SENS_DOUBLE, "Double sens"),
+    )
+
+    qualification_a = models.ForeignKey(
+        Qualification,
+        on_delete=models.CASCADE,
+        related_name="relations_equivalence_a",
+    )
+    qualification_b = models.ForeignKey(
+        Qualification,
+        on_delete=models.CASCADE,
+        related_name="relations_equivalence_b",
+    )
+    sens = models.CharField(max_length=16, choices=CHOIX_SENS, default=SENS_DOUBLE)
+
+    class Meta:
+        ordering = ("qualification_a__nom", "qualification_b__nom")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("qualification_a", "qualification_b"),
+                name="unique_paire_equivalence_qualification",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(qualification_a=models.F("qualification_b")),
+                name="equivalence_qualifications_distinctes",
+            ),
+        ]
+
+    @staticmethod
+    def inverser_sens(sens):
+        if sens == EquivalenceQualification.SENS_A_VERS_B:
+            return EquivalenceQualification.SENS_B_VERS_A
+        if sens == EquivalenceQualification.SENS_B_VERS_A:
+            return EquivalenceQualification.SENS_A_VERS_B
+        return sens
+
+    def save(self, *args, **kwargs):
+        # Une seule ligne par paire, toujours stockée dans le même ordre.
+        if (
+            self.qualification_a_id
+            and self.qualification_b_id
+            and self.qualification_a_id > self.qualification_b_id
+        ):
+            self.qualification_a_id, self.qualification_b_id = (
+                self.qualification_b_id,
+                self.qualification_a_id,
+            )
+            self.sens = self.inverser_sens(self.sens)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        fleche = {
+            self.SENS_A_VERS_B: "→",
+            self.SENS_B_VERS_A: "←",
+            self.SENS_DOUBLE: "↔",
+        }[self.sens]
+        return f"{self.qualification_a} {fleche} {self.qualification_b}"
 
 
 class Animateur(models.Model):
@@ -113,10 +204,53 @@ class Animateur(models.Model):
 
     prenom = models.CharField(max_length=100)
     nom = models.CharField(max_length=100)
+    cle_unique = models.CharField(max_length=240, unique=True, editable=False)
+
+    ROLE_ANIMATEUR = "animateur"
+    ROLE_CHOICES = [
+        (ROLE_ANIMATEUR, "Animateur"),
+    ]
+
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default=ROLE_ANIMATEUR,
+        verbose_name="rôle dans l’application",
+    )
+
+    doit_changer_mot_de_passe = models.BooleanField(
+        default=False,
+        verbose_name="doit changer son mot de passe",
+    )
+
+    utilisateur = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="profil_animateur",
+        verbose_name="compte de connexion",
+        help_text="Compte utilisé par ce salarié pour accéder à son espace animateur.",
+    )
 
     telephone = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
     date_naissance = models.DateField(null=True, blank=True)
+    adresse = models.TextField(blank=True)
+    numero_securite_sociale = models.CharField(
+        max_length=21,
+        blank=True,
+        verbose_name="numéro de sécurité sociale",
+        help_text="Numéro avec ou sans espaces (15 chiffres, clé comprise).",
+    )
+    paie_jour = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="paie par jour",
+        help_text="Montant brut ou net selon la convention retenue par l'association.",
+    )
 
     couleur = models.CharField(
         max_length=7,
@@ -155,7 +289,10 @@ class Animateur(models.Model):
         return age
 
     def save(self, *args, **kwargs):
-        """Attribue une couleur lisible et stable si aucune n'est définie."""
+        """Normalise l’identité et attribue une couleur stable."""
+        self.prenom = self.prenom.strip()
+        self.nom = self.nom.strip()
+        self.cle_unique = normaliser_cle_unique(self.prenom, self.nom)
         if not self.couleur:
             couleurs_utilisees = set(
                 Animateur.objects.exclude(pk=self.pk).exclude(couleur="")
@@ -176,6 +313,7 @@ class Centre(models.Model):
     centre a son propre calendrier sur la page planning."""
 
     nom = models.CharField(max_length=100)
+    cle_unique = models.CharField(max_length=120, unique=True, editable=False)
 
     code = models.CharField(
         max_length=10,
@@ -199,6 +337,12 @@ class Centre(models.Model):
     class Meta:
         ordering = ["ordre", "nom"]
 
+    def save(self, *args, **kwargs):
+        self.nom = self.nom.strip()
+        self.code = self.code.strip().upper()
+        self.cle_unique = normaliser_cle_unique(self.nom)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.nom
 
@@ -213,6 +357,12 @@ class Evenement(models.Model):
         verbose_name="lieu",
     )
     nom = models.CharField(max_length=100)
+    cle_unique = models.CharField(max_length=120, editable=False, default="")
+    permanent = models.BooleanField(
+        default=False,
+        verbose_name="groupe permanent",
+        help_text="Un groupe permanent est ouvert à toutes les périodes selon ses jours habituels.",
+    )
     periodes_scolaires = models.ManyToManyField(
         "PeriodeScolaire",
         related_name="groupes",
@@ -223,11 +373,14 @@ class Evenement(models.Model):
         default=True,
         verbose_name="fermé les jours fériés",
     )
-    debut = models.DateField(null=True, blank=True, help_text="Premier jour du groupe")
-    fin = models.DateField(null=True, blank=True, help_text="Dernier jour du groupe inclus")
     effectif_cible = models.PositiveSmallIntegerField(
         default=1,
         help_text="Nombre de personnes nécessaires chaque jour",
+    )
+    enfants_par_animateur_defaut = models.PositiveSmallIntegerField(
+        default=8,
+        verbose_name="nombre d’enfants par animateur par défaut",
+        help_text="Ratio proposé automatiquement dans le Planning, par exemple 8 pour 1 animateur pour 8 enfants.",
     )
     jours_ouverts = models.JSONField(
         default=jours_ouverts_par_defaut,
@@ -247,23 +400,22 @@ class Evenement(models.Model):
         ordering = ["centre__nom", "ordre", "nom"]
         constraints = [
             models.UniqueConstraint(
-                fields=["centre", "nom", "debut", "fin"],
-                name="unique_evenement_lieu_periode",
-            ),
-            models.CheckConstraint(
-                condition=models.Q(debut__isnull=True) | models.Q(fin__isnull=True) | models.Q(fin__gte=models.F("debut")),
-                name="evenement_fin_apres_debut",
+                fields=["centre", "cle_unique"],
+                name="unique_groupe_nom_normalise_par_lieu",
             ),
         ]
 
+    def save(self, *args, **kwargs):
+        self.nom = self.nom.strip()
+        self.cle_unique = normaliser_cle_unique(self.nom)
+        super().save(*args, **kwargs)
+
     def clean(self):
         super().clean()
-        if self.fin and self.debut and self.fin < self.debut:
-            raise ValidationError("La date de fin doit être postérieure ou égale à la date de début.")
         try:
             jours = sorted({int(numero) for numero in (self.jours_ouverts or [])})
         except (TypeError, ValueError):
-            raise ValidationError({"jours_ouverts": "Les jours d’ouverture sont invalides."})
+            raise ValidationError({"jours_ouverts": "Les jours d’ouverture sont invalides."}) from None
         if not jours or any(numero < 0 or numero > 6 for numero in jours):
             raise ValidationError({"jours_ouverts": "Choisis au moins un jour d’ouverture valide."})
         self.jours_ouverts = jours
@@ -286,10 +438,11 @@ class Evenement(models.Model):
         apparaître ni dans les calendriers ni dans le remplissage automatique.
         """
         periodes = list(self.periodes_scolaires.all())
-        if not periodes:
-            return False
-        if not any(periode.debut <= jour <= self.fin_ouverture_periode(periode) for periode in periodes):
-            return False
+        if not self.permanent:
+            if not periodes:
+                return False
+            if not any(periode.debut <= jour <= self.fin_ouverture_periode(periode) for periode in periodes):
+                return False
         if jour.weekday() not in {int(numero) for numero in (self.jours_ouverts or [])}:
             return False
         if self.ferme_jours_feries and jour in jours_feries_france(jour.year):
@@ -300,6 +453,38 @@ class Evenement(models.Model):
 
     def __str__(self):
         return f"{self.centre.nom} — {self.nom}"
+
+
+class EffectifEnfantsJour(models.Model):
+    """Effectif réel d'enfants prévu pour un groupe à une date donnée."""
+
+    evenement = models.ForeignKey(
+        Evenement,
+        on_delete=models.CASCADE,
+        related_name="effectifs_enfants",
+        verbose_name="groupe",
+    )
+    date = models.DateField(db_index=True)
+    nombre = models.PositiveSmallIntegerField(default=0)
+    enfants_par_animateur = models.PositiveSmallIntegerField(
+        default=8,
+        verbose_name="nombre d’enfants par animateur",
+    )
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("date",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("evenement", "date"),
+                name="unique_effectif_enfants_groupe_date",
+            ),
+        ]
+        verbose_name = "effectif enfants journalier"
+        verbose_name_plural = "effectifs enfants journaliers"
+
+    def __str__(self):
+        return f"{self.evenement} — {self.date:%d/%m/%Y} : {self.nombre} enfants (1/{self.enfants_par_animateur})"
 
 
 class DateExclueEvenement(models.Model):
@@ -575,6 +760,12 @@ class Document(models.Model):
     )
     periode_debut = models.DateField(null=True, blank=True)
     periode_fin = models.DateField(null=True, blank=True)
+    periodes = models.ManyToManyField(
+        "PeriodeScolaire",
+        related_name="documents",
+        blank=True,
+        help_text="Semaines auxquelles ce document est rattaché.",
+    )
     date_ajout = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -597,6 +788,11 @@ class Document(models.Model):
 
     @property
     def libelle_periode(self):
+        periodes = list(self.periodes.all()) if self.pk else []
+        if periodes:
+            if len(periodes) == 1:
+                return periodes[0].libelle_avec_annee
+            return f"{len(periodes)} semaines sélectionnées"
         if self.permanent:
             return "Permanent"
         if self.periode_debut and self.periode_fin:
@@ -605,6 +801,46 @@ class Document(models.Model):
 
     def __str__(self):
         return self.titre
+
+
+class ModeleEmail(models.Model):
+    """Modèle réutilisable pour préparer rapidement un e-mail personnalisé."""
+
+    nom = models.CharField(max_length=120, unique=True)
+    objet = models.CharField(max_length=200)
+    message = models.TextField()
+    actif = models.BooleanField(default=True)
+    ordre = models.PositiveSmallIntegerField(default=0)
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("ordre", "nom")
+        verbose_name = "modèle d’e-mail"
+        verbose_name_plural = "modèles d’e-mail"
+
+    def __str__(self):
+        return self.nom
+
+
+class ContactEmailExterne(models.Model):
+    """Destinataire e-mail enregistré indépendamment des salariés."""
+
+    prenom = models.CharField(max_length=100, blank=True)
+    nom = models.CharField(max_length=100)
+    email = models.EmailField(unique=True)
+    organisation = models.CharField(max_length=150, blank=True)
+    actif = models.BooleanField(default=True)
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["nom", "prenom", "email"]
+        verbose_name = "contact e-mail externe"
+        verbose_name_plural = "contacts e-mail externes"
+
+    def __str__(self):
+        return f"{self.prenom} {self.nom}".strip() or self.email
 
 
 class EnvoiEmail(models.Model):
@@ -652,10 +888,19 @@ class DestinataireEnvoiEmail(models.Model):
         blank=True,
         related_name="emails_recus",
     )
+    contact_externe = models.ForeignKey(
+        ContactEmailExterne,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="emails_recus",
+    )
     prenom = models.CharField(max_length=100)
     nom = models.CharField(max_length=100)
     email = models.EmailField()
     statut = models.CharField(max_length=10, choices=STATUTS)
+    objet_rendu = models.CharField(max_length=200, blank=True, default="")
+    message_rendu = models.TextField(blank=True, default="")
     erreur = models.TextField(blank=True, default="")
     date_traitement = models.DateTimeField(auto_now_add=True)
 
@@ -670,3 +915,37 @@ class DestinataireEnvoiEmail(models.Model):
 
     def __str__(self):
         return f"{self.prenom} {self.nom} — {self.get_statut_display()}"
+
+
+
+
+class JournalAudit(models.Model):
+    """Trace les actions d'écriture réalisées dans l'application."""
+
+    utilisateur = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="actions_auditees",
+    )
+    methode = models.CharField(max_length=10)
+    chemin = models.CharField(max_length=500)
+    statut_http = models.PositiveSmallIntegerField()
+    adresse_ip = models.GenericIPAddressField(null=True, blank=True)
+    description = models.CharField(max_length=255, blank=True)
+    donnees = models.JSONField(default=dict, blank=True)
+    date_creation = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-date_creation", "-id")
+        indexes = [
+            models.Index(fields=("utilisateur", "-date_creation"), name="audit_user_date_idx"),
+            models.Index(fields=("chemin", "-date_creation"), name="audit_path_date_idx"),
+        ]
+        verbose_name = "entrée du journal d'audit"
+        verbose_name_plural = "journal d'audit"
+
+    def __str__(self):
+        acteur = self.utilisateur.get_username() if self.utilisateur else "Anonyme"
+        return f"{self.date_creation:%d/%m/%Y %H:%M} · {acteur} · {self.methode} {self.chemin}"

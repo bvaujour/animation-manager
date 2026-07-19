@@ -2,6 +2,7 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max, Sum
+from django.utils import timezone
 
 from animateurs.models import (
     Affectation,
@@ -30,7 +31,7 @@ def _periodes(ids):
     try:
         ids = sorted({int(value) for value in (ids or [])})
     except (TypeError, ValueError):
-        raise ValidationError("La sélection des périodes est invalide.")
+        raise ValidationError("La sélection des périodes est invalide.") from None
     if not ids:
         return []
     periodes = list(PeriodeScolaire.objects.filter(pk__in=ids).order_by("debut"))
@@ -43,20 +44,10 @@ def _jours_ouverts(valeurs):
     try:
         jours = sorted({int(value) for value in (valeurs or [])})
     except (TypeError, ValueError):
-        raise ValidationError("La sélection des jours d’ouverture est invalide.")
+        raise ValidationError("La sélection des jours d’ouverture est invalide.") from None
     if not jours or any(jour < 0 or jour > 6 for jour in jours):
         raise ValidationError("Choisis au moins un jour d’ouverture valide.")
     return jours
-
-
-def _synchroniser_bornes(groupe, periodes):
-    """Conserve des bornes techniques dérivées, jamais saisies à la main."""
-    if periodes:
-        groupe.debut = min(periode.debut for periode in periodes)
-        groupe.fin = max(groupe.fin_ouverture_periode(periode) for periode in periodes)
-    else:
-        groupe.debut = None
-        groupe.fin = None
 
 
 def _enregistrer_besoins(groupe, besoins):
@@ -77,7 +68,7 @@ def _enregistrer_besoins(groupe, besoins):
 
 def _jours_affectation(affectation):
     import datetime
-    jour = affectation.debut.date()
+    jour = timezone.localtime(affectation.debut).date()
     dernier = (affectation.fin - datetime.timedelta(microseconds=1)).date()
     while jour <= dernier:
         yield jour
@@ -113,25 +104,34 @@ def prochain_ordre(centre):
 
 @transaction.atomic
 def creer_evenement(*, centre, nom, periode_ids=None, effectif_cible=1,
+                    enfants_par_animateur_defaut=8,
                     qualifications=None, jours_ouverts=None,
-                    ferme_jours_feries=True, **_):
+                    ferme_jours_feries=True, permanent=False, **_):
     nom = (nom or "").strip()
     if not nom:
         raise ValidationError("Le nom du groupe est obligatoire.")
-    periodes = _periodes(periode_ids)
+    permanent = bool(permanent)
+    # Un groupe permanent est rattaché à toutes les périodes existantes.
+    # Cela évite qu’il soit interprété comme un groupe « sans période » par
+    # les écrans et exports qui travaillent avec une sélection de semaines.
+    periodes = list(PeriodeScolaire.objects.all().order_by("debut")) if permanent else _periodes(periode_ids)
     effectif_cible = int(effectif_cible)
+    enfants_par_animateur_defaut = int(enfants_par_animateur_defaut)
     if effectif_cible < 1:
         raise ValidationError("Le nombre de personnes doit être d’au moins 1.")
+    if enfants_par_animateur_defaut < 1 or enfants_par_animateur_defaut > 999:
+        raise ValidationError("Le ratio d’encadrement doit être compris entre 1 et 999.")
 
     groupe = Evenement(
         centre=centre,
         nom=nom,
+        permanent=permanent,
         effectif_cible=effectif_cible,
+        enfants_par_animateur_defaut=enfants_par_animateur_defaut,
         jours_ouverts=_jours_ouverts(jours_ouverts if jours_ouverts is not None else [0, 1, 2, 3, 4, 5]),
         ferme_jours_feries=bool(ferme_jours_feries),
         ordre=prochain_ordre(centre),
     )
-    _synchroniser_bornes(groupe, periodes)
     groupe.full_clean()
     groupe.save()
     groupe.periodes_scolaires.set(periodes)
@@ -143,20 +143,29 @@ def creer_evenement(*, centre, nom, periode_ids=None, effectif_cible=1,
 @transaction.atomic
 def modifier_evenement(groupe, *, nom=None, periode_ids=None,
                        periodes_fournies=False, effectif_cible=None,
+                       enfants_par_animateur_defaut=None,
                        qualifications=None, qualifications_fournies=False,
-                       jours_ouverts=None, ferme_jours_feries=None,
+                       jours_ouverts=None, ferme_jours_feries=None, permanent=None,
                        supprimer_affectations_dates_fermees=False, **_):
     if nom is not None:
         groupe.nom = str(nom).strip()
     if effectif_cible is not None:
         groupe.effectif_cible = int(effectif_cible)
+    if enfants_par_animateur_defaut is not None:
+        groupe.enfants_par_animateur_defaut = int(enfants_par_animateur_defaut)
     if jours_ouverts is not None:
         groupe.jours_ouverts = _jours_ouverts(jours_ouverts)
     if ferme_jours_feries is not None:
         groupe.ferme_jours_feries = bool(ferme_jours_feries)
+    if permanent is not None:
+        groupe.permanent = bool(permanent)
 
-    periodes = _periodes(periode_ids) if periodes_fournies else list(groupe.periodes_scolaires.all())
-    _synchroniser_bornes(groupe, periodes)
+    if groupe.permanent:
+        # Permanent signifie toutes les périodes, et non aucune période.
+        periodes = list(PeriodeScolaire.objects.all().order_by("debut"))
+        periodes_fournies = True
+    else:
+        periodes = _periodes(periode_ids) if periodes_fournies else list(groupe.periodes_scolaires.all())
     groupe.full_clean()
     groupe.save()
     if periodes_fournies:
@@ -195,7 +204,7 @@ def reordonner_evenements(centre, evenement_ids):
     try:
         ids = [int(identifiant) for identifiant in evenement_ids]
     except (TypeError, ValueError):
-        raise ValidationError("La liste des groupes est invalide.")
+        raise ValidationError("La liste des groupes est invalide.") from None
     if len(ids) != len(set(ids)) or not set(ids).issubset(existants):
         raise ValidationError("La liste des groupes est invalide.")
 

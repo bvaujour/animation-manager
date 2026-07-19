@@ -2,15 +2,15 @@ import datetime
 import io
 import zipfile
 
-from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from animateurs.models import Affectation, Animateur, Centre, Qualification
+from animateurs.tests.base import ConnexionTestCase
 from animateurs.tests.factories import creer_groupe
 
 
-class ExportPlanningExcelTests(TestCase):
+class ExportPlanningExcelTests(ConnexionTestCase):
     def setUp(self):
         self.bafa = Qualification.objects.create(nom="BAFA")
         self.animateur = Animateur.objects.create(

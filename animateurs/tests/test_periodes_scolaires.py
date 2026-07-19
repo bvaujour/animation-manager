@@ -2,14 +2,17 @@ import datetime
 import json
 from unittest.mock import patch
 
-from django.test import TestCase
 from django.urls import reverse
 
 from animateurs.models import Centre, Evenement, PeriodeScolaire
-from animateurs.services.calendrier_scolaire import SemaineVacances, decouper_en_semaines
+from animateurs.services.calendrier_scolaire import (
+    SemaineVacances,
+    decouper_en_semaines,
+)
+from animateurs.tests.base import ConnexionTestCase
 
 
-class DecoupageCalendrierScolaireTests(TestCase):
+class DecoupageCalendrierScolaireTests(ConnexionTestCase):
     def test_toussaint_est_decoupee_du_lundi_au_vendredi(self):
         semaines = decouper_en_semaines(
             "Vacances de la Toussaint",
@@ -33,7 +36,7 @@ class DecoupageCalendrierScolaireTests(TestCase):
         self.assertEqual(semaines, [])
 
 
-class PeriodesScolairesApiTests(TestCase):
+class PeriodesScolairesApiTests(ConnexionTestCase):
     def setUp(self):
         self.semaines = [
             SemaineVacances(
@@ -110,8 +113,6 @@ class PeriodesScolairesApiTests(TestCase):
         Evenement.objects.create(
             centre=centre,
             nom="Maternelles",
-            debut=datetime.date(2026, 7, 6),
-            fin=datetime.date(2026, 7, 31),
             jours_ouverts=[0, 1, 2, 3, 4],
         )
 
@@ -122,6 +123,4 @@ class PeriodesScolairesApiTests(TestCase):
         )
 
         evenement = Evenement.objects.get()
-        self.assertEqual(evenement.debut, datetime.date(2026, 7, 6))
-        self.assertEqual(evenement.fin, datetime.date(2026, 7, 31))
         self.assertEqual(evenement.periodes_scolaires.count(), 0)

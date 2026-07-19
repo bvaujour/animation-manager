@@ -1,12 +1,12 @@
 import json
 
-from django.test import TestCase
 from django.urls import reverse
 
 from animateurs.models import Centre, Evenement
+from animateurs.tests.base import ConnexionTestCase
 
 
-class OrdreAffichagePlanningApiTests(TestCase):
+class OrdreAffichagePlanningApiTests(ConnexionTestCase):
     def setUp(self):
         self.centre_a = Centre.objects.create(
             nom="Alpha",
@@ -131,4 +131,3 @@ class OrdreAffichagePlanningApiTests(TestCase):
         response = self.client.get(reverse("planning"))
         self.assertNotContains(response, "Attrape cette poignée")
         self.assertNotContains(response, "planning-sort-hint")
-        self.assertNotContains(response, "animateurs-filter-summary")

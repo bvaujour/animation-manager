@@ -1,6 +1,4 @@
 .home-page {
-    height: calc(100vh - 52px);
-    overflow-y: auto;
     padding: 12px;
 }
 
@@ -622,10 +620,6 @@
     .home-week-controls {
         display: grid;
         width: 100%;
-    }
-
-    .home-week-controls {
-        grid-template-columns: 1fr 1fr 1fr;
     }
 
     .home-week-indicator {

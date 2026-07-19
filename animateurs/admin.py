@@ -15,16 +15,29 @@ from .models import (
     Affectation,
     Animateur,
     Centre,
+    ContactEmailExterne,
     DateExclueEvenement,
-    Evenement,
+    DestinataireEnvoiEmail,
     Disponibilite,
     Document,
     EnvoiEmail,
-    DestinataireEnvoiEmail,
-    PreferenceCentre,
+    EquivalenceQualification,
+    Evenement,
+    JournalAudit,
+    ModeleEmail,
     PeriodeScolaire,
-    Qualification
+    PreferenceCentre,
+    Qualification,
 )
+
+
+@admin.register(ModeleEmail)
+class ModeleEmailAdmin(admin.ModelAdmin):
+    list_display = ("nom", "actif", "ordre", "date_modification")
+    list_editable = ("actif", "ordre")
+    list_filter = ("actif",)
+    search_fields = ("nom", "objet", "message")
+    ordering = ("ordre", "nom")
 
 
 @admin.register(Document)
@@ -42,6 +55,15 @@ class QualificationAdmin(admin.ModelAdmin):
     search_fields = ("nom",)
 
 
+
+
+
+@admin.register(EquivalenceQualification)
+class EquivalenceQualificationAdmin(admin.ModelAdmin):
+    list_display = ("qualification_a", "sens", "qualification_b")
+    list_filter = ("sens",)
+    search_fields = ("qualification_a__nom", "qualification_b__nom")
+    autocomplete_fields = ("qualification_a", "qualification_b")
 
 @admin.register(PeriodeScolaire)
 class PeriodeScolaireAdmin(admin.ModelAdmin):
@@ -69,6 +91,7 @@ class EvenementAdmin(admin.ModelAdmin):
         "nom",
         "centre",
         "effectif_cible",
+        "enfants_par_animateur_defaut",
         "ordre",
     )
     list_filter = ("centre", "ferme_jours_feries")
@@ -103,15 +126,17 @@ class AnimateurAdmin(admin.ModelAdmin):
 
     list_display = (
         "prenom",
+        "utilisateur",
         "nom",
         "telephone",
         "email",
         "date_naissance",
+        "paie_jour",
         "age",
         "couleur",
         "evenement_preferee",
     )
-    search_fields = ("prenom", "nom", "telephone", "email")
+    search_fields = ("prenom", "nom", "telephone", "email", "adresse", "numero_securite_sociale")
     inlines = [PreferenceCentreInline, DisponibiliteInline]
 
     def formfield_for_manytomany(
@@ -155,7 +180,7 @@ class DestinataireEnvoiEmailInline(admin.TabularInline):
     model = DestinataireEnvoiEmail
     extra = 0
     can_delete = False
-    readonly_fields = ("prenom", "nom", "email", "statut", "erreur", "date_traitement")
+    readonly_fields = ("prenom", "nom", "email", "statut", "objet_rendu", "message_rendu", "erreur", "date_traitement")
 
 
 @admin.register(EnvoiEmail)
@@ -166,3 +191,25 @@ class EnvoiEmailAdmin(admin.ModelAdmin):
     readonly_fields = ("date_creation", "documents_titres", "nombre_destinataires", "nombre_envoyes", "nombre_echecs", "mode_test")
     filter_horizontal = ("documents",)
     inlines = [DestinataireEnvoiEmailInline]
+
+
+@admin.register(JournalAudit)
+class JournalAuditAdmin(admin.ModelAdmin):
+    list_display = ("date_creation", "utilisateur", "methode", "chemin", "statut_http", "description")
+    list_filter = ("methode", "statut_http", "date_creation")
+    search_fields = ("utilisateur__username", "chemin", "description", "adresse_ip")
+    readonly_fields = ("utilisateur", "methode", "chemin", "statut_http", "adresse_ip", "description", "donnees", "date_creation")
+    ordering = ("-date_creation",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, _obj=None):
+        return False
+
+
+@admin.register(ContactEmailExterne)
+class ContactEmailExterneAdmin(admin.ModelAdmin):
+    list_display = ("nom", "prenom", "email", "organisation", "actif")
+    list_filter = ("actif", "organisation")
+    search_fields = ("nom", "prenom", "email", "organisation")

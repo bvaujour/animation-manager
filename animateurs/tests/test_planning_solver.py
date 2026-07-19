@@ -9,6 +9,7 @@ from animateurs.models import (
     BesoinQualification,
     Centre,
     Disponibilite,
+    EquivalenceQualification,
     PreferenceCentre,
     Qualification,
 )
@@ -69,7 +70,7 @@ class PlanningSolverTests(TestCase):
         data, status = self.lancer()
         self.assertEqual(status, 200)
         self.assertEqual(data["created"], 1)
-        self.assertEqual(Affectation.objects.get().debut.date(), datetime.date(2026, 7, 6))
+        self.assertEqual(timezone.localtime(Affectation.objects.get().debut).date(), datetime.date(2026, 7, 6))
 
     def test_exclut_les_animateurs_sans_disponibilite(self):
         self.qualifie.disponibilites.all().delete()
@@ -84,8 +85,7 @@ class PlanningSolverTests(TestCase):
         # jours sélectionnés, mais le remplissage automatique reste basé sur
         # la semaine de travail du lundi au vendredi.
         self.groupe.jours_ouverts = [0, 1, 2, 3, 4, 5]
-        self.groupe.fin = datetime.date(2026, 7, 11)
-        self.groupe.save(update_fields=["jours_ouverts", "fin"])
+        self.groupe.save(update_fields=["jours_ouverts"])
         samedi = datetime.date(2026, 7, 11)
         affectation_samedi = Affectation.objects.create(
             animateur=self.non_qualifie,
@@ -128,3 +128,93 @@ class PlanningSolverTests(TestCase):
             Affectation.objects.values_list("animateur_id", flat=True).distinct().count(),
             1,
         )
+
+    def test_accepte_une_equivalence_double_sens(self):
+        bpjeps = Qualification.objects.create(nom="BPJEPS")
+        EquivalenceQualification.objects.create(
+            qualification_a=self.bafa,
+            qualification_b=bpjeps,
+            sens=EquivalenceQualification.SENS_DOUBLE,
+        )
+        self.qualifie.qualifications.clear()
+        self.qualifie.qualifications.add(bpjeps)
+        BesoinQualification.objects.create(
+            evenement=self.groupe,
+            qualification=self.bafa,
+            nombre_minimum=1,
+        )
+
+        data, status = self.lancer()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(data["created"], 5)
+        self.assertFalse(Affectation.objects.exclude(animateur=self.qualifie).exists())
+
+    def test_accepte_une_equivalence_dans_le_sens_autorise(self):
+        bpjeps = Qualification.objects.create(nom="BPJEPS")
+        # BPJEPS → BAFA : un titulaire BPJEPS couvre un besoin BAFA.
+        EquivalenceQualification.objects.create(
+            qualification_a=self.bafa,
+            qualification_b=bpjeps,
+            sens=EquivalenceQualification.SENS_B_VERS_A,
+        )
+        self.qualifie.qualifications.clear()
+        self.qualifie.qualifications.add(bpjeps)
+        BesoinQualification.objects.create(
+            evenement=self.groupe,
+            qualification=self.bafa,
+            nombre_minimum=1,
+        )
+
+        data, status = self.lancer()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(data["created"], 5)
+
+    def test_equivalence_sens_unique_ne_fonctionne_pas_a_lenvers(self):
+        bpjeps = Qualification.objects.create(nom="BPJEPS")
+        # BPJEPS → BAFA ne permet pas à BAFA de couvrir BPJEPS.
+        EquivalenceQualification.objects.create(
+            qualification_a=self.bafa,
+            qualification_b=bpjeps,
+            sens=EquivalenceQualification.SENS_B_VERS_A,
+        )
+        BesoinQualification.objects.create(
+            evenement=self.groupe,
+            qualification=bpjeps,
+            nombre_minimum=1,
+        )
+
+        data, status = self.lancer()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(data["created"], 0)
+        self.assertEqual(data["unfilled"], 5)
+
+    def test_equivalence_directionnelle_est_transitive(self):
+        bpjeps = Qualification.objects.create(nom="BPJEPS")
+        cpjeps = Qualification.objects.create(nom="CPJEPS")
+        # CPJEPS → BPJEPS → BAFA.
+        EquivalenceQualification.objects.create(
+            qualification_a=self.bafa,
+            qualification_b=bpjeps,
+            sens=EquivalenceQualification.SENS_B_VERS_A,
+        )
+        EquivalenceQualification.objects.create(
+            qualification_a=bpjeps,
+            qualification_b=cpjeps,
+            sens=EquivalenceQualification.SENS_B_VERS_A,
+        )
+        self.qualifie.qualifications.clear()
+        self.qualifie.qualifications.add(cpjeps)
+        BesoinQualification.objects.create(
+            evenement=self.groupe,
+            qualification=self.bafa,
+            nombre_minimum=1,
+        )
+
+        data, status = self.lancer()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(data["created"], 5)
+

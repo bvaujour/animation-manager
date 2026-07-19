@@ -8,7 +8,7 @@
 
     <a href="{% url 'accueil' %}" class="brand page-brand" aria-label="Retour à l’accueil">
         <span class="brand-mark">GA</span>
-        <span class="page-brand-title">{% if active == 'planning' %}Planning{% elif active == 'gestion' %}Gestion{% elif active == 'recapitulatif' %}Récapitulatif{% elif active == 'documents' %}Documents{% elif active == 'administration' %}Administration{% else %}Accueil{% endif %}</span>
+        <span class="page-brand-title">{% if active == 'planning' %}Planning{% elif active == 'employes' %}Salariés{% elif active == 'gestion' %}Gestion{% elif active == 'recapitulatif' %}Récapitulatif{% elif active == 'emails' %}E-mails{% elif active == 'documents' %}Documents{% elif active == 'disponibilites' %}Mes disponibilités{% elif active == 'administration' %}Administration{% else %}Accueil{% endif %}</span>
     </a>
 </header>
 
@@ -25,10 +25,18 @@
 
     <nav class="nav-drawer-links">
         <a href="{% url 'accueil' %}" class="{% if active == 'accueil' %}active{% endif %}">Accueil</a>
+        {% if utilisateur_est_direction %}
         <a href="{% url 'planning' %}" class="{% if active == 'planning' %}active{% endif %}">Planning</a>
+        <a href="{% url 'employes' %}" class="{% if active == 'employes' %}active{% endif %}">Salariés</a>
         <a href="{% url 'gestion' %}" class="{% if active == 'gestion' %}active{% endif %}">Gestion</a>
         <a href="{% url 'recapitulatif' %}" class="{% if active == 'recapitulatif' %}active{% endif %}">Récapitulatif</a>
-        <a href="{% url 'documents' %}" class="{% if active == 'documents' %}active{% endif %}">Documents</a>
         <a href="{% url 'administration' %}" class="{% if active == 'administration' %}active{% endif %}">Administration</a>
+        {% else %}
+        <a href="{% url 'documents' %}" class="{% if active == 'documents' %}active{% endif %}">Documents</a>
+        <a href="{% url 'mes_disponibilites' %}" class="{% if active == 'disponibilites' %}active{% endif %}">Mes disponibilités</a>
+        {% endif %}
+        {% if request.user.is_authenticated %}
+        <form method="post" action="{% url 'logout' %}" class="nav-logout-form">{% csrf_token %}<button type="submit" class="nav-logout-button">Déconnexion</button></form>
+        {% endif %}
     </nav>
 </aside>

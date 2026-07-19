@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from animateurs.models import Disponibilite
+
 from .dates import jours_couverts
 
 

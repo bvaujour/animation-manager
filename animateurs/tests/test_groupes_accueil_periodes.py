@@ -2,12 +2,12 @@ import datetime
 import json
 
 from django.core.exceptions import FieldDoesNotExist
-from django.test import TestCase
 
 from animateurs.models import Centre, Evenement, PeriodeScolaire
+from animateurs.tests.base import ConnexionTestCase
 
 
-class GroupesPeriodesTests(TestCase):
+class GroupesPeriodesTests(ConnexionTestCase):
     def setUp(self):
         self.centre = Centre.objects.create(nom="La Pacaudière", code="PAC")
         self.s1 = PeriodeScolaire.objects.create(
@@ -45,17 +45,44 @@ class GroupesPeriodesTests(TestCase):
         self.assertEqual(response.status_code, 201)
         groupe = Evenement.objects.get()
         self.assertFalse(groupe.periodes_scolaires.exists())
-        self.assertIsNone(groupe.debut)
-        self.assertIsNone(groupe.fin)
+        with self.assertRaises(FieldDoesNotExist):
+            Evenement._meta.get_field("debut")
+        with self.assertRaises(FieldDoesNotExist):
+            Evenement._meta.get_field("fin")
         self.assertFalse(groupe.est_ouvert_le(datetime.date(2026, 7, 6)))
+
+
+    def test_groupe_permanent_est_ouvert_sans_periode(self):
+        response = self.creer_groupe(permanent=True, periode_ids=[self.s1.id])
+        self.assertEqual(response.status_code, 201)
+        groupe = Evenement.objects.get()
+        self.assertTrue(groupe.permanent)
+        self.assertEqual(
+            set(groupe.periodes_scolaires.values_list("id", flat=True)),
+            {self.s1.id, self.s2.id},
+        )
+        self.assertTrue(groupe.est_ouvert_le(datetime.date(2026, 9, 7)))
+        self.assertFalse(groupe.est_ouvert_le(datetime.date(2026, 9, 13)))
+        self.assertTrue(response.json()["permanent"])
+
+    def test_repasser_un_groupe_en_non_permanent_le_ferme_sans_semaine(self):
+        self.creer_groupe(permanent=True)
+        groupe = Evenement.objects.get()
+        response = self.client.patch(
+            f"/api/groupes/{groupe.id}/",
+            data=json.dumps({"permanent": False, "periode_ids": []}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        groupe.refresh_from_db()
+        self.assertFalse(groupe.permanent)
+        self.assertFalse(groupe.est_ouvert_le(datetime.date(2026, 9, 7)))
 
     def test_creation_utilise_uniquement_les_periodes_selectionnees(self):
         response = self.creer_groupe(periode_ids=[self.s2.id])
         self.assertEqual(response.status_code, 201)
         groupe = Evenement.objects.get()
         self.assertEqual(list(groupe.periodes_scolaires.all()), [self.s2])
-        self.assertEqual(groupe.debut, self.s2.debut)
-        self.assertEqual(groupe.fin, self.s2.fin + datetime.timedelta(days=1))
 
     def test_lundi_a_samedi_ouverts_et_dimanche_ferme_par_defaut(self):
         response = self.creer_groupe(periode_ids=[self.s1.id])

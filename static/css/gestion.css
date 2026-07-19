@@ -1383,3 +1383,351 @@
 .period-library-head {
     gap: 10px;
 }
+
+.group-permanent-option {
+    align-items: flex-start;
+    padding: .9rem 1rem;
+    border: 1px solid var(--border-color, #d8e0dc);
+    border-radius: .75rem;
+    background: var(--surface-soft, #f7faf8);
+}
+.group-permanent-option > span { display: grid; gap: .2rem; }
+.group-permanent-option small { font-weight: 400; opacity: .72; }
+
+/* Fiche groupe : besoins regroupés et sélection des périodes compacte. */
+.event-staffing-settings {
+    margin-top: 16px;
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-sunken);
+}
+
+.staffing-requirements-grid {
+    display: grid;
+    grid-template-columns: minmax(150px, 190px) minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+    margin-top: 10px;
+}
+
+.staffing-total,
+.qualification-requirement {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 74px;
+    gap: 8px;
+    align-items: center;
+    min-height: 38px;
+    padding: 6px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 9px;
+    background: #fff;
+}
+
+.staffing-total {
+    grid-template-columns: 1fr;
+    font-weight: 700;
+}
+
+.staffing-total input,
+.qualification-requirement input {
+    width: 100%;
+    min-width: 0;
+}
+
+.event-qualifications {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+    gap: 6px;
+}
+
+.staffing-subtitle {
+    grid-column: 1 / -1;
+    color: var(--color-text-muted);
+    font-size: .76rem;
+}
+
+.group-period-actions {
+    margin: 6px 0;
+}
+
+.group-period-actions .btn {
+    padding: 5px 9px;
+    font-size: .76rem;
+}
+
+.group-period-year > summary {
+    min-height: 38px;
+    padding: 7px 10px;
+}
+
+.group-period-year .period-year-content {
+    padding: 5px 8px 8px;
+}
+
+.period-zone-block + .period-zone-block {
+    margin-top: 7px;
+}
+
+.period-zone-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+    color: var(--color-text-muted);
+    font-size: .74rem;
+}
+
+.period-zone-toggle {
+    padding: 2px 6px;
+    border: 0;
+    background: transparent;
+    color: var(--color-primary-dark);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.group-period-year .group-period-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 4px;
+}
+
+.group-period-option {
+    min-height: 36px;
+    padding: 4px 6px;
+    gap: 5px;
+    border-radius: 8px;
+}
+
+.group-period-option input {
+    margin-top: 2px;
+}
+
+.group-period-option span {
+    min-width: 0;
+    gap: 0;
+}
+
+.group-period-option strong {
+    overflow: hidden;
+    font-size: .76rem;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.group-period-option small {
+    font-size: .65rem;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+    .staffing-requirements-grid { grid-template-columns: 1fr; }
+    .event-qualifications { grid-template-columns: 1fr; }
+    .group-period-year .group-period-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Équivalences de qualifications */
+.qualification-equivalence-field {
+    gap: .45rem;
+}
+
+.field-label {
+    font-weight: 700;
+}
+
+.qualification-equivalence-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: .45rem;
+}
+
+.qualification-equivalence-option {
+    display: grid;
+    grid-template-columns: minmax(90px, .65fr) minmax(170px, 1.35fr);
+    align-items: center;
+    gap: .55rem;
+    min-width: 0;
+    padding: .45rem .55rem;
+    border: 1px solid var(--border-color, #d9dee8);
+    border-radius: .65rem;
+    background: var(--surface-soft, #f8fafc);
+}
+
+.qualification-equivalence-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
+}
+
+.qualification-equivalence-direction {
+    width: 100%;
+    min-width: 0;
+    height: 2.15rem;
+    padding: .25rem 1.8rem .25rem .5rem;
+    font-size: .78rem;
+}
+
+@media (max-width: 620px) {
+    .qualification-equivalence-grid { grid-template-columns: 1fr; }
+    .qualification-equivalence-option { grid-template-columns: 1fr; gap: .3rem; }
+}
+
+.qualification-equivalence-summary {
+    white-space: normal;
+}
+
+.empty-note.compact {
+    margin: 0;
+}
+
+/* Annuaire salariés : aucune zone interne ne défile. Chaque salarié a sa page. */
+.salaries-directory {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.salaries-directory-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 18px;
+    border-bottom: 1px solid var(--color-border);
+    background: linear-gradient(135deg, rgba(31, 111, 84, .08), rgba(232, 163, 61, .07));
+}
+
+.salaries-directory-head h2 { margin: 0; }
+.salaries-directory-head p { margin: 4px 0 0; color: var(--color-text-muted); }
+.salaries-search { display: block; }
+
+.salaries-directory-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+    padding: 12px;
+}
+
+.salarie-directory-item {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+    min-width: 0;
+    padding: 11px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 13px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    text-decoration: none;
+    transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
+}
+
+.salarie-directory-item:hover {
+    border-color: color-mix(in srgb, var(--anim-color) 55%, var(--color-border));
+    background: color-mix(in srgb, var(--anim-color) 7%, white);
+    transform: translateY(-1px);
+}
+
+.salarie-directory-main { min-width: 0; display: flex; flex-direction: column; }
+.salarie-directory-main strong,
+.salarie-directory-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.salarie-directory-main small { color: var(--color-text-muted); margin-top: 2px; }
+.salarie-directory-open { color: var(--color-primary-dark); font-size: .82rem; font-weight: 700; white-space: nowrap; }
+
+@media (max-width: 620px) {
+    .salaries-directory-head { flex-direction: column; }
+    .salaries-directory-list { grid-template-columns: 1fr; padding: 8px; }
+    .salarie-directory-open { display: none; }
+}
+
+/* Formulaire groupe : alignement commun création / modification. */
+.team-row-editing,
+.team-create-form {
+    container-type: inline-size;
+}
+
+.team-row-editing {
+    padding: 18px;
+    border-left-width: 6px;
+    background: color-mix(in srgb, #ffffff 97%, var(--lieu-color, var(--color-primary)));
+}
+
+.team-form-grid {
+    grid-template-columns: minmax(260px, 2fr) minmax(210px, 1fr);
+    align-items: start;
+    margin-bottom: 14px;
+}
+
+.team-form-grid .field {
+    min-width: 0;
+}
+
+.team-form-grid .field label {
+    min-height: 20px;
+}
+
+.team-form-grid input {
+    width: 100%;
+    min-height: 42px;
+}
+
+.team-ratio-field small {
+    display: block;
+    margin-top: 5px;
+    color: var(--color-text-muted);
+    font-size: .72rem;
+    line-height: 1.25;
+}
+
+.team-row-editing .event-opening-settings,
+.team-row-editing .event-staffing-settings,
+.team-create-form .event-opening-settings,
+.team-create-form .event-staffing-settings {
+    margin-top: 12px;
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--lieu-color, var(--color-primary)) 24%, var(--color-border));
+    border-radius: 12px;
+    background: color-mix(in srgb, #ffffff 96%, var(--lieu-color, var(--color-primary)));
+}
+
+.team-row-editing .edit-actions,
+.team-create-form .edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-border);
+}
+
+@container (max-width: 620px) {
+    .team-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 680px) {
+    .team-row-editing,
+    .team-create-form {
+        padding: 12px;
+    }
+
+    .team-row-editing .edit-actions,
+    .team-create-form .edit-actions {
+        justify-content: stretch;
+    }
+
+    .team-row-editing .edit-actions .btn,
+    .team-create-form .edit-actions .btn {
+        flex: 1 1 0;
+    }
+}

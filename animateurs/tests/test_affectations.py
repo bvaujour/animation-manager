@@ -4,8 +4,8 @@ from django.test import TestCase
 from django.utils import timezone
 
 from animateurs.models import Animateur, Centre, Disponibilite
-from animateurs.tests.factories import creer_groupe
 from animateurs.services.affectations import creer_affectation, modifier_affectation
+from animateurs.tests.factories import creer_groupe
 
 
 class AffectationServiceTests(TestCase):

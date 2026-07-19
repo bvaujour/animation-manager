@@ -328,6 +328,110 @@ body.page-planning .calendar-site-card {
     }
 }
 
+
+/* ========================================================================== 
+   Placement strictement identique — Accueil et Planning
+   --------------------------------------------------------------------------
+   Cette règle finale neutralise les anciennes variantes de mise en page du
+   Planning. Les cartes de lieux suivent désormais la même grille que celles
+   de l'Accueil et chaque ligne prend toujours la hauteur de sa carte la plus
+   grande. Aucun élément ne peut sortir de sa cellule ni recouvrir la suivante.
+   ========================================================================== */
+.home-calendars.calendar-sites,
+body.page-planning #calendars-container.calendar-sites {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr)) !important;
+    grid-auto-flow: row !important;
+    grid-auto-rows: max-content !important;
+    align-items: start !important;
+    align-content: start !important;
+    gap: 9px !important;
+}
+
+body.page-planning #calendars-container.calendar-sites {
+    position: relative !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 0 2px 8px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+.home-calendars.calendar-sites > .calendar-site-card,
+body.page-planning #calendars-container.calendar-sites > .calendar-site-card {
+    position: relative !important;
+    inset: auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    align-self: start !important;
+    contain: layout paint !important;
+    transform: none;
+    z-index: auto;
+}
+
+/* Le Planning conserve uniquement ses poignées de déplacement. Toutes les
+   dimensions intérieures sont celles du composant partagé de l'Accueil. */
+body.page-planning .centre-planning-group.calendar-site-card {
+    display: block !important;
+    gap: 0 !important;
+    padding: 0 !important;
+}
+
+body.page-planning .centre-planning-header.calendar-site-header {
+    border-radius: 0 !important;
+}
+
+body.page-planning .evenement-calendars.calendar-group-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    padding: 6px !important;
+}
+
+body.page-planning .evenement-calendar-card.calendar-group-card {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Les règles de mise en page ci-dessus utilisent display avec !important.
+   Cette règle plus spécifique garantit que l'attribut hidden reste prioritaire. */
+body.page-planning .centre-planning-group.calendar-site-card[hidden],
+body.page-planning .evenement-calendar-card.calendar-group-card[hidden] {
+    display: none !important;
+}
+
+body.page-planning .evenement-calendar-header.calendar-group-header {
+    margin: 0 !important;
+    border-radius: 0 !important;
+}
+
+body.page-planning .evenement-calendar-card .shared-calendar {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+}
+
+body.page-planning .centre-planning-group.collapsed .evenement-calendars {
+    display: none !important;
+}
+
+/* Pendant le drag, seule la carte réellement déplacée peut recevoir un effet
+   visuel. Hors drag, aucune transformation résiduelle ne peut provoquer un
+   chevauchement. */
+body.page-planning:not(.planning-sort-active) .centre-planning-group,
+body.page-planning:not(.planning-sort-active) .evenement-calendar-card {
+    transform: none !important;
+}
+
 @media (max-width: 760px) {
     .home-calendars.calendar-sites,
     body.page-planning #calendars-container.calendar-sites {
@@ -335,5 +439,15 @@ body.page-planning .calendar-site-card {
         flex-direction: column !important;
         align-items: flex-start !important;
         overflow-x: auto !important;
+    }
+
+    .home-calendars.calendar-sites > .calendar-site-card,
+    body.page-planning #calendars-container.calendar-sites > .calendar-site-card {
+        min-width: 740px !important;
+        max-width: none !important;
+    }
+
+    body.page-planning .evenement-calendar-card.calendar-group-card {
+        min-width: 0 !important;
     }
 }

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Documents{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260718-audit-1">{% endblock %}
+{% block content %}
+<main class="page-shell page-shell--medium documents-page documents-shared-page">
+    <div class="page-header documents-heading">
+        <div>
+            <h1>Documents à télécharger</h1>
+            
+        </div>
+    </div>
+    <div id="documents-partages" class="ui-grid documents-grid"></div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/documents-partages.js' %}?v=20260718-audit-1"></script>{% endblock %}

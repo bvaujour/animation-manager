@@ -15,10 +15,12 @@ from django.db import transaction
 from django.utils.dateparse import parse_date
 
 from animateurs.models import Affectation, Animateur, Centre, Evenement, Qualification
+
 from .dates import parse_to_aware_datetime
+from .qualifications import classes_equivalence_qualifications
 
 
-def _evenements_se_chevauchent(evenement_a, evenement_b):
+def _evenements_se_chevauchent(_evenement_a, _evenement_b):
     """La gestion est exclusivement à la journée : deux affectations le même jour sont toujours en conflit."""
     return True
 
@@ -104,10 +106,15 @@ def generer_planning_auto(payload):
     if not groupes:
         return {"error": "Aucune place à remplir : vérifie les effectifs des groupes."}, 400
 
-    qualifs_animateur = {
-        animateur.id: {q.id for q in animateur.qualifications.all()}
-        for animateur in animateurs
-    }
+    classes_equivalence = classes_equivalence_qualifications()
+    qualifs_animateur = {}
+    for animateur in animateurs:
+        qualifs_effectives = set()
+        for qualification in animateur.qualifications.all():
+            qualifs_effectives.update(
+                classes_equivalence.get(qualification.id, {qualification.id})
+            )
+        qualifs_animateur[animateur.id] = qualifs_effectives
     centres_autorises = {
         animateur.id: {pref.centre_id for pref in animateur.preferences.all()}
         for animateur in animateurs
@@ -189,7 +196,7 @@ def generer_planning_auto(payload):
     def score_solution():
         remplissage = sum(len(selection) for selection in choix)
         groupes_complets = sum(
-            1 for groupe, selection in zip(groupes, choix)
+            1 for groupe, selection in zip(groupes, choix, strict=True)
             if len(selection) == groupe["effectif"]
         )
         placements_evenement_preferee = 0
@@ -199,7 +206,7 @@ def generer_planning_auto(payload):
         continuite_consecutive = 0
         jours_par_anim_evenement = defaultdict(set)
 
-        for groupe, selection in zip(groupes, choix):
+        for groupe, selection in zip(groupes, choix, strict=True):
             for animateur in selection:
                 if evenements_preferees.get(animateur.id) == groupe["evenement"].id:
                     placements_evenement_preferee += 1
@@ -256,7 +263,7 @@ def generer_planning_auto(payload):
         jour_precedent = groupe["jour"] - datetime.timedelta(days=1)
 
         def travaille_veille_meme_evenement(animateur):
-            for autre_groupe, selection in zip(groupes, choix):
+            for autre_groupe, selection in zip(groupes, choix, strict=True):
                 if autre_groupe["jour"] != jour_precedent:
                     continue
                 if autre_groupe["evenement"].id != groupe["evenement"].id:
@@ -323,18 +330,18 @@ def generer_planning_auto(payload):
             if len(options) >= limite:
                 break
 
-            def combiner(position, selection):
+            def combiner(position, selection, taille_cible=taille):
                 nonlocal interrompu
                 if len(options) >= limite or datetime.datetime.now() > deadline:
                     interrompu = datetime.datetime.now() > deadline
                     return
-                if len(selection) == taille:
+                if len(selection) == taille_cible:
                     if qualifications_couvertes(groupe, selection):
                         ajouter(selection)
                     return
                 if position >= len(candidats):
                     return
-                if not possible_avec_restant(selection, position, taille):
+                if not possible_avec_restant(selection, position, taille_cible):
                     return
 
                 selection.append(candidats[position])
@@ -395,7 +402,7 @@ def generer_planning_auto(payload):
         ).delete()
 
         a_creer = []
-        for groupe, selection in zip(groupes, meilleur_choix):
+        for groupe, selection in zip(groupes, meilleur_choix, strict=True):
             jour = groupe["jour"]
             for animateur in selection:
                 a_creer.append(Affectation(
@@ -414,7 +421,7 @@ def generer_planning_auto(payload):
 
     noms_qualifs = dict(Qualification.objects.values_list("id", "nom"))
     details_non_remplis = []
-    for groupe, selection in zip(groupes, meilleur_choix):
+    for groupe, selection in zip(groupes, meilleur_choix, strict=True):
         manque = groupe["effectif"] - len(selection)
         if manque <= 0:
             continue

@@ -2,45 +2,20 @@
 {% load static %}
 {% block title %}Gestion{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/animateurs.css' %}">
-<link rel="stylesheet" href="{% static 'css/gestion.css' %}">
+<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v=20260719-clean-ui-1">
+<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260719-clean-ui-1">
+<link rel="stylesheet" href="{% static 'css/administration.css' %}?v=20260719-clean-ui-1">
 {% endblock %}
 {% block content %}
-<main class="gestion-page gestion-page-compact">
+<main class="page-shell page-shell--wide gestion-page gestion-page-compact">
     <div class="tabs" id="gestion-tabs">
-        <button class="tab-btn active" data-tab="salaries" type="button">Salariés</button>
-        <button class="tab-btn" data-tab="lieux" type="button">Lieux et groupes</button>
+        <button class="tab-btn active" data-tab="lieux" type="button">Lieux et groupes</button>
         <button class="tab-btn" data-tab="qualifications" type="button">Qualifications</button>
         <button class="tab-btn" data-tab="periodes" type="button">Périodes</button>
+        <button class="tab-btn" data-tab="documents" type="button">Documents</button>
     </div>
 
-    <div class="tab-panel" data-panel="salaries">
-        <div class="gestion-salaries-embed">
-            <section class="evenement-sidebar" aria-label="Liste des salariés">
-                <div class="evenement-sidebar-head">
-                    <div>
-                        <h2>Salariés</h2>
-                        <p>Choisis une personne pour ouvrir sa fiche.</p>
-                    </div>
-                    <button class="btn btn-primary" id="evenement-add" type="button">+ Ajouter un salarié</button>
-                </div>
-                <label class="evenement-search">
-                    <span class="sr-only">Rechercher un salarié</span>
-                    <input type="search" id="evenement-search" name="recherche_salarie" placeholder="Rechercher…" autocomplete="off">
-                </label>
-                <div id="evenement-list" class="evenement-list"></div>
-            </section>
-
-            <section class="evenement-detail" id="evenement-detail" aria-live="polite">
-                <div class="evenement-empty">
-                    <strong>Sélectionne un salarié</strong>
-                    <p>Sa fiche complète apparaîtra ici.</p>
-                </div>
-            </section>
-        </div>
-    </div>
-
-    <div class="tab-panel" data-panel="lieux" hidden>
+    <div class="tab-panel" data-panel="lieux">
         <div id="panel-centres"></div>
     </div>
     <div class="tab-panel" data-panel="qualifications" hidden>
@@ -49,11 +24,33 @@
     <div class="tab-panel" data-panel="periodes" hidden>
         <div id="panel-periodes"></div>
     </div>
+    <div class="tab-panel" data-panel="documents" hidden>
+        <section class="ui-card gestion-documents" id="documents-management-app">
+            <div class="ui-section-heading gestion-section-heading">
+                <div>
+                    <h1>Documents</h1>
+                    
+                </div>
+            </div>
+            <form id="form-upload" class="ui-form upload-form">
+                <div class="field"><label for="doc-titre">Titre</label><input type="text" id="doc-titre" name="titre" placeholder="ex : Contrat type animateur" required></div>
+                <div class="field"><label for="doc-fichier">Fichier</label><input type="file" id="doc-fichier" name="fichier" required></div>
+                <div class="field document-period-picker-field">
+                    <span class="field-label" id="doc-semaines-title">Semaines concernées</span>
+                    {% include "partials/_week_picker.html" with picker_id="doc-semaines-picker" picker_class="document-weeks-picker" toggle_id="doc-semaines-toggle" label_id="doc-semaines-label" menu_id="doc-semaines-menu" tree_id="doc-semaines-tree" clear_id="doc-semaines-effacer" mode="multiple" placeholder="Choisir des semaines" title_id="doc-semaines-title" %}
+                    
+                </div>
+                <p class="form-error" id="doc-error"></p>
+                <button class="btn btn-primary" type="submit">Ajouter le document</button>
+            </form>
+            <div id="documents-grid" class="ui-grid documents-grid"></div>
+        </section>
+    </div>
 </main>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/animateurs.js' %}"></script>
-<script src="{% static 'js/gestion.js' %}"></script>
+<script src="{% static 'js/gestion.js' %}?v=20260719-clean-ui-1"></script>
+<script src="{% static 'js/documents-management.js' %}?v=20260719-clean-ui-1"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     GestionApp.mountCentres(document.getElementById("panel-centres"));

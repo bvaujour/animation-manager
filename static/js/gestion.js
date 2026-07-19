@@ -54,8 +54,10 @@ function bouton(label, classes, onClick)
 	// ------------------------------------------------------------------
 	function mountQualifications(container, options = {})
 	{
+		let qualifications = [];
 		container.innerHTML = `
 			<p class="section-title">Qualifications existantes</p>
+			
 			<div class="entity-list" id="qualifs-list"></div>
 			<p class="section-title">Ajouter une qualification</p>
 			<div class="gestion-form" id="qualif-form">
@@ -67,6 +69,11 @@ function bouton(label, classes, onClick)
 					<input type="checkbox" id="qualif-auto" name="qualification_auto">
 					<span>Proposer cette qualification dans le remplissage automatique</span>
 				</label>
+				<div class="field qualification-equivalence-field">
+					<span class="field-label">Règles d’équivalence</span>
+					<div id="qualif-equivalences" class="qualification-equivalence-grid"></div>
+					
+				</div>
 				<p class="form-error" id="qualif-error"></p>
 				<button class="btn btn-primary" id="qualif-submit" type="button">Ajouter</button>
 			</div>
@@ -75,7 +82,44 @@ function bouton(label, classes, onClick)
 		const list = container.querySelector("#qualifs-list");
 		const input = container.querySelector("#qualif-nom");
 		const autoEl = container.querySelector("#qualif-auto");
+		const equivalencesEl = container.querySelector("#qualif-equivalences");
 		const errorEl = container.querySelector("#qualif-error");
+
+		function optionsRelations(relations = [], qualificationExclueId = null, nomCourant = "Cette qualification")
+		{
+			const parId = new Map((relations || []).map((relation) => [Number(relation.qualification_id || relation.id), relation.sens]));
+			const candidates = qualifications.filter((item) => Number(item.id) !== Number(qualificationExclueId));
+			if (!candidates.length)
+				return '<span class="empty-note compact">Aucune autre qualification disponible.</span>';
+
+			return candidates.map((item) =>
+			{
+				const sens = parId.get(Number(item.id)) || "";
+				const courant = escapeHtml(nomCourant);
+				const autre = escapeHtml(item.nom);
+				return `
+					<label class="qualification-equivalence-option">
+						<span class="qualification-equivalence-name">${autre}</span>
+						<select class="qualification-equivalence-direction" data-equivalence-id="${item.id}" aria-label="Équivalence entre ${courant} et ${autre}">
+							<option value="" ${sens === "" ? "selected" : ""}>Aucune</option>
+							<option value="sortante" ${sens === "sortante" ? "selected" : ""}>${courant} → ${autre}</option>
+							<option value="entrante" ${sens === "entrante" ? "selected" : ""}>${autre} → ${courant}</option>
+							<option value="double" ${sens === "double" ? "selected" : ""}>Double sens ↔</option>
+						</select>
+					</label>
+				`;
+			}).join("");
+		}
+
+		function lireRelations(root)
+		{
+			return Array.from(root.querySelectorAll(".qualification-equivalence-direction"))
+				.filter((select) => select.value)
+				.map((select) => ({
+					qualification_id: Number(select.dataset.equivalenceId),
+					sens: select.value,
+				}));
+		}
 
 		function ouvrirEdition(q, row)
 		{
@@ -92,10 +136,14 @@ function bouton(label, classes, onClick)
 						<input type="checkbox" id="${autoId}" name="qualification_${q.id}_auto" class="edit-qualif-auto" ${q.selectionnable_remplissage_auto !== false ? "checked" : ""}>
 						<span>Proposer dans le remplissage automatique</span>
 					</label>
+					<div class="field qualification-equivalence-field">
+						<span class="field-label">Règles d’équivalence</span>
+						<div class="qualification-equivalence-grid">${optionsRelations(q.relations_equivalence, q.id, q.nom)}</div>
+						
+					</div>
 					<p class="form-error edit-error"></p>
 				</div>
 			`;
-
 
 			const error = row.querySelector(".edit-error");
 			row.appendChild(creerFormActions(() =>
@@ -103,6 +151,7 @@ function bouton(label, classes, onClick)
 				error.textContent = "";
 				const nom = champValeur(row, ".edit-qualif-nom");
 				const selectionnable_remplissage_auto = row.querySelector(".edit-qualif-auto").checked;
+				const relations_equivalence = lireRelations(row);
 
 				if (!nom)
 				{
@@ -112,7 +161,7 @@ function bouton(label, classes, onClick)
 
 				apiFetch(`/api/qualifications/${escapeHtml(q.id)}/`, {
 					method: "PATCH",
-					body: JSON.stringify({ nom, selectionnable_remplissage_auto }),
+					body: JSON.stringify({ nom, selectionnable_remplissage_auto, relations_equivalence }),
 				}).then(() =>
 				{
 					afficherToast("Qualification modifiée.");
@@ -122,11 +171,23 @@ function bouton(label, classes, onClick)
 			}, charger));
 		}
 
+		function resumeRelations(q)
+		{
+			return (q.relations_equivalence || []).map((relation) =>
+			{
+				if (relation.sens === "double") return `${q.nom} ↔ ${relation.nom}`;
+				if (relation.sens === "entrante") return `${relation.nom} → ${q.nom}`;
+				return `${q.nom} → ${relation.nom}`;
+			});
+		}
+
 		function charger()
 		{
 			return apiFetch("/api/qualifications/").then((data) =>
 			{
+				qualifications = data;
 				list.innerHTML = "";
+				equivalencesEl.innerHTML = optionsRelations();
 
 				if (data.length === 0)
 				{
@@ -136,12 +197,14 @@ function bouton(label, classes, onClick)
 
 				data.forEach((q) =>
 				{
+					const relations = resumeRelations(q);
 					const row = document.createElement("div");
 					row.classList.add("entity-row");
 					row.innerHTML = `
 						<div class="entity-main">
 							<span class="truncate">${escapeHtml(q.nom)}</span>
 							<span class="entity-meta">${q.selectionnable_remplissage_auto !== false ? "Disponible en auto" : "Masquée dans l’auto"}</span>
+							${relations.length ? `<span class="entity-meta qualification-equivalence-summary">${escapeHtml(relations.join(" · "))}</span>` : ""}
 						</div>
 						<div class="entity-actions"></div>
 					`;
@@ -174,6 +237,7 @@ function bouton(label, classes, onClick)
 			errorEl.textContent = "";
 			const nom = input.value.trim();
 			const selectionnable_remplissage_auto = autoEl.checked;
+			const relations_equivalence = lireRelations(container.querySelector("#qualif-form"));
 
 			if (!nom)
 			{
@@ -181,7 +245,7 @@ function bouton(label, classes, onClick)
 				return;
 			}
 
-			apiFetch("/api/qualifications/", { method: "POST", body: JSON.stringify({ nom, selectionnable_remplissage_auto }) })
+			apiFetch("/api/qualifications/", { method: "POST", body: JSON.stringify({ nom, selectionnable_remplissage_auto, relations_equivalence }) })
 				.then((nouvelle) =>
 				{
 					input.value = "";
@@ -206,7 +270,7 @@ function bouton(label, classes, onClick)
 		let periodesScolaires = [];
 		container.innerHTML = `
 			<p class="section-title">Lieux et groupes</p>
-			<p class="section-help">Chaque lieu peut accueillir plusieurs groupes sur les périodes enregistrées.</p>
+			
 			<div class="lieux-cards" id="lieux-list"></div>
 			<p class="section-title">Ajouter un lieu</p>
 			<div class="gestion-form" id="lieu-form">
@@ -251,11 +315,9 @@ function bouton(label, classes, onClick)
 				return '<p class="empty-note">Aucune période enregistrée. Le groupe peut tout de même être créé et configuré plus tard.</p>';
 
 			const selectionnees = new Set(
-				groupe ? (groupe.periode_ids || []).map(Number) : periodesScolaires.map((periode) => Number(periode.id))
+				groupe ? (groupe.periode_ids || []).map(Number) : []
 			);
-			const anneeOuverte = anneePeriodesADeplier(periodesScolaires);
-
-			return grouperPeriodesParAnnee(periodesScolaires).map(({ annee, periodes }) =>
+						return grouperPeriodesParAnnee(periodesScolaires).map(({ annee, periodes }) =>
 			{
 				const zones = new Map();
 				periodes.forEach((periode) =>
@@ -267,7 +329,7 @@ function bouton(label, classes, onClick)
 				const nbSelectionnees = periodes.filter((periode) => selectionnees.has(Number(periode.id))).length;
 
 				return `
-					<details class="period-year-accordion group-period-year" data-period-year="${escapeHtml(annee)}" ${annee === anneeOuverte ? "open" : ""}>
+					<details class="period-year-accordion group-period-year" data-period-year="${escapeHtml(annee)}">
 						<summary>
 							<span class="period-year-summary"><strong>${escapeHtml(annee)}</strong><small class="group-period-year-count">${nbSelectionnees}/${periodes.length} sélectionnée${nbSelectionnees > 1 ? "s" : ""}</small></span>
 							<span class="period-year-chevron" aria-hidden="true">⌄</span>
@@ -275,13 +337,16 @@ function bouton(label, classes, onClick)
 						<div class="period-year-content">
 							${[...zones.entries()].map(([zone, elements]) => `
 								<section class="period-zone-block">
-									<p class="period-zone-title">Zone ${escapeHtml(zone)}</p>
+									<div class="period-zone-head">
+										<strong>Zone ${escapeHtml(zone)}</strong>
+										<button type="button" class="period-zone-toggle" data-zone-action="toggle">Tout sélectionner</button>
+									</div>
 									<div class="group-period-grid period-year-list">
 										${elements.map((periode) => {
 											const id = `${uid}-periode-${periode.id}`;
-											return `<label class="group-period-option" for="${id}">
+											return `<label class="group-period-option" for="${id}" title="${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}">
 												<input type="checkbox" id="${id}" name="${uid}_periode_${periode.id}" class="${prefix}-periode" value="${periode.id}" ${selectionnees.has(Number(periode.id)) ? "checked" : ""}>
-												<span><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><small>${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}</small></span>
+												<span><strong>${escapeHtml(periode.nom || libellePeriodeAvecAnnee(periode))}</strong><small>${escapeHtml(libelleDate(periode.debut))}–${escapeHtml(libelleDate(periode.fin))}</small></span>
 											</label>`;
 										}).join("")}
 									</div>
@@ -297,7 +362,9 @@ function bouton(label, classes, onClick)
 			const uid = identifiantChamp(`groupe-${groupe?.id || "nouveau"}`);
 			const nomId = `${uid}-nom`;
 			const effectifId = `${uid}-effectif`;
+			const ratioId = `${uid}-ratio-enfants`;
 			const feriesId = `${uid}-feries`;
+			const permanentId = `${uid}-permanent`;
 			const besoins = groupe?.qualifications_requises || {};
 			const joursSelectionnes = new Set(
 				(groupe?.jours_ouverts || [0, 1, 2, 3, 4, 5]).map(Number)
@@ -323,27 +390,49 @@ function bouton(label, classes, onClick)
 			return `
 				<div class="team-form-grid">
 					<div class="field team-name-field"><label for="${nomId}">Nom du groupe</label><input type="text" id="${nomId}" name="${uid}_nom" class="${prefix}-nom" value="${escapeHtml(groupe?.nom || "")}" placeholder="ex : Maternelles"></div>
-					<div class="field"><label for="${effectifId}">Personnel nécessaire par jour</label><input type="number" id="${effectifId}" name="${uid}_effectif" class="${prefix}-effectif" value="${groupe?.effectif_cible || 1}" min="1" step="1"></div>
+					<div class="field team-ratio-field"><label for="${ratioId}">Enfants par animateur</label><input type="number" id="${ratioId}" name="${uid}_ratio_enfants" class="${prefix}-ratio-enfants" value="${groupe?.enfants_par_animateur_defaut || 8}" min="1" max="999" step="1"></div>
 				</div>
 				<section class="event-opening-settings">
-					<div class="event-setting-heading"><strong>Périodes</strong><span>Facultatif : sans période, le groupe est conservé dans Gestion mais n’apparaît pas dans les calendriers.</span></div>
+					<label class="checkbox-option group-permanent-option" for="${permanentId}"><input type="checkbox" id="${permanentId}" name="${uid}_permanent" class="${prefix}-permanent" ${groupe?.permanent ? "checked" : ""}><span><strong>Groupe permanent</strong></span></label>
+					<div class="${prefix}-period-settings">
+					<div class="event-setting-heading"><strong>Périodes ouvertes</strong><span>Pour un groupe non permanent, aucune période n’est ouverte par défaut.</span></div>
 					<div class="group-period-actions">
 						<button type="button" class="btn btn-ghost ${prefix}-periods-all">Tout cocher</button>
 						<button type="button" class="btn btn-ghost ${prefix}-periods-none">Tout décocher</button>
 					</div>
 					<div class="group-periods">${periodesFormHtml(uid, prefix, groupe)}</div>
+					</div>
 					<div class="event-setting-heading"><strong>Jours ouverts</strong><span>Lundi à samedi ouverts par défaut ; dimanche fermé.</span></div>
 					<div class="group-weekdays">${joursHtml}</div>
 					<div class="group-closure-options">
 						<label class="checkbox-option" for="${feriesId}"><input type="checkbox" id="${feriesId}" name="${uid}_ferme_jours_feries" class="${prefix}-ferme-feries" ${groupe?.ferme_jours_feries !== false ? "checked" : ""}><span>Fermé les jours fériés</span></label>
 					</div>
 				</section>
-				<div class="event-qualifications"><strong>Qualifications requises chaque jour</strong>${qualifsHtml}</div>
+				<section class="event-staffing-settings">
+					<div class="event-setting-heading"><strong>Personnel requis par jour</strong><span>Indique l’effectif total puis, si besoin, le nombre attendu pour chaque qualification.</span></div>
+					<div class="staffing-requirements-grid">
+						<label class="staffing-total" for="${effectifId}"><span>Nombre total</span><input type="number" id="${effectifId}" name="${uid}_effectif" class="${prefix}-effectif" value="${groupe?.effectif_cible || 1}" min="1" step="1"></label>
+						<div class="event-qualifications"><span class="staffing-subtitle"></span>${qualifsHtml}</div>
+					</div>
+				</section>
 				<p class="form-error ${prefix}-error"></p>`;
 		}
 
 		function initialiserFormGroupe(root, prefix)
 		{
+			const permanentInput = root.querySelector(`.${prefix}-permanent`);
+			const periodSettings = root.querySelector(`.${prefix}-period-settings`);
+
+			function actualiserModePermanent()
+			{
+				const permanent = Boolean(permanentInput?.checked);
+				if (periodSettings)
+				{
+					periodSettings.hidden = permanent;
+					periodSettings.setAttribute("aria-hidden", permanent ? "true" : "false");
+				}
+			}
+
 			function actualiserCompteursAnnees()
 			{
 				root.querySelectorAll(".group-period-year").forEach((details) =>
@@ -366,6 +455,18 @@ function bouton(label, classes, onClick)
 			root.querySelectorAll(`.${prefix}-periode`).forEach((input) =>
 				input.addEventListener("change", actualiserCompteursAnnees)
 			);
+			root.querySelectorAll('[data-zone-action="toggle"]').forEach((button) => {
+				button.addEventListener("click", () => {
+					const zone = button.closest(".period-zone-block");
+					const cases = [...(zone?.querySelectorAll(`.${prefix}-periode`) || [])];
+					const toutCoche = cases.length > 0 && cases.every((input) => input.checked);
+					cases.forEach((input) => { input.checked = !toutCoche; });
+					button.textContent = toutCoche ? "Tout sélectionner" : "Tout retirer";
+					actualiserCompteursAnnees();
+				});
+			});
+			permanentInput?.addEventListener("change", actualiserModePermanent);
+			actualiserModePermanent();
 			actualiserCompteursAnnees();
 		}
 
@@ -376,10 +477,13 @@ function bouton(label, classes, onClick)
 				const nombre = parseInt(input.value, 10) || 0;
 				if (nombre > 0) qualifications_requises[input.dataset.qualificationId] = nombre;
 			});
+			const permanent = Boolean(root.querySelector(`.${prefix}-permanent`)?.checked);
 			return {
 				nom: champValeur(root, `.${prefix}-nom`),
-				periode_ids: Array.from(root.querySelectorAll(`.${prefix}-periode:checked`)).map((input) => Number(input.value)),
+				permanent,
+				periode_ids: permanent ? [] : Array.from(root.querySelectorAll(`.${prefix}-periode:checked`)).map((input) => Number(input.value)),
 				effectif_cible: parseInt(champValeur(root, `.${prefix}-effectif`), 10) || 1,
+				enfants_par_animateur_defaut: Math.max(1, parseInt(champValeur(root, `.${prefix}-ratio-enfants`), 10) || 8),
 				jours_ouverts: Array.from(root.querySelectorAll(`.${prefix}-jour-ouvert:checked`)).map((input) => Number(input.value)),
 				ferme_jours_feries: root.querySelector(`.${prefix}-ferme-feries`).checked,
 				qualifications_requises,
@@ -388,6 +492,7 @@ function bouton(label, classes, onClick)
 
 		function periodeLibelle(groupe)
 		{
+			if (groupe.permanent) return "Permanent — ouvert à toutes les périodes";
 			const periodes = groupe.periodes || [];
 			if (!periodes.length) return "Aucune période — masqué des calendriers";
 			if (periodes.length === 1) return periodes[0].nom;
@@ -437,7 +542,7 @@ function bouton(label, classes, onClick)
 					<div class="field"><label for="${nomId}">Nom</label><input type="text" id="${nomId}" name="lieu_${c.id}_nom" class="edit-lieu-nom" value="${escapeHtml(c.nom)}"></div>
 					<div class="field"><label for="${codeId}">Code</label><input type="text" id="${codeId}" name="lieu_${c.id}_code" class="edit-lieu-code" value="${escapeHtml(c.code)}" maxlength="10"></div>
 					<div class="field"><label for="${couleurId}">Couleur</label><input type="color" id="${couleurId}" name="lieu_${c.id}_couleur" class="edit-lieu-couleur" value="${escapeHtml(c.couleur)}"></div>
-					<div class="lieu-total-readonly"><span>Effectif global</span><strong>${escapeHtml(c.effectif_cible)}</strong><small>calculé depuis les groupes</small></div>
+					<div class="lieu-total-readonly"><span>Effectif global</span><strong>${escapeHtml(c.effectif_cible)}</strong></div>
 					<p class="form-error edit-lieu-error"></p>
 				</div>
 			`;
@@ -550,6 +655,7 @@ function bouton(label, classes, onClick)
 							</div>
 							<div class="team-meta">
 								<span>${evenement.effectif_cible} animateur${evenement.effectif_cible > 1 ? "s" : ""}</span>
+								<span>1 anim. / ${evenement.enfants_par_animateur_defaut || 8} enfants</span>
 								<span>${escapeHtml(periodeLibelle(evenement))}</span>
 								<span>${escapeHtml(joursOuvertureLibelle(evenement))}</span>
 								${(evenement.dates_exclues || []).length ? `<span>${evenement.dates_exclues.length} fermeture${evenement.dates_exclues.length > 1 ? "s" : ""}</span>` : ""}
@@ -728,7 +834,7 @@ function bouton(label, classes, onClick)
 			<div class="periods-intro">
 				<div>
 					<p class="section-title">Importer les vacances scolaires</p>
-					<p class="section-help">Choisis une année scolaire et une zone. Le logiciel récupère les dates officielles et les découpe en semaines complètes du lundi au vendredi.</p>
+					
 				</div>
 				<span class="periods-independent-badge">Indépendant du planning</span>
 			</div>
@@ -759,7 +865,7 @@ function bouton(label, classes, onClick)
 			<div class="period-library-head">
 				<div>
 					<p class="section-title">Périodes enregistrées</p>
-					<p class="section-help">Ces périodes alimentent les groupes, les disponibilités et le récapitulatif.</p>
+					
 				</div>
 				<div class="field period-library-filter">
 					<label for="period-library-year">Afficher</label>
