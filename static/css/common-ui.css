@@ -586,6 +586,75 @@ body.page-planning>.app-page-header #planning-period-nav .week-picker__select{fl
 @media (max-width:1180px){body.page-planning>.app-page-header{flex-wrap:wrap !important}body.page-planning>.app-page-header .app-page-week{flex:1 1 100%;margin-left:0}body.page-planning>.app-page-header #planning-period-nav{width:100% !important}}
 @media (max-width:800px){body.app-body .app-page-header .app-page-week{width:100%;margin-left:0}body.app-body .app-page-header .app-page-week .week-navigation{width:100% !important}body.app-body .app-page-header .app-page-week .week-picker__select{min-width:0 !important;max-width:none}}
 
+/*
+ * Layout téléphone commun.
+ * Les règles sont volontairement placées après les variantes de page afin
+ * que le sélecteur de semaine reste compact partout, y compris au dashboard.
+ */
+@media (max-width:640px){
+  html,body.app-body{max-width:100%;overflow-x:hidden}
+  body.app-body:not(.page-planning)>main.page-shell{width:100% !important;max-width:100% !important;margin-inline:0 !important;padding:8px 9px 28px !important}
+  body.app-body .app-page-header{min-height:0 !important;gap:6px !important;margin-bottom:8px !important;padding:7px 8px !important;border-radius:11px !important}
+  body.app-body .app-page-header h1{font-size:1.05rem !important}
+  body.app-body .app-page-header>div:first-child{min-width:0}
+  body.app-body .app-page-header .app-page-tabs,
+  body.app-body .app-page-header .planning-tabs{min-height:36px !important;flex-wrap:nowrap !important;justify-content:flex-start !important;overflow-x:auto !important;overscroll-behavior-x:contain}
+  body.app-body .app-page-header .app-page-tabs .tab-btn,
+  body.app-body .app-page-header .planning-tabs .planning-tab{flex:0 0 auto;min-height:30px !important;height:30px !important;padding:5px 9px !important;font-size:.69rem !important}
+
+  body.app-body .app-page-header .app-page-week,
+  body.app-body .app-page-header .dashboard-week-filter{width:100% !important;min-width:0 !important;max-width:none !important;margin:0 !important}
+  body.app-body .app-page-header .app-page-week .week-navigation,
+  body.app-body .app-page-header .dashboard-week-filter .week-navigation,
+  body.page-planning>.app-page-header #planning-period-nav{display:flex !important;width:100% !important;min-height:38px !important;align-items:center !important;flex-direction:row !important;flex-wrap:nowrap !important;gap:3px !important;margin:0 !important;padding:2px !important}
+  body.app-body .app-page-header .week-picker__select,
+  body.page-planning>.app-page-header #planning-period-nav .week-picker__select{width:auto !important;min-width:0 !important;max-width:none !important;flex:1 1 auto !important}
+  body.app-body .app-page-header .week-picker__toggle{min-height:32px !important;height:32px !important;padding:4px 7px !important}
+  body.app-body .app-page-header .week-picker__label{font-size:.72rem !important;text-align:left !important}
+  body.app-body .app-page-header .week-navigation-controls{display:flex !important;width:auto !important;flex:0 0 auto !important;justify-content:flex-end !important;gap:2px !important}
+  body.app-body .app-page-header .week-navigation-button{width:30px !important;min-width:30px !important;height:32px !important;min-height:32px !important;padding:1px 5px !important}
+  body.app-body .app-page-header .week-navigation-today{display:none !important}
+  .week-picker__menu{position:fixed;top:auto;right:8px;bottom:8px;left:8px;width:auto;max-height:min(520px,68dvh);border-radius:14px}
+  .week-picker__tree{max-height:min(440px,56dvh)}
+
+  .page-header-actions,.form-actions,.fiche-actions,.export-actions{width:100%;align-items:stretch;flex-direction:column}
+  .page-header-actions>.btn,.form-actions>.btn,.fiche-actions>.btn,.export-actions>.btn{width:100%;flex:0 0 auto;justify-content:center}
+  .ui-card,.dashboard-card,.admin-card,.fiche-card{max-width:100%;border-radius:11px}
+  .modal-box{width:calc(100vw - 16px) !important;max-width:calc(100vw - 16px) !important;max-height:calc(100dvh - 16px) !important;margin:8px !important}
+  input,select,textarea,button{max-width:100%}
+
+  /* Tableau de bord : indicateurs courts en deux colonnes, contenu en une. */
+  body.dashboard-body>.page-shell.dashboard-page{padding:8px 9px 28px !important}
+  body.dashboard-body .dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:7px;margin-bottom:9px}
+  body.dashboard-body .dashboard-kpi{min-height:82px !important;grid-template-columns:32px minmax(0,1fr);gap:5px 7px;padding:9px;border-radius:10px}
+  body.dashboard-body .dashboard-kpi-icon{width:32px;height:32px;border-radius:8px}
+  body.dashboard-body .dashboard-kpi-icon svg{width:19px;height:19px}
+  body.dashboard-body .dashboard-kpi strong{font-size:1.25rem}
+  body.dashboard-body .dashboard-kpi small{font-size:.6rem}
+  body.dashboard-body .dashboard-main-grid{grid-template-columns:minmax(0,1fr) !important;gap:8px}
+  body.dashboard-body .dashboard-centres-card,
+  body.dashboard-body .dashboard-alerts-card,
+  body.dashboard-body .dashboard-actions-card,
+  body.dashboard-body .dashboard-week-card{grid-column:1 !important}
+  body.dashboard-body .dashboard-centres-list,
+  body.dashboard-body .dashboard-alert-list,
+  body.dashboard-body .dashboard-week-grid{grid-template-columns:minmax(0,1fr) !important;padding:8px}
+  body.dashboard-body .dashboard-centre-row{grid-template-columns:38px minmax(0,1fr) auto;padding:7px}
+  body.dashboard-body .dashboard-centre-logo{width:36px;height:36px}
+  body.dashboard-body .dashboard-row-chevron{display:none}
+  body.dashboard-body .dashboard-actions-grid{gap:6px;padding:8px}
+  body.dashboard-body .dashboard-action{min-height:65px}
+
+  /* Pages de gestion : les colonnes deviennent des blocs tactiles lisibles. */
+  .documents-grid,.document-group-grid,.salaries-directory-list,.qualification-equivalence-grid{grid-template-columns:minmax(0,1fr) !important}
+  .upload-form,.export-form,.email-compose-settings,.period-import-grid,.team-form-grid,.centre-edit-grid,.lieu-edit-grid{grid-template-columns:minmax(0,1fr) !important}
+  .administration-section,.admin-tab-panel #emails,.documents-page,.import-drop-section{padding-inline:8px !important}
+  .pdf-drop-zone{min-height:145px;padding:14px}
+  .import-table{min-width:560px}
+  .availability-days{grid-template-columns:minmax(0,1fr)}
+  .recap-section-heading{align-items:flex-start;flex-direction:column}
+}
+
 /* La liste du Planning a une largeur fixe : aucune poignée de redimensionnement. */
 @media (min-width:1024px){
   body.page-planning>main#layout{grid-template-columns:232px minmax(0,1fr) !important}
