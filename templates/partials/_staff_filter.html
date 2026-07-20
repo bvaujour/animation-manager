@@ -22,6 +22,7 @@
                     <span class="empty-note">Chargement…</span>
                 </div>
             </fieldset>
+            {% if show_status_filters %}
             <div class="compact-filter-status-grid">
                 <div class="field compact-field">
                     <label for="{{ availability_id }}">Disponibilité</label>
@@ -40,6 +41,7 @@
                     </select>
                 </div>
             </div>
+            {% endif %}
             <fieldset class="animateurs-filter-group">
                 <legend>Centre préféré</legend>
                 <div id="{{ centres_id }}" class="animateurs-filter-options">

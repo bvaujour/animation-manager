@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Mes disponibilités{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v=20260718-audit-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v=20260720-css-refactor-2">{% endblock %}
 {% block content %}
-<main class="page-shell page-shell--medium employee-detail-page availability-self-page">
-    <header class="page-header employee-detail-header">
-        <div><p class="eyebrow">Espace animateur</p><h1>Mes disponibilités</h1>{% if animateur %}<p class="page-intro">{{ animateur.prenom }} {{ animateur.nom }}</p>{% endif %}</div>
+<main id="main-content" class="page-shell page-shell--medium employee-detail-page availability-self-page">
+    <header class="page-header employee-detail-header app-page-header">
+        <div><h1>Mes disponibilités</h1></div>
     </header>
     {% if erreur_profil %}
     <section class="ui-card fiche-card"><p class="empty-note">Ton compte n’est pas encore rattaché à une fiche salarié. Contacte la direction.</p></section>

@@ -1,5 +1,6 @@
 import datetime
 import json
+from unittest import mock
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -317,7 +318,7 @@ class PlanningPageLayoutTests(ConnexionTestCase):
     def test_planning_page_uses_fixed_viewport_layout(self):
         response = self.client.get("/planning/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'class="page-planning"')
+        self.assertContains(response, 'class="app-body page-planning"')
         self.assertContains(response, 'id="animateurs-panel"')
         self.assertContains(response, 'id="planning-period-nav"')
         self.assertContains(response, 'id="calendars-container"')
@@ -326,7 +327,7 @@ class PlanningPageLayoutTests(ConnexionTestCase):
     def test_planning_page_exposes_scroll_layout(self):
         response = self.client.get("/planning/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'class="page-planning"', html=False)
+        self.assertContains(response, 'class="app-body page-planning"', html=False)
         self.assertContains(response, 'id="calendars-container"', html=False)
         self.assertContains(response, 'id="planning-actions"', html=False)
 
@@ -367,12 +368,13 @@ class AnimateursListPerformanceTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 25)
         # Le but est de garantir l'absence de N+1 : le nombre de requêtes doit
-        # rester constant quel que soit le nombre d'animateurs. Sur les 8, deux
+        # rester constant quel que soit le nombre d'animateurs. Sur les 9, deux
         # sont le coût fixe de l'authentification (session + utilisateur) apporté
-        # par ConnexionTestCase ; les 6 autres sont la sérialisation de la liste.
+        # par ConnexionTestCase ; les autres chargent les relations, dont la
+        # nouvelle table d'affinités animateur-groupe.
         self.assertLessEqual(
             len(contexte),
-            8,
+            9,
             f"La liste a effectué {len(contexte)} requêtes au lieu d'un nombre fixe.",
         )
 
@@ -403,6 +405,18 @@ class AnimateursListPerformanceTests(ConnexionTestCase):
         )
 
 class AnimateursApiOptionsTests(ConnexionTestCase):
+    @mock.patch("animateurs.views.synchroniser_affinites_groupes")
+    def test_liste_avec_affectations_reste_en_lecture_seule(self, synchroniser):
+        Animateur.objects.create(prenom="Aline", nom="Lecture seule")
+
+        response = self.client.get(
+            reverse("api_animateurs"),
+            {"include_affectations": "1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        synchroniser.assert_not_called()
+
     def test_liste_avec_prefetch_des_affectations(self):
         Animateur.objects.create(prenom="Ambre", nom="Test")
 
@@ -413,3 +427,30 @@ class AnimateursApiOptionsTests(ConnexionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 1)
+
+    def test_liste_expose_le_nombre_de_jours_travailles_par_groupe(self):
+        animateur = Animateur.objects.create(prenom="Ambre", nom="Historique")
+        centre = Centre.objects.create(nom="Centre historique", code="HIS", couleur="#123456")
+        groupe, _ = creer_groupe(centre, nom="Maternelles historique")
+        debut = timezone.make_aware(datetime.datetime(2026, 7, 13))
+        Affectation.objects.create(
+            animateur=animateur,
+            centre=centre,
+            evenement=groupe,
+            debut=debut,
+            fin=debut + datetime.timedelta(days=2),
+        )
+
+        response = self.client.get(
+            reverse("api_animateurs"),
+            {"include_affectations": "1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        donnees = response.json()[0]
+        historique = donnees["historique_groupes"]
+        affinites = donnees["affinites_groupes"]
+        self.assertEqual(len(historique), 1)
+        self.assertEqual(historique[0]["groupe_nom"], "Maternelles historique")
+        self.assertEqual(historique[0]["jours_travailles"], 2)
+        self.assertEqual(affinites[0]["score_affinite"], 2)

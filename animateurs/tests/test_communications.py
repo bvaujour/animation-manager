@@ -6,7 +6,7 @@ from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 
-from animateurs.models import Animateur, DestinataireEnvoiEmail, Document, EnvoiEmail
+from animateurs.models import Animateur, Document
 from animateurs.tests.base import ConnexionTestCase
 
 
@@ -35,7 +35,7 @@ class EmailDirectAnimateurTests(ConnexionTestCase):
             permanent=True,
         )
 
-    def test_prepare_la_fiche_email_et_son_historique(self):
+    def test_prepare_la_fiche_email_sans_historique(self):
         response = self.client.get(f"/api/animateurs/{self.animateur.id}/emails/")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -44,7 +44,7 @@ class EmailDirectAnimateurTests(ConnexionTestCase):
         self.assertEqual(payload["documents"][0]["titre"], "Planning juillet")
         self.assertEqual(payload["modeles"], [])
         self.assertIn("{{prenom}}", [variable["code"] for variable in payload["variables"]])
-        self.assertEqual(payload["historique"], [])
+        self.assertNotIn("historique", payload)
 
     def test_envoie_directement_un_email_sans_piece_jointe(self):
         response = self.client.post(
@@ -65,21 +65,6 @@ class EmailDirectAnimateurTests(ConnexionTestCase):
         self.assertEqual(mail.outbox[0].body, "Ton planning a été modifié.")
         self.assertNotIn("Gestion animation", mail.outbox[0].body)
 
-        envoi = EnvoiEmail.objects.get()
-        self.assertEqual(envoi.nombre_envoyes, 1)
-        self.assertEqual(envoi.nombre_echecs, 0)
-        self.assertEqual(
-            DestinataireEnvoiEmail.objects.get().statut,
-            DestinataireEnvoiEmail.STATUT_ENVOYE,
-        )
-
-        historique = self.client.get(
-            f"/api/animateurs/{self.animateur.id}/emails/"
-        ).json()["historique"]
-        self.assertEqual(historique[0]["objet"], "Planning")
-        self.assertEqual(historique[0]["statut"], "envoye")
-        self.assertEqual(historique[0]["documents"], [])
-
     def test_remplace_uniquement_le_nom_et_le_prenom(self):
         response = self.client.post(
             f"/api/animateurs/{self.animateur.id}/emails/",
@@ -93,14 +78,10 @@ class EmailDirectAnimateurTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mail.outbox[0].subject, "Information pour Julie Martin")
         self.assertEqual(mail.outbox[0].body, "Salut Julie,\n\nTexte libre. {{planning_semaine}}")
-        historique = self.client.get(
-            f"/api/animateurs/{self.animateur.id}/emails/"
-        ).json()["historique"]
-        self.assertEqual(historique[0]["message"], "Salut Julie,\n\nTexte libre. {{planning_semaine}}")
 
 
 
-    def test_un_identifiant_provisoire_invalide_ne_cree_pas_d_historique(self):
+    def test_un_identifiant_provisoire_invalide_n_envoie_rien(self):
         utilisateur = get_user_model().objects.create_user(
             username="julie.martin",
             password="mot-de-passe-test",
@@ -124,8 +105,7 @@ class EmailDirectAnimateurTests(ConnexionTestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(EnvoiEmail.objects.count(), 0)
-        self.assertEqual(DestinataireEnvoiEmail.objects.count(), 0)
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_peut_joindre_un_document(self):
         response = self.client.post(
@@ -139,7 +119,6 @@ class EmailDirectAnimateurTests(ConnexionTestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mail.outbox[0].attachments[0][0], "planning-juillet.pdf")
-        self.assertEqual(EnvoiEmail.objects.get().documents_titres, ["Planning juillet"])
 
     def test_refuse_un_salarie_sans_email(self):
         sans_email = Animateur.objects.create(prenom="Léane", nom="Test")

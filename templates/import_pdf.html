@@ -1,13 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Import PDF{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/import-pdf.css' %}?v=20260718-2">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/import-pdf.css' %}?v=20260720-css-refactor-2">{% endblock %}
 {% block content %}
-<main class="page-shell page-shell--wide import-page">
-    <header class="page-header import-header">
+<main id="main-content" class="page-shell page-shell--wide import-page">
+    <header class="page-header import-header app-page-header">
         <div>
             <h1>Import PDF</h1>
-            <p class="page-intro">Dépose un export hebdomadaire pour lire et vérifier ses informations avant un futur enregistrement dans le logiciel.</p>
         </div>
         <span class="local-badge">Lecture locale uniquement</span>
     </header>
@@ -73,6 +72,5 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
 <script src="{% static 'js/import-pdf.js' %}?v=20260718-2" type="module"></script>
 {% endblock %}

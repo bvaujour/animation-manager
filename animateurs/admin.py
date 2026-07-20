@@ -13,17 +13,15 @@ from django.forms import CheckboxSelectMultiple
 
 from .models import (
     Affectation,
+    AffiniteGroupeAnimateur,
     Animateur,
     Centre,
     ContactEmailExterne,
     DateExclueEvenement,
-    DestinataireEnvoiEmail,
     Disponibilite,
     Document,
-    EnvoiEmail,
     EquivalenceQualification,
     Evenement,
-    JournalAudit,
     ModeleEmail,
     PeriodeScolaire,
     PreferenceCentre,
@@ -109,7 +107,7 @@ class PreferenceCentreInline(admin.TabularInline):
     directement depuis sa fiche, sans passer par un écran séparé."""
     model = PreferenceCentre
     extra = 1
-    fields = ("centre", "est_prefere")
+    fields = ("centre", "est_prefere", "est_interdit")
     ordering = ["-est_prefere", "centre__nom"]
 
 
@@ -119,6 +117,25 @@ class DisponibiliteInline(admin.TabularInline):
     model = Disponibilite
     extra = 1
     ordering = ["debut"]
+
+
+class AffiniteGroupeAnimateurInline(admin.TabularInline):
+    """Affiche les scores calculés automatiquement pour chaque groupe."""
+
+    model = AffiniteGroupeAnimateur
+    extra = 0
+    can_delete = False
+    readonly_fields = (
+        "evenement",
+        "jours_travailles",
+        "dernier_jour_travaille",
+        "modifie_le",
+    )
+    fields = readonly_fields
+    ordering = ("-jours_travailles",)
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Animateur)
@@ -137,7 +154,7 @@ class AnimateurAdmin(admin.ModelAdmin):
         "evenement_preferee",
     )
     search_fields = ("prenom", "nom", "telephone", "email", "adresse", "numero_securite_sociale")
-    inlines = [PreferenceCentreInline, DisponibiliteInline]
+    inlines = [PreferenceCentreInline, DisponibiliteInline, AffiniteGroupeAnimateurInline]
 
     def formfield_for_manytomany(
         self,
@@ -159,6 +176,37 @@ class AnimateurAdmin(admin.ModelAdmin):
         )
 
 
+@admin.register(AffiniteGroupeAnimateur)
+class AffiniteGroupeAnimateurAdmin(admin.ModelAdmin):
+    list_display = (
+        "animateur",
+        "evenement",
+        "jours_travailles",
+        "dernier_jour_travaille",
+        "modifie_le",
+    )
+    list_filter = ("evenement__centre", "evenement")
+    search_fields = (
+        "animateur__prenom",
+        "animateur__nom",
+        "evenement__nom",
+        "evenement__centre__nom",
+    )
+    readonly_fields = (
+        "animateur",
+        "evenement",
+        "jours_travailles",
+        "dernier_jour_travaille",
+        "modifie_le",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Affectation)
 class AffectationAdmin(admin.ModelAdmin):
     """Vue d'ensemble/filtrable du planning, utile pour vérifier ou
@@ -174,38 +222,6 @@ class DisponibiliteAdmin(admin.ModelAdmin):
     list_display = ("animateur", "debut", "fin")
     list_filter = ("animateur",)
     date_hierarchy = "debut"
-
-
-class DestinataireEnvoiEmailInline(admin.TabularInline):
-    model = DestinataireEnvoiEmail
-    extra = 0
-    can_delete = False
-    readonly_fields = ("prenom", "nom", "email", "statut", "objet_rendu", "message_rendu", "erreur", "date_traitement")
-
-
-@admin.register(EnvoiEmail)
-class EnvoiEmailAdmin(admin.ModelAdmin):
-    list_display = ("objet", "date_creation", "nombre_destinataires", "nombre_envoyes", "nombre_echecs", "mode_test")
-    list_filter = ("mode_test", "date_creation")
-    search_fields = ("objet", "message", "destinataires__email", "destinataires__nom")
-    readonly_fields = ("date_creation", "documents_titres", "nombre_destinataires", "nombre_envoyes", "nombre_echecs", "mode_test")
-    filter_horizontal = ("documents",)
-    inlines = [DestinataireEnvoiEmailInline]
-
-
-@admin.register(JournalAudit)
-class JournalAuditAdmin(admin.ModelAdmin):
-    list_display = ("date_creation", "utilisateur", "methode", "chemin", "statut_http", "description")
-    list_filter = ("methode", "statut_http", "date_creation")
-    search_fields = ("utilisateur__username", "chemin", "description", "adresse_ip")
-    readonly_fields = ("utilisateur", "methode", "chemin", "statut_http", "adresse_ip", "description", "donnees", "date_creation")
-    ordering = ("-date_creation",)
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, _obj=None):
-        return False
 
 
 @admin.register(ContactEmailExterne)

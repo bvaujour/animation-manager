@@ -8,6 +8,7 @@ Vue d'ensemble des tables et de leurs relations :
                                   +-----------FK--- Disponibilite              |
                                   |                                            +---FK---> Evenement
                                   +-----------FK--- Affectation ----FK---------+
+                                  +------FK--- AffiniteGroupeAnimateur ---FK---> Evenement
                                                             +---FK---> Evenement
 
 - Un Animateur a des Qualifications (ManyToMany direct, pas de table
@@ -25,6 +26,8 @@ Vue d'ensemble des tables et de leurs relations :
   animateur travaille dans un groupe (et donc dans son centre) entre
   deux dates. Le champ `centre` est conservé temporairement pour ne pas
   casser les écrans et API existants pendant la migration progressive.
+- AffiniteGroupeAnimateur : compteur persistant des journées terminées
+  par un salarié dans chaque groupe, utilisé pour le remplissage automatique.
 """
 
 import re
@@ -264,7 +267,13 @@ class Animateur(models.Model):
     # elle-même.
     qualifications = models.ManyToManyField(Qualification, blank=True)
 
-
+    groupes_affinite = models.ManyToManyField(
+        "Evenement",
+        through="AffiniteGroupeAnimateur",
+        related_name="animateurs_avec_affinite",
+        blank=True,
+        verbose_name="affinités avec les groupes",
+    )
 
     evenement_preferee = models.ForeignKey(
         "Evenement", on_delete=models.SET_NULL, null=True, blank=True,
@@ -556,9 +565,9 @@ class BesoinQualification(models.Model):
 class PreferenceCentre(models.Model):
     """Lien entre un animateur et un centre où il peut être affecté.
 
-    Une relation peut être marquée comme centre préféré. Les autres
-    relations sont des centres secondaires. Un animateur ne peut avoir
-    qu'un seul centre préféré, mais plusieurs centres secondaires.
+    Une relation peut être marquée comme lieu préféré, interdite ou neutre.
+    Plusieurs lieux peuvent être préférés ; leur ordre est porté par la liste
+    envoyée par l'interface lors des mises à jour.
     """
 
     animateur = models.ForeignKey(
@@ -573,27 +582,31 @@ class PreferenceCentre(models.Model):
     )
     est_prefere = models.BooleanField(
         default=False,
-        help_text="Centre principal à privilégier lors du remplissage automatique.",
+        help_text="Centre à privilégier lors du remplissage automatique.",
+    )
+    est_interdit = models.BooleanField(
+        default=False,
+        help_text="Centre dans lequel cet animateur ne doit jamais être affecté.",
     )
 
     class Meta:
         ordering = ["-est_prefere", "centre__nom"]
         constraints = [
             # Un animateur ne peut pas avoir deux fois le même centre
-            # dans ses centres autorisés.
+            # dans ses préférences.
             models.UniqueConstraint(
                 fields=["animateur", "centre"],
                 name="unique_animateur_centre",
             ),
-            models.UniqueConstraint(
-                fields=["animateur"],
-                condition=models.Q(est_prefere=True),
-                name="unique_centre_prefere_par_animateur",
-            ),
         ]
 
     def __str__(self):
-        type_centre = "centre préféré" if self.est_prefere else "centre secondaire"
+        if self.est_interdit:
+            type_centre = "centre interdit"
+        elif self.est_prefere:
+            type_centre = "centre préféré"
+        else:
+            type_centre = "centre neutre"
         return f"{self.animateur} - {type_centre} : {self.centre}"
 
 
@@ -691,6 +704,66 @@ class Disponibilite(models.Model):
 
     def __str__(self):
         return f"{self.animateur} disponible du {self.debut:%d/%m/%Y} au {self.fin:%d/%m/%Y}"
+
+
+class AffiniteGroupeAnimateur(models.Model):
+    """Affinité persistante d'un animateur avec un groupe.
+
+    Le score correspond au nombre de journées réellement terminées dans ce
+    groupe. Il est synchronisé depuis les affectations passées et sert de
+    critère au remplissage automatique. Une table intermédiaire est nécessaire
+    car chaque animateur possède une valeur différente pour chaque groupe.
+    """
+
+    animateur = models.ForeignKey(
+        Animateur,
+        on_delete=models.CASCADE,
+        related_name="affinites_groupes",
+    )
+    evenement = models.ForeignKey(
+        Evenement,
+        on_delete=models.CASCADE,
+        related_name="affinites_animateurs",
+        verbose_name="groupe",
+    )
+    jours_travailles = models.PositiveIntegerField(
+        default=0,
+        verbose_name="jours travaillés",
+    )
+    dernier_jour_travaille = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="dernier jour travaillé",
+    )
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-jours_travailles", "evenement__centre__nom", "evenement__nom")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("animateur", "evenement"),
+                name="unique_affinite_animateur_groupe",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("animateur", "jours_travailles"),
+                name="affinite_anim_score_idx",
+            ),
+            models.Index(
+                fields=("evenement", "jours_travailles"),
+                name="affinite_groupe_score_idx",
+            ),
+        ]
+        verbose_name = "affinité animateur-groupe"
+        verbose_name_plural = "affinités animateurs-groupes"
+
+    @property
+    def score(self):
+        return self.jours_travailles
+
+    def __str__(self):
+        return f"{self.animateur} ↔ {self.evenement} : {self.jours_travailles} jour(s)"
 
 
 class Affectation(models.Model):
@@ -850,111 +923,3 @@ class ContactEmailExterne(models.Model):
 
     def __str__(self):
         return f"{self.prenom} {self.nom}".strip() or self.email
-
-
-class EnvoiEmail(models.Model):
-    """Historique d'un envoi groupé réalisé depuis la bibliothèque."""
-
-    objet = models.CharField(max_length=200)
-    message = models.TextField()
-    documents = models.ManyToManyField(Document, related_name="envois_email", blank=True)
-    documents_titres = models.JSONField(
-        default=list,
-        help_text="Copie des titres au moment de l’envoi, conservée si un document est supprimé.",
-    )
-    date_creation = models.DateTimeField(auto_now_add=True)
-    nombre_destinataires = models.PositiveIntegerField(default=0)
-    nombre_envoyes = models.PositiveIntegerField(default=0)
-    nombre_echecs = models.PositiveIntegerField(default=0)
-    mode_test = models.BooleanField(default=False)
-
-    class Meta:
-        ordering = ["-date_creation"]
-
-    def __str__(self):
-        return f"{self.objet} ({self.date_creation:%d/%m/%Y %H:%M})"
-
-
-class DestinataireEnvoiEmail(models.Model):
-    """Résultat individuel conservé même si le salarié est supprimé ensuite."""
-
-    STATUT_ENVOYE = "envoye"
-    STATUT_ECHEC = "echec"
-    STATUTS = [
-        (STATUT_ENVOYE, "Envoyé"),
-        (STATUT_ECHEC, "Échec"),
-    ]
-
-    envoi = models.ForeignKey(
-        EnvoiEmail,
-        on_delete=models.CASCADE,
-        related_name="destinataires",
-    )
-    animateur = models.ForeignKey(
-        Animateur,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="emails_recus",
-    )
-    contact_externe = models.ForeignKey(
-        ContactEmailExterne,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="emails_recus",
-    )
-    prenom = models.CharField(max_length=100)
-    nom = models.CharField(max_length=100)
-    email = models.EmailField()
-    statut = models.CharField(max_length=10, choices=STATUTS)
-    objet_rendu = models.CharField(max_length=200, blank=True, default="")
-    message_rendu = models.TextField(blank=True, default="")
-    erreur = models.TextField(blank=True, default="")
-    date_traitement = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["prenom", "nom", "email"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["envoi", "email"],
-                name="unique_destinataire_par_envoi_email",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.prenom} {self.nom} — {self.get_statut_display()}"
-
-
-
-
-class JournalAudit(models.Model):
-    """Trace les actions d'écriture réalisées dans l'application."""
-
-    utilisateur = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="actions_auditees",
-    )
-    methode = models.CharField(max_length=10)
-    chemin = models.CharField(max_length=500)
-    statut_http = models.PositiveSmallIntegerField()
-    adresse_ip = models.GenericIPAddressField(null=True, blank=True)
-    description = models.CharField(max_length=255, blank=True)
-    donnees = models.JSONField(default=dict, blank=True)
-    date_creation = models.DateTimeField(auto_now_add=True, db_index=True)
-
-    class Meta:
-        ordering = ("-date_creation", "-id")
-        indexes = [
-            models.Index(fields=("utilisateur", "-date_creation"), name="audit_user_date_idx"),
-            models.Index(fields=("chemin", "-date_creation"), name="audit_path_date_idx"),
-        ]
-        verbose_name = "entrée du journal d'audit"
-        verbose_name_plural = "journal d'audit"
-
-    def __str__(self):
-        acteur = self.utilisateur.get_username() if self.utilisateur else "Anonyme"
-        return f"{self.date_creation:%d/%m/%Y %H:%M} · {acteur} · {self.methode} {self.chemin}"

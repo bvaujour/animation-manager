@@ -1,29 +1,29 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Administration - Gestion animation{% endblock %}
+{% block title %}{% if active_tab == "emails" %}E-mails{% else %}Administration{% endif %} - Gestion animation{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/administration.css' %}?v=20260718-audit-1">
-<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260718-audit-1">
+<link rel="stylesheet" href="{% static 'css/administration.css' %}?v=20260720-css-refactor-2">
+<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260720-css-refactor-2">
 {% endblock %}
 
 {% block content %}
-<main class="page-shell page-shell--wide administration-page" data-active-tab="{{ active_tab|default:'export' }}">
-    <header class="page-header administration-page-header">
-        <div><p class="eyebrow">Outils de direction</p><h1>Administration</h1><p class="page-intro">Exportez les plannings, communiquez avec l’équipe et gérez les accès administrateurs.</p></div>
+<main id="main-content" class="page-shell page-shell--wide administration-page" data-active-tab="{{ active_tab|default:'export' }}">
+    <header class="page-header administration-page-header app-page-header app-page-header--tabs">
+        <div>
+            <h1>Administration</h1>
+        </div>
+        <div class="tabs admin-tabs app-page-tabs" id="administration-tabs" role="tablist" aria-label="Administration">
+            <button class="tab-btn{% if active_tab == 'export' %} active{% endif %}" data-admin-tab="export" type="button" role="tab" aria-selected="{% if active_tab == 'export' %}true{% else %}false{% endif %}">Exports</button>
+            <button class="tab-btn{% if active_tab == 'emails' %} active{% endif %}" data-admin-tab="emails" type="button" role="tab" aria-selected="{% if active_tab == 'emails' %}true{% else %}false{% endif %}">E-mails</button>
+            <button class="tab-btn{% if active_tab == 'superusers' %} active{% endif %}" data-admin-tab="superusers" type="button" role="tab" aria-selected="{% if active_tab == 'superusers' %}true{% else %}false{% endif %}">Superusers</button>
+            <button class="tab-btn{% if active_tab == 'mot-de-passe' %} active{% endif %}" data-admin-tab="mot-de-passe" type="button" role="tab" aria-selected="{% if active_tab == 'mot-de-passe' %}true{% else %}false{% endif %}">Mot de passe</button>
+        </div>
     </header>
     {% if message_admin %}<div class="admin-message success" role="status">{{ message_admin }}</div>{% endif %}
     {% if erreur_admin %}<div class="admin-message error" role="alert">{{ erreur_admin }}</div>{% endif %}
 
-    <div class="tabs admin-tabs" id="administration-tabs" role="tablist" aria-label="Administration">
-        <button class="tab-btn" data-admin-tab="export" type="button" role="tab">Export calendrier</button>
-        <button class="tab-btn" data-admin-tab="emails" type="button" role="tab">E-mails</button>
-        <button class="tab-btn" data-admin-tab="superusers" type="button" role="tab">Superusers</button>
-        <button class="tab-btn" data-admin-tab="historique" type="button" role="tab">Historique</button>
-        <button class="tab-btn" data-admin-tab="mot-de-passe" type="button" role="tab">Mot de passe</button>
-    </div>
-
-    <div class="admin-tab-panel" data-admin-panel="export" hidden>
+    <div class="admin-tab-panel" data-admin-panel="export"{% if active_tab != 'export' %} hidden{% endif %}>
         <section class="ui-card administration-section export-card" aria-labelledby="export-planning-title">
             <div class="admin-compact-heading">
                 <div>
@@ -40,11 +40,11 @@
         </section>
     </div>
 
-    <div class="admin-tab-panel" data-admin-panel="emails" hidden>
+    <div class="admin-tab-panel" data-admin-panel="emails"{% if active_tab != 'emails' %} hidden{% endif %}>
         {% include "partials/_emails_admin.html" %}
     </div>
 
-    <div class="admin-tab-panel" data-admin-panel="superusers" hidden>
+    <div class="admin-tab-panel" data-admin-panel="superusers"{% if active_tab != 'superusers' %} hidden{% endif %}>
         <section class="ui-card administration-section admin-users-section" aria-labelledby="superusers-title">
             <div class="admin-compact-heading"><div><h1 id="superusers-title">Superusers</h1></div></div>
             <div class="superuser-layout">
@@ -74,23 +74,7 @@
         </section>
     </div>
 
-    <div class="admin-tab-panel" data-admin-panel="historique" hidden>
-        <section class="ui-card administration-section" aria-labelledby="journal-audit-title">
-            <div class="admin-compact-heading"><div><h1 id="journal-audit-title">Historique des actions</h1></div></div>
-            <div class="audit-table-wrap">
-                <table class="audit-table">
-                    <thead><tr><th>Date</th><th>Compte</th><th>Action</th><th>Chemin</th><th>Statut</th></tr></thead>
-                    <tbody>
-                        {% for entree in journal_audit %}
-                        <tr><td>{{ entree.date_creation|date:"d/m/Y H:i" }}</td><td>{{ entree.utilisateur.username|default:"Système" }}</td><td>{{ entree.description }}</td><td><code>{{ entree.methode }} {{ entree.chemin }}</code></td><td>{{ entree.statut_http }}</td></tr>
-                        {% empty %}<tr><td colspan="5">Aucune action enregistrée pour le moment.</td></tr>{% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-    </div>
-
-    <div class="admin-tab-panel" data-admin-panel="mot-de-passe" hidden>
+    <div class="admin-tab-panel" data-admin-panel="mot-de-passe"{% if active_tab != 'mot-de-passe' %} hidden{% endif %}>
         <section class="ui-card administration-section" aria-labelledby="password-title">
             <div class="admin-compact-heading"><div><h1 id="password-title">Modifier mon mot de passe</h1><p>Compte connecté : <strong>{{ request.user.username }}</strong></p></div></div>
             <form class="ui-form admin-card admin-form password-form" method="post">

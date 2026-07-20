@@ -13,6 +13,13 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+Pour contribuer au projet et lancer les contrôles de style :
+
+```bash
+pip install -r requirements-dev.txt
+ruff check config animateurs
+```
+
 Sans variables `DB_*`, l'application utilise SQLite. En production, renseigner `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` et `DB_PASSWORD` pour PostgreSQL/Supabase.
 
 ## Vérifications
@@ -47,13 +54,13 @@ Définir impérativement `SECRET_KEY`, `DEBUG=False`, `ALLOWED_HOSTS` et les var
 
 Chaque salarié peut être relié à un compte Django depuis sa fiche dans l'administration Django (`Animateurs > Animateurs > compte de connexion`).
 
-- Un compte de direction doit avoir le statut **staff**. Il conserve l'accès à toutes les pages et fonctions.
-- Un compte animateur ne doit pas être staff. Il accède uniquement à l'accueil en lecture seule, aux documents partagés et à la saisie de ses propres disponibilités.
+- Un compte de direction doit être **superutilisateur**. Il conserve l'accès à toutes les pages et fonctions.
+- Un compte animateur est un compte ordinaire relié à une fiche salarié. Il accède uniquement à l'accueil en lecture seule, aux documents partagés et à la saisie de ses propres disponibilités.
 - La page de connexion est `/connexion/`.
 
 Pour créer un accès animateur :
 1. créer l'utilisateur dans `Administration Django > Utilisateurs` ;
-2. ne pas cocher « statut équipe » ;
+2. ne pas lui attribuer le statut superutilisateur ;
 3. rattacher ce compte à la fiche du salarié via le champ « compte de connexion ».
 
 ## Compte maître indépendant
@@ -144,8 +151,25 @@ Toutes les pages utilisent désormais le même langage visuel que le tableau de 
 - espaces de travail adaptés à leur usage : Planning dense, Salariés en maître/détail, Gestion en cartes par lieu et Administration organisée par outils ;
 - mise en page responsive conservant l'accès à toutes les fonctions sur tablette et mobile.
 
-La couche commune se trouve dans `static/css/app-theme.css`. Elle est chargée en dernier depuis `templates/base.html` afin d'unifier les anciens écrans sans dupliquer leur logique métier.
+Les fondations et composants communs se trouvent dans `static/css/common-base.css` et `static/css/common-ui.css`. Les pages ne chargent ensuite que leur feuille spécialisée.
 
 ## Disposition modulable des centres dans le Planning
 
 Le menu compact **Centres** permet de rouvrir un centre précédemment fermé. Chaque carte peut être déplacée depuis sa poignée : les centres déposés sur une même ligne se partagent automatiquement toute la largeur disponible, tandis qu'un dépôt entre deux lignes crée une nouvelle rangée. Les calendriers conservent une hauteur utile pour les affectations ; le Planning défile uniquement vers le bas et ne crée jamais de défilement horizontal. La disposition reste mémorisée dans le navigateur sans modifier l'ordre métier enregistré dans Gestion.
+
+## Navigation réorganisée
+
+Le menu de direction est regroupé par usage :
+
+- **Pilotage** : Tableau de bord, Planning, Récapitulatif ;
+- **Équipe** : Salariés ;
+- **Organisation** : Gestion, Documents ;
+- **Communication** : E-mails ;
+- **Paramètres** : Administration.
+
+Sur ordinateur, le menu ouvert réserve sa propre largeur et ne recouvre plus les pages. Il peut être replié en rail compact. Sur mobile, il reste disponible sous forme de tiroir. Les accès **Documents** et **E-mails** disposent de liens directs.
+
+
+## Audit technique
+
+Le rapport `AUDIT_COMPLET.md` décrit les corrections réalisées, les vérifications exécutées et les chantiers de modularisation recommandés.

@@ -10,7 +10,6 @@
         <div class="tabs documents-tabs" role="tablist" aria-label="E-mails">
             <button class="tab-btn active" type="button" data-tab="envoi" role="tab">Nouvel envoi</button>
             <button class="tab-btn" type="button" data-tab="modeles" role="tab">Modèles</button>
-            <button class="tab-btn" type="button" data-tab="historique" role="tab">Historique</button>
         </div>
 
         <section class="tab-panel" data-panel="envoi">
@@ -25,7 +24,7 @@
                                 <button class="btn btn-ghost" id="destinataires-aucun" type="button">Effacer</button>
                             </div>
                         </div>
-                        {% include "partials/_staff_filter.html" with toolbar_class="email-recipient-tools" search_id="recherche-destinataire" search_placeholder="Nom, e-mail, lieu…" details_id="email-recipient-filter" count_id="email-filter-count" qualifications_id="filtre-destinataire-qualifications" availability_id="filtre-destinataire-disponibilite" assignment_id="filtre-destinataire-affectation" centres_id="filtre-destinataire-centres" reset_id="email-filter-reset" info_id="destinataires-filtres-info" %}
+                        {% include "partials/_staff_filter.html" with toolbar_class="email-recipient-tools" search_id="recherche-destinataire" search_placeholder="Nom, e-mail, lieu…" details_id="email-recipient-filter" count_id="email-filter-count" qualifications_id="filtre-destinataire-qualifications" availability_id="filtre-destinataire-disponibilite" assignment_id="filtre-destinataire-affectation" centres_id="filtre-destinataire-centres" reset_id="email-filter-reset" info_id="destinataires-filtres-info" show_status_filters=True %}
                         <div class="email-recipient-group-title">Salariés</div>
                         <div id="email-destinataires" class="email-checkbox-list"><p class="empty-note">Chargement des salariés…</p></div>
                         <div class="email-recipient-group-heading">
@@ -134,13 +133,6 @@
                     </div>
                 </form>
             </div>
-        </section>
-
-        <section class="tab-panel" data-panel="historique" hidden>
-            <div class="history-heading">
-                <div><h3>Historique des envois</h3></div>
-            </div>
-            <div id="email-historique" class="email-history"></div>
         </section>
     </div>
 </section>

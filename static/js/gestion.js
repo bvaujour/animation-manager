@@ -269,11 +269,8 @@ function bouton(label, classes, onClick)
 		let qualificationsEvenements = [];
 		let periodesScolaires = [];
 		container.innerHTML = `
-			<p class="section-title">Lieux et groupes</p>
-			
-			<div class="lieux-cards" id="lieux-list"></div>
 			<p class="section-title">Ajouter un lieu</p>
-			<div class="gestion-form" id="lieu-form">
+			<div class="gestion-form gestion-form--inline" id="lieu-form">
 				<div class="edit-grid">
 					<div class="field">
 						<label for="lieu-nom">Nom</label>
@@ -291,6 +288,8 @@ function bouton(label, classes, onClick)
 				<p class="form-error" id="lieu-error"></p>
 				<button class="btn btn-primary" id="lieu-submit" type="button">Ajouter le lieu</button>
 			</div>
+			<p class="section-title">Lieux et groupes</p>
+			<div class="lieux-cards" id="lieux-list"></div>
 		`;
 
 		const list = container.querySelector("#lieux-list");

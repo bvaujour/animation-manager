@@ -1,27 +1,21 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Récapitulatif{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}?v=20260719-clean-ui-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}?v=20260720-css-refactor-2">{% endblock %}
 {% block content %}
-<main class="page-shell page-shell--wide recap-page">
-    <header class="page-header recap-header">
+<main id="main-content" class="page-shell page-shell--wide recap-page">
+    <header class="page-header recap-header app-page-header app-page-header--tabs">
         <div>
-            <p class="eyebrow">Suivi du travail et de la paie</p>
             <h1>Récapitulatif</h1>
-            <p class="page-intro">Comparez les jours travaillés, les affectations et les montants sur une ou plusieurs semaines.</p>
+        </div>
+        <div class="tabs recap-tabs app-page-tabs" id="recap-tabs" role="tablist" aria-label="Vues du récapitulatif">
+            <button class="tab-btn active" data-recap-tab="centres" type="button" role="tab" aria-selected="true">Jours et paie par centre</button>
+            <button class="tab-btn" data-recap-tab="totaux" type="button" role="tab" aria-selected="false">Totaux par animateur</button>
+        </div>
+        <div class="app-page-week" aria-label="Choix de la période">
+            {% include "partials/_week_navigation.html" with container_id="periode-select" previous_id="recap-prev-week" today_id="recap-current-week" next_id="recap-next-week" label_id="periode-select-label" %}
         </div>
     </header>
-
-    <section class="ui-card ui-section periode-card" aria-label="Choix des périodes">
-        {% include "partials/_week_picker.html" with picker_id="periode-select" picker_class="periode-select" toggle_id="periode-select-toggle" label_id="periode-select-label" menu_id="periode-select-menu" tree_id="periode-select-options" clear_id="periodes-tout-deselectionner" show_select_all=True mode="multiple" placeholder="Choisir les semaines" %}
-        <button id="btn-appliquer-periode" class="btn" type="button">Afficher</button>
-        <p id="periode-affichee" class="periode-affichee"></p>
-    </section>
-
-    <div class="tabs recap-tabs" id="recap-tabs" role="tablist" aria-label="Vues du récapitulatif">
-        <button class="tab-btn active" data-recap-tab="centres" type="button" role="tab" aria-selected="true">Jours et paie par centre</button>
-        <button class="tab-btn" data-recap-tab="totaux" type="button" role="tab" aria-selected="false">Totaux par animateur</button>
-    </div>
 
     <section class="ui-card ui-section recap-card recap-tab-panel" data-recap-panel="centres" aria-labelledby="recap-centres-title">
         <div class="ui-section-heading section-header recap-section-heading">
@@ -45,4 +39,4 @@
     </section>
 </main>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/recapitulatif.js' %}?v=20260719-clean-ui-1"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/recapitulatif.js' %}?v=20260720-week-header-1"></script>{% endblock %}

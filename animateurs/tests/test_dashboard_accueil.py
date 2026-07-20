@@ -36,48 +36,73 @@ class DashboardAccueilTests(ConnexionTestCase):
                 animateur=animateur,
                 centre=self.centre,
                 evenement=self.groupe,
-                debut=timezone.make_aware(datetime.datetime.combine(self.jour, datetime.time.min)),
-                fin=timezone.make_aware(datetime.datetime.combine(self.jour + datetime.timedelta(days=1), datetime.time.min)),
+                debut=timezone.make_aware(
+                    datetime.datetime.combine(self.jour, datetime.time.min)
+                ),
+                fin=timezone.make_aware(
+                    datetime.datetime.combine(
+                        self.jour + datetime.timedelta(days=1), datetime.time.min
+                    )
+                ),
             )
 
-    def test_page_direction_charge_le_tableau_de_bord(self):
+    def test_page_direction_affiche_un_selecteur_de_semaine_sans_calendrier_ni_centre(self):
         response = self.client.get(reverse("accueil"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="dashboard-root"')
-        self.assertContains(response, "css/dashboard.css")
-        self.assertContains(response, "js/dashboard.js")
+        self.assertContains(response, 'id="dashboard-period-nav"')
+        self.assertNotContains(response, "Semaine concernée")
         self.assertContains(response, "État des centres")
         self.assertContains(response, "Actions rapides")
+        self.assertNotContains(response, 'id="dashboard-calendar"')
+        self.assertNotContains(response, 'id="dashboard-centre-select"')
 
-    def test_api_calcule_enfants_encadrement_et_manque(self):
+    def test_api_calcule_les_indicateurs_de_toute_la_semaine(self):
         response = self.client.get(
             reverse("api_tableau_de_bord"),
-            {"date": self.jour.isoformat()},
+            {"semaine": self.jour.isoformat()},
         )
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["jour"]["enfants"], 18)
-        self.assertEqual(data["jour"]["animateurs_affectes"], 2)
-        self.assertEqual(data["jour"]["animateurs_necessaires"], 3)
-        self.assertEqual(data["jour"]["manque_animateurs"], 1)
-        self.assertEqual(data["jour"]["etat"], "danger")
-        self.assertEqual(data["jour"]["centres"][0]["etat_libelle"], "Manque 1 anim.")
-        self.assertTrue(any("manque 1 animateur" in alerte["titre"].lower() for alerte in data["alertes"]))
-        self.assertEqual(data["indicateurs"]["enfants"], 18)
+        lundi = data["semaine"][0]
+        centre = data["centres_semaine"][0]
 
-    def test_api_signale_un_effectif_non_renseigne(self):
+        self.assertEqual(data["periode"]["debut_semaine"], "2026-07-20")
+        self.assertEqual(data["periode"]["fin_semaine"], "2026-07-24")
+        self.assertEqual(len(data["semaine"]), 5)
+        self.assertEqual(lundi["enfants"], 18)
+        self.assertEqual(lundi["animateurs_affectes"], 2)
+        self.assertEqual(lundi["animateurs_necessaires"], 3)
+        self.assertEqual(lundi["manque_animateurs"], 1)
+        self.assertEqual(lundi["etat"], "vigilance")
+        self.assertEqual(data["indicateurs"]["enfants"], 18)
+        self.assertEqual(centre["enfants"], 18)
+        self.assertEqual(centre["journees_animateurs"], 2)
+        self.assertEqual(centre["journees_necessaires"], 11)
+        self.assertEqual(centre["etat"], "danger")
+        self.assertTrue(
+            any("manque 1 animateur" in alerte["titre"].lower() for alerte in data["alertes"])
+        )
+
+    def test_api_signale_tous_les_effectifs_non_renseignes_de_la_semaine(self):
         EffectifEnfantsJour.objects.filter(evenement=self.groupe, date=self.jour).delete()
 
-        response = self.client.get(reverse("api_tableau_de_bord"), {"date": self.jour.isoformat()})
+        response = self.client.get(
+            reverse("api_tableau_de_bord"), {"semaine": self.jour.isoformat()}
+        )
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["jour"]["effectifs_non_renseignes"], 1)
-        self.assertTrue(any(alerte["niveau"] == "vigilance" for alerte in data["alertes"]))
+        self.assertEqual(data["indicateurs"]["effectifs_non_renseignes"], 5)
+        self.assertEqual(data["centres_semaine"][0]["effectifs_non_renseignes"], 5)
+        self.assertEqual(
+            sum(1 for alerte in data["alertes"] if alerte["niveau"] == "vigilance"),
+            5,
+        )
 
-    def test_filtre_centre_ne_conserve_que_le_centre_demande(self):
+    def test_api_regroupe_toujours_tous_les_centres(self):
         autre = Centre.objects.create(nom="Saint-Forgeux", code="SF", couleur="#43a36f")
         autre_groupe = Evenement.objects.create(
             centre=autre,
@@ -95,19 +120,38 @@ class DashboardAccueilTests(ConnexionTestCase):
 
         response = self.client.get(
             reverse("api_tableau_de_bord"),
-            {"date": self.jour.isoformat(), "centre_id": self.centre.id},
+            {
+                "semaine": self.jour.isoformat(),
+                "centre_id": self.centre.id,
+            },
         )
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["centre_selectionne"], self.centre.id)
-        self.assertEqual(data["jour"]["enfants"], 18)
-        self.assertEqual([centre["id"] for centre in data["jour"]["centres"]], [self.centre.id])
-        self.assertEqual(len(data["centres_filtres"]), 2)
+        self.assertEqual(data["indicateurs"]["enfants"], 58)
+        self.assertEqual(
+            {centre["id"] for centre in data["centres_semaine"]},
+            {self.centre.id, autre.id},
+        )
+        self.assertNotIn("centre_selectionne", data)
+        self.assertNotIn("centres_filtres", data)
 
-    def test_api_refuse_un_centre_inexistant(self):
+    def test_une_date_au_milieu_de_la_semaine_est_ramenee_au_lundi(self):
         response = self.client.get(
             reverse("api_tableau_de_bord"),
-            {"date": self.jour.isoformat(), "centre_id": 999999},
+            {"semaine": "2026-07-22"},
         )
-        self.assertEqual(response.status_code, 404)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["date_selectionnee"], "2026-07-20")
+        self.assertEqual(
+            [jour["date"] for jour in data["semaine"]],
+            [
+                "2026-07-20",
+                "2026-07-21",
+                "2026-07-22",
+                "2026-07-23",
+                "2026-07-24",
+            ],
+        )

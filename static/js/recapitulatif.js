@@ -1,23 +1,18 @@
 document.addEventListener("DOMContentLoaded", () => {
     const pickerRoot = document.getElementById("periode-select");
     const picker = WeekPicker.get(pickerRoot);
-    const applyButton = document.getElementById("btn-appliquer-periode");
-    const displayedPeriod = document.getElementById("periode-affichee");
     const centresRoot = document.getElementById("recap-centres");
     const employeesRoot = document.getElementById("recap-salaries");
     const legendRoot = document.getElementById("recap-legende");
     const tabButtons = Array.from(document.querySelectorAll("[data-recap-tab]"));
     const tabPanels = Array.from(document.querySelectorAll("[data-recap-panel]"));
+    let selectedPeriod = null;
 
     const currencyFormatter = new Intl.NumberFormat("fr-FR", {
         style: "currency",
         currency: "EUR",
         minimumFractionDigits: 2,
     });
-
-    function formatDateFr(dateStr) {
-        return dateStr ? parseLocalDate(dateStr).toLocaleDateString("fr-FR") : "";
-    }
 
     function formatMoney(value) {
         if (value === null || value === undefined || value === "") return null;
@@ -39,22 +34,8 @@ document.addEventListener("DOMContentLoaded", () => {
         return `<span class="place-badge" style="--place-color:${escapeHtml(background)};--place-text:${textColorFor(background)}">${escapeHtml(centre.nom)}</span>`;
     }
 
-    function updateSelectionSummary() {
-        const selected = picker?.getSelectedPeriods() || [];
-        displayedPeriod.textContent = !selected.length
-            ? "Aucune semaine sélectionnée"
-            : selected.length === 1
-                ? `${formatDateFr(selected[0].debut)} au ${formatDateFr(selected[0].fin)}`
-                : selected.map(libellePeriodeAvecAnnee).join(" · ");
-    }
-
     function buildApiUrl() {
-        const ids = picker?.getSelectedIds() || [];
-        if (!ids.length) {
-            afficherToast("Sélectionne au moins une semaine.", true);
-            return null;
-        }
-        return `/api/recapitulatif/?periode_ids=${ids.join(",")}`;
+        return selectedPeriod ? `/api/recapitulatif/?periode_ids=${selectedPeriod.id}` : null;
     }
 
     function displayLegend(centres) {
@@ -146,7 +127,6 @@ document.addEventListener("DOMContentLoaded", () => {
         centresRoot.innerHTML = '<div class="loading-note">Calcul des jours et de la paie par centre…</div>';
         employeesRoot.innerHTML = '<div class="loading-note">Calcul des totaux…</div>';
         legendRoot.innerHTML = "";
-        applyButton.disabled = true;
         try {
             const data = await apiFetch(url);
             displayCentres(data);
@@ -156,24 +136,43 @@ document.addEventListener("DOMContentLoaded", () => {
             centresRoot.innerHTML = `<div class="empty-state"><strong>Chargement impossible</strong><span>${escapeHtml(message)}</span></div>`;
             employeesRoot.innerHTML = "";
             afficherToast(message, true);
-        } finally {
-            applyButton.disabled = false;
         }
     }
 
+    function selectPeriod(period) {
+        if (!period) return;
+        selectedPeriod = period;
+        picker?.setActiveDate(period.debut, { updateLabel: true });
+        loadRecap();
+    }
+
+    function navigatePeriod(delta) {
+        const periods = picker?.periods || [];
+        if (!periods.length) return;
+        const index = Math.max(0, periods.findIndex((period) => Number(period.id) === Number(selectedPeriod?.id)));
+        selectPeriod(periods[Math.min(periods.length - 1, Math.max(0, index + delta))]);
+    }
+
     tabButtons.forEach((button) => button.addEventListener("click", () => openTab(button.dataset.recapTab)));
-    pickerRoot?.addEventListener("week-picker:change", updateSelectionSummary);
+    pickerRoot?.addEventListener("week-picker:select", (event) => selectPeriod(event.detail?.period));
     pickerRoot?.addEventListener("week-picker:ready", () => {
-        updateSelectionSummary();
-        if (picker?.periods.length) {
-            const prompt = '<div class="empty-state"><strong>Sélectionne une ou plusieurs semaines</strong><span>Puis clique sur Afficher.</span></div>';
-            centresRoot.innerHTML = prompt;
-            employeesRoot.innerHTML = prompt;
-        } else {
-            applyButton.disabled = true;
-        }
+        const periods = picker?.periods || [];
+        if (!periods.length) return;
+        const today = formatDateLocal(new Date());
+        const current = periods.find((period) => period.debut <= today && today <= period.fin);
+        const next = periods.find((period) => period.debut > today);
+        selectPeriod(current || next || periods.at(-1));
     });
-    applyButton.addEventListener("click", loadRecap);
+    document.getElementById("recap-prev-week")?.addEventListener("click", () => navigatePeriod(-1));
+    document.getElementById("recap-next-week")?.addEventListener("click", () => navigatePeriod(1));
+    document.getElementById("recap-current-week")?.addEventListener("click", () => {
+        const periods = picker?.periods || [];
+        const today = formatDateLocal(new Date());
+        selectPeriod(
+            periods.find((period) => period.debut <= today && today <= period.fin)
+            || periods.find((period) => period.debut > today)
+            || periods.at(-1)
+        );
+    });
     openTab("centres");
-    updateSelectionSummary();
 });

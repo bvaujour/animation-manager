@@ -17,63 +17,30 @@ window.FormOptionsUtils = Object.freeze({
         }).join("");
     },
 
-    centresHierarchises(centres, centrePrefere = null, centresSecondaires = [], groupe = "centre-prefere") {
-        if (!centres.length) {
-            return '<p class="empty-note">Ajoute d\'abord des centres.</p>';
-        }
-
-        const prefereId = Number(centrePrefere && (centrePrefere.id ?? centrePrefere)) || null;
-        const secondairesSet = new Set((centresSecondaires || []).map((centre) => Number(centre.id ?? centre)));
-
-        return `
-            <div class="centre-hierarchy-head">
-                <span>Centre</span><span>Préféré</span><span>Secondaire</span>
-            </div>
-            ${centres.map((centre) => {
-                const id = Number(centre.id);
-                const estPrefere = prefereId === id;
-                const estSecondaire = secondairesSet.has(id) && !estPrefere;
-                return `
-                    <div class="centre-hierarchy-row" data-centre-id="${escapeHtml(id)}">
-                        <span class="centre-hierarchy-name">
-                            <span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>
-                            ${escapeHtml(centre.code || centre.nom)}
-                        </span>
-                        <label class="centre-hierarchy-choice" for="${escapeHtml(groupe)}-prefere-${escapeHtml(id)}" title="Centre préféré">
-                            <input type="radio" id="${escapeHtml(groupe)}-prefere-${escapeHtml(id)}" name="${escapeHtml(groupe)}" data-role="prefere" value="${escapeHtml(id)}" aria-label="${escapeHtml(centre.code || centre.nom)} comme lieu préféré" ${estPrefere ? "checked" : ""}>
-                        </label>
-                        <label class="centre-hierarchy-choice" for="${escapeHtml(groupe)}-secondaire-${escapeHtml(id)}" title="Centre secondaire">
-                            <input type="checkbox" id="${escapeHtml(groupe)}-secondaire-${escapeHtml(id)}" name="${escapeHtml(groupe)}-secondaires[]" data-role="secondaire" value="${escapeHtml(id)}" aria-label="${escapeHtml(centre.code || centre.nom)} comme lieu secondaire" ${estSecondaire ? "checked" : ""} ${estPrefere ? "disabled" : ""}>
-                        </label>
-                    </div>
-                `;
-            }).join("")}
-        `;
+    centresHierarchises(centres, centresPreferes = [], centresInterdits = [], groupe = "centre-options") {
+        if (!centres.length) return '<p class="empty-note">Ajoute d\'abord des centres.</p>';
+        const preferesSet = new Set((Array.isArray(centresPreferes) ? centresPreferes : [centresPreferes]).filter(Boolean).map(c => Number(c.id ?? c)));
+        const interditsSet = new Set((centresInterdits || []).map(c => Number(c.id ?? c)));
+        return `<div class="centre-hierarchy-head"><span>Lieu</span><span>Préféré</span><span>Interdit</span></div>${centres.map(centre => {
+            const id=Number(centre.id);
+            return `<div class="centre-hierarchy-row" data-centre-id="${escapeHtml(id)}"><span class="centre-hierarchy-name"><span class="swatch" style="background:${escapeHtml(centre.couleur)}"></span>${escapeHtml(centre.code || centre.nom)}</span><label class="centre-hierarchy-choice"><input type="checkbox" data-role="prefere" value="${escapeHtml(id)}" ${preferesSet.has(id)?"checked":""}></label><label class="centre-hierarchy-choice"><input type="checkbox" data-role="interdit" value="${escapeHtml(id)}" ${interditsSet.has(id)?"checked":""}></label></div>`;
+        }).join("")}`;
     },
 
     activerCentresHierarchises(root) {
         if (!root) return;
-        const synchroniser = () => {
-            const prefere = root.querySelector('input[data-role="prefere"]:checked');
-            const prefereId = prefere ? Number(prefere.value) : null;
-            root.querySelectorAll('input[data-role="secondaire"]').forEach((checkbox) => {
-                const memeCentre = Number(checkbox.value) === prefereId;
-                if (memeCentre) checkbox.checked = false;
-                checkbox.disabled = memeCentre;
-            });
-        };
-        root.querySelectorAll('input[data-role="prefere"]').forEach((radio) => {
-            radio.addEventListener("change", synchroniser);
+        root.addEventListener("change", (event) => {
+            const input = event.target.closest('input[data-role="prefere"], input[data-role="interdit"]');
+            if (!input || !input.checked) return;
+            const row=input.closest('[data-centre-id]');
+            const autre=row.querySelector(input.dataset.role === "prefere" ? 'input[data-role="interdit"]' : 'input[data-role="prefere"]');
+            if (autre) autre.checked=false;
         });
-        synchroniser();
     },
 
     lireCentresHierarchises(root) {
-        const prefere = root ? root.querySelector('input[data-role="prefere"]:checked') : null;
-        const centre_prefere = prefere ? Number(prefere.value) : null;
-        const centres_secondaires = root
-            ? Array.from(root.querySelectorAll('input[data-role="secondaire"]:checked')).map((el) => Number(el.value))
-            : [];
-        return { centre_prefere, centres_secondaires };
+        const centres_preferes = root ? Array.from(root.querySelectorAll('input[data-role="prefere"]:checked')).map(el=>Number(el.value)) : [];
+        const centres_interdits = root ? Array.from(root.querySelectorAll('input[data-role="interdit"]:checked')).map(el=>Number(el.value)) : [];
+        return { centres_preferes, centres_interdits };
     },
 });

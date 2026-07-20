@@ -58,13 +58,19 @@ INSTALLED_APPS = [
 
 AWS_ACCESS_KEY_ID = os.getenv("SUPABASE_S3_ACCESS_KEY")
 AWS_SECRET_ACCESS_KEY = os.getenv("SUPABASE_S3_SECRET_KEY")
-AWS_STORAGE_BUCKET_NAME = "Documents"
-AWS_S3_ENDPOINT_URL = "https://qarqqpbstjhcjnmiyiye.storage.supabase.co/storage/v1/s3"
-AWS_S3_REGION_NAME = "eu-west-1"
+AWS_STORAGE_BUCKET_NAME = os.getenv("SUPABASE_S3_BUCKET", "Documents")
+AWS_S3_ENDPOINT_URL = os.getenv(
+    "SUPABASE_S3_ENDPOINT_URL",
+    "https://qarqqpbstjhcjnmiyiye.storage.supabase.co/storage/v1/s3",
+)
+AWS_S3_REGION_NAME = os.getenv("SUPABASE_S3_REGION", "eu-west-1")
 AWS_S3_ADDRESSING_STYLE = "path"
 AWS_QUERYSTRING_AUTH = False
-AWS_S3_CUSTOM_DOMAIN = "qarqqpbstjhcjnmiyiye.supabase.co/storage/v1/object/public/Documents"
-AWS_LOCATION = ""
+AWS_S3_CUSTOM_DOMAIN = os.getenv(
+    "SUPABASE_S3_CUSTOM_DOMAIN",
+    "qarqqpbstjhcjnmiyiye.supabase.co/storage/v1/object/public/Documents",
+)
+AWS_LOCATION = os.getenv("SUPABASE_S3_LOCATION", "")
 
 # Stockage des documents uploadés : S3 (Supabase) si les clés sont
 # configurées, sinon stockage local dans MEDIA_ROOT pour pouvoir
@@ -101,7 +107,6 @@ MIDDLEWARE += [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'animateurs.middleware.JournalAuditMiddleware',
     'animateurs.middleware.ConnexionObligatoireMiddleware',
     'animateurs.middleware.MotDePasseProvisoireMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -227,22 +232,6 @@ DEFAULT_FROM_EMAIL = os.getenv(
 ).strip()
 EMAIL_REPLY_TO = os.getenv("EMAIL_REPLY_TO", "").strip()
 
-
-# Les tentatives d’envoi SMTP sont toujours visibles dans la console Django.
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "handlers": {
-        "console": {"class": "logging.StreamHandler"},
-    },
-    "loggers": {
-        "animateurs.emails": {
-            "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False,
-        },
-    },
-}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

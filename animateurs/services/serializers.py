@@ -30,9 +30,36 @@ def animateur_to_dict(animateur):
     preferences = list(animateur.preferences.all())
     disponibilites = list(animateur.disponibilites.all())
     affectations = list(getattr(animateur, "_filtre_affectations", []))
+    affinites = list(animateur.affinites_groupes.all())
 
-    pref_relation = next((pref for pref in preferences if pref.est_prefere), None)
-    secondaires_relations = [pref for pref in preferences if not pref.est_prefere]
+    affinites_groupes = [
+        {
+            "affinite_id": affinite.id,
+            "groupe_id": affinite.evenement_id,
+            "groupe_nom": affinite.evenement.nom,
+            "centre_id": affinite.evenement.centre_id,
+            "centre_nom": affinite.evenement.centre.nom,
+            "jours_travailles": affinite.jours_travailles,
+            "score_affinite": affinite.score,
+            "dernier_jour": (
+                affinite.dernier_jour_travaille.isoformat()
+                if affinite.dernier_jour_travaille
+                else None
+            ),
+        }
+        for affinite in affinites
+        if affinite.jours_travailles > 0
+    ]
+    affinites_groupes.sort(
+        key=lambda entree: (
+            -entree["score_affinite"],
+            entree["centre_nom"],
+            entree["groupe_nom"],
+        )
+    )
+
+    prefere_relations = [pref for pref in preferences if pref.est_prefere and not pref.est_interdit]
+    interdites_relations = [pref for pref in preferences if pref.est_interdit]
 
     def centre_dict(pref):
         return {
@@ -42,9 +69,14 @@ def animateur_to_dict(animateur):
             "couleur": pref.centre.couleur,
         }
 
-    centre_prefere = centre_dict(pref_relation) if pref_relation else None
-    centres_secondaires = [centre_dict(pref) for pref in secondaires_relations]
-    centres_autorises = ([centre_prefere] if centre_prefere else []) + centres_secondaires
+    centres_preferes = [centre_dict(pref) for pref in prefere_relations]
+    centres_interdits = [centre_dict(pref) for pref in interdites_relations]
+    centre_prefere = centres_preferes[0] if centres_preferes else None
+    # Les champs singulier/secondaires sont conservés pour les anciennes
+    # interfaces. La nouvelle interface utilise directement
+    # ``centres_preferes`` et ``centres_interdits``.
+    centres_secondaires = centres_preferes[1:]
+    centres_autorises = centres_preferes
 
     evenement_preferee = None
     if animateur.evenement_preferee_id:
@@ -72,6 +104,8 @@ def animateur_to_dict(animateur):
         "qualifications": [q.nom for q in qualifications],
         "centre_prefere": centre_prefere,
         "centres_secondaires": centres_secondaires,
+        "centres_preferes": centres_preferes,
+        "centres_interdits": centres_interdits,
         # Champ conservé pour compatibilité avec les écrans qui attendent encore
         # une liste globale. Le centre préféré est toujours placé en premier.
         "centres_autorises": centres_autorises,
@@ -85,6 +119,9 @@ def animateur_to_dict(animateur):
             {"debut": affectation.debut.isoformat(), "fin": affectation.fin.isoformat(), "centre_id": affectation.centre_id}
             for affectation in affectations
         ],
+        "affinites_groupes": affinites_groupes,
+        # Alias temporaire pour les anciens caches JavaScript.
+        "historique_groupes": affinites_groupes,
         "role": "animateur",
         "role_label": "Animateur",
         "access": {

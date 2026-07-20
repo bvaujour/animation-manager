@@ -4,12 +4,12 @@
 {% block body_class %}page-planning{% endblock %}
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
-<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v=20260719-clean-ui-1">
-<link rel="stylesheet" href="{% static 'css/calendars.css' %}?v=20260720-shared-calendar-base-2">
-<link rel="stylesheet" href="{% static 'css/planning.css' %}?v=20260720-calendar-scroll-container-1">
+<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v=20260720-group-days-fix-1">
+<link rel="stylesheet" href="{% static 'css/calendars.css' %}?v=20260720-group-days-fix-1">
+<link rel="stylesheet" href="{% static 'css/planning.css' %}?v=20260720-staff-balance-below-1">
 {% endblock %}
 {% block content %}
-<header class="planning-page-header planning-page-header-compact">
+<header class="planning-page-header planning-page-header-compact app-page-header app-page-header--tabs">
     <h1>Planning</h1>
     <nav class="planning-tabs" aria-label="Sections du planning">
         <button id="planning-tab-affectations" class="planning-tab active" type="button" role="tab" aria-selected="true" aria-controls="layout" data-planning-mode="affectations">
@@ -21,16 +21,17 @@
             <strong>Effectifs enfants</strong>
         </button>
     </nav>
+    <div class="app-page-week">
+        {% include "partials/_week_navigation.html" with container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
+    </div>
 </header>
-<main id="layout" data-planning-mode="affectations">
+<main id="layout" class="planning-workspace" data-planning-mode="affectations" tabindex="-1">
     <aside id="animateurs-panel">
         {% include "partials/_staff_filter.html" with toolbar_class="planning-animateurs-toolbar" search_id="animateurs-search-input" details_id="animateurs-filters" count_id="animateurs-filter-count" qualifications_id="animateurs-filter-qualifications" availability_id="animateurs-filter-disponibilite" assignment_id="animateurs-filter-affectation" centres_id="animateurs-filter-centres" reset_id="animateurs-filter-reset" %}
         <div id="animateurs-list"></div>
     </aside>
-    <button id="planning-sidebar-resizer" class="planning-sidebar-resizer" type="button" aria-label="Redimensionner la liste des salariés" title="Faire glisser pour redimensionner"></button>
     <section id="calendars-section">
         <div class="planning-top-controls">
-            {% include "partials/_week_navigation.html" with container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
             <details id="planning-centres-toolbar" class="planning-centres-dropdown">
                 <summary class="planning-centres-dropdown-toggle" aria-label="Choisir les centres à afficher">
                     <span class="planning-centres-dropdown-icon" aria-hidden="true">▦</span>
@@ -40,12 +41,12 @@
                 </summary>
                 <div id="planning-add-centre-menu" class="planning-centres-dropdown-menu" role="menu"></div>
             </details>
+            <div id="planning-actions" class="planning-control-block toolbar-actions planning-top-actions">
+                <button id="btn-auto-semaine" class="btn btn-primary" type="button">Remplir auto</button>
+                <button id="btn-vider-semaine" class="btn btn-danger-solid" type="button">Vider la semaine</button>
+            </div>
         </div>
         <div id="calendars-container" class="planning-view-week calendar-sites" aria-live="polite"></div>
-        <div id="planning-actions" class="planning-control-block toolbar-actions">
-            <button id="btn-auto-semaine" class="btn btn-primary" type="button">Remplir auto</button>
-            <button id="btn-vider-semaine" class="btn btn-danger-solid" type="button">Vider la semaine</button>
-        </div>
     </section>
 </main>
 <div class="modal-backdrop" id="modal-effectifs-enfants" hidden>
@@ -83,5 +84,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/planning/utils.js' %}?v=20260719-clean-ui-1"></script>
-<script src="{% static 'js/planning.js' %}?v=20260720-effectifs-persistants-4-calendar-scroll-container-1"></script>
+<script src="{% static 'js/planning.js' %}?v=20260720-staff-balance-below-1"></script>
 {% endblock %}

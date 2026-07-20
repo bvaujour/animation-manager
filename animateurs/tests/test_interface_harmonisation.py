@@ -20,16 +20,18 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
     def test_planning_force_une_colonne_de_calendriers_et_respecte_hidden(self):
         css = (Path(settings.BASE_DIR) / "static/css/calendars.css").read_text()
 
-        self.assertIn("flex-direction: column !important", css)
+        css_compact = css.replace(" ", "")
+        self.assertIn("flex-direction:column!important", css_compact)
         self.assertIn(".calendar-site-card[hidden]", css)
-        self.assertIn("display: none !important", css)
+        self.assertIn("display:none!important", css_compact)
 
     def test_le_selecteur_de_semaines_est_partage_par_toutes_les_pages(self):
         attentes = {
+            "templates/accueil.html": "partials/_week_navigation.html",
             "templates/planning.html": "partials/_week_navigation.html",
             "templates/gestion.html": "partials/_week_picker.html",
             "templates/partials/_emails_admin.html": "partials/_week_picker.html",
-            "templates/recapitulatif.html": "partials/_week_picker.html",
+            "templates/recapitulatif.html": "partials/_week_navigation.html",
         }
         for fichier, partial in attentes.items():
             contenu = (Path(settings.BASE_DIR) / fichier).read_text()
@@ -86,12 +88,9 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
 
     def test_planning_precharge_et_relit_les_effectifs_persistes(self):
         contenu = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text()
-        template = (Path(settings.BASE_DIR) / "templates/planning.html").read_text()
-
         self.assertIn("evenement.effectifs_enfants || []", contenu)
         self.assertIn('{ cache: "no-store" }', contenu)
         self.assertIn("window.setTimeout(() => chargerEffectifsEnfants(calendar), 0)", contenu)
-        self.assertIn("effectifs-persistants-4", template)
 
     def test_les_pages_utilisent_le_client_api_commun(self):
         fichiers = [
@@ -107,11 +106,11 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             contenu = (Path(settings.BASE_DIR) / fichier).read_text()
             self.assertNotIn("fetch(", contenu, fichier)
 
-    def test_la_couche_de_composants_est_chargee_apres_les_styles_de_page(self):
+    def test_la_couche_commune_est_chargee_apres_les_styles_de_page(self):
         base = (Path(settings.BASE_DIR) / "templates/base.html").read_text()
 
-        self.assertIn("css/components.css", base)
-        self.assertGreater(base.index("css/components.css"), base.index("block extra_head"))
+        self.assertIn("css/common-ui.css", base)
+        self.assertGreater(base.index("css/common-ui.css"), base.index("block extra_head"))
 
     def test_les_pages_principales_utilisent_le_shell_et_les_cartes_communes(self):
         attentes = {
@@ -143,11 +142,10 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertGreaterEqual(contenu.count("afficherConfiguration"), 2)
 
     def test_les_variables_de_densite_sont_centralisees(self):
-        css = (Path(settings.BASE_DIR) / "static/css/components.css").read_text()
+        css = (Path(settings.BASE_DIR) / "static/css/common-ui.css").read_text()
 
         self.assertIn("--page-gutter", css)
         self.assertIn("--card-padding", css)
         self.assertIn("--control-height", css)
         self.assertIn(".page-shell", css)
         self.assertIn(".ui-card", css)
-

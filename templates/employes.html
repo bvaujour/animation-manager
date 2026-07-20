@@ -3,21 +3,20 @@
 {% block title %}Salariés{% endblock %}
 {% block body_class %}page-employes{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v=20260718-audit-1">
+<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v=20260720-affinites-groupes-1">
 {% endblock %}
 {% block content %}
-<main class="page-shell page-shell--fluid employees-workspace" data-animateur-page>
-    <header class="employees-page-header page-header">
-        <div><p class="eyebrow">Équipe d’animation</p><h1>Salariés</h1><p class="page-intro">Retrouvez les coordonnées, qualifications, disponibilités et accès de chaque salarié.</p></div>
-        <button class="btn btn-primary" id="employees-header-add" type="button">+ Ajouter un salarié</button>
+<main id="main-content" class="page-shell page-shell--fluid employees-workspace" data-animateur-page>
+    <header class="employees-page-header page-header app-page-header">
+        <div><h1>Salariés</h1></div>
+        <button class="btn btn-primary" id="evenement-add" type="button">+ Ajouter un salarié</button>
     </header>
     <aside class="ui-card employees-sidebar" aria-label="Liste des salariés">
         <div class="employees-sidebar-head">
             <div>
-                <h1>Salariés</h1>
+                <h2>Liste de l’équipe</h2>
                 <p id="employees-count">Chargement…</p>
             </div>
-            <button class="btn btn-primary btn-small" id="evenement-add" type="button">+ Ajouter</button>
         </div>
 
         {% include "partials/_staff_filter.html" with toolbar_class="employees-sidebar-toolbar" search_id="evenement-search" search_name="recherche_salarie" details_id="salaries-filter" count_id="salaries-filter-count" qualifications_id="salaries-filter-qualifications" availability_id="salaries-filter-disponibilite" assignment_id="salaries-filter-affectation" centres_id="salaries-filter-centres" reset_id="salaries-filter-reset" %}
@@ -31,5 +30,5 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/animateurs.js' %}?v=20260718-audit-1"></script>
+<script src="{% static 'js/animateurs.js' %}?v=20260720-affinites-groupes-1"></script>
 {% endblock %}

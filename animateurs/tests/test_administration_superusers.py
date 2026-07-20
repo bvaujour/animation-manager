@@ -18,6 +18,15 @@ class AdministrationSuperusersTests(TestCase):
         self.assertContains(response, "E-mails")
         self.assertContains(response, "Superusers")
 
+    def test_acces_direct_aux_emails_active_le_bon_onglet(self):
+        response = self.client.get(reverse("emails"), follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain[-1][0], "/administration/?onglet=emails")
+        self.assertContains(response, 'data-admin-tab="emails" type="button" role="tab" aria-selected="true"', html=False)
+        self.assertContains(response, 'data-admin-panel="emails">', html=False)
+        self.assertNotContains(response, 'data-admin-panel="emails" hidden', html=False)
+
     def test_creation_et_suppression_superuser(self):
         response = self.client.post(reverse("administration"), {
             "action": "create_superuser",

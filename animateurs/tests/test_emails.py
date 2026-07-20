@@ -12,9 +12,7 @@ from animateurs.models import (
     Animateur,
     Centre,
     ContactEmailExterne,
-    DestinataireEnvoiEmail,
     Document,
-    EnvoiEmail,
     Evenement,
     ModeleEmail,
     PeriodeScolaire,
@@ -67,7 +65,7 @@ class EnvoiEmailApiTests(ConnexionTestCase):
         self.assertEqual(payload["documents"][0]["titre"], "Planning juillet")
         self.assertEqual(payload["modeles"], [])
         self.assertEqual([variable["code"] for variable in payload["variables"]], ["{{prenom}}", "{{nom}}", "{{nom_semaine}}", "{{date_debut_semaine}}", "{{date_fin_semaine}}", "{{affectations_semaine}}"] )
-        self.assertEqual(payload["historique"], [])
+        self.assertNotIn("historique", payload)
 
     def test_preparation_expose_les_qualifications_et_la_hierarchie_des_semaines(self):
         qualification = Qualification.objects.create(nom="BAFA")
@@ -139,15 +137,6 @@ class EnvoiEmailApiTests(ConnexionTestCase):
         self.assertEqual(mail.outbox[0].attachments[0][0], "planning-juillet.pdf")
         self.assertEqual(mail.outbox[0].body, "Tu trouveras les documents en pièce jointe.")
         self.assertEqual(mail.outbox[1].body, "Tu trouveras les documents en pièce jointe.")
-
-        envoi = EnvoiEmail.objects.get()
-        self.assertEqual(envoi.nombre_destinataires, 2)
-        self.assertEqual(envoi.nombre_envoyes, 2)
-        self.assertEqual(envoi.documents.get(), self.document)
-        self.assertEqual(
-            envoi.destinataires.filter(statut=DestinataireEnvoiEmail.STATUT_ENVOYE).count(),
-            2,
-        )
 
     def test_personnalise_les_variables_de_la_semaine_selectionnee(self):
         periode = PeriodeScolaire.objects.create(
@@ -360,21 +349,6 @@ class EnvoiEmailApiTests(ConnexionTestCase):
         self.assertIn("même adresse", response.json()["error"])
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_historique_conserve_le_titre_si_le_document_est_supprime(self):
-        response = self.client.post(
-            "/api/envois-email/",
-            data=json.dumps({
-                "animateur_ids": [self.ambre.id],
-                "document_ids": [self.document.id],
-                "objet": "Documents été",
-                "message": "Message",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.document.delete()
-        historique = self.client.get("/api/envois-email/").json()["historique"]
-        self.assertEqual(historique[0]["documents"], ["Planning juillet"])
 
     def test_refuse_un_salarie_sans_email(self):
         response = self.client.post(
@@ -389,7 +363,7 @@ class EnvoiEmailApiTests(ConnexionTestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("Léane Test", response.json()["error"])
-        self.assertEqual(EnvoiEmail.objects.count(), 0)
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_autorise_un_envoi_sans_document(self):
         response = self.client.post(
@@ -405,7 +379,6 @@ class EnvoiEmailApiTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["nombre_envoyes"], 1)
         self.assertEqual(mail.outbox[0].attachments, [])
-        self.assertEqual(EnvoiEmail.objects.get().documents_titres, [])
 
     def test_gere_des_contacts_externes_distincts_des_salaries(self):
         creation = self.client.post(
@@ -437,9 +410,6 @@ class EnvoiEmailApiTests(ConnexionTestCase):
         self.assertEqual(envoi.status_code, 200)
         self.assertEqual(envoi.json()["nombre_envoyes"], 2)
         self.assertEqual(len(mail.outbox), 2)
-        historique_contact = DestinataireEnvoiEmail.objects.get(contact_externe_id=contact_id)
-        self.assertIsNone(historique_contact.animateur_id)
-        self.assertEqual(historique_contact.email, "julie.durand@example.fr")
         self.assertEqual(mail.outbox[1].subject, "Bonjour Julie")
 
     def test_modifie_et_supprime_un_contact_externe(self):

@@ -1,12 +1,13 @@
-"""Données de pilotage pour la page d'accueil de la direction.
+"""Agrégats hebdomadaires utilisés par le tableau de bord de la direction.
 
-Le tableau de bord ne crée aucune donnée parallèle : il agrège les groupes,
-les effectifs enfants et les affectations déjà utilisés par le Planning.
+Le tableau de bord s'appuie exclusivement sur les données du Planning : groupes
+ouverts, effectifs enfants, besoins d'encadrement, qualifications et
+affectations. Toutes les valeurs retournées concernent l'ensemble des centres
+pour la semaine sélectionnée.
 """
 
 from __future__ import annotations
 
-import calendar
 import datetime
 import math
 from collections import defaultdict
@@ -14,31 +15,14 @@ from collections import defaultdict
 from django.db.models import Prefetch
 from django.utils import timezone
 
-from animateurs.models import (
-    Affectation,
-    Animateur,
-    Centre,
-    EffectifEnfantsJour,
-    Evenement,
-)
+from animateurs.models import Affectation, Animateur, Centre, EffectifEnfantsJour, Evenement
 from animateurs.services.qualifications import classes_equivalence_qualifications
 
-
 ETAT_OK = "ok"
-ETAT_INFO = "info"
 ETAT_VIGILANCE = "vigilance"
 ETAT_DANGER = "danger"
 ETAT_VIDE = "vide"
-
-
-def _debut_mois(jour: datetime.date) -> datetime.date:
-    return jour.replace(day=1)
-
-
-def _mois_suivant(jour: datetime.date) -> datetime.date:
-    if jour.month == 12:
-        return jour.replace(year=jour.year + 1, month=1, day=1)
-    return jour.replace(month=jour.month + 1, day=1)
+JOURS_TABLEAU_DE_BORD = 5
 
 
 def _dt_locale(jour: datetime.date) -> datetime.datetime:
@@ -61,54 +45,58 @@ def _niveau_global(etats):
         return ETAT_DANGER
     if ETAT_VIGILANCE in etats:
         return ETAT_VIGILANCE
-    if ETAT_INFO in etats:
-        return ETAT_INFO
     if ETAT_OK in etats:
         return ETAT_OK
     return ETAT_VIDE
 
 
-def _libelle_couverture(affectes: int, necessaires: int, effectifs_manquants: int) -> str:
-    manque = max(necessaires - affectes, 0)
-    if manque:
-        return f"Manque {manque} anim."
-    if effectifs_manquants:
+def _libelle_centre_semaine(
+    *,
+    jours_ouverts: int,
+    manque_animateurs: int,
+    qualifications_manquantes: int,
+    effectifs_non_renseignes: int,
+    journees_animateurs: int,
+    journees_necessaires: int,
+) -> str:
+    if not jours_ouverts:
+        return "Aucune ouverture"
+    if manque_animateurs:
+        suffixe = "s" if manque_animateurs > 1 else ""
+        return f"Manque {manque_animateurs} journée{suffixe} anim."
+    if qualifications_manquantes:
+        return "Qualifications à compléter"
+    if effectifs_non_renseignes:
         return "Effectifs à compléter"
-    if affectes > necessaires:
+    if journees_animateurs > journees_necessaires:
         return "Équipe renforcée"
     return "Tout est OK"
 
 
-def generer_tableau_de_bord(date_reference: datetime.date, centre_id: int | None = None):
-    """Construit toutes les données utiles au tableau de bord.
+def generer_tableau_de_bord(date_reference: datetime.date):
+    """Construit les indicateurs de la semaine contenant ``date_reference``.
 
-    Les besoins d'encadrement sont calculés comme dans l'onglet Effectifs :
-    ``ceil(nombre d'enfants / ratio)`` lorsqu'un effectif a été saisi. En
-    l'absence de saisie, le besoin configuré sur le groupe sert uniquement de
-    repère provisoire et une vigilance « effectif non renseigné » est émise.
+    La semaine affichée va du lundi au vendredi. Les besoins d'encadrement sont
+    calculés comme dans l'onglet Effectifs : ``ceil(enfants / ratio)`` lorsqu'un
+    effectif a été saisi. Sans saisie, le besoin configuré sur le groupe sert de
+    repère provisoire et une vigilance est créée.
     """
 
-    centres_tous = list(Centre.objects.order_by("ordre", "nom"))
-    centres = [centre for centre in centres_tous if centre_id is None or centre.id == centre_id]
+    centres = list(Centre.objects.order_by("ordre", "nom"))
     ids_centres = {centre.id for centre in centres}
 
-    debut_mois = _debut_mois(date_reference)
-    fin_mois = _mois_suivant(date_reference)
     debut_semaine = date_reference - datetime.timedelta(days=date_reference.weekday())
-    fin_semaine = debut_semaine + datetime.timedelta(days=7)
+    fin_semaine_exclusive = debut_semaine + datetime.timedelta(days=JOURS_TABLEAU_DE_BORD)
     debut_semaine_precedente = debut_semaine - datetime.timedelta(days=7)
-    # La marge à venir permet de trouver les prochains jours ouverts, même
-    # entre deux semaines de vacances.
-    fin_recherche = max(fin_mois, date_reference + datetime.timedelta(days=43), fin_semaine)
-    debut_recherche = min(debut_mois, debut_semaine_precedente)
+    debut_recherche = debut_semaine_precedente
+    fin_recherche = fin_semaine_exclusive
 
-    fermetures_prefetch = Prefetch("dates_exclues")
     groupes = list(
         Evenement.objects.filter(centre_id__in=ids_centres)
         .select_related("centre")
         .prefetch_related(
             "periodes_scolaires",
-            fermetures_prefetch,
+            Prefetch("dates_exclues"),
             "besoins_qualifications__qualification",
         )
         .order_by("centre__ordre", "centre__nom", "ordre", "nom")
@@ -181,10 +169,9 @@ def generer_tableau_de_bord(date_reference: datetime.date, centre_id: int | None
             if ligne
             else max(1, groupe.enfants_par_animateur_defaut)
         )
-        if effectif_saisi:
-            necessaires = math.ceil(enfants / ratio) if enfants else 0
-        else:
-            necessaires = max(0, groupe.effectif_cible)
+        necessaires = (
+            math.ceil(enfants / ratio) if effectif_saisi and enfants else 0
+        ) if effectif_saisi else max(0, groupe.effectif_cible)
 
         ids_affectes = set(affectes_par_cle.get(cle, set()))
         affectes = len(ids_affectes)
@@ -195,24 +182,33 @@ def generer_tableau_de_bord(date_reference: datetime.date, centre_id: int | None
             couverts = sum(
                 1
                 for animateur_id in ids_affectes
-                if besoin.qualification_id in qualifications_effectives.get(animateur_id, set())
+                if besoin.qualification_id
+                in qualifications_effectives.get(animateur_id, set())
             )
             if couverts < besoin.nombre_minimum:
-                qualifications_manquantes.append({
-                    "qualification": besoin.qualification.nom,
-                    "minimum": besoin.nombre_minimum,
-                    "affectes": couverts,
-                    "manque": besoin.nombre_minimum - couverts,
-                })
+                qualifications_manquantes.append(
+                    {
+                        "qualification": besoin.qualification.nom,
+                        "minimum": besoin.nombre_minimum,
+                        "affectes": couverts,
+                        "manque": besoin.nombre_minimum - couverts,
+                    }
+                )
 
-        if manque or qualifications_manquantes:
-            etat = ETAT_DANGER
-        elif not effectif_saisi:
-            etat = ETAT_VIGILANCE
-        elif affectes > necessaires:
-            etat = ETAT_INFO
-        else:
-            etat = ETAT_OK
+        ecart_partiel = manque or qualifications_manquantes or affectes > necessaires
+        completement_non_fait = (
+            (necessaires > 0 and affectes == 0)
+            or any(
+                qualification["minimum"] > 0 and qualification["affectes"] == 0
+                for qualification in qualifications_manquantes
+            )
+            or not effectif_saisi
+        )
+        etat = (
+            ETAT_DANGER
+            if completement_non_fait
+            else ETAT_VIGILANCE if ecart_partiel else ETAT_OK
+        )
 
         resultat = {
             "id": groupe.id,
@@ -241,47 +237,67 @@ def generer_tableau_de_bord(date_reference: datetime.date, centre_id: int | None
         groupes_jour = [metriques_groupe(groupe, jour) for groupe in groupes_ouverts(jour)]
         centres_jour = []
         for centre in centres:
-            groupes_centre = [groupe for groupe in groupes_jour if groupe["centre_id"] == centre.id]
+            groupes_centre = [
+                groupe for groupe in groupes_jour if groupe["centre_id"] == centre.id
+            ]
             if not groupes_centre:
                 continue
-            ids_affectes = set().union(*(groupe["animateur_ids"] for groupe in groupes_centre))
+            ids_affectes = set().union(
+                *(groupe["animateur_ids"] for groupe in groupes_centre)
+            )
             enfants = sum(groupe["enfants"] for groupe in groupes_centre)
-            necessaires = sum(groupe["animateurs_necessaires"] for groupe in groupes_centre)
+            necessaires = sum(
+                groupe["animateurs_necessaires"] for groupe in groupes_centre
+            )
             affectes = len(ids_affectes)
-            effectifs_manquants = sum(1 for groupe in groupes_centre if not groupe["effectif_saisi"])
+            effectifs_manquants = sum(
+                1 for groupe in groupes_centre if not groupe["effectif_saisi"]
+            )
             manque = sum(groupe["manque_animateurs"] for groupe in groupes_centre)
             qualifications_manquantes = sum(
                 len(groupe["qualifications_manquantes"]) for groupe in groupes_centre
             )
-            etat = _niveau_global(groupe["etat"] for groupe in groupes_centre)
-            centres_jour.append({
-                "id": centre.id,
-                "nom": centre.nom,
-                "code": centre.code,
-                "couleur": centre.couleur,
-                "date": jour.isoformat(),
-                "enfants": enfants,
-                "animateurs_affectes": affectes,
-                "animateurs_necessaires": necessaires,
-                "manque_animateurs": manque,
-                "effectifs_non_renseignes": effectifs_manquants,
-                "qualifications_manquantes": qualifications_manquantes,
-                "groupes_ouverts": len(groupes_centre),
-                "etat": etat,
-                "etat_libelle": _libelle_couverture(affectes, necessaires, effectifs_manquants),
-                "groupes": groupes_centre,
-                "animateur_ids": ids_affectes,
-            })
+            centres_jour.append(
+                {
+                    "id": centre.id,
+                    "nom": centre.nom,
+                    "code": centre.code,
+                    "couleur": centre.couleur,
+                    "date": jour.isoformat(),
+                    "enfants": enfants,
+                    "animateurs_affectes": affectes,
+                    "animateurs_necessaires": necessaires,
+                    "manque_animateurs": manque,
+                    "effectifs_non_renseignes": effectifs_manquants,
+                    "qualifications_manquantes": qualifications_manquantes,
+                    "groupes_ouverts": len(groupes_centre),
+                    "etat": _niveau_global(groupe["etat"] for groupe in groupes_centre),
+                    "groupes": groupes_centre,
+                    "animateur_ids": ids_affectes,
+                }
+            )
 
-        ids_affectes_jour = set().union(*(centre["animateur_ids"] for centre in centres_jour)) if centres_jour else set()
+        ids_affectes_jour = (
+            set().union(*(centre["animateur_ids"] for centre in centres_jour))
+            if centres_jour
+            else set()
+        )
         resultat = {
             "date": jour.isoformat(),
             "enfants": sum(centre["enfants"] for centre in centres_jour),
             "animateurs_affectes": len(ids_affectes_jour),
-            "animateurs_necessaires": sum(centre["animateurs_necessaires"] for centre in centres_jour),
-            "manque_animateurs": sum(centre["manque_animateurs"] for centre in centres_jour),
-            "effectifs_non_renseignes": sum(centre["effectifs_non_renseignes"] for centre in centres_jour),
-            "qualifications_manquantes": sum(centre["qualifications_manquantes"] for centre in centres_jour),
+            "animateurs_necessaires": sum(
+                centre["animateurs_necessaires"] for centre in centres_jour
+            ),
+            "manque_animateurs": sum(
+                centre["manque_animateurs"] for centre in centres_jour
+            ),
+            "effectifs_non_renseignes": sum(
+                centre["effectifs_non_renseignes"] for centre in centres_jour
+            ),
+            "qualifications_manquantes": sum(
+                centre["qualifications_manquantes"] for centre in centres_jour
+            ),
             "groupes_ouverts": len(groupes_jour),
             "centres": centres_jour,
             "groupes": groupes_jour,
@@ -292,23 +308,41 @@ def generer_tableau_de_bord(date_reference: datetime.date, centre_id: int | None
         return resultat
 
     def resume_semaine(debut):
-        jours_semaine = [metriques_jour(debut + datetime.timedelta(days=i)) for i in range(7)]
+        jours_semaine = [
+            metriques_jour(debut + datetime.timedelta(days=index))
+            for index in range(JOURS_TABLEAU_DE_BORD)
+        ]
         return {
             "jours": jours_semaine,
             "enfants": sum(jour["enfants"] for jour in jours_semaine),
-            "journees_animateurs": sum(jour["animateurs_affectes"] for jour in jours_semaine),
-            "journees_necessaires": sum(jour["animateurs_necessaires"] for jour in jours_semaine),
-            "manque_animateurs": sum(jour["manque_animateurs"] for jour in jours_semaine),
-            "effectifs_non_renseignes": sum(jour["effectifs_non_renseignes"] for jour in jours_semaine),
+            "journees_animateurs": sum(
+                jour["animateurs_affectes"] for jour in jours_semaine
+            ),
+            "journees_necessaires": sum(
+                jour["animateurs_necessaires"] for jour in jours_semaine
+            ),
+            "manque_animateurs": sum(
+                jour["manque_animateurs"] for jour in jours_semaine
+            ),
+            "effectifs_non_renseignes": sum(
+                jour["effectifs_non_renseignes"] for jour in jours_semaine
+            ),
             "groupes_ouverts": sum(jour["groupes_ouverts"] for jour in jours_semaine),
             "groupes_a_risque": sum(
-                1 for jour in jours_semaine for groupe in jour["groupes"]
+                1
+                for jour in jours_semaine
+                for groupe in jour["groupes"]
                 if groupe["manque_animateurs"] or groupe["qualifications_manquantes"]
             ),
             "problemes_critiques": sum(
-                1 for jour in jours_semaine for groupe in jour["groupes"]
+                1
+                for jour in jours_semaine
+                for groupe in jour["groupes"]
                 if groupe["qualifications_manquantes"]
-                or (groupe["animateurs_necessaires"] > 0 and groupe["animateurs_affectes"] == 0)
+                or (
+                    groupe["animateurs_necessaires"] > 0
+                    and groupe["animateurs_affectes"] == 0
+                )
                 or groupe["manque_animateurs"] >= 2
             ),
         }
@@ -316,112 +350,154 @@ def generer_tableau_de_bord(date_reference: datetime.date, centre_id: int | None
     semaine = resume_semaine(debut_semaine)
     semaine_precedente = resume_semaine(debut_semaine_precedente)
     semaine["variation_enfants"] = semaine["enfants"] - semaine_precedente["enfants"]
-    semaine["variation_animateurs"] = semaine["journees_animateurs"] - semaine_precedente["journees_animateurs"]
+    semaine["variation_animateurs"] = (
+        semaine["journees_animateurs"] - semaine_precedente["journees_animateurs"]
+    )
 
-    jour_selectionne = metriques_jour(date_reference)
+    centres_semaine = []
+    for centre in centres:
+        jours_centre = []
+        ids_groupes = set()
+        etats = []
+        for jour in semaine["jours"]:
+            donnees_centre = next(
+                (item for item in jour["centres"] if item["id"] == centre.id),
+                None,
+            )
+            if donnees_centre is None:
+                continue
+            jours_centre.append(donnees_centre)
+            etats.append(donnees_centre["etat"])
+            ids_groupes.update(groupe["id"] for groupe in donnees_centre["groupes"])
+
+        jours_ouverts = len(jours_centre)
+        enfants = sum(item["enfants"] for item in jours_centre)
+        journees_animateurs = sum(
+            item["animateurs_affectes"] for item in jours_centre
+        )
+        journees_necessaires = sum(
+            item["animateurs_necessaires"] for item in jours_centre
+        )
+        manque_animateurs = sum(item["manque_animateurs"] for item in jours_centre)
+        effectifs_non_renseignes = sum(
+            item["effectifs_non_renseignes"] for item in jours_centre
+        )
+        qualifications_manquantes = sum(
+            item["qualifications_manquantes"] for item in jours_centre
+        )
+        centres_semaine.append(
+            {
+                "id": centre.id,
+                "nom": centre.nom,
+                "code": centre.code,
+                "couleur": centre.couleur,
+                "jours_ouverts": jours_ouverts,
+                "groupes": len(ids_groupes),
+                "enfants": enfants,
+                "journees_animateurs": journees_animateurs,
+                "journees_necessaires": journees_necessaires,
+                "manque_animateurs": manque_animateurs,
+                "effectifs_non_renseignes": effectifs_non_renseignes,
+                "qualifications_manquantes": qualifications_manquantes,
+                "etat": _niveau_global(etats),
+                "etat_libelle": _libelle_centre_semaine(
+                    jours_ouverts=jours_ouverts,
+                    manque_animateurs=manque_animateurs,
+                    qualifications_manquantes=qualifications_manquantes,
+                    effectifs_non_renseignes=effectifs_non_renseignes,
+                    journees_animateurs=journees_animateurs,
+                    journees_necessaires=journees_necessaires,
+                ),
+            }
+        )
 
     alertes = []
-    for groupe in jour_selectionne["groupes"]:
-        action = f"/planning/?date={jour_selectionne['date']}&mode=effectifs&centre={groupe['centre_id']}"
-        if groupe["manque_animateurs"]:
-            nombre = groupe["manque_animateurs"]
-            alertes.append({
-                "niveau": "danger",
-                "titre": f"Il manque {nombre} animateur{'s' if nombre > 1 else ''}",
-                "detail": f"{groupe['centre_nom']} — {groupe['nom']}",
-                "action_url": action,
-                "action_label": "Voir",
-            })
-        for qualification in groupe["qualifications_manquantes"]:
-            alertes.append({
-                "niveau": "danger",
-                "titre": f"Qualification manquante : {qualification['qualification']}",
-                "detail": f"{groupe['centre_nom']} — {groupe['nom']} ({qualification['affectes']}/{qualification['minimum']})",
-                "action_url": f"/planning/?date={jour_selectionne['date']}&mode=affectations&centre={groupe['centre_id']}",
-                "action_label": "Voir",
-            })
-        if not groupe["effectif_saisi"]:
-            alertes.append({
-                "niveau": "vigilance",
-                "titre": "Effectif enfants non renseigné",
-                "detail": f"{groupe['centre_nom']} — {groupe['nom']}",
-                "action_url": action,
-                "action_label": "Saisir",
-            })
+    for jour in semaine["jours"]:
+        for groupe in jour["groupes"]:
+            date = jour["date"]
+            action_affectations = (
+                f"/planning/?date={date}&mode=affectations&centre={groupe['centre_id']}"
+            )
+            action_effectifs = (
+                f"/planning/?date={date}&mode=effectifs&centre={groupe['centre_id']}"
+            )
+            if groupe["manque_animateurs"]:
+                nombre = groupe["manque_animateurs"]
+                alertes.append(
+                    {
+                        "date": date,
+                        "niveau": "danger",
+                        "titre": f"Il manque {nombre} animateur{'s' if nombre > 1 else ''}",
+                        "detail": f"{groupe['centre_nom']} — {groupe['nom']}",
+                        "action_url": action_affectations,
+                        "action_label": "Voir",
+                    }
+                )
+            for qualification in groupe["qualifications_manquantes"]:
+                alertes.append(
+                    {
+                        "date": date,
+                        "niveau": "danger",
+                        "titre": (
+                            "Qualification manquante : "
+                            f"{qualification['qualification']}"
+                        ),
+                        "detail": (
+                            f"{groupe['centre_nom']} — {groupe['nom']} "
+                            f"({qualification['affectes']}/{qualification['minimum']})"
+                        ),
+                        "action_url": action_affectations,
+                        "action_label": "Voir",
+                    }
+                )
+            if not groupe["effectif_saisi"]:
+                alertes.append(
+                    {
+                        "date": date,
+                        "niveau": "vigilance",
+                        "titre": "Effectif enfants non renseigné",
+                        "detail": f"{groupe['centre_nom']} — {groupe['nom']}",
+                        "action_url": action_effectifs,
+                        "action_label": "Saisir",
+                    }
+                )
 
-    prochains = []
-    for jour in _jours(date_reference, fin_recherche):
-        donnees_jour = metriques_jour(jour)
-        for centre in donnees_jour["centres"]:
-            prochains.append({
-                "date": jour.isoformat(),
-                "centre_id": centre["id"],
-                "centre_nom": centre["nom"],
-                "couleur": centre["couleur"],
-                "groupes": centre["groupes_ouverts"],
-                "enfants": centre["enfants"],
-                "animateurs_affectes": centre["animateurs_affectes"],
-                "animateurs_necessaires": centre["animateurs_necessaires"],
-                "etat": centre["etat"],
-                "etat_libelle": centre["etat_libelle"],
-                "action_url": f"/planning/?date={jour.isoformat()}&mode=affectations&centre={centre['id']}",
-            })
-            if len(prochains) >= 5:
-                break
-        if len(prochains) >= 5:
-            break
+    alertes.sort(
+        key=lambda alerte: (
+            alerte["date"],
+            0 if alerte["niveau"] == "danger" else 1,
+            alerte["detail"],
+        )
+    )
 
-    calendrier = []
-    for jour in _jours(debut_mois, fin_mois):
-        donnees = metriques_jour(jour)
-        calendrier.append({
-            "date": jour.isoformat(),
-            "jour": jour.day,
-            "etat": donnees["etat"],
-            "enfants": donnees["enfants"],
-            "animateurs_affectes": donnees["animateurs_affectes"],
-            "animateurs_necessaires": donnees["animateurs_necessaires"],
-            "alertes": donnees["manque_animateurs"] + donnees["effectifs_non_renseignes"] + donnees["qualifications_manquantes"],
-            "groupes_ouverts": donnees["groupes_ouverts"],
-        })
-
-    mois_libelle = calendar.month_name[date_reference.month]
-    # calendar.month_name est en anglais dans certains environnements serveur ;
-    # le front reformate la date en français, ce libellé sert de repli.
     return {
-        "date_selectionnee": date_reference.isoformat(),
-        "centre_selectionne": centre_id,
-        "centres_filtres": [
-            {"id": centre.id, "nom": centre.nom, "code": centre.code, "couleur": centre.couleur}
-            for centre in centres_tous
-        ],
+        "date_selectionnee": debut_semaine.isoformat(),
         "periode": {
             "debut_semaine": debut_semaine.isoformat(),
-            "fin_semaine": (fin_semaine - datetime.timedelta(days=1)).isoformat(),
-            "mois": date_reference.month,
-            "annee": date_reference.year,
-            "libelle_repli": f"{mois_libelle} {date_reference.year}",
+            "fin_semaine": (
+                fin_semaine_exclusive - datetime.timedelta(days=1)
+            ).isoformat(),
         },
         "indicateurs": {
             **{cle: valeur for cle, valeur in semaine.items() if cle != "jours"},
             "couverture_pourcentage": round(
-                (semaine["journees_animateurs"] / semaine["journees_necessaires"] * 100)
+                (
+                    semaine["journees_animateurs"]
+                    / semaine["journees_necessaires"]
+                    * 100
+                )
                 if semaine["journees_necessaires"]
                 else 100
             ),
         },
-        "jour": {
-            **{cle: valeur for cle, valeur in jour_selectionne.items() if cle not in {"groupes", "animateur_ids"}},
-            "centres": [
-                {cle: valeur for cle, valeur in centre.items() if cle not in {"groupes", "animateur_ids"}}
-                for centre in jour_selectionne["centres"]
-            ],
-        },
-        "calendrier": calendrier,
+        "centres_semaine": centres_semaine,
         "semaine": [
-            {cle: valeur for cle, valeur in jour.items() if cle not in {"centres", "groupes", "animateur_ids"}}
+            {
+                cle: valeur
+                for cle, valeur in jour.items()
+                if cle not in {"centres", "groupes", "animateur_ids"}
+            }
             for jour in semaine["jours"]
         ],
-        "alertes": alertes[:8],
-        "prochains_jours": prochains,
+        "alertes": alertes,
     }

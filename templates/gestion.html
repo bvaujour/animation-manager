@@ -2,21 +2,23 @@
 {% load static %}
 {% block title %}Gestion{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v=20260719-clean-ui-1">
-<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260719-clean-ui-1">
-<link rel="stylesheet" href="{% static 'css/administration.css' %}?v=20260719-clean-ui-1">
+<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v=20260720-group-days-fix-1">
+<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260720-group-days-fix-1">
+<link rel="stylesheet" href="{% static 'css/administration.css' %}?v=20260720-group-days-fix-1">
 {% endblock %}
 {% block content %}
-<main class="page-shell page-shell--wide gestion-page gestion-page-compact">
-    <header class="page-header gestion-page-header">
-        <div><p class="eyebrow">Paramétrage de l’organisation</p><h1>Gestion</h1><p class="page-intro">Configurez les lieux, les groupes, les qualifications, les périodes et les documents.</p></div>
+<main id="main-content" class="page-shell page-shell--wide gestion-page gestion-page-compact">
+    <header class="page-header gestion-page-header app-page-header app-page-header--tabs">
+        <div>
+            <h1>Gestion</h1>
+        </div>
+        <div class="tabs gestion-main-tabs app-page-tabs" id="gestion-tabs" role="tablist" aria-label="Rubriques de gestion">
+            <button class="tab-btn active" data-tab="lieux" type="button" role="tab">Lieux et groupes</button>
+            <button class="tab-btn" data-tab="qualifications" type="button" role="tab">Qualifications</button>
+            <button class="tab-btn" data-tab="periodes" type="button" role="tab">Périodes</button>
+            <button class="tab-btn" data-tab="documents" type="button" role="tab">Documents</button>
+        </div>
     </header>
-    <div class="tabs gestion-main-tabs" id="gestion-tabs">
-        <button class="tab-btn active" data-tab="lieux" type="button">Lieux et groupes</button>
-        <button class="tab-btn" data-tab="qualifications" type="button">Qualifications</button>
-        <button class="tab-btn" data-tab="periodes" type="button">Périodes</button>
-        <button class="tab-btn" data-tab="documents" type="button">Documents</button>
-    </div>
 
     <div class="tab-panel" data-panel="lieux">
         <div id="panel-centres"></div>
@@ -31,8 +33,8 @@
         <section class="ui-card gestion-documents" id="documents-management-app">
             <div class="ui-section-heading gestion-section-heading">
                 <div>
-                    <h1>Documents</h1>
-                    
+                    <h2>Bibliothèque de documents</h2>
+                    <p>Ajoutez les fichiers utiles à l’équipe et associez-les aux semaines concernées.</p>
                 </div>
             </div>
             <form id="form-upload" class="ui-form upload-form">
@@ -52,7 +54,7 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/gestion.js' %}?v=20260719-clean-ui-1"></script>
+<script src="{% static 'js/gestion.js' %}?v=20260720-gestion-v4-ergonomie"></script>
 <script src="{% static 'js/documents-management.js' %}?v=20260719-clean-ui-1"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -60,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
     GestionApp.mountQualifications(document.getElementById("panel-qualifications"));
     GestionApp.mountPeriodes(document.getElementById("panel-periodes"));
 
-    const root = document.getElementById("gestion-tabs").parentElement;
+    const root = document.getElementById("gestion-tabs").closest("main");
     initTabs(root);
 
     const requestedTab = new URLSearchParams(window.location.search).get("onglet");

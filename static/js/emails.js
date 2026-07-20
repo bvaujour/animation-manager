@@ -22,7 +22,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const erreur = document.getElementById("email-erreur");
     const resultat = document.getElementById("email-resultat");
     const envoyer = document.getElementById("email-envoyer");
-    const historiqueRoot = document.getElementById("email-historique");
     const modeleSelect = document.getElementById("email-modele");
     const semainesPicker = document.getElementById("email-semaines-picker");
     const variablesRoot = document.getElementById("email-variables");
@@ -52,7 +51,6 @@ document.addEventListener("DOMContentLoaded", () => {
         variables: [],
         periodes: [],
         qualifications: [],
-        historique: [],
         configuration: {},
     };
     let modelesGestion = [];
@@ -341,39 +339,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    function afficherHistorique() {
-        historiqueRoot.innerHTML = "";
-        const historique = donnees.historique || [];
-        if (!historique.length) {
-            historiqueRoot.innerHTML = '<p class="empty-note">Aucun e-mail envoyé pour l’instant.</p>';
-            return;
-        }
-
-        historique.forEach((envoi) => {
-            const article = document.createElement("article");
-            article.className = "email-history-card";
-            const date = new Date(envoi.date_creation).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
-            article.innerHTML = `
-                <div class="history-card-main">
-                    <div><h3>${escapeHtml(envoi.objet)}</h3><p>${escapeHtml(date)}${envoi.mode_test ? " · Mode test" : ""}</p></div>
-                    <span class="history-status ${envoi.nombre_echecs ? "warning" : "success"}">
-                        ${envoi.nombre_envoyes} envoyé${envoi.nombre_envoyes > 1 ? "s" : ""}${envoi.nombre_echecs ? ` · ${envoi.nombre_echecs} échec${envoi.nombre_echecs > 1 ? "s" : ""}` : ""}
-                    </span>
-                </div>
-                <p class="history-documents"><strong>Documents :</strong> ${envoi.documents.length ? envoi.documents.map(escapeHtml).join(", ") : "Aucun"}</p>
-                <div class="history-errors"></div>
-            `;
-            if (envoi.echecs?.length) {
-                const details = document.createElement("details");
-                details.innerHTML = `<summary>Voir les échecs</summary><ul>${envoi.echecs.map((item) => `
-                    <li><strong>${escapeHtml(item.prenom)} ${escapeHtml(item.nom)}</strong> (${escapeHtml(item.email)}) : ${escapeHtml(item.erreur || "Erreur inconnue")}</li>
-                `).join("")}</ul>`;
-                article.querySelector(".history-errors").appendChild(details);
-            }
-            historiqueRoot.appendChild(article);
-        });
-    }
-
     function reinitialiserModele() {
         modeleForm.reset();
         modeleIdInput.value = "";
@@ -447,7 +412,6 @@ document.addEventListener("DOMContentLoaded", () => {
         afficherDocuments();
         afficherModelesEnvoi();
         afficherVariables(variablesRoot, () => champVariableActif || messageInput);
-        afficherHistorique();
         compteurs();
         recherche.dispatchEvent(new Event("input"));
     }

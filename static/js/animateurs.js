@@ -172,37 +172,31 @@ document.addEventListener("DOMContentLoaded", () => {
         return FormOptionsUtils.centresHierarchises(centres, prefere, secondaires, group);
     }
 
-    function optionsEvenementPreferee(centreId, evenementId = null) {
-        const centre = centres.find((item) => Number(item.id) === Number(centreId));
-        const evenements = (centre?.evenements || []);
-        const selected = Number(evenementId) || null;
-
-        if (!centreId) {
-            return '<option value="">Choisis d’abord un lieu préféré</option>';
+    function affinitesGroupesHtml(affinites = []) {
+        if (!affinites.length) {
+            return '<p class="empty-note">Aucune affinité avec un groupe n’est encore enregistrée.</p>';
         }
-        if (!evenements.length) {
-            return '<option value="">Aucun groupe dans ce lieu</option>';
-        }
-
-        return [
-            '<option value="">Aucune préférence de groupe</option>',
-            ...evenements.map((evenement) => `
-                <option value="${escapeHtml(evenement.id)}" ${selected === Number(evenement.id) ? "selected" : ""}>
-                    ${escapeHtml(evenement.nom)}
-                </option>
-            `),
-        ].join("");
-    }
-
-    function synchroniserEvenementPreferee(evenementSelectionnee = null) {
-        const select = detailEl.querySelector("#fiche-evenement-preferee");
-        const zoneCentres = detailEl.querySelector("#fiche-centres");
-        if (!select || !zoneCentres) return;
-        const centresChoisis = FormOptionsUtils.lireCentresHierarchises(zoneCentres);
-        const ancienneValeur = evenementSelectionnee ?? select.value;
-        select.innerHTML = optionsEvenementPreferee(centresChoisis.centre_prefere, ancienneValeur);
-        select.disabled = !centresChoisis.centre_prefere
-            || !centres.find((centre) => Number(centre.id) === Number(centresChoisis.centre_prefere))?.evenements?.length;
+        const total = affinites.reduce((somme, entree) => somme + Number(entree.score_affinite ?? entree.jours_travailles ?? 0), 0);
+        return `
+            <div class="employee-group-history-summary">
+                <strong>${total}</strong>
+                <span>point${total > 1 ? "s" : ""} d’affinité cumulé${total > 1 ? "s" : ""}</span>
+            </div>
+            <div class="employee-group-history-list">
+                ${affinites.map((entree) => `
+                    <div class="employee-group-history-row">
+                        <div>
+                            <strong>${escapeHtml(entree.groupe_nom || "Groupe")}</strong>
+                            <span>${escapeHtml(entree.centre_nom || "")}</span>
+                        </div>
+                        <div class="employee-group-history-count">
+                            <strong>${Number(entree.score_affinite ?? entree.jours_travailles ?? 0)}</strong>
+                            <span>point${Number(entree.score_affinite ?? entree.jours_travailles ?? 0) > 1 ? "s" : ""}</span>
+                        </div>
+                    </div>
+                `).join("")}
+            </div>
+            <p class="field-help">Chaque journée terminée dans un groupe ajoute automatiquement 1 point. Le remplissage automatique privilégie ensuite les salariés ayant la meilleure affinité avec ce groupe.</p>`;
     }
 
     function blankAnimateur() {
@@ -210,8 +204,8 @@ document.addEventListener("DOMContentLoaded", () => {
             id: null, prenom: "", nom: "", telephone: "", email: "",
             date_naissance: null, adresse: "", numero_securite_sociale: "",
             paie_jour: null, age: null, couleur: couleurAleatoireAnimateur(),
-            qualification_ids: [], centre_prefere: null, centres_secondaires: [],
-            evenement_preferee: null, evenement_preferee_id: null, disponibilites: [],
+            qualification_ids: [], centres_preferes: [], centres_interdits: [], centre_prefere: null, centres_secondaires: [],
+            evenement_preferee: null, evenement_preferee_id: null, disponibilites: [], affinites_groupes: [], historique_groupes: [],
             role: "animateur", access: { exists: false, username: null, active: false },
         };
     }
@@ -282,16 +276,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     <section class="fiche-section fiche-card employee-compact-card centres-card">
                         <div class="fiche-section-head"><h3>Lieux d’affectation</h3></div>
                         <div class="centre-hierarchy-grid evenement-centres" id="fiche-centres">
-                            ${centresHtml(a.centre_prefere, a.centres_secondaires || [], `fiche-centre-prefere-${a.id || "new"}`)}
-                        </div>
-                        <div class="evenement-preferee-field field employee-group-preference">
-                            <label for="fiche-evenement-preferee">Groupe préféré <span class="label-hint">(facultatif)</span></label>
-                            <select id="fiche-evenement-preferee" name="evenement_preferee">
-                                ${optionsEvenementPreferee(a.centre_prefere?.id || a.centre_prefere, a.evenement_preferee_id || a.evenement_preferee?.id)}
-                            </select>
-                            
+                            ${centresHtml(a.centres_preferes || (a.centre_prefere ? [a.centre_prefere] : []), a.centres_interdits || [], `fiche-centre-prefere-${a.id || "new"}`)}
                         </div>
                     </section>
+                    ${isNew ? "" : `
+                    <section class="fiche-section fiche-card employee-compact-card employee-group-history-card">
+                        <div class="fiche-section-head"><h3>Affinité avec les groupes</h3></div>
+                        ${affinitesGroupesHtml(a.affinites_groupes || a.historique_groupes || [])}
+                    </section>`}
                 </div>
 
                 <div class="employee-detail-panel" data-employee-panel="acces" hidden>
@@ -365,10 +357,6 @@ document.addEventListener("DOMContentLoaded", () => {
                             <button class="btn btn-primary" type="button" id="employee-email-send" disabled>Envoyer depuis le site</button>
                         </div>
                     </section>
-                    <section class="fiche-section fiche-card employee-compact-card communication-history-card">
-                        <div class="fiche-section-head"><h3>Historique des e-mails</h3><button class="btn btn-ghost btn-small" type="button" id="employee-email-refresh">Actualiser</button></div>
-                        <div id="employee-email-history" class="communication-history"><p class="empty-note">Chargement…</p></div>
-                    </section>
                 </div>`}
             </div>`;
 
@@ -392,10 +380,6 @@ document.addEventListener("DOMContentLoaded", () => {
         activerOnglet(activeDetailTab);
 
         FormOptionsUtils.activerCentresHierarchises(detailEl.querySelector("#fiche-centres"));
-        detailEl.querySelectorAll('#fiche-centres input[data-role="prefere"]').forEach((radio) => {
-            radio.addEventListener("change", () => synchroniserEvenementPreferee(null));
-        });
-        synchroniserEvenementPreferee(a.evenement_preferee_id || a.evenement_preferee?.id || null);
         const couleurInput = detailEl.querySelector("#fiche-couleur");
         const appliquerCouleur = (couleur) => {
             couleurInput.value = couleur;
@@ -487,19 +471,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${(valeur / 1048576).toFixed(1).replace(".", ",")} Mo`;
     }
 
-    function afficherHistoriqueEmails(items) {
-        const zone = detailEl.querySelector("#employee-email-history");
-        if (!zone) return;
-        zone.innerHTML = items.length ? items.map((item) => `
-            <article class="communication-history-item ${item.statut === "echec" ? "is-error" : ""}">
-                <div><strong>${escapeHtml(item.objet || "Sans objet")}</strong><span>${escapeHtml(item.statut_libelle)}${item.mode_test ? " · Test" : ""}</span></div>
-                <p>${escapeHtml(item.message).replace(/\n/g, "<br>")}</p>
-                ${item.documents?.length ? `<small>Pièces jointes : ${item.documents.map(escapeHtml).join(", ")}</small>` : ""}
-                ${item.erreur ? `<small class="communication-error">${escapeHtml(item.erreur)}</small>` : ""}
-                <small>${new Date(item.date_creation).toLocaleString("fr-FR")}</small>
-            </article>`).join("") : '<p class="empty-note">Aucun e-mail envoyé à ce salarié.</p>';
-    }
-
     function afficherDocumentsEmail(documents) {
         const zone = detailEl.querySelector("#employee-email-documents");
         if (!zone) return;
@@ -513,7 +484,6 @@ document.addEventListener("DOMContentLoaded", () => {
     async function chargerEmailsAnimateur(a) {
         const configuration = detailEl.querySelector("#employee-email-configuration");
         const envoyer = detailEl.querySelector("#employee-email-send");
-        const zoneHistorique = detailEl.querySelector("#employee-email-history");
         try {
             const data = await apiFetch(`/api/animateurs/${a.id}/emails/`);
             const statut = data.configuration || {};
@@ -523,13 +493,11 @@ document.addEventListener("DOMContentLoaded", () => {
             afficherModelesEmailAnimateur(data.modeles || []);
             afficherVariablesEmailAnimateur(data.variables || []);
             afficherDocumentsEmail(data.documents || []);
-            afficherHistoriqueEmails(data.historique || []);
         } catch (error) {
             configuration.className = "employee-email-configuration error";
             const message = erreurMessage(error, "Impossible de préparer l’envoi d’e-mail.");
             configuration.textContent = message;
             envoyer.disabled = true;
-            if (zoneHistorique) zoneHistorique.innerHTML = `<p class="empty-note">${escapeHtml(message)}</p>`;
         }
     }
 
@@ -607,9 +575,8 @@ document.addEventListener("DOMContentLoaded", () => {
             adresse: detailEl.querySelector("#fiche-adresse").value.trim(),
             couleur: detailEl.querySelector("#fiche-couleur").value,
             qualifications: idsCheckboxesCochees(detailEl.querySelector("#fiche-qualifs")),
-            centre_prefere: centresChoisis.centre_prefere,
-            centres_secondaires: centresChoisis.centres_secondaires,
-            evenement_preferee: detailEl.querySelector("#fiche-evenement-preferee")?.value || null,
+            centres_preferes: centresChoisis.centres_preferes,
+            centres_interdits: centresChoisis.centres_interdits,
             role: "animateur",
             create_access: Boolean(detailEl.querySelector("#fiche-create-access")?.checked),
             access_active: detailEl.querySelector("#fiche-access-active") ? detailEl.querySelector("#fiche-access-active").checked : undefined,
@@ -880,15 +847,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     init();
-});
-
-// Le bouton d'action principal de l'en-tête réutilise exactement le même
-// flux de création que le bouton de la liste afin de ne pas dupliquer la
-// logique de formulaire.
-document.addEventListener("DOMContentLoaded", () => {
-    const headerAdd = document.getElementById("employees-header-add");
-    const directoryAdd = document.getElementById("evenement-add");
-    if (headerAdd && directoryAdd) {
-        headerAdd.addEventListener("click", () => directoryAdd.click());
-    }
 });

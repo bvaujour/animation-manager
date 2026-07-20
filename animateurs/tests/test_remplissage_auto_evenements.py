@@ -58,11 +58,12 @@ class ConfigurationEvenementRemplissageAutoTests(TestCase):
         data = evenement_to_dict(self.evenement)
         self.assertEqual(data["qualifications_requises"], {str(self.bafa.id): 1})
 
-    def test_solveur_utilise_le_besoin_enregistre(self):
+    def test_solveur_reserve_le_poste_si_la_qualification_manque(self):
         data, status = generer_planning_auto({"debut": "2026-07-06"})
         self.assertEqual(status, 200)
         self.assertEqual(data["created"], 0)
-        self.assertFalse(Affectation.objects.exists())
+        self.assertEqual(data["qualifications_manquantes"], 5)
+        self.assertEqual(Affectation.objects.count(), 0)
 
     def test_une_configuration_temporaire_envoyee_est_ignoree(self):
         data, status = generer_planning_auto({
@@ -76,7 +77,8 @@ class ConfigurationEvenementRemplissageAutoTests(TestCase):
         })
         self.assertEqual(status, 200)
         self.assertEqual(data["created"], 0)
-        self.assertFalse(Affectation.objects.exists())
+        self.assertEqual(data["qualifications_manquantes"], 5)
+        self.assertEqual(Affectation.objects.count(), 0)
 
     def test_le_solveur_remplit_quand_le_salarie_respecte_le_besoin(self):
         self.animateur.qualifications.add(self.bafa)
@@ -89,7 +91,7 @@ class ConfigurationEvenementRemplissageAutoTests(TestCase):
 class PlanningJavascriptConfigurationTests(SimpleTestCase):
     def test_la_fenetre_est_en_lecture_seule(self):
         script = Path("static/js/planning.js").read_text(encoding="utf-8")
-        self.assertIn("Ces besoins ne sont pas modifiables depuis le planning.", script)
-        self.assertNotIn('class="auto-evenement-effectif"', script)
-        self.assertNotIn('class="auto-evenement-qualif"', script)
+        self.assertIn("nombre d’animateurs et qualifications requises dans chaque groupe", script)
+        self.assertIn("lieux interdits exclus, lieux préférés favorisés", script)
+        self.assertIn("qualifications requises dans chaque groupe", script)
         self.assertIn('body: JSON.stringify({ debut })', script)

@@ -1,16 +1,14 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Documents{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260718-audit-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260720-css-refactor-2">{% endblock %}
 {% block content %}
-<main class="page-shell page-shell--medium documents-page documents-shared-page">
-    <div class="page-header documents-heading">
+<main id="main-content" class="page-shell page-shell--medium documents-page documents-shared-page">
+    <header class="page-header documents-heading app-page-header">
         <div>
-            <p class="eyebrow">Espace animateur</p>
-            <h1>Documents à télécharger</h1>
-            <p class="page-intro">Retrouvez les documents partagés par la direction pour vos semaines d’activité.</p>
+            <h1>Documents</h1>
         </div>
-    </div>
+    </header>
     <div id="documents-partages" class="ui-grid documents-grid"></div>
 </main>
 {% endblock %}

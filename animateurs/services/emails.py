@@ -7,7 +7,6 @@ réutilisés pour tous les messages de l'envoi.
 
 from __future__ import annotations
 
-import logging
 import mimetypes
 import re
 from dataclasses import dataclass
@@ -19,7 +18,6 @@ from django.core.mail import EmailMultiAlternatives, get_connection
 from django.utils import timezone
 from django.utils.html import escape, linebreaks
 
-logger = logging.getLogger("animateurs.emails")
 
 
 MAX_PIECES_JOINTES_OCTETS = 18 * 1024 * 1024
@@ -327,11 +325,9 @@ def envoyer_un_message(*, animateur, objet: str, message: str, pieces: list[Piec
     email.attach_alternative(_corps_html(message_rendu), "text/html")
     for piece in pieces:
         email.attach(piece.nom, piece.contenu, piece.type_mime)
-    logger.info("Envoi SMTP vers %s — objet : %s", animateur.email, objet_rendu)
     nombre_envoye = email.send(fail_silently=False)
     if nombre_envoye != 1:
         raise RuntimeError(f"Le backend e-mail a retourné {nombre_envoye} message envoyé au lieu de 1.")
-    logger.info("E-mail accepté par le serveur SMTP pour %s", animateur.email)
     return objet_rendu, message_rendu
 
 
@@ -341,13 +337,4 @@ def connexion_email():
     statut = statut_configuration_email()
     if not statut["operationnel"]:
         raise ConfigurationEmailError(statut["message"])
-    logger.info(
-        "Ouverture SMTP : backend=%s hôte=%s port=%s utilisateur=%s TLS=%s SSL=%s",
-        settings.EMAIL_BACKEND,
-        settings.EMAIL_HOST,
-        settings.EMAIL_PORT,
-        settings.EMAIL_HOST_USER,
-        settings.EMAIL_USE_TLS,
-        settings.EMAIL_USE_SSL,
-    )
     return get_connection(fail_silently=False)
