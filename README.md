@@ -132,3 +132,20 @@ Variables principales : `{{planning_semaine}}`, `{{affectation_lundi}}` à
 `{{affectation_dimanche}}`, `{{lieu_lundi}}`, `{{groupe_lundi}}`, ainsi que
 `{{semaine_du}}` et `{{semaine_au}}`. Chaque destinataire reçoit ses propres
 affectations enregistrées dans le planning.
+
+## Interface pastel unifiée
+
+Toutes les pages utilisent désormais le même langage visuel que le tableau de bord :
+
+- barre latérale persistante sur ordinateur et menu coulissant sur petit écran ;
+- palette pastel violette, cartes blanches, bordures légères et ombres discrètes ;
+- titres, onglets, boutons, formulaires et tableaux harmonisés ;
+- en-têtes explicites pour Planning, Salariés, Gestion, Récapitulatif et Administration ;
+- espaces de travail adaptés à leur usage : Planning dense, Salariés en maître/détail, Gestion en cartes par lieu et Administration organisée par outils ;
+- mise en page responsive conservant l'accès à toutes les fonctions sur tablette et mobile.
+
+La couche commune se trouve dans `static/css/app-theme.css`. Elle est chargée en dernier depuis `templates/base.html` afin d'unifier les anciens écrans sans dupliquer leur logique métier.
+
+## Disposition modulable des centres dans le Planning
+
+Le menu compact **Centres** permet de rouvrir un centre précédemment fermé. Chaque carte peut être déplacée depuis sa poignée : les centres déposés sur une même ligne se partagent automatiquement toute la largeur disponible, tandis qu'un dépôt entre deux lignes crée une nouvelle rangée. Les calendriers conservent une hauteur utile pour les affectations ; le Planning défile uniquement vers le bas et ne crée jamais de défilement horizontal. La disposition reste mémorisée dans le navigateur sans modifier l'ordre métier enregistré dans Gestion.

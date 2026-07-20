@@ -148,7 +148,8 @@ def evenement_to_dict(evenement):
             {
                 "date": effectif.date.isoformat(),
                 "nombre": effectif.nombre,
-                "enfants_par_animateur": effectif.enfants_par_animateur,
+                "enfants_par_animateur": effectif.ratio_encadrement_effectif,
+                "ratio_encadrement_exceptionnel": effectif.ratio_encadrement_exceptionnel,
             }
             for effectif in effectifs_enfants
         ],

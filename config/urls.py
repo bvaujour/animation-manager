@@ -56,6 +56,7 @@ from animateurs.views import (
     api_qualification_detail,
     api_qualifications,
     api_recapitulatif,
+    api_tableau_de_bord,
     changer_mot_de_passe,
     documents,
     emails,
@@ -125,7 +126,9 @@ urlpatterns = [
     path("api/affectations/", direction_requise_api(api_affectation_create), name="api_affectation_create"),
     path("api/affectations/<int:affectation_id>/", direction_requise_api(api_affectation_detail), name="api_affectation_detail"),
 
-    # --- API : récapitulatif ---
+    # --- API : tableau de bord et récapitulatif ---
+    path("api/tableau-de-bord/", direction_requise_api(api_tableau_de_bord), name="api_tableau_de_bord"),
+
     path("api/recapitulatif/", direction_requise_api(api_recapitulatif), name="api_recapitulatif"),
 
     # --- API : documents ---

@@ -470,7 +470,16 @@ class EffectifEnfantsJour(models.Model):
         default=8,
         verbose_name="nombre d’enfants par animateur",
     )
+    ratio_encadrement_exceptionnel = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="ratio d’encadrement exceptionnel",
+    )
     modifie_le = models.DateTimeField(auto_now=True)
+
+    @property
+    def ratio_encadrement_effectif(self):
+        return self.ratio_encadrement_exceptionnel or self.evenement.enfants_par_animateur_defaut
 
     class Meta:
         ordering = ("date",)

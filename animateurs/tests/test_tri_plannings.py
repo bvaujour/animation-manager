@@ -127,7 +127,12 @@ class OrdreAffichagePlanningApiTests(ConnexionTestCase):
             nouvel_ordre,
         )
 
-    def test_page_planning_ne_contient_plus_le_texte_daide_au_tri(self):
+    def test_page_planning_propose_la_disposition_libre_des_centres(self):
         response = self.client.get(reverse("planning"))
-        self.assertNotContains(response, "Attrape cette poignée")
+        self.assertContains(response, 'id="planning-centres-toolbar"')
+        self.assertContains(response, 'id="planning-add-centre-menu"')
+        self.assertContains(response, 'id="calendars-container"')
+        self.assertNotContains(response, 'id="planning-layout-one-row"')
+        self.assertNotContains(response, 'id="planning-layout-stacked"')
         self.assertNotContains(response, "planning-sort-hint")
+        self.assertNotContains(response, "Sortable.min.js")

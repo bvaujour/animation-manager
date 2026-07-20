@@ -6,15 +6,15 @@ from animateurs.tests.base import ConnexionTestCase
 
 
 class InterfaceHarmonisationTests(ConnexionTestCase):
-    def test_accueil_et_planning_chargent_le_style_calendrier_partage(self):
+    def test_accueil_direction_et_planning_chargent_leurs_styles_adaptes(self):
         accueil = self.client.get("/")
         planning = self.client.get("/planning/")
 
         self.assertEqual(accueil.status_code, 200)
         self.assertEqual(planning.status_code, 200)
-        self.assertContains(accueil, "css/calendars.css")
+        self.assertContains(accueil, "css/dashboard.css")
+        self.assertContains(accueil, 'id="dashboard-root"')
         self.assertContains(planning, "css/calendars.css")
-        self.assertContains(accueil, 'class="home-calendars calendar-sites"')
         self.assertContains(planning, 'class="planning-view-week calendar-sites"')
 
     def test_planning_force_une_colonne_de_calendriers_et_respecte_hidden(self):
@@ -26,7 +26,6 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
 
     def test_le_selecteur_de_semaines_est_partage_par_toutes_les_pages(self):
         attentes = {
-            "templates/accueil.html": "partials/_week_navigation.html",
             "templates/planning.html": "partials/_week_navigation.html",
             "templates/gestion.html": "partials/_week_picker.html",
             "templates/partials/_emails_admin.html": "partials/_week_picker.html",

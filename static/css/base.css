@@ -1283,3 +1283,68 @@ a {
         flex-direction: column;
     }
 }
+
+/* Éléments enrichis du menu latéral, utilisés sur toutes les pages. */
+.nav-drawer-links {
+    flex: 1 1 auto;
+}
+
+.nav-link-icon {
+    width: 20px;
+    min-width: 20px;
+    display: inline-grid;
+    place-items: center;
+    color: currentColor;
+}
+
+.nav-link-icon svg {
+    width: 19px;
+    height: 19px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.nav-user-card {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: auto;
+    padding: 12px 10px 6px;
+    border-top: 1px solid var(--color-border);
+}
+
+.nav-user-avatar {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 34px;
+    border-radius: 50%;
+    color: var(--color-primary-dark);
+    background: var(--color-surface-sunken);
+    font-size: .78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.nav-user-copy {
+    min-width: 0;
+    display: grid;
+    line-height: 1.2;
+}
+
+.nav-user-copy strong {
+    overflow: hidden;
+    font-size: .78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.nav-user-copy small {
+    margin-top: 2px;
+    color: var(--color-text-muted);
+    font-size: .68rem;
+}

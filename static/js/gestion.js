@@ -692,6 +692,10 @@ function bouton(label, classes, onClick)
 					teamList.appendChild(row);
 				});
 				return evenements;
+			}).catch((err) =>
+			{
+				teamList.innerHTML = `<p class="form-error gestion-load-error">${escapeHtml(erreurMessage(err, "Impossible de recharger les groupes de ce lieu."))}</p>`;
+				throw err;
 			});
 		}
 
@@ -775,16 +779,37 @@ function bouton(label, classes, onClick)
 
 		function charger()
 		{
+			list.setAttribute("aria-busy", "true");
 			return apiFetch("/api/centres/").then((data) =>
 			{
-				list.innerHTML = "";
+				const contenu = document.createDocumentFragment();
 				if (data.length === 0)
 				{
-					list.innerHTML = '<p class="empty-note">Aucun lieu pour l’instant.</p>';
-					return data;
+					const vide = document.createElement("p");
+					vide.className = "empty-note";
+					vide.textContent = "Aucun lieu pour l’instant.";
+					contenu.appendChild(vide);
 				}
-				data.forEach((lieu) => list.appendChild(creerCarteLieu(lieu)));
+				else
+				{
+					data.forEach((lieu) => contenu.appendChild(creerCarteLieu(lieu)));
+				}
+
+				// Ne remplace l'ancien affichage qu'une fois le nouveau construit.
+				// Ainsi, une erreur réseau ne laisse jamais la page Gestion vide.
+				list.replaceChildren(contenu);
 				return data;
+			}).catch((err) =>
+			{
+				afficherToast(erreurMessage(err, "Impossible de recharger les lieux et groupes."), true);
+				if (!list.children.length)
+				{
+					list.innerHTML = '<p class="form-error gestion-load-error">Impossible de charger les lieux et groupes. Recharge la page pour réessayer.</p>';
+				}
+				throw err;
+			}).finally(() =>
+			{
+				list.removeAttribute("aria-busy");
 			});
 		}
 
@@ -811,7 +836,18 @@ function bouton(label, classes, onClick)
 				.catch((err) => { errorEl.textContent = erreurMessage(err, "Impossible d’ajouter ce lieu."); });
 		});
 
-		Promise.all([apiFetch("/api/qualifications/"), apiFetch("/api/periodes-scolaires/")]).then(([qualifications, periodes]) => { qualificationsEvenements = qualifications; periodesScolaires = periodes; return charger(); });
+		Promise.all([apiFetch("/api/qualifications/"), apiFetch("/api/periodes-scolaires/")])
+			.then(([qualifications, periodes]) =>
+			{
+				qualificationsEvenements = qualifications;
+				periodesScolaires = periodes;
+				return charger();
+			})
+			.catch((err) =>
+			{
+				if (!list.children.length)
+					list.innerHTML = `<p class="form-error gestion-load-error">${escapeHtml(erreurMessage(err, "Impossible d'initialiser la gestion des lieux et groupes."))}</p>`;
+			});
 		return { charger };
 	}
 

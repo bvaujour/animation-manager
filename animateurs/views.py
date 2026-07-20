@@ -66,6 +66,7 @@ from .services.calendrier_scolaire import (
 from .services.centres import prochain_ordre_centre, reordonner_centres
 from .services.dates import parse_to_aware_datetime
 from .services.disponibilites import fusionner_et_nettoyer_disponibilites
+from .services.dashboard import generer_tableau_de_bord
 from .services.documents import valider_periode_document
 from .services.emails import (
     ConfigurationEmailError,
@@ -216,6 +217,24 @@ def changer_mot_de_passe(request):
 
 def accueil(request):
     return render(request, "accueil.html", {"active_page": "accueil"})
+
+
+@never_cache
+def api_tableau_de_bord(request):
+    """Données agrégées du poste de pilotage de la direction."""
+
+    date_reference = parse_date(request.GET.get("date", "")) or timezone.localdate()
+    centre_id_brut = request.GET.get("centre_id", "").strip()
+    centre_id = None
+    if centre_id_brut:
+        try:
+            centre_id = int(centre_id_brut)
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "Le centre sélectionné est invalide."}, status=400)
+        if not Centre.objects.filter(pk=centre_id).exists():
+            return JsonResponse({"error": "Le centre sélectionné est introuvable."}, status=404)
+
+    return JsonResponse(generer_tableau_de_bord(date_reference, centre_id=centre_id))
 
 
 def planning(request):
@@ -2463,7 +2482,7 @@ def api_emails_animateur(request, animateur_id):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def api_effectifs_enfants_groupe(request, evenement_id):
-    """Lit ou enregistre les effectifs enfants journaliers d'un groupe."""
+    """Lit ou enregistre les effectifs et exceptions d’encadrement d’un groupe."""
     try:
         evenement = Evenement.objects.get(pk=evenement_id)
     except Evenement.DoesNotExist:
@@ -2482,7 +2501,8 @@ def api_effectifs_enfants_groupe(request, evenement_id):
                 {
                     "date": item.date.isoformat(),
                     "nombre": item.nombre,
-                    "enfants_par_animateur": item.enfants_par_animateur,
+                    "enfants_par_animateur": item.ratio_encadrement_effectif,
+                    "ratio_encadrement_exceptionnel": item.ratio_encadrement_exceptionnel,
                 }
                 for item in queryset
             ],
@@ -2491,39 +2511,81 @@ def api_effectifs_enfants_groupe(request, evenement_id):
 
     try:
         payload = json.loads(request.body)
-        valeurs = payload.get("effectifs", [])
-        if not isinstance(valeurs, list):
-            raise ValueError
-        normalisees = []
-        for valeur in valeurs:
-            jour = parse_date(str(valeur.get("date", "")))
-            nombre = int(valeur.get("nombre", 0))
-            enfants_par_animateur = int(
-                valeur.get("enfants_par_animateur", evenement.enfants_par_animateur_defaut)
-            )
-            if (
-                not jour
-                or nombre < 0
-                or nombre > 999
-                or enfants_par_animateur < 1
-                or enfants_par_animateur > 999
-            ):
+        effectifs = payload.get("effectifs")
+        ratios = payload.get("ratios_encadrement")
+
+        if effectifs is not None:
+            if not isinstance(effectifs, list):
                 raise ValueError
-            normalisees.append((jour, nombre, enfants_par_animateur))
+            normalises_effectifs = []
+            for valeur in effectifs:
+                jour = parse_date(str(valeur.get("date", "")))
+                nombre = int(valeur.get("nombre", 0))
+                if not jour or nombre < 0 or nombre > 999:
+                    raise ValueError
+                normalises_effectifs.append((jour, nombre))
+        else:
+            normalises_effectifs = []
+
+        if ratios is not None:
+            if not isinstance(ratios, list):
+                raise ValueError
+            normalises_ratios = []
+            for valeur in ratios:
+                jour = parse_date(str(valeur.get("date", "")))
+                brut = valeur.get("ratio")
+                ratio = None if brut in (None, "") else int(brut)
+                if not jour or (ratio is not None and (ratio < 1 or ratio > 999)):
+                    raise ValueError
+                normalises_ratios.append((jour, ratio))
+        else:
+            normalises_ratios = []
+
+        if effectifs is None and ratios is None:
+            raise ValueError
     except (TypeError, ValueError, AttributeError, json.JSONDecodeError):
-        return JsonResponse({"error": "Les effectifs transmis sont invalides."}, status=400)
+        return JsonResponse({"error": "Les données transmises sont invalides."}, status=400)
 
     with transaction.atomic():
-        for jour, nombre, enfants_par_animateur in normalisees:
+        for jour, nombre in normalises_effectifs:
+            ligne = EffectifEnfantsJour.objects.filter(evenement=evenement, date=jour).first()
             if nombre == 0:
-                EffectifEnfantsJour.objects.filter(evenement=evenement, date=jour).delete()
+                if ligne and ligne.ratio_encadrement_exceptionnel:
+                    ligne.nombre = 0
+                    ligne.enfants_par_animateur = ligne.ratio_encadrement_effectif
+                    ligne.save(update_fields=["nombre", "enfants_par_animateur", "modifie_le"])
+                elif ligne:
+                    ligne.delete()
+            else:
+                ratio = ligne.ratio_encadrement_effectif if ligne else evenement.enfants_par_animateur_defaut
+                EffectifEnfantsJour.objects.update_or_create(
+                    evenement=evenement,
+                    date=jour,
+                    defaults={"nombre": nombre, "enfants_par_animateur": ratio},
+                )
+
+        for jour, ratio in normalises_ratios:
+            ligne = EffectifEnfantsJour.objects.filter(evenement=evenement, date=jour).first()
+            if ratio is None:
+                if ligne:
+                    ligne.ratio_encadrement_exceptionnel = None
+                    ligne.enfants_par_animateur = evenement.enfants_par_animateur_defaut
+                    if ligne.nombre == 0:
+                        ligne.delete()
+                    else:
+                        ligne.save(update_fields=[
+                            "ratio_encadrement_exceptionnel",
+                            "enfants_par_animateur",
+                            "modifie_le",
+                        ])
             else:
                 EffectifEnfantsJour.objects.update_or_create(
                     evenement=evenement,
                     date=jour,
                     defaults={
-                        "nombre": nombre,
-                        "enfants_par_animateur": enfants_par_animateur,
+                        "nombre": ligne.nombre if ligne else 0,
+                        "enfants_par_animateur": ratio,
+                        "ratio_encadrement_exceptionnel": ratio,
                     },
                 )
     return JsonResponse({"ok": True})

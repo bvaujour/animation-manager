@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Choisir mon mot de passe{% endblock %}
+{% block body_class %}login-body{% endblock %}
 {% block content %}
 <main class="login-page">
     <section class="login-card">
+        <div class="brand login-brand"><span class="brand-mark">AM</span><span>Animation Manager</span></div>
         <h1>Choisis ton mot de passe</h1>
         <p>Le mot de passe transmis était provisoire. Choisis maintenant ton mot de passe personnel.</p>
         {% if erreur %}<p class="login-error">{{ erreur }}</p>{% endif %}

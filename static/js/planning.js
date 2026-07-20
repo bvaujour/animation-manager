@@ -24,6 +24,17 @@ document.addEventListener("DOMContentLoaded", function ()
 	} = PlanningUtils;
 	// -- Références DOM utilisées à plusieurs endroits --
 	const calendarsContainer = document.getElementById("calendars-container");
+	const centresToolbar = document.getElementById("planning-centres-toolbar");
+	const menuAjouterCentre = document.getElementById("planning-add-centre-menu");
+	const compteurCentresMasques = document.getElementById("planning-hidden-centres-count");
+	const layoutPlanning = document.getElementById("layout");
+	const ongletsPlanning = Array.from(document.querySelectorAll("[data-planning-mode]"));
+	const aideModePlanning = document.getElementById("planning-mode-help");
+	const planningQuery = new URLSearchParams(window.location.search);
+	const modeDemande = planningQuery.get("mode");
+	let modePlanning = modeDemande === "effectifs" || modeDemande === "affectations"
+		? modeDemande
+		: (localStorage.getItem("planning-mode") === "effectifs" ? "effectifs" : "affectations");
 	const animList = document.getElementById("animateurs-list");
 	const filtresQualificationsConteneur = document.getElementById("animateurs-filter-qualifications");
 	const filtresCentresConteneur = document.getElementById("animateurs-filter-centres");
@@ -39,14 +50,26 @@ document.addEventListener("DOMContentLoaded", function ()
 	const formulaireEffectifsEnfants = document.getElementById("effectifs-enfants-form");
 	const champsEffectifsEnfants = document.getElementById("effectifs-enfants-fields");
 	const titreEffectifsEnfants = document.getElementById("effectifs-enfants-title");
+	const modalEncadrementSpecial = document.getElementById("modal-encadrement-special");
+	const formulaireEncadrementSpecial = document.getElementById("encadrement-special-form");
+	const champsEncadrementSpecial = document.getElementById("encadrement-special-fields");
+	const titreEncadrementSpecial = document.getElementById("encadrement-special-title");
 	let contexteEffectifsEnfants = null;
+	let contexteEncadrementSpecial = null;
 
 	// Un FullCalendar.Calendar par centre, dans le même ordre que les
 	// centres reçus de l'API. On s'en sert pour synchroniser la
 	// navigation (précédent/suivant/aujourd’hui) sur tous les calendriers.
 	const calendars = [];
-	// Date de la période ciblée par la barre de navigation.
-	let datePeriodeCourante = null;
+	// Date de la période ciblée par la barre de navigation. Le tableau de
+	// bord peut ouvrir directement le Planning sur une date précise.
+	const dateDemandee = /^\d{4}-\d{2}-\d{2}$/.test(planningQuery.get("date") || "")
+		? planningQuery.get("date")
+		: null;
+	const centreDemande = /^\d+$/.test(planningQuery.get("centre") || "")
+		? Number(planningQuery.get("centre"))
+		: null;
+	let datePeriodeCourante = dateDemandee;
 
 	// Petits caches front : ils évitent de refaire des appels API quand on
 	// modifie un animateur ou qu'on affiche ses informations. Ils sont mis à jour
@@ -102,349 +125,490 @@ document.addEventListener("DOMContentLoaded", function ()
 	let celluleJourSelectionnee = null;
 
 
-	// Les lieux peuvent être repliés pour libérer de la place. Le choix est
-	// conservé uniquement dans le navigateur : il ne modifie aucune donnée.
-	const CENTRES_REPLIES_KEY = "calendar-centres-replies";
+	// -----------------------------------------------------------------
+	// Centres visibles et disposition libre des calendriers
+	// -----------------------------------------------------------------
+	// La disposition est conservée dans le navigateur. Chaque sous-tableau
+	// représente une ligne ; les centres d'une même ligne se partagent toute
+	// la largeur disponible. Un centre peut être fermé totalement puis rouvert
+	// avec son petit bouton dans la barre située au-dessus des calendriers.
+	const PLANNING_CENTRES_LAYOUT_KEY = "planning-centres-layout-v3";
+	let dispositionCentres = [];
+	let centreGlisseId = null;
+	let cibleDepotCentre = null;
 
-	function lireCentresReplies()
+	function idsCentresVisibles()
 	{
+		return dispositionCentres.flat().map(Number).filter(Number.isFinite);
+	}
+
+	function normaliserDispositionCentres(valeur, centres = centresPlanning)
+	{
+		const idsDisponibles = new Set((centres || []).map((centre) => Number(centre.id)));
+		const lignesSource = Array.isArray(valeur)
+			? valeur
+			: (Array.isArray(valeur?.rows) ? valeur.rows : []);
+		const dejaVus = new Set();
+		const lignes = [];
+
+		for (const ligneSource of lignesSource)
+		{
+			if (!Array.isArray(ligneSource)) continue;
+			const ligne = [];
+			for (const valeurId of ligneSource)
+			{
+				const id = Number(valeurId);
+				if (!idsDisponibles.has(id) || dejaVus.has(id)) continue;
+				dejaVus.add(id);
+				ligne.push(id);
+			}
+			if (ligne.length) lignes.push(ligne);
+		}
+
+		return lignes;
+	}
+
+	function chargerDispositionCentres(centres)
+	{
+		const idsDisponibles = new Set((centres || []).map((centre) => Number(centre.id)));
+		if (centreDemande && idsDisponibles.has(Number(centreDemande)))
+		{
+			return [[Number(centreDemande)]];
+		}
+
 		try
 		{
-			const ids = JSON.parse(localStorage.getItem(CENTRES_REPLIES_KEY) || "[]");
-			return new Set(Array.isArray(ids) ? ids.map(Number).filter(Number.isFinite) : []);
+			const memorisee = JSON.parse(localStorage.getItem(PLANNING_CENTRES_LAYOUT_KEY) || "null");
+			if (memorisee !== null)
+			{
+				const normalisee = normaliserDispositionCentres(memorisee, centres);
+				// Une ancienne disposition vide ou devenue invalide ne doit jamais
+				// produire un Planning entièrement blanc au chargement.
+				if (normalisee.length) return normalisee;
+			}
 		}
 		catch
 		{
-			return new Set();
+			// Une valeur locale invalide ne doit jamais bloquer le planning.
 		}
+
+		// Première ouverture : tous les centres occupent une seule ligne.
+		return centres?.length ? [centres.map((centre) => Number(centre.id))] : [];
 	}
 
-	const centresReplies = lireCentresReplies();
-
-	function sauvegarderCentresReplies()
+	function sauvegarderDispositionCentres()
 	{
-		localStorage.setItem(CENTRES_REPLIES_KEY, JSON.stringify([...centresReplies]));
+		localStorage.setItem(PLANNING_CENTRES_LAYOUT_KEY, JSON.stringify({ rows: dispositionCentres }));
 	}
 
-	function reglerCentreReplie(groupe, centreId, replie)
+	function positionCentre(centreId)
 	{
 		const id = Number(centreId);
-		const bouton = groupe.querySelector(".centre-collapse-toggle");
-		groupe.classList.toggle("collapsed", replie);
-		bouton?.setAttribute("aria-expanded", String(!replie));
-		bouton?.setAttribute("aria-label", replie ? "Déplier ce lieu" : "Replier ce lieu");
-
-		if (replie) centresReplies.add(id);
-		else centresReplies.delete(id);
-		sauvegarderCentresReplies();
-
-		if (!replie)
+		for (let ligneIndex = 0; ligneIndex < dispositionCentres.length; ligneIndex += 1)
 		{
-			window.setTimeout(() =>
-			{
-				calendars
-					.filter((calendar) => Number(calendar.centrePlanning?.id) === id)
-					.forEach((calendar) => calendar.updateSize());
-			}, 30);
+			const colonneIndex = dispositionCentres[ligneIndex].indexOf(id);
+			if (colonneIndex >= 0) return { ligneIndex, colonneIndex };
 		}
+		return null;
 	}
 
-	function idsEnfants(container, selector, dataKey)
+	function mettreAJourBarreCentres()
 	{
-		return Array.from(container.querySelectorAll(`:scope > ${selector}`))
-			.map((element) => Number(element.dataset[dataKey]));
-	}
+		if (!menuAjouterCentre || !centresToolbar) return;
+		const visibles = new Set(idsCentresVisibles());
+		const centresMasques = centresPlanning.filter((centre) => !visibles.has(Number(centre.id)));
 
-	function mettreAJourCacheOrdre(type, ids, centreId = null)
-	{
-		if (type === "centre")
+		if (compteurCentresMasques)
 		{
-			const centresParId = new Map(centresPlanning.map((centre) => [Number(centre.id), centre]));
-			centresPlanning = ids.map((id, ordre) =>
-			{
-				const centre = centresParId.get(Number(id));
-				if (centre) centre.ordre = ordre;
-				return centre;
-			}).filter(Boolean);
+			compteurCentresMasques.hidden = centresMasques.length === 0;
+			compteurCentresMasques.textContent = String(centresMasques.length);
+		}
+
+		if (!centresMasques.length)
+		{
+			menuAjouterCentre.innerHTML = `
+				<div class="planning-centres-dropdown-empty" role="status">
+					<span aria-hidden="true">✓</span>
+					<span>Tous les centres sont affichés</span>
+				</div>`;
 			return;
 		}
 
-		const centre = centresPlanning.find((item) => Number(item.id) === Number(centreId));
-		if (!centre) return;
-		const evenementsParId = new Map((centre.evenements || []).map((evenement) => [Number(evenement.id), evenement]));
-		centre.evenements = ids.map((id, ordre) =>
-		{
-			const evenement = evenementsParId.get(Number(id));
-			if (evenement) evenement.ordre = ordre;
-			return evenement;
-		}).filter(Boolean);
+		menuAjouterCentre.innerHTML = `
+			<div class="planning-centres-dropdown-heading">Afficher un centre</div>
+			${centresMasques.map((centre) => `
+				<button class="planning-centres-dropdown-option" type="button" role="menuitem" data-add-centre-id="${centre.id}">
+					<span class="planning-centre-color" style="--centre-option-color:${escapeHtml(centre.couleur || "#6650c8")}"></span>
+					<span>${escapeHtml(centre.nom)}</span>
+					<span class="planning-centres-dropdown-add" aria-hidden="true">＋</span>
+				</button>`).join("")}
+		`;
 	}
 
-	async function enregistrerOrdrePlanning(type, container, selector, dataKey, centreId = null)
+	function detruireCentreRendu(centreId)
 	{
-		const ids = idsEnfants(container, selector, dataKey);
-		const url = type === "centre"
-			? "/api/centres/reordonner/"
-			: `/api/centres/${centreId}/groupes/reordonner/`;
-		const payload = type === "centre"
-			? { centre_ids: ids }
-			: { evenement_ids: ids };
-
-		try
+		const id = Number(centreId);
+		for (let index = calendars.length - 1; index >= 0; index -= 1)
 		{
-			await apiFetch(url, { method: "POST", body: JSON.stringify(payload) });
-			mettreAJourCacheOrdre(type, ids, centreId);
-			afficherToast(type === "centre" ? "Ordre des lieux enregistré." : "Ordre des groupes enregistré.");
+			if (Number(calendars[index].centrePlanning?.id) !== id) continue;
+			calendars[index].destroy();
+			calendars.splice(index, 1);
 		}
-		catch (err)
-		{
-			afficherToast(erreurMessage(err, "L’ordre n’a pas pu être enregistré. Recharge la page pour retrouver le dernier ordre enregistré."), true);
-		}
+		calendarsContainer.querySelector(`.centre-planning-group[data-centre-id="${id}"]`)?.remove();
 	}
 
-	let detruireTriCentres = null;
-	const sortablesGroupes = [];
-
-	function optionsTriCommun()
+	function creerZoneDepotLigne(indexInsertion)
 	{
-		return {
-			animation: 180,
-			handle: ".planning-drag-handle",
-			draggable: ":scope > *",
-			ghostClass: "planning-sort-ghost",
-			chosenClass: "planning-sort-chosen",
-			dragClass: "planning-sort-drag",
-			forceFallback: true,
-			fallbackOnBody: true,
-			fallbackTolerance: 4,
-			scroll: true,
-			scrollSensitivity: 95,
-			scrollSpeed: 18,
-			emptyInsertThreshold: 40,
-			delay: 0,
-			onStart: () => document.body.classList.add("planning-sort-active"),
-			onEnd: () => document.body.classList.remove("planning-sort-active"),
-		};
+		const zone = document.createElement("div");
+		zone.className = "planning-row-dropzone";
+		zone.dataset.insertRow = String(indexInsertion);
+		zone.setAttribute("aria-label", "Créer une nouvelle ligne");
+		zone.innerHTML = `
+			<span class="planning-row-dropzone-icon" aria-hidden="true">＋</span>
+			<span class="planning-row-dropzone-label">Créer une nouvelle ligne</span>
+		`;
+		return zone;
 	}
 
-	/*
-	 * Les lieux sont affichés dans une grille CSS à deux colonnes et leurs
-	 * hauteurs peuvent être très différentes. SortableJS traite cette grille
-	 * comme une liste et crée des zones d'insertion incohérentes dans les grands
-	 * espaces vides. Le tri des lieux utilise donc un geste pointeur dédié :
-	 * aucune insertion pendant le mouvement, puis échange strict des deux cartes
-	 * au relâchement.
-	 */
-	function installerTriCentres()
+	function rendreDispositionCentres({ persister = true } = {})
 	{
-		detruireTriCentres?.();
+		dispositionCentres = normaliserDispositionCentres(dispositionCentres);
+		calendarsContainer.dataset.planningRows = String(dispositionCentres.length);
+		calendarsContainer.style.setProperty("--planning-visible-row-count", String(Math.max(1, dispositionCentres.length)));
 
-		const controleur = new AbortController();
-		const { signal } = controleur;
-		let geste = null;
-		let apercu = null;
-		let cible = null;
-		let clicABloquer = false;
-
-		function cartes()
+		const visibles = new Set(idsCentresVisibles());
+		Array.from(calendarsContainer.querySelectorAll(".centre-planning-group")).forEach((carte) =>
 		{
-			return Array.from(calendarsContainer.querySelectorAll(":scope > .centre-planning-group"));
-		}
+			const id = Number(carte.dataset.centreId);
+			if (!visibles.has(id)) detruireCentreRendu(id);
+		});
 
-		function retirerCible()
-		{
-			cible?.classList.remove("planning-swap-target");
-			cible = null;
-		}
+		const cartesExistantes = new Map(
+			Array.from(calendarsContainer.querySelectorAll(".centre-planning-group"))
+				.map((carte) => [Number(carte.dataset.centreId), carte])
+		);
+		const fragment = document.createDocumentFragment();
+		const lignesDom = [];
 
-		function definirCible(nouvelleCible)
+		if (dispositionCentres.length)
 		{
-			if (nouvelleCible === geste?.source) nouvelleCible = null;
-			if (cible === nouvelleCible) return;
-			retirerCible();
-			cible = nouvelleCible;
-			cible?.classList.add("planning-swap-target");
-		}
-
-		function distanceAuRectangle(x, y, rect)
-		{
-			const dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0;
-			const dy = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
-			return (dx * dx) + (dy * dy);
-		}
-
-		function cibleVisuelle(x, y)
-		{
-			const rectConteneur = calendarsContainer.getBoundingClientRect();
-			const marge = 60;
-			if (x < rectConteneur.left - marge || x > rectConteneur.right + marge ||
-				y < rectConteneur.top - marge || y > rectConteneur.bottom + marge)
+			fragment.appendChild(creerZoneDepotLigne(0));
+			dispositionCentres.forEach((ligne, index) =>
 			{
-				return null;
-			}
-
-			// Lorsqu'une carte est réellement sous le pointeur, elle gagne toujours.
-			const directe = document.elementFromPoint(x, y)?.closest?.(".centre-planning-group");
-			if (directe && directe !== geste?.source && calendarsContainer.contains(directe))
-			{
-				return directe;
-			}
-
-			// Dans les trous produits par des cartes de hauteurs différentes, on prend
-			// la carte dont le rectangle est le plus proche du pointeur. Ainsi, le vide
-			// sous une petite carte appartient naturellement à la carte de la ligne
-			// suivante, plutôt qu'à une position d'insertion abstraite.
-			let meilleure = null;
-			let meilleureDistance = Number.POSITIVE_INFINITY;
-			for (const carte of cartes())
-			{
-				if (carte === geste?.source) continue;
-				const distance = distanceAuRectangle(x, y, carte.getBoundingClientRect());
-				if (distance < meilleureDistance)
+				const element = document.createElement("div");
+				element.className = "planning-centres-row";
+				element.dataset.planningRow = String(index);
+				element.dataset.centresCount = String(Math.max(1, ligne.length));
+				element.style.setProperty("--planning-row-count", String(Math.max(1, ligne.length)));
+				ligne.forEach((centreId) =>
 				{
-					meilleure = carte;
-					meilleureDistance = distance;
-				}
-			}
-			return meilleure;
+					const carte = cartesExistantes.get(Number(centreId));
+					if (carte) element.appendChild(carte);
+				});
+				fragment.appendChild(element);
+				fragment.appendChild(creerZoneDepotLigne(index + 1));
+				lignesDom.push(element);
+			});
+		}
+		else
+		{
+			const vide = document.createElement("div");
+			vide.className = "planning-centres-empty";
+			vide.setAttribute("aria-hidden", "true");
+			fragment.appendChild(vide);
 		}
 
-		function placerApercu(x, y)
+		calendarsContainer.replaceChildren(fragment);
+		const calendriersAvant = new Set(calendars);
+		dispositionCentres.forEach((ligne, ligneIndex) =>
 		{
-			if (!apercu) return;
-			apercu.style.left = `${x + 14}px`;
-			apercu.style.top = `${y + 14}px`;
-		}
-
-		function demarrerDrag(x, y)
-		{
-			if (!geste || geste.actif) return;
-			geste.actif = true;
-			clicABloquer = true;
-			document.body.classList.add("planning-sort-active");
-			geste.source.classList.add("planning-dragging");
-
-			apercu = document.createElement("div");
-			apercu.className = "planning-centre-drag-preview";
-			const nom = geste.source.querySelector(".calendar-site-title, h2, h3")?.textContent?.trim();
-			apercu.textContent = nom || "Déplacer ce lieu";
-			document.body.appendChild(apercu);
-			placerApercu(x, y);
-		}
-
-		function nettoyerGeste()
-		{
-			retirerCible();
-			geste?.source?.classList.remove("planning-dragging");
-			apercu?.remove();
-			apercu = null;
-			document.body.classList.remove("planning-sort-active");
-			geste = null;
-		}
-
-		async function terminerDrag(event)
-		{
-			if (!geste) return;
-			const etat = geste;
-			if (etat.actif)
+			ligne.forEach((centreId) =>
 			{
-				const cibleFinale = cibleVisuelle(event.clientX, event.clientY) || cible;
-				const ordre = etat.ordre.slice();
-				const indexSource = ordre.indexOf(etat.source);
-				const indexCible = ordre.indexOf(cibleFinale);
+				if (cartesExistantes.has(Number(centreId))) return;
+				const centre = centresPlanning.find((item) => Number(item.id) === Number(centreId));
+				if (centre) ajouterCentreAuPlanning(centre, lignesDom[ligneIndex]);
+			});
+		});
 
-				nettoyerGeste();
-				if (indexSource >= 0 && indexCible >= 0 && indexSource !== indexCible)
-				{
-					[ordre[indexSource], ordre[indexCible]] = [ordre[indexCible], ordre[indexSource]];
-					ordre.forEach((lieu) => calendarsContainer.appendChild(lieu));
-					await enregistrerOrdrePlanning("centre", calendarsContainer, ".centre-planning-group", "centreId");
-				}
+		if (datePeriodeCourante)
+		{
+			calendars.filter((calendar) => !calendriersAvant.has(calendar)).forEach((calendar) => calendar.gotoDate(datePeriodeCourante));
+		}
+		if (persister) sauvegarderDispositionCentres();
+		mettreAJourBarreCentres();
+		mettreAJourDimensionsCalendriers();
+		window.setTimeout(mettreAJourDimensionsCalendriers, 60);
+	}
+
+	function ajouterCentreVisible(centreId)
+	{
+		const id = Number(centreId);
+		if (idsCentresVisibles().includes(id)) return;
+		if (!dispositionCentres.length) dispositionCentres = [[id]];
+		else dispositionCentres[dispositionCentres.length - 1].push(id);
+		rendreDispositionCentres();
+	}
+
+	function retirerCentreVisible(centreId)
+	{
+		const id = Number(centreId);
+		dispositionCentres = dispositionCentres
+			.map((ligne) => ligne.filter((valeur) => Number(valeur) !== id))
+			.filter((ligne) => ligne.length);
+		nettoyerModePlacementJour();
+		rendreDispositionCentres();
+	}
+
+	function retirerCentreDeDisposition(centreId)
+	{
+		const position = positionCentre(centreId);
+		if (!position) return null;
+		const { ligneIndex, colonneIndex } = position;
+		dispositionCentres[ligneIndex].splice(colonneIndex, 1);
+		const ligneSupprimee = dispositionCentres[ligneIndex].length === 0;
+		if (ligneSupprimee) dispositionCentres.splice(ligneIndex, 1);
+		return { ligneIndex, colonneIndex, ligneSupprimee };
+	}
+
+	function nettoyerIndicationsDepotCentre()
+	{
+		calendarsContainer.querySelectorAll(".planning-drop-before, .planning-drop-after, .planning-drop-row, .is-drop-target")
+			.forEach((element) => element.classList.remove("planning-drop-before", "planning-drop-after", "planning-drop-row", "is-drop-target"));
+		cibleDepotCentre = null;
+	}
+
+	function appliquerDepotCentre(centreId, cible)
+	{
+		const id = Number(centreId);
+		if (!Number.isFinite(id) || !cible) return;
+
+		if (cible.type === "before" || cible.type === "after")
+		{
+			if (Number(cible.targetId) === id) return;
+			retirerCentreDeDisposition(id);
+			const positionCible = positionCentre(cible.targetId);
+			if (!positionCible) return;
+			const index = positionCible.colonneIndex + (cible.type === "after" ? 1 : 0);
+			dispositionCentres[positionCible.ligneIndex].splice(index, 0, id);
+		}
+		else if (cible.type === "append-row")
+		{
+			retirerCentreDeDisposition(id);
+			const positionAncre = positionCentre(cible.anchorId);
+			if (!positionAncre)
+			{
+				dispositionCentres.push([id]);
 			}
 			else
 			{
-				nettoyerGeste();
+				dispositionCentres[positionAncre.ligneIndex].push(id);
 			}
 		}
-
-		calendarsContainer.addEventListener("pointerdown", (event) =>
+		else if (cible.type === "new-row")
 		{
-			const poignee = event.target.closest(".centre-drag-handle");
-			if (!poignee || event.button !== 0) return;
-			const source = poignee.closest(".centre-planning-group");
-			if (!source) return;
-
-			event.preventDefault();
-			geste = {
-				pointerId: event.pointerId,
-				source,
-				ordre: cartes(),
-				departX: event.clientX,
-				departY: event.clientY,
-				actif: false,
-			};
-			poignee.setPointerCapture?.(event.pointerId);
-		}, { signal });
-
-		document.addEventListener("pointermove", (event) =>
+			const retrait = retirerCentreDeDisposition(id);
+			let indexInsertion = Math.max(0, Math.min(Number(cible.rowIndex), dispositionCentres.length));
+			if (retrait?.ligneSupprimee && retrait.ligneIndex < Number(cible.rowIndex)) indexInsertion -= 1;
+			indexInsertion = Math.max(0, Math.min(indexInsertion, dispositionCentres.length));
+			dispositionCentres.splice(indexInsertion, 0, [id]);
+		}
+		else
 		{
-			if (!geste || event.pointerId !== geste.pointerId) return;
-			const distance = Math.hypot(event.clientX - geste.departX, event.clientY - geste.departY);
-			if (!geste.actif && distance >= 5) demarrerDrag(event.clientX, event.clientY);
-			if (!geste.actif) return;
+			return;
+		}
 
-			event.preventDefault();
-			placerApercu(event.clientX, event.clientY);
-			definirCible(cibleVisuelle(event.clientX, event.clientY));
-		}, { signal, capture: true });
-
-		document.addEventListener("pointerup", (event) =>
-		{
-			if (!geste || event.pointerId !== geste.pointerId) return;
-			terminerDrag(event);
-		}, { signal, capture: true });
-
-		document.addEventListener("pointercancel", (event) =>
-		{
-			if (!geste || event.pointerId !== geste.pointerId) return;
-			nettoyerGeste();
-		}, { signal, capture: true });
-
-		// Le pointerup d'un vrai drag ne doit pas déclencher le bouton voisin ni
-		// replier le lieu lorsque le navigateur synthétise ensuite un clic.
-		calendarsContainer.addEventListener("click", (event) =>
-		{
-			if (!clicABloquer) return;
-			clicABloquer = false;
-			event.preventDefault();
-			event.stopImmediatePropagation();
-		}, { signal, capture: true });
-
-		detruireTriCentres = () =>
-		{
-			controleur.abort();
-			nettoyerGeste();
-		};
+		dispositionCentres = dispositionCentres.filter((ligne) => ligne.length);
+		rendreDispositionCentres();
 	}
 
-	function installerTriEvenements(zoneEvenements, centre)
+	menuAjouterCentre?.addEventListener("click", (event) =>
 	{
-		if (typeof Sortable === "undefined") return;
-		const sortable = Sortable.create(zoneEvenements, {
-			...optionsTriCommun(),
-			draggable: ".evenement-calendar-card",
-			direction: "vertical",
-			swapThreshold: 0.65,
-			group: { name: `groupes-centre-${centre.id}`, pull: false, put: false },
-			onEnd: async (event) =>
-			{
-				document.body.classList.remove("planning-sort-active");
-				if (event.oldIndex === event.newIndex) return;
-				await enregistrerOrdrePlanning("evenement", zoneEvenements, ".evenement-calendar-card", "evenementId", centre.id);
-			},
-		});
-		sortablesGroupes.push(sortable);
+		const option = event.target.closest("[data-add-centre-id]");
+		if (!option) return;
+		ajouterCentreVisible(option.dataset.addCentreId);
+		centresToolbar?.removeAttribute("open");
+	});
+
+	document.addEventListener("click", (event) =>
+	{
+		if (!centresToolbar?.hasAttribute("open") || centresToolbar.contains(event.target)) return;
+		centresToolbar.removeAttribute("open");
+	});
+
+	centresToolbar?.addEventListener("keydown", (event) =>
+	{
+		if (event.key !== "Escape") return;
+		centresToolbar.removeAttribute("open");
+		centresToolbar.querySelector("summary")?.focus();
+	});
+
+	calendarsContainer.addEventListener("click", (event) =>
+	{
+		const bouton = event.target.closest("[data-centre-action=remove]");
+		if (!bouton) return;
+		const carte = bouton.closest(".centre-planning-group");
+		if (!carte) return;
+		event.preventDefault();
+		event.stopPropagation();
+		retirerCentreVisible(carte.dataset.centreId);
+	});
+
+	// Le drag HTML5 natif s'avère peu fiable avec FullCalendar et les cartes
+	// reconstruites dynamiquement. On utilise donc les Pointer Events : le geste
+	// démarre depuis n'importe quel point de l'en-tête, suit réellement la souris
+	// (ou le doigt), puis applique la disposition au relâchement.
+	let deplacementCentre = null;
+	let fantomeCentre = null;
+
+	function creerFantomeCentre(carte)
+	{
+		const fantome = document.createElement("div");
+		fantome.className = "planning-centre-drag-ghost";
+		fantome.style.setProperty("--centre-color", carte.style.getPropertyValue("--centre-color") || "var(--color-primary)");
+		fantome.textContent = carte.querySelector(".calendar-site-name")?.textContent?.trim() || "Centre";
+		document.body.appendChild(fantome);
+		return fantome;
 	}
+
+	function positionnerFantomeCentre(clientX, clientY)
+	{
+		if (!fantomeCentre) return;
+		fantomeCentre.style.transform = `translate3d(${Math.round(clientX + 14)}px, ${Math.round(clientY + 14)}px, 0)`;
+	}
+
+	function definirCibleDepotCentre(clientX, clientY)
+	{
+		nettoyerIndicationsDepotCentre();
+		const element = document.elementFromPoint(clientX, clientY);
+		if (!element || !calendarsContainer.contains(element)) return;
+
+		const zone = element.closest(".planning-row-dropzone");
+		if (zone)
+		{
+			zone.classList.add("is-drop-target");
+			cibleDepotCentre = { type: "new-row", rowIndex: Number(zone.dataset.insertRow) };
+			return;
+		}
+
+		const carte = element.closest(".centre-planning-group");
+		if (carte && Number(carte.dataset.centreId) !== centreGlisseId)
+		{
+			const rect = carte.getBoundingClientRect();
+			const apres = clientX >= rect.left + rect.width / 2;
+			carte.classList.add(apres ? "planning-drop-after" : "planning-drop-before");
+			cibleDepotCentre = {
+				type: apres ? "after" : "before",
+				targetId: Number(carte.dataset.centreId),
+			};
+			return;
+		}
+
+		const ligne = element.closest(".planning-centres-row");
+		if (!ligne) return;
+		const ancre = Array.from(ligne.querySelectorAll(".centre-planning-group"))
+			.find((item) => Number(item.dataset.centreId) !== centreGlisseId);
+		if (!ancre) return;
+		ligne.classList.add("planning-drop-row");
+		cibleDepotCentre = { type: "append-row", anchorId: Number(ancre.dataset.centreId) };
+	}
+
+	function faireDefilerPendantDeplacement(clientY)
+	{
+		const marge = 72;
+		const vitesse = 18;
+		const rect = calendarsContainer.getBoundingClientRect();
+		if (clientY < rect.top + marge) calendarsContainer.scrollTop -= vitesse;
+		else if (clientY > rect.bottom - marge) calendarsContainer.scrollTop += vitesse;
+	}
+
+	function demarrerDeplacementCentre(event)
+	{
+		const entete = event.target.closest?.(".centre-planning-header");
+		const carte = entete?.closest(".centre-planning-group");
+		if (!entete || !carte || event.isPrimary === false) return;
+		if (event.pointerType === "mouse" && event.button !== 0) return;
+		if (event.target.closest("button, a, input, select, textarea, summary, [role=button]")) return;
+
+		deplacementCentre = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			clientX: event.clientX,
+			clientY: event.clientY,
+			carte,
+			entete,
+			actif: false,
+		};
+		try
+		{
+			entete.setPointerCapture?.(event.pointerId);
+		}
+		catch
+		{
+			// Le déplacement reste fonctionnel grâce aux écouteurs installés sur window.
+		}
+		event.preventDefault();
+	}
+
+	function suivreDeplacementCentre(event)
+	{
+		if (!deplacementCentre || event.pointerId !== deplacementCentre.pointerId) return;
+		deplacementCentre.clientX = event.clientX;
+		deplacementCentre.clientY = event.clientY;
+
+		if (!deplacementCentre.actif)
+		{
+			const distance = Math.hypot(
+				event.clientX - deplacementCentre.startX,
+				event.clientY - deplacementCentre.startY,
+			);
+			if (distance < 5) return;
+
+			deplacementCentre.actif = true;
+			centreGlisseId = Number(deplacementCentre.carte.dataset.centreId);
+			deplacementCentre.carte.classList.add("planning-centre-dragging");
+			document.body.classList.add("planning-centre-sort-active");
+			fantomeCentre = creerFantomeCentre(deplacementCentre.carte);
+		}
+
+		event.preventDefault();
+		positionnerFantomeCentre(event.clientX, event.clientY);
+		definirCibleDepotCentre(event.clientX, event.clientY);
+		faireDefilerPendantDeplacement(event.clientY);
+	}
+
+	function terminerDeplacementCentre(event, annuler = false)
+	{
+		if (!deplacementCentre || (event && event.pointerId !== deplacementCentre.pointerId)) return;
+		const etat = deplacementCentre;
+		const id = centreGlisseId;
+		const cible = cibleDepotCentre ? { ...cibleDepotCentre } : null;
+
+		if (event && etat.actif) event.preventDefault();
+		if (etat.entete.hasPointerCapture?.(etat.pointerId))
+		{
+			etat.entete.releasePointerCapture(etat.pointerId);
+		}
+		etat.carte.classList.remove("planning-centre-dragging");
+		fantomeCentre?.remove();
+		fantomeCentre = null;
+		deplacementCentre = null;
+		centreGlisseId = null;
+		document.body.classList.remove("planning-centre-sort-active");
+		nettoyerIndicationsDepotCentre();
+
+		if (!annuler && etat.actif && Number.isFinite(id) && cible)
+		{
+			appliquerDepotCentre(id, cible);
+		}
+	}
+
+	calendarsContainer.addEventListener("pointerdown", demarrerDeplacementCentre);
+	window.addEventListener("pointermove", suivreDeplacementCentre, { passive: false });
+	window.addEventListener("pointerup", (event) => terminerDeplacementCentre(event));
+	window.addEventListener("pointercancel", (event) => terminerDeplacementCentre(event, true));
+	window.addEventListener("blur", () => terminerDeplacementCentre(null, true));
+
 
 
 function libelleDate(dateStr)
@@ -786,6 +950,12 @@ function libelleDate(dateStr)
 			const cartes = Array.from(bloc.querySelectorAll(".evenement-calendar-card"));
 			const visibles = cartes.filter((card) => !card.hidden);
 			const aucunGroupeVisible = visibles.length === 0;
+			const zoneGroupes = bloc.querySelector(".evenement-calendars");
+			if (zoneGroupes)
+			{
+				zoneGroupes.dataset.visibleGroups = String(visibles.length);
+				zoneGroupes.style.setProperty("--planning-visible-group-count", String(Math.max(1, visibles.length)));
+			}
 
 			// Comme sur l'accueil, le lieu reste toujours visible. Seuls les
 			// groupes fermés pour toute la semaine sont retirés de l'affichage.
@@ -816,6 +986,52 @@ function libelleDate(dateStr)
 		});
 	}
 
+	function estModeEffectifs()
+	{
+		return modePlanning === "effectifs";
+	}
+
+	function appliquerModePlanning(nouveauMode, memoriser = true)
+	{
+		modePlanning = nouveauMode === "effectifs" ? "effectifs" : "affectations";
+		if (memoriser) localStorage.setItem("planning-mode", modePlanning);
+		layoutPlanning.dataset.planningMode = modePlanning;
+		document.body.classList.toggle("planning-mode-effectifs", estModeEffectifs());
+		document.body.classList.toggle("planning-mode-affectations", !estModeEffectifs());
+		ongletsPlanning.forEach((onglet) =>
+		{
+			const actif = onglet.dataset.planningMode === modePlanning;
+			onglet.classList.toggle("active", actif);
+			onglet.setAttribute("aria-selected", String(actif));
+		});
+		if (aideModePlanning)
+		{
+			aideModePlanning.textContent = estModeEffectifs()
+				? "Renseignez les enfants prévus et, si nécessaire, un taux d’encadrement particulier pour chaque groupe."
+				: "Glissez ou sélectionnez un salarié, puis choisissez ses jours d’affectation.";
+		}
+		calendars.forEach((calendar) =>
+		{
+			calendar.setOption("editable", !estModeEffectifs());
+			calendar.setOption("droppable", !estModeEffectifs());
+			calendar.updateSize();
+		});
+		centresPlanning.forEach((centre) => mettreAJourTotalEffectifsCentre(centre.id));
+		if (estModeEffectifs())
+		{
+			animateurActif = null;
+			animateurDragPreview = null;
+			effacerDisponibilitesAffichees();
+			nettoyerModePlacementJour();
+			document.querySelectorAll(".animateur.selected").forEach((element) => element.classList.remove("selected"));
+		}
+		window.setTimeout(mettreAJourDimensionsCalendriers, 20);
+	}
+
+	ongletsPlanning.forEach((onglet) => onglet.addEventListener("click", () =>
+		appliquerModePlanning(onglet.dataset.planningMode)
+	));
+
 	function libelleJourEffectif(dateStr)
 	{
 		return parseLocalDate(dateStr).toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "2-digit" });
@@ -843,9 +1059,11 @@ function libelleDate(dateStr)
 		{
 			return { nombre: valeur, enfantsParAnimateur: ratio };
 		}
+		const exceptionnel = valeur?.ratioEncadrementExceptionnel ?? valeur?.ratio_encadrement_exceptionnel ?? null;
 		return {
 			nombre: Number(valeur?.nombre || 0),
-			enfantsParAnimateur: Math.max(1, Number(valeur?.enfantsParAnimateur || valeur?.enfants_par_animateur || ratio)),
+			enfantsParAnimateur: Math.max(1, Number(exceptionnel || valeur?.enfantsParAnimateur || valeur?.enfants_par_animateur || ratio)),
+			ratioEncadrementExceptionnel: exceptionnel === null || exceptionnel === "" ? null : Math.max(1, Number(exceptionnel)),
 		};
 	}
 
@@ -872,7 +1090,10 @@ function libelleDate(dateStr)
 			zone.className = "planning-effectif-enfants-zone";
 			const badge = document.createElement("span");
 			badge.className = `planning-effectif-enfants planning-effectif-enfants--${etat}`;
-			badge.innerHTML = `<strong>${valeur.nombre} enfant${valeur.nombre > 1 ? "s" : ""}</strong><small>${animateursAffectes}/${animateursNecessaires} anim.</small>`;
+			badge.innerHTML = `
+				<span class="planning-effectif-line planning-effectif-main"><span class="planning-effectif-label">Enfants</span><strong>${valeur.nombre}</strong></span>
+				<span class="planning-effectif-line planning-ratio-visible"><span class="planning-effectif-label">Taux d’encadrement</span><strong>1/${valeur.enfantsParAnimateur}</strong></span>
+				<span class="planning-effectif-line planning-animateurs-compteur"><span class="planning-effectif-label">Anim. affectés / nécessaires</span><strong>${animateursAffectes}/${animateursNecessaires}</strong></span>`;
 			badge.title = `${valeur.nombre} enfant${valeur.nombre > 1 ? "s" : ""} — ratio 1 animateur pour ${valeur.enfantsParAnimateur} enfants — ${animateursAffectes} animateur${animateursAffectes > 1 ? "s" : ""} affecté${animateursAffectes > 1 ? "s" : ""}, ${animateursNecessaires} nécessaire${animateursNecessaires > 1 ? "s" : ""}`;
 			zone.appendChild(badge);
 
@@ -880,6 +1101,60 @@ function libelleDate(dateStr)
 			if (evenements) cadre.insertBefore(zone, evenements);
 			else cadre.appendChild(zone);
 		});
+		mettreAJourTotalEffectifsCentre(calendar.centrePlanning?.id);
+	}
+
+	function mettreAJourTotalEffectifsCentre(centreId)
+	{
+		if (!centreId) return;
+		const blocCentre = calendarsContainer.querySelector(`.centre-planning-group[data-centre-id="${centreId}"]`);
+		const resume = blocCentre?.querySelector(".centre-effectifs-summary");
+		if (!resume) return;
+
+		const calendriersCentre = calendars.filter((calendar) =>
+			Number(calendar.centrePlanning?.id) === Number(centreId)
+		);
+		const calendrierReference = calendriersCentre.find((calendar) => calendar.view?.activeStart && calendar.view?.activeEnd);
+		if (!calendrierReference)
+		{
+			resume.innerHTML = '<span class="centre-effectifs-total">Aucun effectif renseigné</span>';
+			return;
+		}
+
+		const debut = formatDateLocal(calendrierReference.view.activeStart);
+		const fin = formatDateLocal(calendrierReference.view.activeEnd);
+		const totauxParJour = [];
+
+		for (let dateStr = debut; dateStr < fin; dateStr = addDays(dateStr, 1))
+		{
+			const groupesOuverts = calendriersCentre.filter((calendar) =>
+				evenementOuvertCeJour(calendar.evenementPlanning, dateStr)
+			);
+			if (!groupesOuverts.length) continue;
+
+			const totalJour = groupesOuverts.reduce((total, calendar) =>
+			{
+				const valeurs = calendar.evenementPlanning.effectifsEnfants || {};
+				return total + normaliserEffectifJour(
+					valeurs[dateStr],
+					calendar.evenementPlanning.enfants_par_animateur_defaut
+				).nombre;
+			}, 0);
+
+			totauxParJour.push({ dateStr, totalJour });
+		}
+
+		const joursHtml = totauxParJour.map(({ dateStr, totalJour }) =>
+		{
+			const date = parseLocalDate(dateStr);
+			const jour = date.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
+			const numero = date.toLocaleDateString("fr-FR", { day: "2-digit" });
+			return `<span class="centre-effectifs-day"><span>${jour} ${numero}</span><strong>${totalJour}</strong></span>`;
+		}).join("");
+
+		resume.innerHTML = `
+			<div class="centre-effectifs-summary-label">Total</div>
+			<div class="centre-effectifs-days">${joursHtml}</div>`;
 	}
 
 	function rafraichirAffichageEffectifsEnfants(calendar)
@@ -921,7 +1196,11 @@ function libelleDate(dateStr)
 			calendar.evenementPlanning.effectifsEnfants = Object.fromEntries(
 				(lignes || []).map((ligne) => [
 					ligne.date,
-					{ nombre: ligne.nombre, enfantsParAnimateur: ligne.enfants_par_animateur || 8 },
+					{
+						nombre: ligne.nombre,
+						enfantsParAnimateur: ligne.enfants_par_animateur || 8,
+						ratioEncadrementExceptionnel: ligne.ratio_encadrement_exceptionnel ?? null,
+					},
 				])
 			);
 			calendar.effectifsEnfantsPlageChargee = plageDemandee;
@@ -954,39 +1233,88 @@ function libelleDate(dateStr)
 		{
 			const valeur = normaliserEffectifJour(valeurs[dateStr], calendar.evenementPlanning.enfants_par_animateur_defaut);
 			return `
-				<div class="effectif-enfants-row">
+				<div class="effectif-enfants-row effectif-enfants-row--simple">
 					<span>${escapeHtml(libelleJourEffectif(dateStr))}</span>
 					<label><small>Enfants</small><input type="number" min="0" max="999" step="1" inputmode="numeric" data-date="${dateStr}" data-field="nombre" value="${valeur.nombre || ""}" placeholder="0"></label>
-					<label><small>Enfants / anim.</small><input type="number" min="1" max="999" step="1" inputmode="numeric" data-date="${dateStr}" data-field="ratio" value="${valeur.enfantsParAnimateur}" placeholder="8"></label>
 				</div>`;
 		}).join("") || '<p class="empty-note">Ce groupe n’est ouvert aucun jour cette semaine.</p>';
 		ouvrirModal(modalEffectifsEnfants);
 	}
 
+	function ouvrirSaisieEncadrementSpecial(calendar)
+	{
+		const evenement = calendar.evenementPlanning;
+		const debut = calendar.view.activeStart;
+		const fin = calendar.view.activeEnd;
+		const valeurs = evenement.effectifsEnfants || {};
+		const jours = [];
+		for (let curseur = new Date(debut); curseur < fin; curseur = new Date(curseur.getFullYear(), curseur.getMonth(), curseur.getDate() + 1))
+		{
+			const dateStr = formatDateLocal(curseur);
+			if (evenementOuvertCeJour(evenement, dateStr)) jours.push(dateStr);
+		}
+		contexteEncadrementSpecial = { calendar, evenement, jours };
+		titreEncadrementSpecial.textContent = `Encadrement spécial — ${evenement.nom}`;
+		champsEncadrementSpecial.innerHTML = jours.map((dateStr) =>
+		{
+			const valeur = normaliserEffectifJour(valeurs[dateStr], evenement.enfants_par_animateur_defaut);
+			const ratioExceptionnel = valeur.ratioEncadrementExceptionnel;
+			return `
+				<div class="effectif-enfants-row effectif-enfants-row--encadrement">
+					<span>${escapeHtml(libelleJourEffectif(dateStr))}</span>
+					<label><small>Enfants / anim.</small><input type="number" min="1" max="999" step="1" inputmode="numeric" data-date="${dateStr}" data-field="ratio-special" value="${ratioExceptionnel || ""}" placeholder="${evenement.enfants_par_animateur_defaut}"></label>
+					<small class="ratio-default-label">Défaut : 1/${evenement.enfants_par_animateur_defaut}</small>
+				</div>`;
+		}).join("") || '<p class="empty-note">Ce groupe n’est ouvert aucun jour cette semaine.</p>';
+		ouvrirModal(modalEncadrementSpecial);
+	}
+
+	formulaireEncadrementSpecial?.addEventListener("submit", async (event) =>
+	{
+		event.preventDefault();
+		if (!contexteEncadrementSpecial) return;
+		const ratiosEncadrement = Array.from(champsEncadrementSpecial.querySelectorAll('input[data-field="ratio-special"]')).map((input) => ({
+			date: input.dataset.date,
+			ratio: input.value.trim() === "" ? null : Number.parseInt(input.value, 10),
+		}));
+		try
+		{
+			await apiFetch(`/api/groupes/${contexteEncadrementSpecial.evenement.id}/effectifs-enfants/`, {
+				method: "POST", body: JSON.stringify({ ratios_encadrement: ratiosEncadrement }),
+			});
+			const calendarEnregistre = contexteEncadrementSpecial.calendar;
+			fermerModal(modalEncadrementSpecial);
+			afficherToast("Encadrement spécial enregistré.");
+			await chargerEffectifsEnfants(calendarEnregistre);
+		}
+		catch (err)
+		{
+			afficherToast(erreurMessage(err, "L’encadrement spécial n’a pas pu être enregistré."), true);
+		}
+	});
+
 	formulaireEffectifsEnfants?.addEventListener("submit", async (event) =>
 	{
 		event.preventDefault();
 		if (!contexteEffectifsEnfants) return;
-		const effectifs = Array.from(champsEffectifsEnfants.querySelectorAll('input[data-field="nombre"]')).map((input) =>
-		{
-			const date = input.dataset.date;
-			const ratioInput = champsEffectifsEnfants.querySelector(`input[data-date="${date}"][data-field="ratio"]`);
-			return {
-				date,
-				nombre: Number.parseInt(input.value || "0", 10) || 0,
-				enfants_par_animateur: Math.max(1, Number.parseInt(ratioInput?.value || String(contexteEffectifsEnfants.evenement.enfants_par_animateur_defaut || 8), 10) || 8),
-			};
-		});
+		const effectifs = Array.from(champsEffectifsEnfants.querySelectorAll('input[data-field="nombre"]')).map((input) => ({
+			date: input.dataset.date,
+			nombre: Number.parseInt(input.value || "0", 10) || 0,
+		}));
 		try
 		{
 			await apiFetch(`/api/groupes/${contexteEffectifsEnfants.evenement.id}/effectifs-enfants/`, {
 				method: "POST", body: JSON.stringify({ effectifs }),
 			});
 			const calendarEnregistre = contexteEffectifsEnfants.calendar;
+			const valeursExistantes = contexteEffectifsEnfants.evenement.effectifsEnfants || {};
 			contexteEffectifsEnfants.evenement.effectifsEnfants = Object.fromEntries(
 				effectifs
-					.filter((item) => item.nombre > 0)
-					.map((item) => [item.date, { nombre: item.nombre, enfantsParAnimateur: item.enfants_par_animateur }])
+					.filter((item) => item.nombre > 0 || valeursExistantes[item.date]?.ratioEncadrementExceptionnel)
+					.map((item) => [item.date, {
+						...normaliserEffectifJour(valeursExistantes[item.date], contexteEffectifsEnfants.evenement.enfants_par_animateur_defaut),
+						nombre: item.nombre,
+					}])
 			);
 			// Affichage immédiat, puis relecture de la base : l'utilisateur voit le
 			// résultat sans attendre et le cache local ne peut pas masquer un échec.
@@ -1009,11 +1337,12 @@ function libelleDate(dateStr)
 		{
 			initialView: "dayGridWeek",
 			height: "auto",
+			contentHeight: "auto",
 			locale: "fr",
 			firstDay: 1,
 			hiddenDays: joursCachesFullCalendar(evenement),
-			editable: true,
-			droppable: true,
+			editable: !estModeEffectifs(),
+			droppable: !estModeEffectifs(),
 			selectable: true,
 
 			dayCellClassNames: function (arg)
@@ -1044,6 +1373,7 @@ function libelleDate(dateStr)
 			},
 			eventOrderStrict: true,
 			expandRows: false,
+			dayMaxEvents: false,
 			headerToolbar: false,
 			footerToolbar: false,
 
@@ -1071,6 +1401,7 @@ function libelleDate(dateStr)
 
 			dateClick: function (info)
 			{
+				if (estModeEffectifs()) return;
 				if (!evenementOuvertCeJour(evenement, info.dateStr)) return;
 
 
@@ -1086,6 +1417,7 @@ function libelleDate(dateStr)
 
 			eventAllow: function (dropInfo, draggedEvent)
 			{
+				if (estModeEffectifs()) return false;
 
 				const debut = formatDateLocal(dropInfo.start);
 				const fin = dropInfo.end ? formatDateLocal(dropInfo.end) : addDays(debut, 1);
@@ -1106,6 +1438,7 @@ function libelleDate(dateStr)
 
 			eventReceive: function (info)
 			{
+				if (estModeEffectifs()) { info.event.remove(); return; }
 				const debut = info.event.startStr;
 				const fin = info.event.endStr || addDays(debut, 1);
 
@@ -1149,11 +1482,12 @@ function libelleDate(dateStr)
 				});
 			},
 
-			eventDrop: function (info) { updateAffectation(info, centre, evenement); },
-			eventResize: function (info) { updateAffectation(info, centre, evenement); },
+			eventDrop: function (info) { if (!estModeEffectifs()) updateAffectation(info, centre, evenement); },
+			eventResize: function (info) { if (!estModeEffectifs()) updateAffectation(info, centre, evenement); },
 
 			eventClick: function (info)
 			{
+				if (estModeEffectifs()) return;
 				if (info.event.display === "background") return;
 				if (confirm(`Supprimer l'affectation de ${info.event.title} dans ${evenement.nom} ?`))
 				{
@@ -1175,7 +1509,7 @@ function libelleDate(dateStr)
 		return calendar;
 	}
 
-	function ajouterCentreAuPlanning(centre)
+	function ajouterCentreAuPlanning(centre, conteneurLigne)
 	{
 		const evenements = (centre.evenements || []).filter((groupe) => groupe.permanent || (groupe.periodes || []).length > 0);
 
@@ -1184,35 +1518,28 @@ function libelleDate(dateStr)
 		groupe.dataset.centreId = centre.id;
 		groupe.style.setProperty("--centre-color", centre.couleur);
 		groupe.innerHTML = `
-			<header class="centre-planning-header calendar-site-header">
+			<header class="centre-planning-header calendar-site-header" title="Maintenir et glisser pour déplacer ce centre">
 				<div class="centre-planning-title calendar-site-title">
-					<span class="planning-drag-handle centre-drag-handle" role="button" tabindex="0" aria-label="Déplacer le planning du centre ${escapeHtml(centre.nom)}" title="Glisser pour déplacer ce centre">⠿</span>
-					<div>
+					<div class="calendar-site-identity">
 						<span class="centre-planning-code calendar-site-code">${escapeHtml(centre.code || "")}</span>
 						<h2 class="calendar-site-name">${escapeHtml(centre.nom)}</h2>
 					</div>
 				</div>
 				<div class="centre-planning-actions calendar-site-actions">
 					<span class="centre-evenements-count calendar-site-count">${evenements.length} groupe${evenements.length > 1 ? "s" : ""}</span>
-					<button class="centre-collapse-toggle" type="button" aria-expanded="true" aria-label="Replier ce lieu" title="Replier ou déplier ce lieu">
-						<span aria-hidden="true">⌄</span>
-					</button>
+					<button class="planning-centre-close" type="button" data-centre-action="remove" aria-label="Fermer le centre ${escapeHtml(centre.nom)}" title="Fermer ce centre">×</button>
 				</div>
 			</header>
 			<div class="evenement-calendars calendar-group-list"></div>
-			<p class="calendar-site-empty" ${evenements.length ? "hidden" : ""}>Aucun groupe ouvert cette semaine.</p>`;
+			<p class="calendar-site-empty" ${evenements.length ? "hidden" : ""}>Aucun groupe ouvert cette semaine.</p>
+			<footer class="centre-effectifs-summary" aria-live="polite"></footer>`;
 
-		calendarsContainer.appendChild(groupe);
+		(conteneurLigne || calendarsContainer).appendChild(groupe);
 		attacherSurvolCentre(groupe, centre.id);
 
-		const boutonRepli = groupe.querySelector(".centre-collapse-toggle");
-		boutonRepli.addEventListener("click", () =>
-		{
-			reglerCentreReplie(groupe, centre.id, !groupe.classList.contains("collapsed"));
-		});
-
 		const zoneEvenements = groupe.querySelector(".evenement-calendars");
-
+		zoneEvenements.dataset.visibleGroups = String(evenements.length);
+		zoneEvenements.style.setProperty("--planning-visible-group-count", String(Math.max(1, evenements.length)));
 		evenements.forEach((evenement) =>
 		{
 			const card = document.createElement("article");
@@ -1224,14 +1551,14 @@ function libelleDate(dateStr)
 			card.innerHTML = `
 				<header class="evenement-calendar-header calendar-group-header">
 					<div class="evenement-calendar-title calendar-group-title">
-						<span class="planning-drag-handle evenement-drag-handle" role="button" tabindex="0" aria-label="Déplacer le planning ${escapeHtml(evenement.nom)}" title="Glisser pour déplacer ce groupe">⠿</span>
-						<div>
-							<h3 class="calendar-group-name">${escapeHtml(evenement.nom)}</h3>
-						</div>
+						<div><h3 class="calendar-group-name">${escapeHtml(evenement.nom)}</h3></div>
 					</div>
 					<div class="evenement-calendar-meta calendar-group-meta">
-						<span>Objectif ${escapeHtml(evenement.effectif_cible)}</span>
-						<button class="btn btn-secondary btn-effectifs-enfants" type="button" title="Renseigner le nombre d’enfants pour cette semaine">Effectifs enfants</button>
+						<span class="planning-objectif-groupe">Objectif ${escapeHtml(evenement.effectif_cible)}</span>
+						<div class="planning-effectifs-actions">
+							<button class="btn btn-secondary btn-effectifs-enfants" type="button">Effectifs</button>
+							<button class="btn btn-ghost btn-encadrement-special" type="button">Encadrement spécial</button>
+						</div>
 					</div>
 				</header>
 				<div class="calendar shared-calendar"></div>`;
@@ -1239,15 +1566,11 @@ function libelleDate(dateStr)
 			zoneEvenements.appendChild(card);
 			const calendar = creerCalendar(centre, evenement, card);
 			card.querySelector(".btn-effectifs-enfants").addEventListener("click", () => ouvrirSaisieEffectifsEnfants(calendar));
+			card.querySelector(".btn-encadrement-special").addEventListener("click", () => ouvrirSaisieEncadrementSpecial(calendar));
 			calendars.push(calendar);
 		});
 
-		installerTriEvenements(zoneEvenements, centre);
-
-		if (centresReplies.has(Number(centre.id)))
-		{
-			reglerCentreReplie(groupe, centre.id, true);
-		}
+		return groupe;
 	}
 
 	let rafMiseAJourCalendriers = null;
@@ -1259,7 +1582,17 @@ function libelleDate(dateStr)
 		{
 			rafMiseAJourCalendriers = requestAnimationFrame(() =>
 			{
-				calendars.forEach((calendar) => calendar.updateSize());
+				calendars.forEach((calendar) =>
+				{
+					const card = calendar.el?.closest(".evenement-calendar-card");
+					if (card)
+					{
+						const rect = card.getBoundingClientRect();
+						card.classList.toggle("planning-calendar-tight", rect.width < 520);
+						card.classList.toggle("planning-calendar-ultra-tight", rect.width < 340);
+					}
+					calendar.updateSize();
+				});
 				rafMiseAJourCalendriers = null;
 			});
 		});
@@ -1277,7 +1610,11 @@ function libelleDate(dateStr)
 							effectifsEnfants: Object.fromEntries(
 								(evenement.effectifs_enfants || []).map((ligne) => [
 									ligne.date,
-									{ nombre: ligne.nombre, enfantsParAnimateur: ligne.enfants_par_animateur || 8 },
+									{
+						nombre: ligne.nombre,
+						enfantsParAnimateur: ligne.enfants_par_animateur || 8,
+						ratioEncadrementExceptionnel: ligne.ratio_encadrement_exceptionnel ?? null,
+					},
 								])
 							),
 						})),
@@ -1289,34 +1626,46 @@ function libelleDate(dateStr)
 				centresFiltresCharges = true;
 				rafraichirFiltresAnimateurs(false);
 				calendars.splice(0).forEach((calendar) => calendar.destroy());
-				sortablesGroupes.splice(0).forEach((sortable) => sortable.destroy());
 				calendarsContainer.innerHTML = "";
 
 				if (centres.length === 0)
 				{
+					dispositionCentres = [];
 					calendarsContainer.innerHTML = '<p class="empty-note">Aucun centre pour l\'instant. Ajoute-en un depuis Gestion.</p>';
+					mettreAJourBarreCentres();
 					return;
 				}
 
-				centres.forEach((centre) => ajouterCentreAuPlanning(centre));
-				installerTriCentres();
-				mettreAJourDimensionsCalendriers();
-				if (!calendars.length)
-				{
-					// Les lieux restent visibles même lorsqu’aucun groupe n’a de période.
-					return;
-				}
+				dispositionCentres = chargerDispositionCentres(centres);
+				rendreDispositionCentres({ persister: false });
 				const periodes = periodesOuvertesPlanning();
-				if (calendars.length && periodes.length)
+				if (!datePeriodeCourante && periodes.length)
 				{
 					const aujourdHui = formatDateLocal(new Date());
 					const ouverte = periodes.find((periode) => periode.debut <= aujourdHui && periode.fin >= aujourdHui);
 					const prochaine = periodes.find((periode) => periode.debut > aujourdHui);
-					// Quand une période est ouverte aujourd’hui, rester sur la semaine
-					// actuelle. Aller à periode.debut ramenait systématiquement au premier
-					// jour des vacances après un rechargement, ce qui faisait croire que
-					// les effectifs saisis sur une autre semaine avaient disparu.
-					allerDateTous(ouverte ? aujourdHui : (prochaine || periodes[0]).debut);
+					datePeriodeCourante = ouverte ? aujourdHui : (prochaine || periodes[0]).debut;
+				}
+
+				if (!calendars.length)
+				{
+					// Même avec tous les centres fermés, la semaine choisie reste mémorisée.
+					mettreAJourLibelleSemaine();
+					return;
+				}
+				if (datePeriodeCourante)
+				{
+					allerDateTous(datePeriodeCourante);
+				}
+
+				if (centreDemande)
+				{
+					const centreCible = calendarsContainer.querySelector(`.centre-planning-group[data-centre-id="${centreDemande}"]`);
+					if (centreCible)
+					{
+						centreCible.classList.add("planning-centre-cible");
+						window.setTimeout(() => centreCible.scrollIntoView({ block: "start", behavior: "smooth" }), 80);
+					}
 				}
 
 				// Le gotoDate initial relance datesSet sur chaque calendrier. Une dernière
@@ -1329,9 +1678,9 @@ function libelleDate(dateStr)
 	}
 
 	// -----------------------------------------------------------------
-	// Barre d'outils commune : navigation, vue, actions groupées.
-	// Les 3 calendriers sont toujours pilotés EN MÊME TEMPS, en itérant
-	// simplement sur le tableau `calendars`.
+	// Barre d'outils commune : navigation, vue et actions groupées.
+	// Toutes les calendriers actuellement visibles restent synchronisés
+	// en itérant simplement sur le tableau `calendars`.
 	// -----------------------------------------------------------------
 
 	function periodesOuvertesPlanning()
@@ -1384,8 +1733,9 @@ function libelleDate(dateStr)
 	function naviguerVersPeriode(direction)
 	{
 		const periodes = periodesOuvertesPlanning();
-		if (!periodes.length || !calendars.length) return;
-		const dateCourante = datePeriodeCourante || formatDateLocal(calendars[0].getDate());
+		if (!periodes.length) return;
+		const dateCourante = datePeriodeCourante
+			|| (calendars[0] ? formatDateLocal(calendars[0].getDate()) : periodes[0].debut);
 		const cible = direction > 0
 			? periodes.find((periode) => periode.debut > dateCourante)
 			: [...periodes].reverse().find((periode) => periode.debut < dateCourante);
@@ -1431,7 +1781,7 @@ function libelleDate(dateStr)
 		samedi.setDate(samedi.getDate() + 5);
 
 		const confirmation = confirm(
-			"Supprimer les affectations À VENIR de cette semaine (à partir d'aujourd'hui), dans les 3 centres ? Les jours déjà passés ne sont jamais touchés. Cette action est irréversible."
+			"Supprimer les affectations À VENIR de cette semaine (à partir d'aujourd'hui), dans tous les centres ? Les jours déjà passés ne sont jamais touchés. Cette action est irréversible."
 		);
 		if (!confirmation) return;
 
@@ -2011,6 +2361,8 @@ function libelleDate(dateStr)
 	const modalAuto = document.getElementById("modal-auto-remplissage");
 	const modalAutoContent = document.getElementById("modal-auto-remplissage-content");
 
+	initFermetureModal(modalEffectifsEnfants);
+	initFermetureModal(modalEncadrementSpecial);
 	initFermetureModal(modalAuto);
 
 	// Les calendriers occupent maintenant toute la largeur disponible.
@@ -2193,7 +2545,7 @@ function libelleDate(dateStr)
 			}).join("");
 
 			modalAutoContent.innerHTML = `
-				
+				<p class="auto-remplissage-note">Ces besoins ne sont pas modifiables depuis le planning.</p>
 				<div class="auto-centres-liste">${centresHtml}</div>
 				<div class="edit-actions">
 					<button class="btn btn-primary" id="auto-valider" type="button">Remplir la semaine</button>
@@ -2229,5 +2581,7 @@ function libelleDate(dateStr)
 			ouvrirPopupRemplissageAuto();
 		});
 	}
+
+	appliquerModePlanning(modePlanning, false);
 
 });

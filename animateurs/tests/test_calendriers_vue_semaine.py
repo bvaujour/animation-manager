@@ -16,13 +16,13 @@ class CalendriersVueSemaineTests(ConnexionTestCase):
         self.assertNotIn(">Mois<", contenu)
         self.assertNotIn("planning-view-switcher", contenu)
 
-    def test_accueil_ne_propose_plus_la_vue_mois(self):
+    def test_accueil_direction_propose_un_mini_calendrier_de_pilotage(self):
         response = self.client.get(reverse("accueil"))
         self.assertEqual(response.status_code, 200)
         contenu = response.content.decode("utf-8")
-        self.assertNotIn("Semaine affichée", contenu)
-        self.assertIn("Aujourd’hui", contenu)
-        self.assertNotIn(">Mois<", contenu)
+        self.assertIn('id="dashboard-calendar"', contenu)
+        self.assertIn('id="dashboard-month-prev"', contenu)
+        self.assertIn('id="dashboard-month-next"', contenu)
         self.assertNotIn("home-view-month", contenu)
 
     def test_javascript_ne_contient_plus_de_vue_mensuelle(self):

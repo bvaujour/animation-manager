@@ -451,3 +451,247 @@ body.page-planning:not(.planning-sort-active) .evenement-calendar-card {
         min-width: 0 !important;
     }
 }
+
+/* ========================================================================== 
+   Planning — lignes de centres choisies par l'utilisateur
+   --------------------------------------------------------------------------
+   Cette section remplace la grille auto-fit et le drag & drop des lieux.
+   Chaque ligne répartit équitablement un, deux ou trois centres.
+   ========================================================================== */
+body.page-planning #calendars-container.calendar-sites {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 1px 2px 10px !important;
+    overflow: auto !important;
+}
+
+body.page-planning #calendars-container > .planning-centres-row {
+    --planning-centre-min-width: 310px;
+    display: grid !important;
+    grid-template-columns: repeat(var(--planning-row-count, 1), minmax(var(--planning-centre-min-width), 1fr)) !important;
+    align-items: start !important;
+    gap: 9px !important;
+    width: 100% !important;
+    min-width: calc(
+        (var(--planning-row-count, 1) * var(--planning-centre-min-width)) +
+        ((var(--planning-row-count, 1) - 1) * 9px)
+    );
+    margin: 0 0 9px;
+}
+
+body.page-planning #calendars-container > .planning-centres-row:last-child {
+    margin-bottom: 0;
+}
+
+body.page-planning .planning-centres-row > .centre-planning-group.calendar-site-card {
+    position: relative !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    align-self: start !important;
+    contain: layout paint !important;
+    transform: none !important;
+}
+
+@media (max-width: 760px) {
+    body.page-planning #calendars-container > .planning-centres-row {
+        --planning-centre-min-width: 720px;
+    }
+}
+
+
+/* ========================================================================== 
+   Planning sans défilement — partage intégral de l'espace disponible
+   --------------------------------------------------------------------------
+   Chaque ligne reçoit la même hauteur. Dans une ligne, chaque centre reçoit
+   la même largeur. Les groupes d'un centre se partagent sa hauteur.
+   ========================================================================== */
+body.page-planning #calendars-container.calendar-sites,
+body.page-planning #calendars-container.planning-view-week,
+body.page-planning #calendars-container.planning-view-month {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning #calendars-container > .planning-centres-row {
+    flex: 1 1 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(var(--planning-row-count, 1), minmax(0, 1fr)) !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning #calendars-container > .planning-row-dropzone {
+    flex: 0 0 3px !important;
+    min-height: 3px !important;
+    height: 3px !important;
+}
+
+body.page-planning #calendars-container > .planning-centres-row > .centre-planning-group.calendar-site-card {
+    position: relative !important;
+    inset: auto !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+    align-self: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    contain: layout paint !important;
+    transform: none !important;
+}
+
+body.page-planning .centre-planning-header {
+    position: relative !important;
+    top: auto !important;
+    flex: 0 0 auto !important;
+}
+
+body.page-planning .centre-planning-group .evenement-calendars {
+    display: grid !important;
+    grid-template-rows: repeat(var(--planning-visible-group-count, 1), minmax(0, 1fr)) !important;
+    gap: 4px !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning .centre-planning-group .evenement-calendar-card.calendar-group-card {
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    align-self: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 4px !important;
+    overflow: hidden !important;
+}
+
+body.page-planning .evenement-calendar-header {
+    min-height: 0 !important;
+    margin-bottom: 3px !important;
+    padding: 3px 5px !important;
+}
+
+body.page-planning .evenement-calendar-card .shared-calendar,
+body.page-planning .evenement-calendar-card .calendar,
+body.page-planning .evenement-calendar-card .fc,
+body.page-planning .evenement-calendar-card .fc-view-harness,
+body.page-planning .evenement-calendar-card .fc-view-harness-active,
+body.page-planning .evenement-calendar-card .fc-scrollgrid {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+}
+
+body.page-planning .evenement-calendar-card .fc-scroller,
+body.page-planning .evenement-calendar-card .fc-scroller-liquid-absolute,
+body.page-planning .evenement-calendar-card .fc-daygrid-body,
+body.page-planning .evenement-calendar-card .fc-daygrid-body table {
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+}
+
+body.page-planning .evenement-calendar-card .fc-daygrid-day-frame {
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+}
+
+body.page-planning .evenement-calendar-card .fc-daygrid-day-events {
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning .centre-effectifs-summary {
+    min-width: 0 !important;
+    margin: 4px 2px 2px !important;
+    padding: 3px !important;
+    overflow: hidden !important;
+}
+
+body.page-planning .centre-effectifs-days {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
+
+/* Densité automatique quand une carte reçoit une petite part de l'écran. */
+body.page-planning .planning-calendar-tight .evenement-calendar-header {
+    gap: 3px !important;
+    padding: 2px 4px !important;
+}
+body.page-planning .planning-calendar-tight .calendar-group-name,
+body.page-planning .planning-calendar-tight .planning-objectif-groupe {
+    font-size: .66rem !important;
+}
+body.page-planning .planning-calendar-tight .fc {
+    font-size: .59rem !important;
+}
+body.page-planning .planning-calendar-tight .fc-col-header-cell-cushion,
+body.page-planning .planning-calendar-tight .fc-daygrid-day-number {
+    padding: 0 1px !important;
+    font-size: .56rem !important;
+}
+body.page-planning .planning-calendar-tight .fc-event {
+    padding: 0 1px !important;
+    font-size: .52rem !important;
+    line-height: 1.1 !important;
+}
+
+body.page-planning .planning-calendar-ultra-tight .planning-objectif-groupe,
+body.page-planning .planning-calendar-ultra-tight .evenement-calendar-meta {
+    display: none !important;
+}
+body.page-planning .planning-calendar-ultra-tight .evenement-calendar-header {
+    margin-bottom: 1px !important;
+    padding: 1px 3px !important;
+}
+body.page-planning .planning-calendar-ultra-tight .calendar-group-name {
+    font-size: .6rem !important;
+}
+body.page-planning .planning-calendar-ultra-tight .fc {
+    font-size: .54rem !important;
+}
+body.page-planning .planning-calendar-ultra-tight .fc-event {
+    font-size: .48rem !important;
+}
+
+@media (max-width: 760px) {
+    body.page-planning #calendars-container.calendar-sites {
+        align-items: stretch !important;
+        overflow: hidden !important;
+    }
+    body.page-planning #calendars-container > .planning-centres-row {
+        grid-template-columns: repeat(var(--planning-row-count, 1), minmax(0, 1fr)) !important;
+    }
+    body.page-planning #calendars-container > .planning-centres-row > .centre-planning-group.calendar-site-card,
+    body.page-planning .evenement-calendar-card.calendar-group-card {
+        min-width: 0 !important;
+    }
+}

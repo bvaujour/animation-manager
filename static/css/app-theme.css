@@ -1,0 +1,1420 @@
+/* ========================================================================== 
+   Animation Manager — thème pastel partagé
+   --------------------------------------------------------------------------
+   Cette feuille est chargée en dernier. Elle harmonise toutes les pages sans
+   modifier leur logique métier : navigation latérale, surfaces, formulaires,
+   tableaux, onglets et espaces de travail.
+   ========================================================================== */
+
+:root {
+    --app-sidebar-width: 244px;
+    --color-bg: #f7f8fc;
+    --color-surface: #ffffff;
+    --color-surface-sunken: #f4f5fb;
+    --color-text: #151d3b;
+    --color-text-muted: #66708b;
+    --color-primary: #6b55ca;
+    --color-primary-dark: #4e38ad;
+    --color-accent: #f0b64d;
+    --color-accent-dark: #d69322;
+    --color-danger: #d94d5d;
+    --color-danger-dark: #b72f41;
+    --color-border: #e1e5f0;
+    --color-success: #24965b;
+    --color-info: #397fc3;
+    --pastel-purple: #f0edff;
+    --pastel-blue: #eef6ff;
+    --pastel-green: #edf9f2;
+    --pastel-yellow: #fff8e7;
+    --pastel-orange: #fff2e9;
+    --pastel-red: #fff0f2;
+    --radius-sm: 9px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --shadow-sm: 0 1px 3px rgba(20, 29, 59, .045), 0 6px 18px rgba(20, 29, 59, .025);
+    --shadow-md: 0 10px 28px rgba(31, 42, 85, .09);
+    --shadow-lg: 0 24px 65px rgba(31, 42, 85, .16);
+    --page-gutter: 18px;
+    --page-top-space: 18px;
+    --page-bottom-space: 30px;
+    --card-padding: 16px;
+    --card-radius: 15px;
+    --control-height: 38px;
+}
+
+body {
+    background:
+        radial-gradient(circle at 28% -10%, rgba(107, 85, 202, .055), transparent 28rem),
+        var(--color-bg);
+    color: var(--color-text);
+}
+
+body h1,
+body h2,
+body h3,
+body h4 {
+    color: var(--color-text);
+}
+
+body ::selection {
+    color: #fff;
+    background: var(--color-primary);
+}
+
+/* --- Navigation --------------------------------------------------------- */
+.brand-mark {
+    display: inline-grid !important;
+    place-items: center;
+    color: #fff;
+    background: linear-gradient(145deg, #806ce0, #5c43bb) !important;
+    box-shadow: 0 8px 20px rgba(92, 67, 187, .2);
+}
+
+.brand-mark svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.nav-drawer {
+    background: linear-gradient(180deg, #faf9ff 0%, #fff 55%, #fbfbff 100%);
+    border-color: #e8e6f2;
+}
+
+.nav-drawer-header {
+    min-height: 92px;
+    padding: 20px 20px 15px;
+    border-bottom: 0;
+}
+
+.nav-drawer .brand {
+    align-items: center;
+    gap: 11px;
+    color: var(--color-text);
+    font-size: 1rem;
+    line-height: 1.08;
+    white-space: normal;
+}
+
+.nav-drawer .brand .brand-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+}
+
+.nav-drawer-links {
+    flex: 1 1 auto;
+    gap: 5px;
+    padding: 7px 15px 15px;
+}
+
+.nav-section-label {
+    display: block;
+    margin: 13px 10px 3px;
+    color: #9a9fb2;
+    font-size: .62rem;
+    font-weight: 800;
+    letter-spacing: .095em;
+    text-transform: uppercase;
+}
+
+.nav-section-label:first-child {
+    margin-top: 2px;
+}
+
+.nav-drawer-links a,
+.nav-logout-button {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 12px;
+    border-radius: 11px;
+    color: #59637d;
+    font-size: .86rem;
+    font-weight: 650;
+}
+
+.nav-drawer-links a:hover,
+.nav-logout-button:hover {
+    color: var(--color-primary-dark);
+    background: #f1eeff;
+}
+
+.nav-drawer-links a.active {
+    color: #4933b2;
+    background: linear-gradient(90deg, #ece8ff, #f5f2ff);
+    box-shadow: inset 0 0 0 1px rgba(103, 81, 198, .06);
+}
+
+.nav-link-icon {
+    width: 21px;
+    height: 21px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 21px;
+    color: currentColor;
+}
+
+.nav-link-icon svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.nav-spacer {
+    flex: 1 1 auto;
+    min-height: 18px;
+}
+
+.nav-user-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 7px;
+    padding: 13px 8px 8px;
+    border-top: 1px solid #ebeaf2;
+}
+
+.nav-user-avatar {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 36px;
+    border: 1px solid #dcd7ff;
+    border-radius: 50%;
+    color: #5742bd;
+    background: #efecff;
+    font-size: .8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.nav-user-copy {
+    min-width: 0;
+    display: grid;
+    line-height: 1.2;
+}
+
+.nav-user-copy strong {
+    overflow: hidden;
+    color: var(--color-text);
+    font-size: .77rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.nav-user-copy small {
+    margin-top: 2px;
+    color: var(--color-text-muted);
+    font-size: .67rem;
+}
+
+.nav-logout-form {
+    margin: 0;
+    padding: 0;
+}
+
+.nav-logout-button {
+    width: 100%;
+    min-height: 38px;
+    padding-block: 7px;
+    border: 0;
+    background: transparent;
+    color: #7a849b;
+    cursor: pointer;
+}
+
+/* --- Structure commune ------------------------------------------------- */
+.page-shell,
+.page-shell.home-page,
+.page-shell.administration-page,
+.page-shell.documents-page,
+.page-shell.employes-page,
+.page-shell.gestion-page,
+.page-shell.availability-self-page,
+.page-shell.recap-page {
+    padding-top: var(--page-top-space);
+    padding-bottom: var(--page-bottom-space);
+}
+
+.page-header {
+    align-items: flex-end;
+    margin: 0 2px 17px;
+}
+
+.page-header h1 {
+    font-size: clamp(1.55rem, 2.3vw, 2rem);
+    letter-spacing: -.035em;
+}
+
+.page-header .page-intro,
+.page-header > div > p:last-child {
+    max-width: 740px;
+    margin-top: 6px;
+    color: var(--color-text-muted);
+    font-size: .88rem;
+}
+
+.eyebrow {
+    margin-bottom: 4px !important;
+    color: var(--color-primary) !important;
+    font-size: .66rem !important;
+    letter-spacing: .1em !important;
+}
+
+.ui-card,
+.dashboard-card {
+    border: 1px solid var(--color-border);
+    background: rgba(255, 255, 255, .96);
+    box-shadow: var(--shadow-sm);
+}
+
+.ui-card:hover {
+    border-color: color-mix(in srgb, var(--color-primary) 11%, var(--color-border));
+}
+
+.ui-section-heading,
+.section-heading,
+.administration-section-heading,
+.fiche-section-heading,
+.gestion-section-heading,
+.section-header {
+    padding-bottom: 10px;
+    border-bottom: 1px solid #edf0f6;
+}
+
+.ui-section-heading h2,
+.section-heading h2,
+.administration-section-heading h2,
+.fiche-section-heading h2,
+.gestion-section-heading h1,
+.section-header h2 {
+    font-size: 1.03rem;
+}
+
+/* --- Commandes et formulaires ----------------------------------------- */
+.btn,
+button.btn {
+    min-height: 38px;
+    padding: 8px 13px;
+    border-radius: 10px;
+    font-weight: 700;
+    box-shadow: none;
+}
+
+.btn-primary {
+    background: linear-gradient(145deg, #745fd1, #6049bb);
+    box-shadow: 0 5px 13px rgba(95, 72, 185, .16);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(145deg, #6650c7, #5039a9);
+}
+
+.btn-secondary {
+    border-color: #dfe3ee;
+    background: #f7f8fc;
+    color: #48536d;
+}
+
+.btn-danger-solid {
+    background: #d94d5d;
+}
+
+.btn-ghost {
+    color: #69738c;
+}
+
+.field input:not([type="checkbox"]):not([type="radio"]),
+.field select,
+.field textarea,
+.ui-form input:not([type="checkbox"]):not([type="radio"]),
+.ui-form select,
+.ui-form textarea,
+.admin-form input:not([type="checkbox"]):not([type="radio"]),
+.admin-form select,
+.admin-form textarea,
+.export-form input:not([type="checkbox"]):not([type="radio"]),
+.export-form select,
+.export-form textarea,
+.search-input {
+    border-color: #dfe3ee;
+    background: #fff;
+    box-shadow: inset 0 1px 2px rgba(20, 29, 59, .025);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.ui-form input:focus,
+.ui-form select:focus,
+.ui-form textarea:focus,
+.admin-form input:focus,
+.admin-form select:focus,
+.export-form select:focus,
+.search-input:focus {
+    border-color: #9b8ae6;
+    outline: 3px solid rgba(107, 85, 202, .11);
+}
+
+.checkbox-chip,
+.checkbox-option,
+.email-checkbox-option {
+    border-color: #e1e5f0 !important;
+    background: #f8f9fc;
+}
+
+.checkbox-chip:has(input:checked),
+.checkbox-option:has(input:checked),
+.email-checkbox-option:has(input:checked) {
+    border-color: #b7aaef !important;
+    background: #f1eeff !important;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--color-primary);
+}
+
+.tabs {
+    gap: 4px;
+    padding: 4px;
+    border-color: #e2e6f0;
+    border-radius: 13px;
+    background: #f1f3f8;
+}
+
+.tab-btn {
+    min-height: 36px;
+    border: 0 !important;
+    border-radius: 9px;
+    color: #66708a;
+}
+
+.tab-btn.active {
+    color: #4f38ad;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(31, 42, 85, .08);
+}
+
+.modal-backdrop {
+    background: rgba(20, 25, 50, .43);
+    backdrop-filter: blur(3px);
+}
+
+.modal-box {
+    border: 1px solid rgba(255, 255, 255, .7);
+    box-shadow: var(--shadow-lg);
+}
+
+.modal-header {
+    background: linear-gradient(180deg, #fff, #fbfbfe);
+}
+
+.table-wrap,
+.audit-table-wrap,
+.recap-table-wrap {
+    border-color: #e4e7f0;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.table-wrap th,
+.audit-table-wrap th,
+.recap-table thead th {
+    background: #f5f6fa;
+    color: #68728b;
+}
+
+/* --- Bureau : vraie barre latérale persistante ------------------------- */
+@media (min-width: 1100px) {
+    body:not(.login-body) {
+        padding-left: var(--app-sidebar-width);
+    }
+
+    body:not(.login-body) > .top-nav,
+    body:not(.login-body) > .nav-overlay {
+        display: none !important;
+    }
+
+    body:not(.login-body) > .nav-drawer,
+    body:not(.login-body) > .nav-drawer[hidden] {
+        display: flex !important;
+        width: var(--app-sidebar-width);
+        transform: none !important;
+        border-right: 1px solid #e7e6ef;
+        box-shadow: 4px 0 22px rgba(31, 42, 85, .035);
+    }
+
+    body:not(.login-body) .nav-close-button {
+        display: none;
+    }
+
+    body:not(.login-body):not(.page-planning) > .page-shell {
+        width: min(var(--page-max-wide), calc(100% - (var(--page-gutter) * 2)));
+        height: 100dvh;
+        margin-inline: auto;
+    }
+
+    body.dashboard-body > .page-shell.dashboard-page {
+        width: 100% !important;
+        height: 100dvh !important;
+        margin: 0 !important;
+        padding: 24px 28px 36px !important;
+    }
+}
+
+/* --- Mobile ------------------------------------------------------------- */
+@media (max-width: 1099px) {
+    .top-nav {
+        min-height: 56px;
+        padding: 7px 12px;
+        border-bottom-color: #e7e8f0;
+        background: rgba(255, 255, 255, .94);
+        backdrop-filter: blur(14px);
+    }
+
+    .top-nav .brand {
+        color: var(--color-text);
+    }
+
+    .top-nav .brand .brand-mark {
+        width: 31px;
+        height: 31px;
+        border-radius: 10px;
+    }
+
+    .top-nav .brand .brand-mark svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .nav-overlay.open {
+        backdrop-filter: blur(2px);
+    }
+
+    .nav-drawer {
+        width: min(300px, 88vw);
+    }
+}
+
+/* ========================================================================
+   PAGE PLANNING
+   ======================================================================== */
+.planning-page-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 15px 18px 10px;
+}
+
+.planning-page-title {
+    min-width: 0;
+}
+
+.planning-page-title h1 {
+    margin: 0;
+    font-size: 1.65rem;
+    letter-spacing: -.035em;
+}
+
+.planning-page-title > p:last-child {
+    margin: 4px 0 0;
+    color: var(--color-text-muted);
+    font-size: .8rem;
+}
+
+.planning-tabs {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 7px;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+.planning-tab {
+    min-width: 190px;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px !important;
+    border: 1px solid #e0e4ef !important;
+    border-radius: 13px !important;
+    background: #fff !important;
+    color: #67718a !important;
+    box-shadow: var(--shadow-sm);
+}
+
+.planning-tab > span:last-child {
+    display: grid;
+    gap: 1px;
+    text-align: left;
+}
+
+.planning-tab strong {
+    font-size: .82rem;
+}
+
+.planning-tab small {
+    color: #8b93a7;
+    font-size: .65rem;
+    font-weight: 550;
+}
+
+.planning-tab-icon {
+    width: 31px;
+    height: 31px;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    color: #5c45b9;
+    background: #efecff;
+    font-size: 1rem;
+}
+
+.planning-tab.active {
+    border-color: #bcb0ef !important;
+    color: #4e38ad !important;
+    background: linear-gradient(135deg, #f2efff, #fff) !important;
+    box-shadow: 0 6px 18px rgba(84, 61, 174, .1) !important;
+}
+
+.planning-tab.active .planning-tab-icon {
+    color: #fff;
+    background: linear-gradient(145deg, #735dcc, #5b43b5);
+}
+
+body:has(.planning-tabs) #layout,
+body.page-planning > main#layout {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 0 18px 18px !important;
+}
+
+body.page-planning #animateurs-panel,
+body.page-planning #calendars-section {
+    border: 1px solid var(--color-border) !important;
+    background: #fff !important;
+    box-shadow: var(--shadow-sm);
+}
+
+body.page-planning #animateurs-panel {
+    border-radius: 14px !important;
+}
+
+body.page-planning #calendars-section {
+    padding: 8px !important;
+    border-radius: 14px !important;
+}
+
+body.page-planning .planning-mode-help {
+    border: 0;
+    background: #f7f8fc;
+    color: #67718a;
+}
+
+body.page-planning #planning-period-nav.week-navigation {
+    border-color: #e0e4ef !important;
+    border-radius: 11px !important;
+    background: #fff !important;
+    box-shadow: none !important;
+}
+
+body.page-planning #planning-actions {
+    padding: 7px;
+    border: 1px solid #e2e6f0;
+    border-radius: 10px;
+    background: #f7f8fc;
+}
+
+body.page-planning .calendar-site-card,
+body.page-planning .centre-planning-group {
+    border-color: #e2e6f0 !important;
+    border-radius: 13px !important;
+    background: #fff !important;
+    box-shadow: 0 2px 9px rgba(31, 42, 85, .045) !important;
+}
+
+body.page-planning .calendar-site-header {
+    border-left-width: 4px !important;
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 9%, #fff) !important;
+}
+
+body.page-planning .calendar-group-card {
+    border-radius: 10px !important;
+}
+
+body.page-planning .centre-effectifs-summary {
+    border-radius: 10px;
+    background: #f7f8fc;
+}
+
+@media (min-width: 1100px) {
+    body.page-planning {
+        padding-left: var(--app-sidebar-width);
+    }
+
+    body.page-planning > main#layout {
+        grid-template-columns: clamp(235px, var(--planning-sidebar-width), 420px) 7px minmax(0, 1fr) !important;
+        padding: 0 18px 18px !important;
+    }
+}
+
+@media (max-width: 800px) {
+    .planning-page-header {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 12px 10px 8px;
+    }
+
+    .planning-page-title > p:last-child {
+        display: none;
+    }
+
+    .planning-tabs {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .planning-tab {
+        min-width: 175px;
+        min-height: 49px;
+    }
+
+    body.page-planning > main#layout {
+        padding: 0 8px 8px !important;
+    }
+}
+
+/* ========================================================================
+   PAGE SALARIÉS
+   ======================================================================== */
+body.page-employes:not(.login-body):not(.page-planning) > .employees-workspace {
+    grid-template-areas:
+        "header header"
+        "directory editor";
+    grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 11px;
+    padding: 16px 0 18px;
+}
+
+.employees-page-header {
+    grid-area: header;
+    margin: 0 2px 2px;
+}
+
+.employees-sidebar {
+    grid-area: directory;
+}
+
+.employee-editor {
+    grid-area: editor;
+}
+
+.employees-sidebar,
+.employee-editor {
+    border-radius: 15px !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+
+.employees-sidebar-head {
+    min-height: 60px;
+    padding: 11px 12px;
+    background: linear-gradient(135deg, #f1eeff, #fff);
+}
+
+.employees-sidebar-head h1 {
+    font-size: 1rem;
+}
+
+.employees-list {
+    gap: 4px;
+    padding: 7px;
+}
+
+body.page-employes .employees-list .salarie-directory-item {
+    min-height: 52px;
+    border-radius: 10px;
+}
+
+body.page-employes .employees-list .salarie-directory-item.active {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--anim-color) 38%, transparent);
+}
+
+.employee-editor .employee-editor-head {
+    min-height: 68px;
+    padding: 10px 13px;
+    background: linear-gradient(180deg, #fff, #fbfbfe);
+}
+
+.employee-detail-tabs {
+    padding: 5px 9px;
+    background: #f3f4f9;
+}
+
+.employee-detail-tabs button {
+    min-height: 31px;
+    border-radius: 9px;
+}
+
+.employee-detail-tabs button.active {
+    color: #4e38ad;
+}
+
+.employee-editor .employee-compact-card {
+    border: 1px solid #e4e7f0;
+    background: #fff;
+}
+
+#employees-header-add {
+    flex: 0 0 auto;
+}
+
+@media (min-width: 1100px) {
+    body.page-employes:not(.login-body):not(.page-planning) > .employees-workspace {
+        width: calc(100% - 32px);
+        height: 100dvh;
+    }
+}
+
+@media (max-width: 760px) {
+    body.page-employes:not(.login-body):not(.page-planning) > .employees-workspace {
+        grid-template-areas: "header" "directory" "editor";
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(180px, 28vh) minmax(0, 1fr);
+        padding: 10px 0;
+    }
+
+    .employees-page-header {
+        align-items: flex-start;
+    }
+
+    .employees-page-header .page-intro {
+        display: none;
+    }
+}
+
+/* ========================================================================
+   PAGE GESTION
+   ======================================================================== */
+.gestion-page-header,
+.administration-page-header {
+    margin-bottom: 14px;
+}
+
+.gestion-main-tabs {
+    position: sticky;
+    top: -1px;
+    z-index: 15;
+    margin-bottom: 13px;
+    padding: 5px;
+    background: rgba(241, 243, 248, .94);
+    backdrop-filter: blur(12px);
+}
+
+.gestion-main-tabs .tab-btn {
+    min-width: 130px;
+}
+
+.gestion-page .tab-panel > #panel-centres,
+.gestion-page .tab-panel > #panel-qualifications,
+.gestion-page .tab-panel > #panel-periodes {
+    display: grid;
+    gap: 14px;
+}
+
+.gestion-page .section-title {
+    margin: 0;
+    color: #69738d;
+    font-size: .68rem;
+    letter-spacing: .09em;
+}
+
+.gestion-page .lieux-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 12px;
+}
+
+.gestion-page .lieu-card,
+.gestion-page .gestion-form,
+.gestion-page .periode-library,
+.gestion-page .period-create-panel,
+.gestion-page .entity-list,
+.gestion-documents {
+    border: 1px solid var(--color-border);
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+}
+
+.gestion-page .gestion-form {
+    padding: 15px;
+}
+
+.gestion-page .lieu-card {
+    overflow: hidden;
+}
+
+.gestion-page .lieu-card-header {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--centre-color, var(--color-primary)) 10%, #fff), #fff);
+}
+
+.gestion-page .entity-row {
+    border: 1px solid #e5e8f1;
+    background: #fafbfe;
+}
+
+.gestion-page .entity-row:hover {
+    border-color: #cfc7f2;
+    background: #f6f3ff;
+}
+
+.gestion-page .event-opening-settings,
+.gestion-page .event-staffing-settings {
+    border-color: #e3e6ef;
+    background: #f7f8fc;
+}
+
+.gestion-page .period-year-accordion {
+    border-color: #e1e5ef;
+    box-shadow: none;
+}
+
+.gestion-page .period-year-accordion > summary {
+    background: #f5f6fa;
+}
+
+.gestion-documents .documents-grid {
+    margin-top: 14px;
+}
+
+@media (max-width: 720px) {
+    .gestion-main-tabs .tab-btn {
+        min-width: max-content;
+    }
+
+    .gestion-page .lieux-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ========================================================================
+   PAGE RÉCAPITULATIF
+   ======================================================================== */
+.recap-page .periode-card {
+    padding: 13px 14px;
+    border-left: 4px solid #8c79df;
+    background: linear-gradient(90deg, #f4f1ff, #fff 38%);
+}
+
+.recap-page .recap-tabs {
+    max-width: 620px;
+}
+
+.recap-card {
+    border-radius: 15px;
+}
+
+.recap-table th,
+.recap-table td {
+    padding: 11px 12px;
+}
+
+.recap-table tbody tr:hover td {
+    background: #faf9ff;
+}
+
+.place-badge {
+    box-shadow: inset 0 0 0 1px rgba(20, 29, 59, .08);
+}
+
+/* ========================================================================
+   PAGE ADMINISTRATION / E-MAILS
+   ======================================================================== */
+.administration-page {
+    --card-padding: 14px;
+    --section-gap: 10px;
+    padding-top: var(--page-top-space) !important;
+}
+
+.administration-page .admin-tabs {
+    position: sticky;
+    top: -1px;
+    z-index: 15;
+    margin-bottom: 13px;
+    background: rgba(241, 243, 248, .94);
+    backdrop-filter: blur(12px);
+}
+
+.administration-page .administration-section,
+.admin-tab-panel #emails {
+    padding: 14px;
+    border-radius: 15px;
+}
+
+.admin-compact-heading {
+    padding-bottom: 11px;
+    border-bottom-color: #edf0f6;
+}
+
+.admin-card {
+    border-color: #e2e6f0;
+    border-radius: 12px;
+    background: #fafbfe;
+}
+
+.export-form {
+    padding: 4px 0;
+}
+
+.superuser-row {
+    border-color: #e3e7f0;
+    background: #fff;
+}
+
+.status-badge {
+    color: #503aa9;
+    background: #efecff;
+}
+
+#emails .email-selection-card,
+#emails .email-compose-card,
+#emails .email-template-editor,
+#emails .email-templates-list {
+    border-color: #e2e6f0;
+    border-radius: 13px;
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+}
+
+#emails .email-checkbox-option:hover {
+    border-color: #c8bef0 !important;
+    background: #f7f5ff;
+}
+
+/* ========================================================================
+   DOCUMENTS / DISPONIBILITÉS / IMPORT
+   ======================================================================== */
+.documents-page .document-card {
+    border-color: #e2e6f0;
+    border-radius: 14px;
+    box-shadow: var(--shadow-sm);
+}
+
+.documents-page .document-card:hover {
+    transform: translateY(-2px);
+    border-color: #c9c0ee;
+    box-shadow: var(--shadow-md);
+}
+
+.document-icon,
+.document-apercu {
+    background: #f0edff;
+    color: #5840b4;
+}
+
+.availability-self-page .disponibilites-card,
+.availability-period {
+    border-color: #e2e6f0;
+    border-radius: 15px;
+    box-shadow: var(--shadow-sm);
+}
+
+.availability-day:has(input:checked) {
+    border-color: #bfb3ee;
+    color: #4f38ad;
+    background: #f1eeff;
+}
+
+.import-page {
+    gap: 14px;
+}
+
+.pdf-drop-zone {
+    border-color: #cfc8ed;
+    background: linear-gradient(135deg, #f7f4ff, #fbfcff);
+}
+
+.pdf-drop-zone:hover,
+.pdf-drop-zone:focus,
+.pdf-drop-zone.is-dragging {
+    border-color: #7864d0;
+    background: #f1eeff;
+}
+
+.drop-icon {
+    color: #5a43b5;
+    background: #ebe7ff;
+}
+
+.summary-card:nth-child(1) { background: var(--pastel-blue); }
+.summary-card:nth-child(2) { background: var(--pastel-green); }
+.summary-card:nth-child(3) { background: var(--pastel-yellow); }
+.summary-card:nth-child(4) { background: var(--pastel-purple); }
+
+/* ========================================================================
+   ACCUEIL ANIMATEUR
+   ======================================================================== */
+.home-page-header {
+    margin-bottom: 14px;
+}
+
+.home-page .home-section {
+    border-radius: 15px;
+}
+
+.home-page .home-planning-section {
+    background: linear-gradient(180deg, #fff, #fcfcff);
+}
+
+/* ========================================================================
+   CONNEXION
+   ======================================================================== */
+.login-page {
+    position: relative;
+    min-height: 100dvh;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 15% 10%, rgba(108, 85, 202, .22), transparent 25rem),
+        radial-gradient(circle at 90% 85%, rgba(77, 165, 120, .14), transparent 23rem),
+        #f7f8fc;
+}
+
+.login-page::before,
+.login-page::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(1px);
+    pointer-events: none;
+}
+
+.login-page::before {
+    width: 280px;
+    height: 280px;
+    top: -110px;
+    right: -70px;
+    background: rgba(245, 190, 87, .13);
+}
+
+.login-page::after {
+    width: 230px;
+    height: 230px;
+    bottom: -90px;
+    left: -70px;
+    background: rgba(107, 85, 202, .11);
+}
+
+.login-card {
+    position: relative;
+    z-index: 1;
+    width: min(430px, 100%);
+    padding: 34px;
+    border: 1px solid rgba(255, 255, 255, .75);
+    border-radius: 23px;
+    background: rgba(255, 255, 255, .94);
+    box-shadow: 0 24px 70px rgba(38, 36, 80, .16);
+    backdrop-filter: blur(12px);
+}
+
+.login-brand {
+    align-items: center;
+    color: var(--color-text);
+}
+
+.login-brand .brand-mark {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+}
+
+.login-card h1 {
+    margin-bottom: 5px;
+    font-size: 1.75rem;
+    letter-spacing: -.035em;
+}
+
+.login-intro {
+    margin: 0 0 20px;
+    color: var(--color-text-muted);
+    font-size: .86rem;
+}
+
+.login-form {
+    margin-top: 20px;
+}
+
+.login-form input {
+    min-height: 43px;
+    border-color: #dfe3ee;
+    border-radius: 11px;
+}
+
+.login-form .btn {
+    min-height: 43px;
+}
+
+/* --- petits écrans ------------------------------------------------------ */
+@media (max-width: 620px) {
+    :root {
+        --page-gutter: 10px;
+        --page-top-space: 12px;
+        --card-padding: 12px;
+    }
+
+    .page-header {
+        align-items: flex-start;
+        flex-direction: column;
+        margin-bottom: 12px;
+    }
+
+    .page-header h1 {
+        font-size: 1.45rem;
+    }
+
+    .login-card {
+        padding: 26px 22px;
+    }
+}
+
+/* Correctifs de structure du planning : quatre lignes réelles dans la zone
+   de travail et utilisation de toute la largeur dans l'onglet Effectifs. */
+body.page-planning #calendars-section {
+    display: grid !important;
+    grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+}
+body.page-planning #planning-mode-help { grid-row: 1 !important; }
+body.page-planning #planning-period-nav { grid-row: 2 !important; }
+body.page-planning #calendars-container { grid-row: 3 !important; }
+body.page-planning #planning-actions { grid-row: 4 !important; }
+
+@media (min-width: 1024px) {
+    body.planning-mode-effectifs > main#layout {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+    body.planning-mode-effectifs > main#layout > #calendars-section {
+        grid-column: 1 !important;
+        margin-left: 0 !important;
+    }
+}
+
+.gestion-page .entity-list {
+    padding: 8px;
+    margin-bottom: 0;
+}
+.gestion-page .lieu-card-header {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--lieu-color, var(--color-primary)) 10%, #fff), #fff);
+}
+
+/* --- Menu latéral repliable sur ordinateur ------------------------------ */
+.nav-collapse-button {
+    width: 38px;
+    height: 38px;
+    display: none;
+    flex: 0 0 38px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 0;
+    border-radius: 10px;
+    color: var(--color-text-muted);
+    background: transparent;
+    cursor: pointer;
+}
+
+.nav-collapse-button span {
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+}
+
+.nav-collapse-button:hover {
+    color: var(--color-primary-dark);
+    background: var(--pastel-purple);
+}
+
+@media (min-width: 1100px) {
+    .nav-collapse-button {
+        display: inline-flex;
+    }
+
+    body:not(.login-body),
+    body:not(.login-body) > .nav-drawer,
+    body:not(.login-body) > .page-shell {
+        transition: padding-left .2s ease, width .2s ease, margin-left .2s ease;
+    }
+
+    body:not(.login-body).nav-collapsed {
+        --app-sidebar-width: 76px;
+    }
+
+    body:not(.login-body).nav-collapsed .nav-drawer-header {
+        justify-content: center;
+        padding-inline: 10px;
+    }
+
+    body:not(.login-body).nav-collapsed .nav-drawer-header .brand {
+        display: none;
+    }
+
+    body:not(.login-body).nav-collapsed .nav-drawer-links {
+        padding-inline: 10px;
+    }
+
+    body:not(.login-body).nav-collapsed .nav-section-label,
+    body:not(.login-body).nav-collapsed .nav-drawer-links a > span:last-child,
+    body:not(.login-body).nav-collapsed .nav-logout-button > span:last-child,
+    body:not(.login-body).nav-collapsed .nav-user-copy {
+        display: none;
+    }
+
+    body:not(.login-body).nav-collapsed .nav-drawer-links a,
+    body:not(.login-body).nav-collapsed .nav-logout-button,
+    body:not(.login-body).nav-collapsed .nav-user-card {
+        justify-content: center;
+        padding-inline: 0;
+    }
+
+    body:not(.login-body).nav-collapsed .nav-user-card {
+        border-top: 1px solid var(--color-border);
+    }
+
+    body:not(.login-body).nav-collapsed .nav-collapse-button {
+        color: var(--color-primary-dark);
+        background: var(--pastel-purple);
+    }
+}
+
+/* Planning : le menu Centres est dans la barre supérieure.
+   Les calendriers ont une hauteur naturelle : seule la largeur est partagée
+   entre les centres d'une même ligne et la page défile vers le bas.
+   Important : cette règle est dans app-theme.css, chargé en dernier, afin de
+   ne jamais réintroduire une rangée flexible de hauteur nulle. */
+body.page-planning:has(.planning-tabs) > main#layout,
+body.page-planning > main#layout {
+    height: auto !important;
+    min-height: calc(100dvh - 96px) !important;
+    overflow: visible !important;
+}
+
+body.page-planning #calendars-section {
+    grid-template-rows: auto auto auto !important;
+    align-content: start !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
+body.page-planning .planning-top-controls { grid-row: 1 !important; }
+body.page-planning #calendars-container {
+    grid-row: 2 !important;
+    height: auto !important;
+    min-height: 1px !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+}
+body.page-planning #planning-actions { grid-row: 3 !important; }
+
+/* ========================================================================
+   Planning : seul le conteneur des calendriers défile
+   ------------------------------------------------------------------------
+   La page, l'en-tête, la liste des salariés et les commandes restent fixes.
+   Les calendriers conservent une hauteur naturelle et défilent uniquement
+   verticalement dans l'espace restant, sans aucun défilement horizontal.
+   ======================================================================== */
+html {
+    height: 100%;
+}
+
+body.page-planning {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning > .top-nav,
+body.page-planning > .planning-page-header {
+    flex: 0 0 auto !important;
+}
+
+body.page-planning > main#layout,
+body.page-planning:has(.planning-tabs) > main#layout {
+    flex: 1 1 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning > main#layout > #animateurs-panel,
+body.page-planning > main#layout > #planning-sidebar-resizer,
+body.page-planning > main#layout > #calendars-section {
+    min-height: 0 !important;
+}
+
+body.page-planning #calendars-section {
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+    align-content: stretch !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+
+body.page-planning .planning-top-controls {
+    grid-row: 1 !important;
+    min-width: 0 !important;
+}
+
+body.page-planning #calendars-container,
+body.page-planning #calendars-container.calendar-sites,
+body.page-planning #calendars-container.planning-view-week,
+body.page-planning #calendars-container.planning-view-month {
+    grid-row: 2 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    scrollbar-gutter: stable !important;
+    padding-right: 5px !important;
+}
+
+body.page-planning #planning-actions {
+    grid-row: 3 !important;
+    flex: 0 0 auto !important;
+}
+
+body.page-planning #calendars-container > .planning-centres-row {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    grid-template-columns: repeat(var(--planning-row-count, 1), minmax(0, 1fr)) !important;
+}
+
+body.page-planning #calendars-container > .planning-centres-row > .centre-planning-group {
+    min-width: 0 !important;
+    max-width: 100% !important;
+}

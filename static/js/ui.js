@@ -271,8 +271,27 @@ function initNavigationLaterale() {
     const overlay = document.querySelector("[data-nav-close].nav-overlay");
     const openButton = document.querySelector("[data-nav-open]");
     const closeButtons = document.querySelectorAll("[data-nav-close]");
+    const collapseButton = document.querySelector("[data-nav-collapse]");
+    const desktopQuery = window.matchMedia("(min-width: 1100px)");
+    const storageKey = "animation-manager-menu-replie";
 
     if (!drawer || !overlay || !openButton) return;
+
+    function appliquerEtatCompact(replie) {
+        document.body.classList.toggle("nav-collapsed", replie && desktopQuery.matches);
+        if (!collapseButton) return;
+        collapseButton.setAttribute("aria-pressed", replie ? "true" : "false");
+        collapseButton.setAttribute("aria-label", replie ? "Déplier le menu" : "Replier le menu");
+        collapseButton.setAttribute("title", replie ? "Déplier le menu" : "Replier le menu");
+    }
+
+    function etatCompactSauvegarde() {
+        try {
+            return window.localStorage.getItem(storageKey) === "1";
+        } catch {
+            return false;
+        }
+    }
 
     function ouvrirNavigation() {
         drawer.hidden = false;
@@ -296,6 +315,18 @@ function initNavigationLaterale() {
 
     openButton.addEventListener("click", ouvrirNavigation);
     closeButtons.forEach((button) => button.addEventListener("click", fermerNavigation));
+    collapseButton?.addEventListener("click", () => {
+        const replie = !document.body.classList.contains("nav-collapsed");
+        try {
+            window.localStorage.setItem(storageKey, replie ? "1" : "0");
+        } catch {
+            // Le menu reste utilisable même si le stockage local est bloqué.
+        }
+        appliquerEtatCompact(replie);
+    });
+    desktopQuery.addEventListener?.("change", () => appliquerEtatCompact(etatCompactSauvegarde()));
+    appliquerEtatCompact(etatCompactSauvegarde());
+
     document.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && !drawer.hidden) fermerNavigation();
     });

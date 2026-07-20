@@ -2864,74 +2864,1647 @@ body.page-planning #planning-period-nav .week-navigation-today {
     }
 }
 
-/* Effectifs enfants par groupe et par jour */
-.btn-effectifs-enfants {
-    padding: .32rem .58rem;
-    font-size: .78rem;
-    line-height: 1.1;
+/* Effectifs enfants et encadrement par groupe et par jour */
+.planning-effectifs-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+}
+.btn-effectifs-enfants,
+.btn-encadrement-special {
+    min-height: 1.7rem;
+    padding: .18rem .42rem;
+    font-size: .68rem;
+    line-height: 1;
     white-space: nowrap;
 }
 .planning-effectif-enfants-zone {
     display: flex;
-    justify-content: center;
-    min-height: 1.45rem;
-    padding: .12rem .18rem .08rem;
+    justify-content: stretch;
+    min-height: 1rem;
+    padding: .06rem .08rem;
 }
 .planning-effectif-enfants {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: .18rem .4rem;
+    display: grid;
+    width: 100%;
+    gap: 0;
     margin: 0;
-    padding: .24rem .42rem;
-    border-radius: .55rem;
+    padding: .22rem .3rem;
     border: 1px solid transparent;
+    border-radius: .38rem;
+    font-size: .56rem;
+    font-weight: 750;
+    line-height: 1.08;
+}
+.planning-effectif-line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .25rem;
+    min-width: 0;
+    min-height: 1.05rem;
+    white-space: nowrap;
+}
+.planning-effectif-line + .planning-effectif-line {
+    padding-top: .08rem;
+    margin-top: .08rem;
+    border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+.planning-effectif-line strong {
     font-size: .7rem;
-    font-weight: 800;
-    line-height: 1.05;
+    font-weight: 950;
+    letter-spacing: -.01em;
+}
+.planning-effectif-main strong {
+    font-size: .78rem;
+}
+.planning-effectif-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: .52rem !important;
+    font-weight: 760 !important;
+}
+.planning-animateurs-compteur {
+    opacity: 1 !important;
+}
+.planning-effectif-enfants--manque { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
+.planning-effectif-enfants--ok { background: #dcfce7; border-color: #22c55e; color: #166534; }
+.planning-effectif-enfants--surplus { background: #dbeafe; border-color: #3b82f6; color: #1e40af; }
+
+/* Synthèse placée sous tous les calendriers du lieu. */
+.centre-effectifs-summary {
+    display: none;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: stretch;
+    gap: .5rem;
+    margin: .5rem .65rem .65rem;
+    padding: .5rem;
+    border: 1px solid var(--color-border);
+    border-radius: .55rem;
+    background: color-mix(in srgb, var(--color-surface) 92%, var(--centre-color, #64748b) 8%);
+    font-size: .66rem;
+}
+body.planning-mode-effectifs .centre-effectifs-summary {
+    display: grid;
+}
+.centre-effectifs-summary-label {
+    display: flex;
+    align-items: center;
+    padding: 0 .2rem;
+    white-space: nowrap;
+    font-weight: 900;
+}
+.centre-effectifs-days {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(54px, 1fr));
+    gap: .28rem;
+    min-width: 0;
+}
+.centre-effectifs-day {
+    display: grid;
+    place-items: center;
+    gap: .08rem;
+    min-width: 0;
+    padding: .3rem .22rem;
+    border: 1px solid color-mix(in srgb, var(--color-border) 80%, var(--centre-color, #64748b) 20%);
+    border-radius: .42rem;
+    background: var(--color-surface);
     text-align: center;
 }
-.planning-effectif-enfants strong,
-.planning-effectif-enfants small { white-space: nowrap; }
-.planning-effectif-enfants small { font-size: .62rem; font-weight: 800; opacity: .88; }
-.planning-effectif-enfants--manque {
-    background: #fee2e2;
-    border-color: #ef4444;
-    color: #991b1b;
+.centre-effectifs-day span {
+    overflow: hidden;
+    max-width: 100%;
+    text-transform: capitalize;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-muted);
+    font-size: .58rem;
+    font-weight: 750;
 }
-.planning-effectif-enfants--ok {
-    background: #dcfce7;
-    border-color: #22c55e;
-    color: #166534;
+.centre-effectifs-day strong {
+    font-size: .9rem;
+    line-height: 1;
+    font-weight: 950;
 }
-.planning-effectif-enfants--surplus {
-    background: #dbeafe;
-    border-color: #3b82f6;
-    color: #1e40af;
+.centre-effectifs-total {
+    display: grid;
+    place-items: center;
+    min-width: 82px;
+    padding: .3rem .5rem;
+    border-radius: .45rem;
+    background: color-mix(in srgb, var(--centre-color, #64748b) 13%, var(--color-surface));
+    white-space: nowrap;
+    text-align: center;
+    font-weight: 800;
+}
+.centre-effectifs-total span {
+    font-size: .56rem;
+    color: var(--color-text-muted);
+}
+.centre-effectifs-total strong {
+    font-size: 1rem;
+    line-height: 1.1;
+    font-weight: 950;
+}
+@media (max-width: 900px) {
+    .centre-effectifs-summary {
+        grid-template-columns: 1fr auto;
+    }
+    .centre-effectifs-summary-label {
+        grid-column: 1 / -1;
+        padding: 0;
+    }
+    .centre-effectifs-days {
+        grid-template-columns: repeat(5, minmax(46px, 1fr));
+    }
+}
+@media (max-width: 620px) {
+    .centre-effectifs-summary {
+        grid-template-columns: 1fr;
+    }
+    .centre-effectifs-days {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+    .centre-effectifs-total {
+        grid-template-columns: auto auto;
+        justify-content: center;
+        gap: .35rem;
+    }
 }
 .effectifs-enfants-fields {
     display: grid;
-    gap: .55rem;
-    margin-top: .8rem;
+    gap: .4rem;
 }
 .effectif-enfants-row {
     display: grid;
-    grid-template-columns: minmax(145px, 1fr) minmax(85px, 105px) minmax(105px, 125px);
     align-items: center;
-    gap: .8rem;
-    padding: .55rem .65rem;
+    gap: .55rem;
+    padding: .42rem .5rem;
     border: 1px solid var(--border-color, #d9dee8);
-    border-radius: .65rem;
+    border-radius: .5rem;
 }
+.effectif-enfants-row--simple { grid-template-columns: minmax(130px, 1fr) 90px; }
+.effectif-enfants-row--encadrement { grid-template-columns: minmax(130px, 1fr) 105px auto; }
 .effectif-enfants-row > span { text-transform: capitalize; font-weight: 700; }
-.effectif-enfants-row label { display: grid; gap: .2rem; }
-.effectif-enfants-row label small { font-size: .7rem; font-weight: 700; color: var(--text-muted, #667085); }
-.effectif-enfants-row input { width: 100%; text-align: center; }
-.planning-effectifs-modal .modal-actions { margin-top: 1rem; }
+.effectif-enfants-row label { display: grid; gap: .15rem; }
+.effectif-enfants-row label small,
+.ratio-default-label { font-size: .66rem; font-weight: 700; color: var(--text-muted, #667085); }
+.effectif-enfants-row input { width: 100%; min-height: 2rem; text-align: center; }
+.ratio-default-label { white-space: nowrap; }
+.planning-effectifs-modal .modal-actions { margin-top: .7rem; }
 @media (max-width: 700px) {
     .calendar-group-meta { align-items: flex-end; }
-    .btn-effectifs-enfants { font-size: .72rem; }
-    .effectif-enfants-row { grid-template-columns: 1fr 1fr; }
-    .effectif-enfants-row > span { grid-column: 1 / -1; }
+    .planning-effectifs-actions { flex-wrap: wrap; justify-content: flex-end; }
+    .btn-effectifs-enfants,
+    .btn-encadrement-special { font-size: .66rem; }
+    .effectif-enfants-row--simple,
+    .effectif-enfants-row--encadrement { grid-template-columns: 1fr 90px; }
+    .effectif-enfants-row--encadrement .ratio-default-label { grid-column: 2; }
+}
+
+/* --- Deux usages clairement séparés du planning --- */
+.planning-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 8px 8px 0;
+    background: var(--color-bg);
+}
+
+.planning-tab {
+    appearance: none;
+    border: 1px solid var(--color-border);
+    border-bottom: 0;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    background: color-mix(in srgb, var(--color-surface) 82%, var(--color-bg));
+    color: var(--color-text-muted);
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 750;
+    cursor: pointer;
+}
+
+.planning-tab.active {
+    background: var(--color-surface);
+    color: var(--color-primary);
+    box-shadow: inset 0 3px 0 var(--color-primary);
+}
+
+.planning-mode-help {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+}
+
+body:has(.planning-tabs) #layout {
+    height: calc(100vh - 102px);
+}
+
+body.planning-mode-effectifs #animateurs-panel,
+body.planning-mode-effectifs #planning-sidebar-resizer,
+body.planning-mode-effectifs #planning-actions {
+    display: none;
+}
+
+body.planning-mode-affectations .planning-effectifs-actions {
+    display: none;
+}
+
+body.planning-mode-effectifs .planning-effectifs-actions {
+    display: flex;
+    gap: 5px;
+}
+
+body.planning-mode-effectifs .planning-effectifs-actions .btn {
+    padding: 4px 7px;
+    font-size: 0.72rem;
+}
+
+/* Dans l’onglet effectifs, les affectations restent chargées uniquement pour
+   calculer le nombre d’animateurs affectés, mais elles ne sont pas affichées. */
+body.planning-mode-effectifs .fc-daygrid-event-harness,
+body.planning-mode-effectifs .fc-timegrid-event-harness,
+body.planning-mode-effectifs .fc-list-event,
+body.planning-mode-effectifs .fc-event:not(.fc-bg-event) {
+    display: none !important;
+}
+
+/* Dans l’onglet affectations, aucun élément relatif aux enfants ou au taux
+   d’encadrement ne vient encombrer les calendriers. */
+body.planning-mode-affectations .planning-effectif-enfants-zone {
+    display: none !important;
+}
+
+body.planning-mode-effectifs .planning-objectif-groupe,
+body.planning-mode-effectifs .planning-drag-handle {
+    display: none !important;
+}
+
+body.planning-mode-effectifs .fc-daygrid-day:not(.evenement-hors-periode) {
+    background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+}
+
+@media (max-width: 620px) {
+    .planning-tabs { overflow-x: auto; }
+    .planning-tab { flex: 0 0 auto; padding: 8px 10px; }
+}
+
+
+/* Onglet effectifs : cellules ajustées au contenu et synthèse sans total hebdomadaire. */
+body.planning-mode-effectifs #calendars-container.planning-view-week .calendar .fc-daygrid-day-frame,
+body.planning-mode-effectifs #calendars-container.planning-view-month .calendar .fc-daygrid-day-frame {
+    min-height: 0 !important;
+    height: auto !important;
+    padding-bottom: 0 !important;
+}
+body.planning-mode-effectifs .calendar .fc-daygrid-day-top {
+    min-height: 0;
+}
+body.planning-mode-effectifs .calendar .fc-daygrid-day-events {
+    min-height: 0 !important;
+    margin-bottom: 0 !important;
+}
+body.planning-mode-effectifs .centre-effectifs-summary {
+    grid-template-columns: auto minmax(0, 1fr);
+}
+@media (max-width: 900px) {
+    body.planning-mode-effectifs .centre-effectifs-summary {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+    body.planning-mode-effectifs .centre-effectifs-summary-label {
+        grid-column: auto;
+    }
+}
+@media (max-width: 620px) {
+    body.planning-mode-effectifs .centre-effectifs-summary {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Point d'arrivée depuis le tableau de bord. */
+.centre-planning-group.planning-centre-cible {
+    box-shadow: 0 0 0 3px rgba(102, 80, 200, .16), var(--shadow-sm);
+}
+
+/* ========================================================================== 
+   Sélecteur et disposition manuelle des centres
+   --------------------------------------------------------------------------
+   Les centres visibles sont choisis avec le bouton +. Les flèches de chaque
+   carte permettent de changer de colonne ou de ligne sans drag & drop.
+   ========================================================================== */
+body.page-planning #calendars-section {
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto !important;
+}
+
+body.page-planning #planning-mode-help { grid-row: 1 !important; }
+body.page-planning #planning-period-nav { grid-row: 2 !important; }
+body.page-planning #planning-centres-toolbar { grid-row: 3 !important; }
+body.page-planning #calendars-container { grid-row: 4 !important; }
+body.page-planning #planning-actions { grid-row: 5 !important; }
+
+.planning-centres-toolbar {
+    position: relative;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    padding: 7px 9px;
+    border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--color-primary) 7%, var(--color-surface)),
+        var(--color-surface));
+    box-shadow: var(--shadow-sm);
+}
+
+.planning-centres-toolbar-summary {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.planning-centres-toolbar-summary > span:last-child {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+}
+
+.planning-centres-toolbar-summary strong {
+    overflow: hidden;
+    color: var(--color-text);
+    font-size: .79rem;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planning-centres-toolbar-summary small {
+    color: var(--color-text-muted);
+    font-size: .67rem;
+    line-height: 1.2;
+}
+
+.planning-centres-toolbar-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--color-primary) 13%, white);
+    color: var(--color-primary);
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.planning-centres-toolbar-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.planning-centres-toolbar .btn {
+    min-height: 31px;
+    padding: 5px 9px;
+    font-size: .72rem;
+    white-space: nowrap;
+}
+
+.planning-centres-toolbar .btn:disabled,
+.planning-centre-layout-controls button:disabled {
+    opacity: .38;
+    cursor: default;
+    transform: none !important;
+}
+
+.planning-centres-add-wrap {
+    position: relative;
+}
+
+.planning-add-centre-menu {
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    z-index: 1000;
+    width: min(290px, calc(100vw - 30px));
+    padding: 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+    box-shadow: 0 16px 38px rgba(38, 31, 78, .18);
+}
+
+.planning-add-centre-menu[hidden] {
+    display: none !important;
+}
+
+.planning-add-centre-option {
+    appearance: none;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.planning-add-centre-option:hover,
+.planning-add-centre-option:focus-visible {
+    background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+    outline: none;
+}
+
+.planning-add-centre-option > span:last-child {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+}
+
+.planning-add-centre-option strong {
+    overflow: hidden;
+    font-size: .78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planning-add-centre-option small {
+    color: var(--color-text-muted);
+    font-size: .64rem;
+    text-transform: uppercase;
+}
+
+.planning-centre-color {
+    flex: 0 0 auto;
+    width: 11px;
+    height: 30px;
+    border-radius: 999px;
+    background: var(--centre-option-color, var(--color-primary));
+}
+
+.planning-add-centre-empty {
+    margin: 0;
+    padding: 9px;
+    color: var(--color-text-muted);
+    font-size: .72rem;
+    text-align: center;
+}
+
+.centre-planning-actions.calendar-site-actions {
+    min-width: 0;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+}
+
+.planning-centre-row-label {
+    flex: 0 0 auto;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 10%, white);
+    color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 72%, black);
+    font-size: .61rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.planning-centre-layout-controls {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 22%, var(--color-border));
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .72);
+}
+
+.planning-centre-layout-controls button {
+    appearance: none;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 75%, #182033);
+    font: inherit;
+    font-size: .78rem;
+    font-weight: 900;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.planning-centre-layout-controls button:not(:disabled):hover,
+.planning-centre-layout-controls button:not(:disabled):focus-visible {
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 15%, white);
+    outline: none;
+}
+
+.planning-centre-layout-controls .planning-centre-remove {
+    color: var(--color-danger, #b42318);
+    font-size: 1rem;
+}
+
+.planning-centres-row[data-centres-count="3"] .centre-evenements-count,
+.planning-centres-row[data-centres-count="3"] .planning-centre-row-label {
+    display: none;
+}
+
+.planning-centres-row[data-centres-count="3"] .centre-planning-header {
+    gap: 5px;
+    padding-inline: 6px;
+}
+
+.planning-centres-row[data-centres-count="3"] .planning-centre-layout-controls button {
+    width: 20px;
+}
+
+@media (max-width: 1180px) {
+    .planning-centres-toolbar {
+        align-items: flex-start;
+    }
+    .planning-centres-toolbar-summary small {
+        display: none;
+    }
+    .planning-layout-preset {
+        padding-inline: 7px !important;
+    }
+}
+
+@media (max-width: 760px) {
+    body.page-planning #calendars-section {
+        grid-template-rows: auto auto auto minmax(0, 1fr) auto !important;
+    }
+    .planning-centres-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 7px;
+    }
+    .planning-centres-toolbar-actions {
+        justify-content: flex-start;
+        overflow-x: auto;
+        padding-bottom: 1px;
+    }
+    .planning-add-centre-menu {
+        right: auto;
+        left: 0;
+    }
+}
+
+/* Barre compacte d'ajout des centres */
+.planning-centres-toolbar.planning-centres-toolbar-compact {
+    min-height: 34px;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 3px 5px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.planning-centres-compact-label {
+    flex: 0 0 auto;
+    color: var(--color-text-muted);
+    font-size: .68rem;
+    font-weight: 700;
+}
+
+.planning-add-centre-menu.planning-add-centre-buttons {
+    position: static;
+    z-index: auto;
+    display: flex !important;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    width: auto;
+    max-width: none;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.planning-add-centre-chip {
+    width: auto;
+    min-height: 26px;
+    gap: 4px;
+    padding: 3px 7px;
+    border: 1px solid color-mix(in srgb, var(--centre-option-color, var(--color-primary)) 28%, var(--color-border));
+    border-radius: 999px;
+    background: var(--color-surface);
+    font-size: .68rem;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.planning-add-centre-chip:hover,
+.planning-add-centre-chip:focus-visible {
+    border-color: var(--centre-option-color, var(--color-primary));
+    background: color-mix(in srgb, var(--centre-option-color, var(--color-primary)) 8%, var(--color-surface));
+}
+
+.planning-add-centre-chip .planning-centre-color {
+    width: 7px;
+    height: 7px;
+}
+
+.planning-add-centre-chip strong {
+    font-size: .68rem;
+    font-weight: 750;
+}
+
+.planning-centres-visible-count {
+    margin-left: auto;
+    color: var(--color-text-muted);
+    font-size: .62rem;
+    white-space: nowrap;
+}
+
+.planning-centres-layout-shortcuts {
+    display: flex;
+    gap: 3px;
+}
+
+.planning-layout-icon {
+    display: grid;
+    place-items: center;
+    width: 25px;
+    height: 25px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 7px;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+.planning-layout-icon:hover:not(:disabled) {
+    color: var(--color-primary);
+    border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+}
+
+.planning-layout-icon:disabled {
+    opacity: .35;
+    cursor: default;
+}
+
+@media (max-width: 760px) {
+    .planning-centres-toolbar.planning-centres-toolbar-compact {
+        align-items: center;
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 3px;
+    }
+    .planning-centres-visible-count {
+        display: none;
+    }
+}
+
+/* ========================================================================== 
+   Planning libre — centres plein espace, fermeture et lignes dynamiques
+   ========================================================================== */
+body.page-planning .planning-page-header-compact {
+    min-height: 44px;
+    padding: 4px 18px;
+    gap: 12px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+body.page-planning .planning-page-header-compact > h1 {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: 1.08rem;
+    line-height: 1;
+    letter-spacing: -.02em;
+}
+
+body.page-planning .planning-page-header-compact .planning-tabs {
+    min-width: 0;
+    margin-left: auto;
+    gap: 4px;
+}
+
+body.page-planning .planning-page-header-compact .planning-tab {
+    min-width: 0;
+    min-height: 32px;
+    gap: 5px;
+    padding: 5px 9px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: .72rem;
+}
+
+body.page-planning .planning-page-header-compact .planning-tab-icon {
+    font-size: .78rem;
+}
+
+body.page-planning > main#layout {
+    min-height: 0 !important;
+    padding-top: 6px !important;
+}
+
+body.page-planning #calendars-section {
+    grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+    gap: 5px !important;
+}
+
+body.page-planning #planning-period-nav { grid-row: 1 !important; }
+body.page-planning #planning-centres-toolbar { grid-row: 2 !important; }
+body.page-planning #calendars-container { grid-row: 3 !important; }
+body.page-planning #planning-actions { grid-row: 4 !important; }
+
+body.page-planning #planning-centres-toolbar[hidden] {
+    display: none !important;
+}
+
+body.page-planning .planning-centres-toolbar.planning-centres-toolbar-compact {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+body.page-planning .planning-add-centre-menu.planning-add-centre-buttons {
+    width: 100%;
+    min-height: 27px;
+    display: flex !important;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+body.page-planning .planning-add-centre-chip {
+    min-height: 25px;
+    padding: 3px 7px;
+    border-radius: 7px;
+    box-shadow: none;
+}
+
+body.page-planning #calendars-container,
+body.page-planning #calendars-container.planning-view-week,
+body.page-planning #calendars-container.planning-view-month {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    overflow: auto !important;
+}
+
+body.page-planning .planning-centres-row {
+    flex: 1 1 260px;
+    min-height: 220px;
+    display: grid;
+    grid-template-columns: repeat(var(--planning-row-count, 1), minmax(0, 1fr));
+    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+}
+
+body.page-planning .centre-planning-group.calendar-site-card {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 5px;
+    gap: 5px;
+    overflow: auto;
+    border-radius: 9px;
+}
+
+body.page-planning .centre-planning-header {
+    position: sticky;
+    top: 0;
+    z-index: 9;
+    min-height: 34px;
+    padding: 4px 6px;
+    gap: 5px;
+    cursor: default;
+}
+
+body.page-planning .centre-planning-title {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+body.page-planning .centre-planning-header h2 {
+    margin: 0;
+    font-size: .82rem;
+}
+
+body.page-planning .centre-planning-code {
+    display: none;
+}
+
+body.page-planning .centre-evenements-count {
+    padding: 2px 5px;
+    font-size: .58rem;
+}
+
+body.page-planning .centre-drag-handle,
+body.page-planning .planning-centre-close {
+    appearance: none;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 25px;
+    height: 25px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: color-mix(in srgb, var(--centre-color, var(--color-primary)) 72%, #283044);
+    font: inherit;
+    font-size: .92rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+body.page-planning .centre-drag-handle {
+    cursor: grab;
+    touch-action: none;
+}
+
+body.page-planning .centre-drag-handle:active {
+    cursor: grabbing;
+}
+
+body.page-planning .centre-drag-handle:hover,
+body.page-planning .centre-drag-handle:focus-visible,
+body.page-planning .planning-centre-close:hover,
+body.page-planning .planning-centre-close:focus-visible {
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 14%, white);
+    outline: none;
+}
+
+body.page-planning .planning-centre-close {
+    color: var(--color-danger, #b42318);
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+body.page-planning .evenement-calendars {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+body.page-planning .planning-row-dropzone {
+    flex: 0 0 4px;
+    width: 100%;
+    min-height: 4px;
+    border-radius: 999px;
+    transition: min-height .12s ease, background-color .12s ease, box-shadow .12s ease;
+}
+
+body.page-planning.planning-centre-sort-active .planning-row-dropzone,
+body.planning-centre-sort-active .planning-row-dropzone {
+    min-height: 16px;
+    margin: 2px 0;
+    background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+}
+
+body.page-planning .planning-row-dropzone.is-drop-target {
+    min-height: 20px;
+    background: color-mix(in srgb, var(--color-primary) 18%, white);
+    box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+body.page-planning .centre-planning-group.planning-centre-dragging {
+    opacity: .42;
+    box-shadow: 0 0 0 2px var(--color-primary), var(--shadow-md);
+}
+
+body.page-planning .centre-planning-group.planning-drop-before::before,
+body.page-planning .centre-planning-group.planning-drop-after::after {
+    content: "";
+    position: absolute;
+    z-index: 40;
+    top: 4px;
+    bottom: 4px;
+    width: 4px;
+    border-radius: 999px;
+    background: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+body.page-planning .centre-planning-group.planning-drop-before::before { left: -4px; }
+body.page-planning .centre-planning-group.planning-drop-after::after { right: -4px; }
+
+body.page-planning .planning-centres-row.planning-drop-row {
+    border-radius: 9px;
+    box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+body.page-planning .planning-centres-empty {
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 1px dashed color-mix(in srgb, var(--color-border) 75%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-surface) 55%, transparent);
+}
+
+@media (max-width: 800px) {
+    body.page-planning .planning-page-header-compact {
+        min-height: 42px;
+        align-items: center;
+        flex-direction: row;
+        padding: 4px 8px;
+    }
+
+    body.page-planning .planning-page-header-compact > h1 {
+        font-size: .95rem;
+    }
+
+    body.page-planning .planning-page-header-compact .planning-tabs {
+        width: auto;
+    }
+
+    body.page-planning .planning-page-header-compact .planning-tab {
+        min-width: 0;
+        min-height: 30px;
+        padding: 4px 7px;
+    }
+
+    body.page-planning .planning-centres-row {
+        flex-basis: auto;
+        min-height: 0;
+        grid-template-columns: 1fr;
+    }
+
+    body.page-planning .centre-planning-group.calendar-site-card {
+        min-height: 280px;
+        height: auto;
+    }
+}
+
+/* ========================================================================== 
+   Sélecteur professionnel des centres
+   Un seul menu reste présent : fermer un calendrier ne crée plus de boutons
+   visibles. Les centres masqués sont proposés dans un menu déroulant compact.
+   ========================================================================== */
+body.page-planning #calendars-section {
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+}
+
+body.page-planning .planning-top-controls {
+    position: relative;
+    z-index: 35;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+body.page-planning .planning-top-controls #planning-period-nav {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    margin-bottom: 0 !important;
+}
+
+body.page-planning #planning-centres-toolbar {
+    grid-row: auto !important;
+}
+
+body.page-planning #calendars-container {
+    grid-row: auto !important;
+}
+
+body.page-planning #planning-actions {
+    grid-row: auto !important;
+}
+
+body.page-planning .planning-centres-dropdown {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+body.page-planning .planning-centres-dropdown > summary {
+    list-style: none;
+}
+
+body.page-planning .planning-centres-dropdown > summary::-webkit-details-marker {
+    display: none;
+}
+
+body.page-planning .planning-centres-dropdown-toggle {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border: 1px solid var(--color-border);
+    border-radius: 9px;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-sm);
+    color: var(--color-text);
+    font-size: .75rem;
+    font-weight: 750;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+
+body.page-planning .planning-centres-dropdown-toggle:hover,
+body.page-planning .planning-centres-dropdown-toggle:focus-visible,
+body.page-planning .planning-centres-dropdown[open] .planning-centres-dropdown-toggle {
+    border-color: color-mix(in srgb, var(--color-primary) 48%, var(--color-border));
+    background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+    outline: none;
+}
+
+body.page-planning .planning-centres-dropdown[open] .planning-centres-dropdown-toggle {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 13%, transparent);
+}
+
+body.page-planning .planning-centres-dropdown-icon {
+    color: var(--color-primary);
+    font-size: .9rem;
+    line-height: 1;
+}
+
+body.page-planning .planning-centres-dropdown-count {
+    min-width: 18px;
+    height: 18px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: white;
+    font-size: .62rem;
+    font-weight: 850;
+    line-height: 1;
+}
+
+body.page-planning .planning-centres-dropdown-chevron {
+    color: var(--color-text-muted);
+    font-size: .8rem;
+    line-height: 1;
+    transition: transform .15s ease;
+}
+
+body.page-planning .planning-centres-dropdown[open] .planning-centres-dropdown-chevron {
+    transform: rotate(180deg);
+}
+
+body.page-planning .planning-centres-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 120;
+    width: min(290px, calc(100vw - 24px));
+    max-height: min(360px, 60vh);
+    overflow: auto;
+    padding: 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 11px;
+    background: var(--color-surface);
+    box-shadow: 0 14px 35px rgba(15, 23, 42, .18);
+}
+
+body.page-planning .planning-centres-dropdown-heading {
+    padding: 5px 7px 7px;
+    color: var(--color-text-muted);
+    font-size: .64rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+body.page-planning .planning-centres-dropdown-option {
+    appearance: none;
+    width: 100%;
+    min-height: 36px;
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr) 24px;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 7px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-size: .76rem;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+}
+
+body.page-planning .planning-centres-dropdown-option:hover,
+body.page-planning .planning-centres-dropdown-option:focus-visible {
+    background: color-mix(in srgb, var(--centre-option-color, var(--color-primary)) 9%, var(--color-surface));
+    outline: none;
+}
+
+body.page-planning .planning-centres-dropdown-option .planning-centre-color {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: var(--centre-option-color, var(--color-primary));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--centre-option-color, var(--color-primary)) 18%, transparent);
+}
+
+body.page-planning .planning-centres-dropdown-add {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface));
+    color: var(--color-primary);
+    font-size: .9rem;
+    font-weight: 850;
+}
+
+body.page-planning .planning-centres-dropdown-empty {
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 10px;
+    color: var(--color-text-muted);
+    font-size: .73rem;
+    text-align: center;
+}
+
+body.page-planning .planning-centres-dropdown-empty > span:first-child {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-success, #18864b) 12%, white);
+    color: var(--color-success, #18864b);
+    font-weight: 900;
+}
+
+@media (max-width: 640px) {
+    body.page-planning .planning-top-controls {
+        align-items: stretch;
+    }
+
+    body.page-planning .planning-centres-dropdown-toggle {
+        min-height: 100%;
+        padding-inline: 8px;
+    }
+
+    body.page-planning .planning-centres-dropdown-toggle > span:nth-child(2) {
+        display: none;
+    }
+}
+
+/* ========================================================================== 
+   Planning — défilement vertical et partage horizontal uniquement
+   --------------------------------------------------------------------------
+   Les calendriers ne sont plus comprimés pour tenir dans la hauteur de
+   l'écran. Une ligne partage seulement la largeur disponible entre ses
+   centres ; les lignes et les groupes s'ajoutent naturellement vers le bas.
+   La page peut défiler verticalement, jamais horizontalement.
+   ========================================================================== */
+html {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+body.page-planning {
+    width: 100%;
+    height: auto !important;
+    min-height: 100dvh;
+    max-width: 100%;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+body.page-planning > main#layout {
+    height: auto !important;
+    min-height: calc(100dvh - 50px) !important;
+    overflow: visible !important;
+    align-items: start !important;
+}
+
+body.page-planning #calendars-section {
+    display: grid !important;
+    grid-template-rows: auto auto auto !important;
+    align-content: start !important;
+    align-self: start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
+body.page-planning #calendars-container,
+body.page-planning #calendars-container.planning-view-week,
+body.page-planning #calendars-container.planning-view-month,
+body.page-planning #calendars-container.calendar-sites {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 0 1px 8px !important;
+    gap: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    scrollbar-gutter: auto !important;
+}
+
+body.page-planning #calendars-container > .planning-centres-row {
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: repeat(var(--planning-row-count, 1), minmax(0, 1fr)) !important;
+    align-items: start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    height: auto !important;
+    gap: 7px !important;
+    margin: 0 !important;
+    overflow: visible !important;
+}
+
+body.page-planning #calendars-container > .planning-row-dropzone {
+    flex: 0 0 8px !important;
+    height: 8px !important;
+    min-height: 8px !important;
+}
+
+body.page-planning #calendars-container > .planning-centres-row > .centre-planning-group.calendar-site-card,
+body.page-planning .centre-planning-group.calendar-site-card {
+    display: block !important;
+    align-self: start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    contain: layout paint !important;
+}
+
+body.page-planning .centre-planning-header {
+    position: relative !important;
+    top: auto !important;
+}
+
+body.page-planning .centre-planning-group .evenement-calendars,
+body.page-planning .evenement-calendars.calendar-group-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 7px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+
+body.page-planning .centre-planning-group .evenement-calendar-card.calendar-group-card,
+body.page-planning .evenement-calendar-card.calendar-group-card {
+    display: block !important;
+    align-self: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 205px !important;
+    margin: 0 !important;
+    padding: 4px !important;
+    overflow: hidden !important;
+}
+
+body.page-planning .evenement-calendar-card .shared-calendar,
+body.page-planning .evenement-calendar-card .calendar,
+body.page-planning .evenement-calendar-card .fc,
+body.page-planning .evenement-calendar-card .fc-view-harness,
+body.page-planning .evenement-calendar-card .fc-view-harness-active,
+body.page-planning .evenement-calendar-card .fc-scrollgrid {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+}
+
+body.page-planning .evenement-calendar-card .fc-scroller,
+body.page-planning .evenement-calendar-card .fc-scroller-liquid-absolute,
+body.page-planning .evenement-calendar-card .fc-daygrid-body,
+body.page-planning .evenement-calendar-card .fc-daygrid-body table,
+body.page-planning .evenement-calendar-card .fc-scrollgrid-sync-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+body.page-planning .evenement-calendar-card .fc-scrollgrid-sync-table,
+body.page-planning .evenement-calendar-card .fc-col-header,
+body.page-planning .evenement-calendar-card .fc-daygrid-body table {
+    table-layout: fixed !important;
+}
+
+body.page-planning .evenement-calendar-card .fc-daygrid-day-frame {
+    height: auto !important;
+    min-height: 118px !important;
+    overflow: visible !important;
+}
+
+body.page-planning .evenement-calendar-card .fc-daygrid-day-events {
+    min-height: 84px !important;
+    overflow: visible !important;
+}
+
+body.page-planning .evenement-calendar-card .fc-daygrid-event,
+body.page-planning .evenement-calendar-card .fc-event-title,
+body.page-planning .evenement-calendar-card .fc-event-main {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+body.page-planning #calendars-scroll-top {
+    display: none !important;
+}
+
+@media (min-width: 1024px) {
+    body.page-planning > main#layout {
+        grid-template-rows: auto !important;
+    }
+
+    body.page-planning > main#layout > #animateurs-panel,
+    body.page-planning > main#layout > #planning-sidebar-resizer {
+        position: sticky;
+        top: 8px;
+        height: calc(100dvh - 16px) !important;
+        max-height: calc(100dvh - 16px) !important;
+    }
+
+    body.page-planning > main#layout > #calendars-section {
+        overflow: visible !important;
+    }
+}
+
+@media (max-width: 1023px) {
+    body.page-planning > main#layout {
+        min-height: 0 !important;
+    }
+
+    body.page-planning #animateurs-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+    }
+
+    body.page-planning #animateurs-list {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+    }
+}
+
+@media (max-width: 800px) {
+    body.page-planning #calendars-container > .planning-centres-row,
+    body.page-planning .planning-centres-row {
+        grid-template-columns: repeat(var(--planning-row-count, 1), minmax(0, 1fr)) !important;
+    }
+
+    body.page-planning #calendars-container > .planning-centres-row > .centre-planning-group.calendar-site-card,
+    body.page-planning .centre-planning-group.calendar-site-card,
+    body.page-planning .evenement-calendar-card.calendar-group-card {
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+
+    body.page-planning .evenement-calendar-card .fc-daygrid-day-frame {
+        min-height: 104px !important;
+    }
+
+    body.page-planning .evenement-calendar-card .fc-daygrid-day-events {
+        min-height: 72px !important;
+    }
+}
+
+/* Aucun composant du Planning ne crée de défilement latéral sur petit écran. */
+@media (max-width: 1023px) {
+    body.page-planning .planning-page-header,
+    body.page-planning .planning-tabs,
+    body.page-planning #animateurs-panel,
+    body.page-planning #animateurs-list,
+    body.page-planning .planning-top-controls,
+    body.page-planning #calendars-section,
+    body.page-planning #calendars-container {
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+    }
+
+    body.page-planning .planning-tabs,
+    body.page-planning #animateurs-list {
+        flex-wrap: wrap !important;
+    }
+
+    body.page-planning #animateurs-list {
+        overflow-y: visible !important;
+    }
+}
+
+
+/* Zone moderne de création d'une nouvelle ligne.
+   Discrète au repos, elle devient une cible large et claire pendant le drag. */
+body.page-planning #calendars-container > .planning-row-dropzone {
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    flex: 0 0 12px !important;
+    width: 100% !important;
+    height: 12px !important;
+    min-height: 12px !important;
+    margin: 2px 0 !important;
+    overflow: hidden !important;
+    border: 1px dashed transparent !important;
+    border-radius: 12px !important;
+    background: transparent !important;
+    color: transparent !important;
+    opacity: .45;
+    transition: height .18s ease, min-height .18s ease, margin .18s ease,
+                border-color .18s ease, background-color .18s ease,
+                color .18s ease, opacity .18s ease, box-shadow .18s ease,
+                transform .18s ease !important;
+}
+
+body.page-planning .planning-row-dropzone-icon,
+body.page-planning .planning-row-dropzone-label {
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity .14s ease, transform .14s ease;
+    pointer-events: none;
+}
+
+body.page-planning .planning-row-dropzone-icon {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-primary) 12%, white);
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+
+body.page-planning .planning-row-dropzone-label {
+    font-size: .86rem;
+    font-weight: 750;
+    letter-spacing: .01em;
+}
+
+body.page-planning.planning-centre-sort-active #calendars-container > .planning-row-dropzone,
+body.planning-centre-sort-active #calendars-container > .planning-row-dropzone {
+    flex-basis: 52px !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    margin: 8px 0 !important;
+    border-color: color-mix(in srgb, var(--color-primary) 40%, transparent) !important;
+    background: color-mix(in srgb, var(--color-primary) 6%, white) !important;
+    color: var(--color-primary) !important;
+    opacity: 1;
+}
+
+body.page-planning.planning-centre-sort-active .planning-row-dropzone-icon,
+body.page-planning.planning-centre-sort-active .planning-row-dropzone-label,
+body.planning-centre-sort-active .planning-row-dropzone-icon,
+body.planning-centre-sort-active .planning-row-dropzone-label {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+body.page-planning #calendars-container > .planning-row-dropzone.is-drop-target {
+    flex-basis: 68px !important;
+    height: 68px !important;
+    min-height: 68px !important;
+    border-color: var(--color-primary) !important;
+    background: color-mix(in srgb, var(--color-primary) 13%, white) !important;
+    color: var(--color-primary) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 45%, transparent),
+                0 8px 24px color-mix(in srgb, var(--color-primary) 14%, transparent) !important;
+    transform: scale(1.003);
+}
+
+body.page-planning #calendars-container > .planning-row-dropzone.is-drop-target .planning-row-dropzone-label::after {
+    content: " — déposer ici";
+}
+
+@media (max-width: 760px) {
+    body.page-planning.planning-centre-sort-active #calendars-container > .planning-row-dropzone,
+    body.planning-centre-sort-active #calendars-container > .planning-row-dropzone {
+        flex-basis: 46px !important;
+        height: 46px !important;
+        min-height: 46px !important;
+    }
+
+    body.page-planning #calendars-container > .planning-row-dropzone.is-drop-target {
+        flex-basis: 58px !important;
+        height: 58px !important;
+        min-height: 58px !important;
+    }
+}
+
+
+/* Déplacement des centres depuis tout l'en-tête. */
+body.page-planning .centre-planning-header {
+    cursor: grab !important;
+    user-select: none;
+}
+
+body.page-planning .centre-planning-header:active {
+    cursor: grabbing !important;
+}
+
+body.page-planning .centre-planning-header button,
+body.page-planning .centre-planning-header a,
+body.page-planning .centre-planning-header input,
+body.page-planning .centre-planning-header select,
+body.page-planning .centre-planning-header textarea {
+    cursor: pointer;
+}
+
+/* L'ancienne petite poignée n'est plus nécessaire. */
+body.page-planning .centre-drag-handle {
+    display: none !important;
+}
+
+
+
+body.page-planning .centre-planning-group.planning-centre-dragging {
+    opacity: .55;
+}
+
+/* Drag fiable au pointeur : tout l'en-tête est la zone de prise. */
+body.page-planning .centre-planning-header {
+    cursor: grab !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    touch-action: none !important;
+}
+
+body.page-planning.planning-centre-sort-active,
+body.page-planning.planning-centre-sort-active * {
+    cursor: grabbing !important;
+}
+
+body.page-planning .planning-centre-drag-ghost {
+    position: fixed;
+    inset: 0 auto auto 0;
+    z-index: 10000;
+    max-width: min(320px, calc(100vw - 28px));
+    padding: 9px 14px;
+    border: 1px solid color-mix(in srgb, var(--centre-color, var(--color-primary)) 50%, white);
+    border-left: 5px solid var(--centre-color, var(--color-primary));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--centre-color, var(--color-primary)) 13%, white);
+    box-shadow: 0 12px 34px rgba(31, 41, 55, .24);
+    color: var(--color-text);
+    font-size: .88rem;
+    font-weight: 800;
+    line-height: 1.2;
+    pointer-events: none;
+    will-change: transform;
 }

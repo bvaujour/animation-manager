@@ -1,14 +1,13 @@
-{% load static %}
 <header class="top-nav">
     <button class="nav-menu-button" type="button" aria-label="Ouvrir le menu" aria-controls="app-drawer" aria-expanded="false" data-nav-open>
-        <span></span>
-        <span></span>
-        <span></span>
+        <span></span><span></span><span></span>
     </button>
 
     <a href="{% url 'accueil' %}" class="brand page-brand" aria-label="Retour à l’accueil">
-        <span class="brand-mark">GA</span>
-        <span class="page-brand-title">{% if active == 'planning' %}Planning{% elif active == 'employes' %}Salariés{% elif active == 'gestion' %}Gestion{% elif active == 'recapitulatif' %}Récapitulatif{% elif active == 'emails' %}E-mails{% elif active == 'documents' %}Documents{% elif active == 'disponibilites' %}Mes disponibilités{% elif active == 'administration' %}Administration{% else %}Accueil{% endif %}</span>
+        <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2.5 20v-1.4A5.6 5.6 0 0 1 8.1 13h.8a5.6 5.6 0 0 1 5.6 5.6V20m0-6.2a5 5 0 0 1 7 4.6V20"/></svg>
+        </span>
+        <span class="page-brand-title">{% if active == 'planning' %}Planning{% elif active == 'employes' %}Salariés{% elif active == 'gestion' %}Gestion{% elif active == 'recapitulatif' %}Récapitulatif{% elif active == 'emails' %}E-mails{% elif active == 'documents' %}Documents{% elif active == 'disponibilites' %}Mes disponibilités{% elif active == 'administration' %}Administration{% else %}{% if utilisateur_est_direction %}Tableau de bord{% else %}Accueil{% endif %}{% endif %}</span>
     </a>
 </header>
 
@@ -17,26 +16,54 @@
 <aside id="app-drawer" class="nav-drawer" hidden aria-label="Menu principal">
     <div class="nav-drawer-header">
         <a href="{% url 'accueil' %}" class="brand">
-            <span class="brand-mark">GA</span>
-            <span>Gestion animation</span>
+            <span class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2.5 20v-1.4A5.6 5.6 0 0 1 8.1 13h.8a5.6 5.6 0 0 1 5.6 5.6V20m0-6.2a5 5 0 0 1 7 4.6V20"/></svg>
+            </span>
+            <span>Animation<br>Manager</span>
         </a>
+        <button class="nav-collapse-button" type="button" aria-label="Replier le menu" aria-pressed="false" title="Replier le menu" data-nav-collapse>
+            <span></span><span></span><span></span>
+        </button>
         <button class="nav-close-button" type="button" aria-label="Fermer le menu" data-nav-close>&times;</button>
     </div>
 
     <nav class="nav-drawer-links">
-        <a href="{% url 'accueil' %}" class="{% if active == 'accueil' %}active{% endif %}">Accueil</a>
+        <span class="nav-section-label">Pilotage</span>
+        <a href="{% url 'accueil' %}" class="{% if active == 'accueil' %}active{% endif %}">
+            <span class="nav-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v10H5V10m5 11v-6h4v6"/></svg></span><span>{% if utilisateur_est_direction %}Tableau de bord{% else %}Accueil{% endif %}</span>
+        </a>
         {% if utilisateur_est_direction %}
-        <a href="{% url 'planning' %}" class="{% if active == 'planning' %}active{% endif %}">Planning</a>
-        <a href="{% url 'employes' %}" class="{% if active == 'employes' %}active{% endif %}">Salariés</a>
-        <a href="{% url 'gestion' %}" class="{% if active == 'gestion' %}active{% endif %}">Gestion</a>
-        <a href="{% url 'recapitulatif' %}" class="{% if active == 'recapitulatif' %}active{% endif %}">Récapitulatif</a>
-        <a href="{% url 'administration' %}" class="{% if active == 'administration' %}active{% endif %}">Administration</a>
+        <a href="{% url 'planning' %}" class="{% if active == 'planning' %}active{% endif %}">
+            <span class="nav-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 2v3m10-3v3M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z"/></svg></span><span>Planning</span>
+        </a>
+        <a href="{% url 'employes' %}" class="{% if active == 'employes' %}active{% endif %}">
+            <span class="nav-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2m7.5-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 11l2 2 4-4"/></svg></span><span>Salariés</span>
+        </a>
+        <span class="nav-section-label">Organisation</span>
+        <a href="{% url 'gestion' %}" class="{% if active == 'gestion' %}active{% endif %}">
+            <span class="nav-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13M8 21v-5h8v5M9 10h.01M15 10h.01"/></svg></span><span>Gestion</span>
+        </a>
+        <a href="{% url 'recapitulatif' %}" class="{% if active == 'recapitulatif' %}active{% endif %}">
+            <span class="nav-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V9m5 10V5m5 14v-7m5 7V3M2 21h20"/></svg></span><span>Récapitulatif</span>
+        </a>
+        <a href="{% url 'administration' %}" class="{% if active == 'administration' %}active{% endif %}">
+            <span class="nav-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5ZM19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6V20h-4v-.09a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1H4v-4h.09a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6V4h4v.09a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .6 1h.09v4H20a1.7 1.7 0 0 0-.6 1Z"/></svg></span><span>Administration</span>
+        </a>
         {% else %}
-        <a href="{% url 'documents' %}" class="{% if active == 'documents' %}active{% endif %}">Documents</a>
-        <a href="{% url 'mes_disponibilites' %}" class="{% if active == 'disponibilites' %}active{% endif %}">Mes disponibilités</a>
+        <a href="{% url 'documents' %}" class="{% if active == 'documents' %}active{% endif %}"><span class="nav-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zM14 2v6h6M9 13h8M9 17h8"/></svg></span><span>Documents</span></a>
+        <a href="{% url 'mes_disponibilites' %}" class="{% if active == 'disponibilites' %}active{% endif %}"><span class="nav-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 2v3m10-3v3M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Zm4 10 2 2 4-4"/></svg></span><span>Mes disponibilités</span></a>
         {% endif %}
+
         {% if request.user.is_authenticated %}
-        <form method="post" action="{% url 'logout' %}" class="nav-logout-form">{% csrf_token %}<button type="submit" class="nav-logout-button">Déconnexion</button></form>
+        <div class="nav-spacer"></div>
+        <div class="nav-user-card">
+            <span class="nav-user-avatar">{% firstof request.user.first_name|first request.user.username|first "U" %}</span>
+            <span class="nav-user-copy">
+                <strong>{% firstof request.user.get_full_name request.user.username %}</strong>
+                <small>{% if utilisateur_est_direction %}Administrateur{% else %}Animateur{% endif %}</small>
+            </span>
+        </div>
+        <form method="post" action="{% url 'logout' %}" class="nav-logout-form">{% csrf_token %}<button type="submit" class="nav-logout-button"><span class="nav-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5m5 5H3m11-9h6v18h-6"/></svg></span><span>Déconnexion</span></button></form>
         {% endif %}
     </nav>
 </aside>

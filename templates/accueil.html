@@ -1,24 +1,150 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Accueil{% endblock %}
+{% block title %}{% if utilisateur_est_direction %}Tableau de bord{% else %}Accueil{% endif %}{% endblock %}
+{% block body_class %}{% if utilisateur_est_direction %}dashboard-body{% endif %}{% endblock %}
 {% block extra_head %}
+{% if utilisateur_est_direction %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=20260720-dashboard-1">
+{% else %}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260718-audit-1">
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v=20260718-audit-1">
+{% endif %}
 {% endblock %}
 {% block content %}
+{% if utilisateur_est_direction %}
+<main id="dashboard-root" class="page-shell page-shell--fluid dashboard-page" data-api-url="{% url 'api_tableau_de_bord' %}">
+    <header class="dashboard-header">
+        <div>
+            <h1>Bonjour {% firstof request.user.first_name request.user.username "Marie" %} ! <span aria-hidden="true">👋</span></h1>
+            <p>Voici un aperçu de l’organisation de vos centres.</p>
+        </div>
+        <label class="dashboard-centre-filter" for="dashboard-centre-select">
+            <span>Centre sélectionné :</span>
+            <span class="dashboard-select-wrap">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v16M8 7h2m3 0h1M8 11h2m3 0h1M8 15h2m3 0h1M2 21h20"/></svg>
+                <select id="dashboard-centre-select" aria-label="Filtrer le tableau de bord par centre">
+                    <option value="">Tous les centres</option>
+                </select>
+            </span>
+        </label>
+    </header>
+
+    <section class="dashboard-kpis" aria-label="Indicateurs de la semaine">
+        <article class="dashboard-kpi dashboard-kpi--blue">
+            <span class="dashboard-kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 2v3m10-3v3M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z"/></svg></span>
+            <div><strong id="kpi-couverture">—</strong><span>Couverture équipe</span></div>
+            <small id="kpi-couverture-detail">Chargement…</small>
+        </article>
+        <article class="dashboard-kpi dashboard-kpi--green">
+            <span class="dashboard-kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m7-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+            <div><strong id="kpi-enfants">—</strong><span>Enfants prévus</span></div>
+            <small id="kpi-enfants-detail">Sur la semaine affichée</small>
+        </article>
+        <article class="dashboard-kpi dashboard-kpi--yellow">
+            <span class="dashboard-kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Zm0-13v4m0 4h.01"/></svg></span>
+            <div><strong id="kpi-vigilances">—</strong><span>Alertes vigilance</span></div>
+            <small>Effectifs enfants à compléter</small>
+        </article>
+        <article class="dashboard-kpi dashboard-kpi--orange">
+            <span class="dashboard-kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7-1-2 2-2-2"/></svg></span>
+            <div><strong id="kpi-manques">—</strong><span>Manques animateurs</span></div>
+            <small id="kpi-manques-detail">Journées à compléter</small>
+        </article>
+        <article class="dashboard-kpi dashboard-kpi--red">
+            <span class="dashboard-kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0ZM12 9v4m0 4h.01"/></svg></span>
+            <div><strong id="kpi-critiques">—</strong><span>Problèmes critiques</span></div>
+            <small>Action prioritaire requise</small>
+        </article>
+    </section>
+
+    <section class="dashboard-main-grid">
+        <article class="dashboard-card dashboard-calendar-card">
+            <header class="dashboard-card-header">
+                <h2><span class="dashboard-card-icon" aria-hidden="true">▣</span> Calendrier</h2>
+                <div class="dashboard-month-nav">
+                    <button id="dashboard-month-prev" type="button" aria-label="Mois précédent">‹</button>
+                    <strong id="dashboard-month-label">—</strong>
+                    <button id="dashboard-month-next" type="button" aria-label="Mois suivant">›</button>
+                </div>
+            </header>
+            <div class="dashboard-calendar-weekdays" aria-hidden="true">
+                <span>Lun</span><span>Mar</span><span>Mer</span><span>Jeu</span><span>Ven</span><span>Sam</span><span>Dim</span>
+            </div>
+            <div id="dashboard-calendar" class="dashboard-calendar" aria-label="Calendrier mensuel"></div>
+            <div class="dashboard-calendar-legend">
+                <span><i class="is-ok"></i> Conforme</span>
+                <span><i class="is-vigilance"></i> À vérifier</span>
+                <span><i class="is-danger"></i> Problème</span>
+            </div>
+        </article>
+
+        <article class="dashboard-card dashboard-centres-card">
+            <header class="dashboard-card-header">
+                <h2><span class="dashboard-card-icon" aria-hidden="true">⌂</span> État des centres</h2>
+                <time id="dashboard-selected-date">—</time>
+            </header>
+            <div id="dashboard-centres" class="dashboard-centres-list" aria-live="polite"></div>
+            <a class="dashboard-card-footer-link" id="dashboard-centres-link" href="{% url 'planning' %}">Voir le planning détaillé <span>›</span></a>
+        </article>
+
+        <article class="dashboard-card dashboard-upcoming-card">
+            <header class="dashboard-card-header">
+                <h2><span class="dashboard-card-icon" aria-hidden="true">□</span> Prochains jours</h2>
+            </header>
+            <div id="dashboard-upcoming" class="dashboard-upcoming-list" aria-live="polite"></div>
+            <a class="dashboard-card-footer-link" href="{% url 'planning' %}">Voir tout le planning <span>›</span></a>
+        </article>
+
+        <article class="dashboard-card dashboard-alerts-card">
+            <header class="dashboard-card-header">
+                <h2><span class="dashboard-card-icon" aria-hidden="true">♢</span> Alerte(s) du jour</h2>
+            </header>
+            <div id="dashboard-alerts" class="dashboard-alert-list" aria-live="polite"></div>
+            <a class="dashboard-card-footer-link" href="{% url 'planning' %}">Corriger dans le planning <span>›</span></a>
+        </article>
+
+        <article class="dashboard-card dashboard-actions-card">
+            <header class="dashboard-card-header"><h2><span class="dashboard-card-icon" aria-hidden="true">ϟ</span> Actions rapides</h2></header>
+            <div class="dashboard-actions-grid">
+                <a id="action-effectifs" class="dashboard-action dashboard-action--blue" href="{% url 'planning' %}?mode=effectifs"><strong>＋</strong><span>Renseigner les effectifs</span></a>
+                <a id="action-affectations" class="dashboard-action dashboard-action--green" href="{% url 'planning' %}?mode=affectations"><strong>♟</strong><span>Gérer les affectations</span></a>
+                <a class="dashboard-action dashboard-action--purple" href="{% url 'employes' %}?nouveau=1"><strong>♙</strong><span>Ajouter un animateur</span></a>
+                <a class="dashboard-action dashboard-action--orange" href="{% url 'recapitulatif' %}"><strong>▥</strong><span>Voir le récapitulatif</span></a>
+                <a class="dashboard-action dashboard-action--pink" href="{% url 'administration' %}?onglet=emails"><strong>✉</strong><span>Envoyer un e-mail</span></a>
+                <a class="dashboard-action dashboard-action--slate" href="{% url 'administration' %}?onglet=export"><strong>⇩</strong><span>Exporter le planning</span></a>
+            </div>
+        </article>
+
+        <article class="dashboard-card dashboard-week-card">
+            <header class="dashboard-card-header">
+                <div><h2><span class="dashboard-card-icon" aria-hidden="true">▤</span> Vue de la semaine</h2><p id="dashboard-week-label">—</p></div>
+                <a id="dashboard-week-planning-link" href="{% url 'planning' %}">Ouvrir la semaine <span>›</span></a>
+            </header>
+            <div id="dashboard-week" class="dashboard-week-grid" aria-live="polite"></div>
+        </article>
+    </section>
+
+    <div id="dashboard-loading" class="dashboard-loading" role="status" aria-live="polite">Mise à jour du tableau de bord…</div>
+</main>
+{% else %}
 <main class="page-shell page-shell--wide home-page">
+    <header class="page-header home-page-header"><div><p class="eyebrow">Mon espace</p><h1>Bonjour {% firstof request.user.first_name request.user.username %}</h1><p class="page-intro">Consultez votre planning et les documents utiles pour la semaine.</p></div></header>
     <section class="ui-card ui-section home-section home-planning-section">
         {% include "partials/_week_navigation.html" with container_id="home-period-nav" previous_id="home-prev-week" today_id="home-current-week" next_id="home-next-week" label_id="home-visible-period" %}
         <div id="home-calendars" class="home-calendars calendar-sites"></div>
     </section>
     <section class="ui-card ui-section home-section">
-        <div class="ui-section-heading section-heading">
-            <h2>Documents disponibles</h2>
-            
-        </div>
+        <div class="ui-section-heading section-heading"><h2>Documents disponibles</h2></div>
         <div id="home-documents" class="home-documents"></div>
     </section>
 </main>
+{% endif %}
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/accueil.js' %}?v=20260718-audit-1"></script>{% endblock %}
+{% block scripts %}
+{% if utilisateur_est_direction %}
+<script src="{% static 'js/dashboard.js' %}?v=20260720-dashboard-1"></script>
+{% else %}
+<script src="{% static 'js/accueil.js' %}?v=20260718-audit-1"></script>
+{% endif %}
+{% endblock %}

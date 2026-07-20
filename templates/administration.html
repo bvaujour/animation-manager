@@ -9,6 +9,9 @@
 
 {% block content %}
 <main class="page-shell page-shell--wide administration-page" data-active-tab="{{ active_tab|default:'export' }}">
+    <header class="page-header administration-page-header">
+        <div><p class="eyebrow">Outils de direction</p><h1>Administration</h1><p class="page-intro">Exportez les plannings, communiquez avec l’équipe et gérez les accès administrateurs.</p></div>
+    </header>
     {% if message_admin %}<div class="admin-message success" role="status">{{ message_admin }}</div>{% endif %}
     {% if erreur_admin %}<div class="admin-message error" role="alert">{{ erreur_admin }}</div>{% endif %}
 

@@ -9,13 +9,14 @@
     <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20260718-week-period-1">
     {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="{% static 'css/components.css' %}?v=20260718-week-period-1">
+    <link rel="stylesheet" href="{% static 'css/app-theme.css' %}?v=20260720-collapsible-nav-planning-visible-3">
 </head>
 <body class="{% block body_class %}{% endblock %}">
     {% csrf_token %}
     {% include "partials/_nav.html" with active=active_page %}
     {% block content %}{% endblock %}
 
-    <script src="{% static 'js/ui.js' %}?v=20260719-effectifs-persistants-4"></script>
+    <script src="{% static 'js/ui.js' %}?v=20260720-collapsible-nav-1"></script>
     <script src="{% static 'js/common/documents.js' %}?v=20260718-week-period-1"></script>
     <script src="{% static 'js/common/colors.js' %}?v=20260718-week-period-1"></script>
     <script src="{% static 'js/common/forms.js' %}?v=20260718-week-period-1"></script>

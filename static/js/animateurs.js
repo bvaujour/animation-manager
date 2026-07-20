@@ -881,3 +881,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     init();
 });
+
+// Le bouton d'action principal de l'en-tête réutilise exactement le même
+// flux de création que le bouton de la liste afin de ne pas dupliquer la
+// logique de formulaire.
+document.addEventListener("DOMContentLoaded", () => {
+    const headerAdd = document.getElementById("employees-header-add");
+    const directoryAdd = document.getElementById("evenement-add");
+    if (headerAdd && directoryAdd) {
+        headerAdd.addEventListener("click", () => directoryAdd.click());
+    }
+});
