@@ -1,0 +1,6 @@
+<header class="page-header app-page-header app-page-header--week-only{% if header_class %} {{ header_class }}{% endif %}">
+    <h1 class="app-page-title">{{ title }}</h1>
+    <div class="app-page-week" aria-label="{{ week_aria_label|default:'Choix de la période' }}">
+        {% include "partials/_week_navigation.html" with container_id=container_id previous_id=previous_id today_id=today_id next_id=next_id label_id=label_id generic_navigation=generic_navigation %}
+    </div>
+</header>

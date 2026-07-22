@@ -9,6 +9,7 @@ from decimal import Decimal
 from django.utils import timezone
 
 from animateurs.models import Affectation
+from animateurs.services.flottants import est_groupe_flottants
 
 
 def _jours_entre(debut: datetime.date, fin_exclusive: datetime.date):
@@ -79,7 +80,7 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None):
                 "nom": centre.nom,
                 "code": centre.code,
                 "couleur": centre.couleur,
-                "groupe": affectation.evenement.nom,
+                "groupe": "Animateur flottant" if est_groupe_flottants(affectation.evenement) else affectation.evenement.nom,
             }
 
     centres_tries = sorted(

@@ -1,4 +1,5 @@
 """Gestion des groupes journaliers rattachés à un lieu."""
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max, Sum
@@ -9,9 +10,12 @@ from animateurs.models import (
     BesoinQualification,
     Centre,
     Evenement,
+    Groupe,
     PeriodeScolaire,
     Qualification,
 )
+
+from .flottants import groupes_visibles
 
 
 class FermetureAvecAffectationsError(ValidationError):
@@ -21,8 +25,7 @@ class FermetureAvecAffectationsError(ValidationError):
         self.affectations = list(affectations)
         self.dates = sorted(set(dates))
         super().__init__(
-            f"{len(self.affectations)} affectation(s) existent sur "
-            f"{len(self.dates)} date(s) désormais fermée(s)."
+            f"{len(self.affectations)} affectation(s) existent sur {len(self.dates)} date(s) désormais fermée(s)."
         )
 
 
@@ -68,6 +71,7 @@ def _enregistrer_besoins(groupe, besoins):
 
 def _jours_affectation(affectation):
     import datetime
+
     jour = timezone.localtime(affectation.debut).date()
     dernier = (affectation.fin - datetime.timedelta(microseconds=1)).date()
     while jour <= dernier:
@@ -80,10 +84,7 @@ def _affectations_sur_jours_fermes(groupe):
     dates_fermees = []
     dates_exclues = set(groupe.dates_exclues.values_list("date", flat=True))
     for affectation in groupe.affectations.all():
-        fermes = [
-            jour for jour in _jours_affectation(affectation)
-            if not groupe.est_ouvert_le(jour, dates_exclues)
-        ]
+        fermes = [jour for jour in _jours_affectation(affectation) if not groupe.est_ouvert_le(jour, dates_exclues)]
         if fermes:
             affectations_fermees.append(affectation)
             dates_fermees.extend(fermes)
@@ -91,22 +92,37 @@ def _affectations_sur_jours_fermes(groupe):
 
 
 def synchroniser_effectif_centre(centre):
-    total = centre.evenements.aggregate(total=Sum("effectif_cible"))["total"] or 0
+    total = groupes_visibles(centre.evenements.all()).aggregate(total=Sum("effectif_cible"))["total"] or 0
     Centre.objects.filter(pk=centre.pk).update(effectif_cible=max(1, total))
     centre.effectif_cible = max(1, total)
     return total
 
 
 def prochain_ordre(centre):
-    maximum = centre.evenements.aggregate(maximum=Max("ordre"))["maximum"]
+    maximum = groupes_visibles(centre.evenements.all()).aggregate(maximum=Max("ordre"))["maximum"]
     return (maximum if maximum is not None else -1) + 1
 
 
 @transaction.atomic
-def creer_evenement(*, centre, nom, periode_ids=None, effectif_cible=1,
-                    enfants_par_animateur_defaut=8,
-                    qualifications=None, jours_ouverts=None,
-                    ferme_jours_feries=True, permanent=False, **_):
+def creer_evenement(
+    *,
+    centre,
+    nom,
+    periode_ids=None,
+    effectif_cible=1,
+    enfants_par_animateur_defaut=8,
+    qualifications=None,
+    jours_ouverts=None,
+    ferme_jours_feries=True,
+    permanent=False,
+    groupe_partage=None,
+    **_,
+):
+    if groupe_partage is not None and not isinstance(groupe_partage, Groupe):
+        groupe_partage = Groupe.objects.get(pk=groupe_partage)
+    if groupe_partage is not None:
+        nom = groupe_partage.nom
+        enfants_par_animateur_defaut = groupe_partage.enfants_par_animateur_defaut
     nom = (nom or "").strip()
     if not nom:
         raise ValidationError("Le nom du groupe est obligatoire.")
@@ -124,6 +140,7 @@ def creer_evenement(*, centre, nom, periode_ids=None, effectif_cible=1,
 
     groupe = Evenement(
         centre=centre,
+        groupe=groupe_partage,
         nom=nom,
         permanent=permanent,
         effectif_cible=effectif_cible,
@@ -141,12 +158,22 @@ def creer_evenement(*, centre, nom, periode_ids=None, effectif_cible=1,
 
 
 @transaction.atomic
-def modifier_evenement(groupe, *, nom=None, periode_ids=None,
-                       periodes_fournies=False, effectif_cible=None,
-                       enfants_par_animateur_defaut=None,
-                       qualifications=None, qualifications_fournies=False,
-                       jours_ouverts=None, ferme_jours_feries=None, permanent=None,
-                       supprimer_affectations_dates_fermees=False, **_):
+def modifier_evenement(
+    groupe,
+    *,
+    nom=None,
+    periode_ids=None,
+    periodes_fournies=False,
+    effectif_cible=None,
+    enfants_par_animateur_defaut=None,
+    qualifications=None,
+    qualifications_fournies=False,
+    jours_ouverts=None,
+    ferme_jours_feries=None,
+    permanent=None,
+    supprimer_affectations_dates_fermees=False,
+    **_,
+):
     if nom is not None:
         groupe.nom = str(nom).strip()
     if effectif_cible is not None:
@@ -199,7 +226,7 @@ def reordonner_evenements(centre, evenement_ids):
     sous-ensemble des groupes du lieu. Les groupes absents sont conservés à la
     suite, dans leur ordre relatif actuel.
     """
-    groupes = list(centre.evenements.order_by("ordre", "nom", "id"))
+    groupes = list(groupes_visibles(centre.evenements.all()).order_by("ordre", "nom", "id"))
     existants = {groupe.id: groupe for groupe in groupes}
     try:
         ids = [int(identifiant) for identifiant in evenement_ids]

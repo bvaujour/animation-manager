@@ -1,0 +1,138 @@
+<section class="ui-card ui-section administration-section" id="emails" aria-labelledby="emails-title">
+    <div class="ui-section-heading administration-section-heading">
+        <div>
+            <p class="eyebrow">Communication</p>
+            <h2 id="emails-title">E-mails</h2>
+            
+        </div>
+    </div>
+    <div class="documents-page emails-page" id="emails-app">
+        <div class="tabs documents-tabs" role="tablist" aria-label="E-mails">
+            <button class="tab-btn active" type="button" data-tab="envoi" role="tab">Nouvel envoi</button>
+            <button class="tab-btn" type="button" data-tab="modeles" role="tab">Modèles</button>
+        </div>
+
+        <section class="tab-panel" data-panel="envoi">
+            <div id="email-configuration" class="email-configuration" role="status"></div>
+            <form id="form-envoi-email" class="ui-form email-form">
+                <div class="email-selection-column">
+                    <section class="email-selection-card">
+                        <div class="selection-header">
+                            <div><h3>Destinataires</h3><p id="destinataires-compteur">0 destinataire sélectionné</p></div>
+                            <div class="selection-actions">
+                                <button class="btn btn-ghost" id="destinataires-tous" type="button">Tout sélectionner</button>
+                                <button class="btn btn-ghost" id="destinataires-aucun" type="button">Effacer</button>
+                            </div>
+                        </div>
+                        {% include "partials/_staff_filter.html" with toolbar_class="email-recipient-tools" search_id="recherche-destinataire" search_placeholder="Nom, e-mail, lieu…" details_id="email-recipient-filter" count_id="email-filter-count" qualifications_id="filtre-destinataire-qualifications" availability_id="filtre-destinataire-disponibilite" assignment_id="filtre-destinataire-affectation" centres_id="filtre-destinataire-centres" reset_id="email-filter-reset" info_id="destinataires-filtres-info" show_status_filters=True %}
+                        <div class="email-recipient-group-title">Salariés</div>
+                        <div id="email-destinataires" class="email-checkbox-list"><p class="empty-note">Chargement des salariés…</p></div>
+                        <div class="email-recipient-group-heading">
+                            <div class="email-recipient-group-title">Contacts externes</div>
+                            <button class="btn btn-ghost btn-small" id="contact-email-nouveau" type="button">Ajouter</button>
+                        </div>
+                        <div id="email-contacts-externes" class="email-checkbox-list"><p class="empty-note">Chargement des contacts…</p></div>
+                        <div id="contact-email-form" class="email-contact-form" hidden>
+                            <input type="hidden" id="contact-email-id">
+                            <div class="field"><label for="contact-email-prenom">Prénom</label><input id="contact-email-prenom" maxlength="100"></div>
+                            <div class="field"><label for="contact-email-nom">Nom *</label><input id="contact-email-nom" maxlength="100"></div>
+                            <div class="field"><label for="contact-email-adresse">E-mail *</label><input type="email" id="contact-email-adresse"></div>
+                            <div class="field"><label for="contact-email-organisation">Organisation</label><input id="contact-email-organisation" maxlength="150"></div>
+                            <p class="form-error" id="contact-email-erreur"></p>
+                            <div class="selection-actions"><button class="btn btn-primary btn-small" id="contact-email-enregistrer" type="button">Enregistrer</button><button class="btn btn-ghost btn-small" id="contact-email-annuler" type="button">Annuler</button><button class="btn btn-danger btn-small" id="contact-email-supprimer" type="button" hidden>Supprimer</button></div>
+                        </div>
+                    </section>
+                    <section class="email-selection-card">
+                        <div class="selection-header">
+                            <div><h3>Pièces jointes <span class="label-hint">(facultatif)</span></h3><p id="documents-compteur">0 document sélectionné</p></div>
+                            <div class="selection-actions">
+                                <button class="btn btn-ghost" id="documents-tous" type="button">Tout sélectionner</button>
+                                <button class="btn btn-ghost" id="documents-aucun" type="button">Effacer</button>
+                            </div>
+                        </div>
+                        <div id="email-documents" class="email-checkbox-list"></div>
+                        
+                    </section>
+                </div>
+                <section class="email-compose-card">
+                    <h3>Message</h3>
+                    <div class="email-compose-settings">
+                        <div class="field email-weeks-field">
+                            <span class="field-label" id="email-semaines-title">Semaines concernées</span>
+                            {% include "partials/_week_picker.html" with picker_id="email-semaines-picker" toggle_id="email-semaines-toggle" label_id="email-semaines-label" menu_id="email-semaines-menu" tree_id="email-semaines-tree" clear_id="email-semaines-effacer" mode="multiple" placeholder="Choisir des semaines" title_id="email-semaines-title" %}
+                            
+                        </div>
+                        <div class="field">
+                            <label for="email-modele">Modèle d’e-mail</label>
+                            <select id="email-modele"><option value="">Message personnalisé</option></select>
+                            
+                        </div>
+                    </div>
+                    <div class="field"><label for="email-objet">Objet</label><input type="text" id="email-objet" maxlength="200" required></div>
+                    <div class="field">
+                        <label for="email-message">Message</label>
+                        <textarea id="email-message" rows="12" maxlength="10000" required></textarea>
+                        
+                    </div>
+                    <div class="email-variable-guide">
+                        <strong>Variables disponibles</strong>
+                        <div id="email-variables" class="email-variable-list"></div>
+                        
+                    </div>
+                    <p class="form-error" id="email-erreur"></p>
+                    <div id="email-resultat" class="email-resultat" hidden></div>
+                    <button class="btn btn-primary email-send-button" id="email-envoyer" type="submit">Envoyer les e-mails</button>
+                </section>
+            </form>
+        </section>
+
+        <section class="tab-panel" data-panel="modeles" hidden>
+            <div class="email-templates-layout">
+                <aside class="email-templates-list-card">
+                    <div class="selection-header">
+                        <div><h3>Mes modèles</h3><p id="modeles-compteur">0 modèle</p></div>
+                        <button class="btn btn-primary btn-small" id="modele-email-nouveau" type="button">Nouveau</button>
+                    </div>
+                    <div id="modeles-email-liste" class="email-templates-list"></div>
+                </aside>
+
+                <form id="modele-email-form" class="ui-form email-template-editor">
+                    <input type="hidden" id="modele-email-id">
+                    <div class="email-template-editor-heading">
+                        <div>
+                            <h3 id="modele-email-form-title">Nouveau modèle</h3>
+                            
+                        </div>
+                        <label class="email-template-active">
+                            <input type="checkbox" id="modele-email-actif" checked>
+                            <span>Actif</span>
+                        </label>
+                    </div>
+                    <div class="field">
+                        <label for="modele-email-nom">Nom du modèle</label>
+                        <input type="text" id="modele-email-nom" maxlength="120" placeholder="Ex. Rappel de réunion" required>
+                    </div>
+                    <div class="field">
+                        <label for="modele-email-objet">Objet</label>
+                        <input type="text" id="modele-email-objet" maxlength="200" placeholder="Ex. Informations importantes pour {{prenom}}" required>
+                    </div>
+                    <div class="field">
+                        <label for="modele-email-message">Message</label>
+                        <textarea id="modele-email-message" rows="10" maxlength="10000" placeholder="Rédige ici le contenu réutilisable…" required></textarea>
+                    </div>
+                    <div class="email-variable-guide">
+                        <strong>Variables disponibles</strong>
+                        <div id="modele-email-variables" class="email-variable-list"></div>
+                        
+                    </div>
+                    <p class="form-error" id="modele-email-erreur"></p>
+                    <div class="email-template-actions">
+                        <button class="btn btn-primary" type="submit" id="modele-email-enregistrer">Enregistrer</button>
+                        <button class="btn btn-ghost" type="button" id="modele-email-annuler">Réinitialiser</button>
+                        <button class="btn btn-danger" type="button" id="modele-email-supprimer" hidden>Supprimer</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+</section>

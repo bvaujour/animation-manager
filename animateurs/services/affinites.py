@@ -11,6 +11,7 @@ from django.utils import timezone
 from animateurs.models import Affectation, AffiniteGroupeAnimateur
 
 from .dates import parse_to_aware_datetime
+from .flottants import CLE_GROUPE_FLOTTANTS
 
 
 def _jours_termines(affectation, date_reference):
@@ -36,6 +37,8 @@ def recalculer_affinite_groupe(animateur_id, evenement_id, date_reference=None):
         animateur_id=animateur_id,
         evenement_id=evenement_id,
         debut__lt=limite,
+    ).exclude(
+        evenement__groupe__cle_unique=CLE_GROUPE_FLOTTANTS
     ).only("debut", "fin")
 
     jours = set()
@@ -70,7 +73,9 @@ def synchroniser_affinites_groupes(date_reference=None, animateur_ids=None):
 
     date_reference = date_reference or timezone.localdate()
     limite = parse_to_aware_datetime(date_reference.isoformat())
-    affectations = Affectation.objects.filter(debut__lt=limite).only(
+    affectations = Affectation.objects.filter(debut__lt=limite).exclude(
+        evenement__groupe__cle_unique=CLE_GROUPE_FLOTTANTS
+    ).only(
         "animateur_id",
         "evenement_id",
         "debut",

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Connexion{% endblock %}
+{% block body_class %}login-body{% endblock %}
+{% block content %}
+<main class="login-page">
+    <section class="login-card">
+        <div class="brand login-brand"><span class="brand-mark">AM</span><span>Animation Manager</span></div>
+        <p class="eyebrow">Bienvenue</p><h1>Connexion</h1><p class="login-intro">Accédez à votre espace de gestion ou à votre planning animateur.</p>
+        
+        {% if form.errors %}<p class="form-error">Identifiant ou mot de passe incorrect.</p>{% endif %}
+        <form method="post" class="login-form">{% csrf_token %}
+            <label for="id_username">Identifiant</label>{{ form.username }}
+            <label for="id_password">Mot de passe</label>{{ form.password }}
+            {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+            <button class="btn btn-primary" type="submit">Se connecter</button>
+        </form>
+    </section>
+</main>
+{% endblock %}

@@ -1,23 +1,12 @@
-"""Remplissage automatique déterministe du planning.
+"""Remplissage automatique du planning selon un ordre métier explicite.
 
-Contraintes strictes :
-- l'effectif quotidien vient de ``effectif_cible`` ;
-- un salarié doit être disponible et ne peut travailler que dans un groupe par jour ;
-- un lieu explicitement interdit n'est jamais proposé ;
-- les minima de qualifications configurés dans chaque groupe sont respectés ;
-- lorsqu'une qualification manque, le nombre minimal de postes nécessaires pour
-  la couvrir reste vacant au lieu d'être occupé par une personne non qualifiée.
+Pour chaque journée, le moteur affecte successivement :
+1. les personnes permettant de couvrir les statuts demandés ;
+2. les personnes possédant les diplômes précis demandés ;
+3. les postes restants selon l'affinité avec le groupe.
 
-Priorités de départage :
-- couvrir les qualifications les plus rares ;
-- couvrir le maximum de groupes avant de compléter les équipes ;
-- favoriser le lieu préféré ;
-- conserver la même équipe pendant la semaine ;
-- favoriser l'expérience passée dans le groupe puis dans le lieu.
-
-Une même personne peut couvrir plusieurs exigences d'un groupe lorsqu'elle
-possède plusieurs qualifications. Une exigence « 2 BAFA » demande toutefois
-bien deux personnes couvrant le BAFA.
+À chaque étape, les disponibilités, lieux interdits, préférences de lieu,
+continuité sur la semaine et limites d'effectif restent prises en compte.
 """
 
 from __future__ import annotations
@@ -38,6 +27,7 @@ from animateurs.models import (
 )
 
 from .affinites import synchroniser_affinites_groupes
+from .flottants import groupes_visibles
 from .dates import parse_to_aware_datetime
 from .qualifications import couvertures_qualifications
 
@@ -59,7 +49,7 @@ def _ajouter_arete(graphe, source, destination, capacite, cout):
 
 
 def _meilleure_affectation(animateurs, groupes, capacites, score):
-    """Maximise d'abord le nombre d'affectations, puis leur score."""
+    """Maximise le nombre de postes remplis, puis le score des candidats."""
 
     groupes = [groupe for groupe in groupes if capacites.get(groupe.id, 0) > 0]
     if not animateurs or not groupes:
@@ -70,379 +60,277 @@ def _meilleure_affectation(animateurs, groupes, capacites, score):
     premier_groupe = premier_animateur + len(animateurs)
     puits = premier_groupe + len(groupes)
     graphe = [[] for _ in range(puits + 1)]
-
-    index_animateur = {
-        animateur.id: premier_animateur + index
-        for index, animateur in enumerate(animateurs)
-    }
-    index_groupe = {
-        groupe.id: premier_groupe + index
-        for index, groupe in enumerate(groupes)
-    }
+    index_animateur = {a.id: premier_animateur + index for index, a in enumerate(animateurs)}
+    index_groupe = {g.id: premier_groupe + index for index, g in enumerate(groupes)}
     aretes_candidats = {}
 
     for animateur in animateurs:
         _ajouter_arete(graphe, source, index_animateur[animateur.id], 1, 0)
-
     for groupe in groupes:
-        _ajouter_arete(
-            graphe,
-            index_groupe[groupe.id],
-            puits,
-            int(capacites[groupe.id]),
-            0,
-        )
-
+        _ajouter_arete(graphe, index_groupe[groupe.id], puits, int(capacites[groupe.id]), 0)
     for animateur in animateurs:
         for groupe in groupes:
             valeur = score(animateur, groupe)
             if valeur is None:
                 continue
             aretes_candidats[(animateur.id, groupe.id)] = _ajouter_arete(
-                graphe,
-                index_animateur[animateur.id],
-                index_groupe[groupe.id],
-                1,
-                -int(valeur),
+                graphe, index_animateur[animateur.id], index_groupe[groupe.id], 1, -int(valeur)
             )
 
-    # SPFA : les graphes manipulés ici restent petits et les coûts de
-    # préférence peuvent être négatifs.
     while True:
-        infini = 10**30
-        distances = [infini] * len(graphe)
-        precedent_noeud = [-1] * len(graphe)
-        precedente_arete = [-1] * len(graphe)
+        distances = [None] * len(graphe)
+        precedent = [None] * len(graphe)
         dans_file = [False] * len(graphe)
         distances[source] = 0
         file = deque([source])
         dans_file[source] = True
-
         while file:
-            noeud = file.popleft()
-            dans_file[noeud] = False
-            for index, arete in enumerate(graphe[noeud]):
+            sommet = file.popleft()
+            dans_file[sommet] = False
+            for index, arete in enumerate(graphe[sommet]):
                 if arete.capacite <= 0:
                     continue
-                nouvelle_distance = distances[noeud] + arete.cout
-                if nouvelle_distance >= distances[arete.destination]:
-                    continue
-                distances[arete.destination] = nouvelle_distance
-                precedent_noeud[arete.destination] = noeud
-                precedente_arete[arete.destination] = index
-                if not dans_file[arete.destination]:
-                    file.append(arete.destination)
-                    dans_file[arete.destination] = True
-
-        if distances[puits] == infini:
+                nouvelle = distances[sommet] + arete.cout
+                if distances[arete.destination] is None or nouvelle < distances[arete.destination]:
+                    distances[arete.destination] = nouvelle
+                    precedent[arete.destination] = (sommet, index)
+                    if not dans_file[arete.destination]:
+                        file.append(arete.destination)
+                        dans_file[arete.destination] = True
+        if distances[puits] is None:
             break
-
-        noeud = puits
-        while noeud != source:
-            precedent = precedent_noeud[noeud]
-            index = precedente_arete[noeud]
-            arete = graphe[precedent][index]
+        sommet = puits
+        while sommet != source:
+            origine, index = precedent[sommet]
+            arete = graphe[origine][index]
             arete.capacite -= 1
-            graphe[noeud][arete.retour].capacite += 1
-            noeud = precedent
+            graphe[sommet][arete.retour].capacite += 1
+            sommet = origine
 
-    groupes_par_id = {groupe.id: groupe for groupe in groupes}
-    animateurs_par_id = {animateur.id: animateur for animateur in animateurs}
+    par_animateur = {a.id: a for a in animateurs}
+    par_groupe = {g.id: g for g in groupes}
     return [
-        (animateurs_par_id[animateur_id], groupes_par_id[groupe_id])
+        (par_animateur[animateur_id], par_groupe[groupe_id])
         for (animateur_id, groupe_id), arete in aretes_candidats.items()
         if arete.capacite == 0
     ]
 
 
 def generer_planning_auto(payload):
-    """Remplit tous les groupes ouverts du lundi au vendredi."""
-
     debut_date = parse_date((payload or {}).get("debut", ""))
     if not debut_date:
         return {"error": "Date de début invalide."}, 400
 
     lundi = debut_date - datetime.timedelta(days=debut_date.weekday())
     jours = [lundi + datetime.timedelta(days=index) for index in range(5)]
-    samedi = lundi + datetime.timedelta(days=5)
     debut_dt = parse_to_aware_datetime(lundi.isoformat())
-    fin_dt = parse_to_aware_datetime(samedi.isoformat())
+    fin_dt = parse_to_aware_datetime((lundi + datetime.timedelta(days=5)).isoformat())
 
-    groupes_configures = list(
-        Evenement.objects.select_related("centre")
-        .prefetch_related(
-            "dates_exclues",
-            "periodes_scolaires",
-            "besoins_qualifications__qualification",
-        )
+    groupes = list(
+        groupes_visibles(Evenement.objects.all()).select_related("centre")
+        .prefetch_related("dates_exclues", "periodes_scolaires", "besoins_qualifications__qualification")
         .order_by("centre__ordre", "centre__nom", "ordre", "nom", "id")
     )
     animateurs = list(
-        Animateur.objects.prefetch_related(
-            "disponibilites",
-            "preferences",
-            "qualifications",
-        ).order_by("prenom", "nom", "id")
+        Animateur.objects.prefetch_related("disponibilites", "preferences", "qualifications")
+        .order_by("prenom", "nom", "id")
     )
-
-    if not groupes_configures:
+    if not groupes:
         return {"error": "Aucun groupe n'est configuré."}, 400
     if not animateurs:
         return {"error": "Aucun animateur n'est configuré."}, 400
 
-    dates_exclues = {
-        groupe.id: {fermeture.date for fermeture in groupe.dates_exclues.all()}
-        for groupe in groupes_configures
-    }
+    fermetures = {g.id: {item.date for item in g.dates_exclues.all()} for g in groupes}
     groupes_par_jour = {
-        jour: [
-            groupe
-            for groupe in groupes_configures
-            if groupe.effectif_cible > 0
-            and groupe.est_ouvert_le(jour, dates_exclues[groupe.id])
-        ]
+        jour: [g for g in groupes if g.effectif_cible > 0 and g.est_ouvert_le(jour, fermetures[g.id])]
         for jour in jours
     }
     if not any(groupes_par_jour.values()):
-        return {
-            "error": "Aucune place à remplir : vérifie les effectifs et les jours d'ouverture des groupes."
-        }, 400
+        return {"error": "Aucune place à remplir : vérifie les effectifs et les jours d'ouverture des groupes."}, 400
 
-    besoins_qualifications = {
-        groupe.id: {
-            besoin.qualification_id: int(besoin.nombre_minimum)
-            for besoin in groupe.besoins_qualifications.all()
-            if besoin.nombre_minimum > 0
-        }
-        for groupe in groupes_configures
-    }
-    noms_qualifications = dict(Qualification.objects.values_list("id", "nom"))
+    statuts_ids = set(Qualification.objects.filter(est_statut=True).values_list("id", flat=True))
+    noms = dict(Qualification.objects.values_list("id", "nom"))
+    besoins_statuts = {}
+    besoins_diplomes = {}
+    for groupe in groupes:
+        tous = {b.qualification_id: int(b.nombre_minimum) for b in groupe.besoins_qualifications.all() if b.nombre_minimum > 0}
+        besoins_statuts[groupe.id] = {identifiant: minimum for identifiant, minimum in tous.items() if identifiant in statuts_ids}
+        besoins_diplomes[groupe.id] = {identifiant: minimum for identifiant, minimum in tous.items() if identifiant not in statuts_ids}
+
     couvertures = couvertures_qualifications()
-    qualifications_animateurs = {}
+    qualifications_effectives = {}
+    diplomes_possedes = {}
     for animateur in animateurs:
-        effectives = set()
-        for qualification in animateur.qualifications.all():
-            effectives.update(couvertures.get(qualification.id, {qualification.id}))
-        qualifications_animateurs[animateur.id] = effectives
-
-    disponibilites = {
-        animateur.id: list(animateur.disponibilites.all())
-        for animateur in animateurs
-    }
-    centres_interdits = {
-        animateur.id: {
-            preference.centre_id
-            for preference in animateur.preferences.all()
-            if preference.est_interdit
+        diplomes = {q.id for q in animateur.qualifications.all() if not q.est_statut}
+        diplomes_possedes[animateur.id] = diplomes
+        qualifications_effectives[animateur.id] = {
+            identifiant
+            for diplome_id in diplomes
+            for identifiant in couvertures.get(diplome_id, {diplome_id})
         }
-        for animateur in animateurs
+
+    disponibilites = {a.id: list(a.disponibilites.all()) for a in animateurs}
+    centres_interdits = {
+        a.id: {p.centre_id for p in a.preferences.all() if p.est_interdit}
+        for a in animateurs
     }
     centres_preferes = {
-        animateur.id: {
-            preference.centre_id
-            for preference in animateur.preferences.all()
-            if preference.est_prefere and not preference.est_interdit
-        }
-        for animateur in animateurs
+        a.id: {p.centre_id for p in a.preferences.all() if p.est_prefere and not p.est_interdit}
+        for a in animateurs
     }
 
-    # La table d'affinité est la source persistante du nombre de jours
-    # réellement travaillés dans chaque groupe. Elle est resynchronisée avant
-    # chaque calcul afin que le passage d'une journée au statut « terminée »
-    # soit pris en compte même sans modification manuelle du planning.
     synchroniser_affinites_groupes()
-    affinites_groupes = {}
+    affinites = {}
     historique_centres = defaultdict(int)
-    for animateur_id, groupe_id, centre_id, jours_travailles in (
-        AffiniteGroupeAnimateur.objects.values_list(
-            "animateur_id",
-            "evenement_id",
-            "evenement__centre_id",
-            "jours_travailles",
-        )
+    for animateur_id, groupe_id, centre_id, jours_travailles in AffiniteGroupeAnimateur.objects.values_list(
+        "animateur_id", "evenement_id", "evenement__centre_id", "jours_travailles"
     ):
-        affinites_groupes[(animateur_id, groupe_id)] = int(jours_travailles)
+        affinites[(animateur_id, groupe_id)] = int(jours_travailles)
         historique_centres[(animateur_id, centre_id)] += int(jours_travailles)
 
+    rang_animateur = {a.id: index for index, a in enumerate(animateurs)}
+    rang_groupe = {g.id: index for index, g in enumerate(groupes)}
     semaine_groupes = defaultdict(int)
     semaine_centres = defaultdict(int)
     groupes_veille = defaultdict(set)
-    rang_animateur = {animateur.id: index for index, animateur in enumerate(animateurs)}
-    rang_groupe = {groupe.id: index for index, groupe in enumerate(groupes_configures)}
-
-    def disponible(animateur, jour):
-        plages = disponibilites[animateur.id]
-        return bool(plages) and any(plage.debut <= jour <= plage.fin for plage in plages)
-
-    def autorise(animateur, groupe):
-        return groupe.centre_id not in centres_interdits.get(animateur.id, set())
-
-    def score_candidat(animateur, groupe):
-        if not autorise(animateur, groupe):
-            return None
-
-        score = 0
-        if groupe.centre_id in centres_preferes.get(animateur.id, set()):
-            score += 10_000_000
-        if groupe.id in groupes_veille.get(animateur.id, set()):
-            score += 3_000_000
-        score += min(semaine_groupes[(animateur.id, groupe.id)], 4) * 500_000
-        score += min(affinites_groupes.get((animateur.id, groupe.id), 0), 9_999) * 10_000
-        score += min(semaine_centres[(animateur.id, groupe.centre_id)], 4) * 100
-        score += min(historique_centres.get((animateur.id, groupe.centre_id), 0), 99)
-        score += len(animateurs) - rang_animateur[animateur.id]
-        return score
-
-    def manques_qualifications(groupe, selection):
-        manques = {}
-        for qualification_id, minimum in besoins_qualifications[groupe.id].items():
-            couverts = sum(
-                1
-                for animateur in selection
-                if qualification_id in qualifications_animateurs[animateur.id]
-            )
-            if couverts < minimum:
-                manques[qualification_id] = minimum - couverts
-        return manques
-
     planning = []
     qualifications_manquantes_total = 0
     details_qualifications = []
 
+    def disponible(animateur, jour):
+        return any(plage.debut <= jour <= plage.fin for plage in disponibilites[animateur.id])
+
+    def score_affinite_preferences(animateur, groupe):
+        if groupe.centre_id in centres_interdits[animateur.id]:
+            return None
+        # L'affinité est le premier critère après statuts et diplômes.
+        score = min(affinites.get((animateur.id, groupe.id), 0), 9_999) * 1_000_000_000
+        if groupe.centre_id in centres_preferes[animateur.id]:
+            score += 10_000_000
+        if groupe.id in groupes_veille[animateur.id]:
+            score += 1_000_000
+        score += min(semaine_groupes[(animateur.id, groupe.id)], 4) * 100_000
+        score += min(historique_centres[(animateur.id, groupe.centre_id)], 999) * 1_000
+        score += min(semaine_centres[(animateur.id, groupe.centre_id)], 4) * 100
+        score += len(animateurs) - rang_animateur[animateur.id]
+        return score
+
+    def manques(selection, besoins, groupe_id):
+        resultat = {}
+        for qualification_id, minimum in besoins[groupe_id].items():
+            couverts = sum(qualification_id in qualifications_effectives[a.id] for a in selection)
+            if couverts < minimum:
+                resultat[qualification_id] = minimum - couverts
+        return resultat
+
     for jour in jours:
         groupes_jour = groupes_par_jour[jour]
-        disponibles_jour = [animateur for animateur in animateurs if disponible(animateur, jour)]
+        disponibles_jour = [a for a in animateurs if disponible(a, jour)]
         utilises = set()
-        selection_par_groupe = {groupe.id: [] for groupe in groupes_jour}
+        selections = {g.id: [] for g in groupes_jour}
 
-        def ajouter(
-            animateur,
-            groupe,
-            utilises_jour=utilises,
-            selections_jour=selection_par_groupe,
+        def ajouter(animateur, groupe, *, utilises=utilises, selections=selections):
+            utilises.add(animateur.id)
+            selections[groupe.id].append(animateur)
+
+        def affecter_besoins(
+            besoins,
+            est_phase_statut,
+            *,
+            groupes_jour=groupes_jour,
+            selections=selections,
+            disponibles_jour=disponibles_jour,
+            utilises=utilises,
         ):
-            utilises_jour.add(animateur.id)
-            selections_jour[groupe.id].append(animateur)
-
-        # Passage 1 : affecter les personnes qualifiées avant tout poste
-        # générique. Les besoins les plus rares obtiennent le poids le plus
-        # fort ; un groupe encore vide est également prioritaire.
-        while True:
-            meilleur = None
-            for groupe in groupes_jour:
-                selection = selection_par_groupe[groupe.id]
-                if len(selection) >= groupe.effectif_cible:
-                    continue
-                manques = manques_qualifications(groupe, selection)
-                if not manques:
-                    continue
-
-                candidats = [
-                    animateur
-                    for animateur in disponibles_jour
-                    if animateur.id not in utilises and autorise(animateur, groupe)
-                ]
-                for animateur in candidats:
-                    couvertes = {
-                        qualification_id
-                        for qualification_id in manques
-                        if qualification_id in qualifications_animateurs[animateur.id]
-                    }
-                    if not couvertes:
+            while True:
+                meilleur = None
+                for groupe in groupes_jour:
+                    selection = selections[groupe.id]
+                    if len(selection) >= groupe.effectif_cible:
                         continue
-
-                    rarete = 0
-                    for qualification_id in couvertes:
-                        nombre_candidats = sum(
-                            1
-                            for candidat in candidats
-                            if qualification_id in qualifications_animateurs[candidat.id]
+                    attendus = manques(selection, besoins, groupe.id)
+                    if not attendus:
+                        continue
+                    for animateur in disponibles_jour:
+                        if animateur.id in utilises:
+                            continue
+                        score = score_affinite_preferences(animateur, groupe)
+                        if score is None:
+                            continue
+                        couverts = {qid for qid in attendus if qid in qualifications_effectives[animateur.id]}
+                        if not couverts:
+                            continue
+                        # Pour couvrir un statut, on préserve si possible les
+                        # diplômes rares qui seront demandés à l'étape suivante.
+                        diplomes_reserves = 0
+                        if est_phase_statut:
+                            diplomes_reserves = sum(
+                                minimum
+                                for autre in groupes_jour
+                                for qid, minimum in manques(selections[autre.id], besoins_diplomes, autre.id).items()
+                                if qid in diplomes_possedes[animateur.id]
+                            )
+                        valeur = (
+                            len(couverts),
+                            -diplomes_reserves,
+                            score,
+                            -rang_groupe[groupe.id],
+                            -rang_animateur[animateur.id],
                         )
-                        rarete += 1_000_000 // max(1, nombre_candidats)
+                        if meilleur is None or valeur > meilleur[0]:
+                            meilleur = (valeur, animateur, groupe)
+                if meilleur is None:
+                    return
+                _, animateur, groupe = meilleur
+                ajouter(animateur, groupe)
 
-                    valeur = (
-                        1 if not selection else 0,
-                        rarete,
-                        len(couvertes),
-                        score_candidat(animateur, groupe),
-                        -rang_groupe[groupe.id],
-                        -rang_animateur[animateur.id],
-                    )
-                    if meilleur is None or valeur > meilleur[0]:
-                        meilleur = (valeur, animateur, groupe)
+        # Ordre demandé : statuts, diplômes précis, puis affinité.
+        affecter_besoins(besoins_statuts, True)
+        affecter_besoins(besoins_diplomes, False)
 
-            if meilleur is None:
-                break
-            _, animateur, groupe = meilleur
+        def capacite_generique(groupe, *, selections=selections):
+            restantes = max(0, groupe.effectif_cible - len(selections[groupe.id]))
+            manques_restants = {
+                **manques(selections[groupe.id], besoins_statuts, groupe.id),
+                **manques(selections[groupe.id], besoins_diplomes, groupe.id),
+            }
+            return max(0, restantes - max(manques_restants.values(), default=0))
+
+        restants = [a for a in disponibles_jour if a.id not in utilises]
+        groupes_vides = [g for g in groupes_jour if not selections[g.id] and capacite_generique(g) > 0]
+        for animateur, groupe in _meilleure_affectation(
+            restants, groupes_vides, {g.id: 1 for g in groupes_vides}, score_affinite_preferences
+        ):
             ajouter(animateur, groupe)
 
-        def capacite_generique(groupe, selections_jour=selection_par_groupe):
-            selection = selections_jour[groupe.id]
-            places_restantes = max(0, groupe.effectif_cible - len(selection))
-            manques = manques_qualifications(groupe, selection)
-            # Une personne multiqualifiée peut couvrir plusieurs exigences à
-            # la fois. Le nombre minimal de places à réserver est donc le plus
-            # grand minimum encore manquant, et non la somme des manques.
-            places_reservees = max(manques.values(), default=0)
-            return max(0, places_restantes - places_reservees)
-
-        # Passage 2 : donner une présence aux groupes encore vides lorsque des
-        # postes non qualifiés sont réellement disponibles.
-        restants = [animateur for animateur in disponibles_jour if animateur.id not in utilises]
-        groupes_a_couvrir = [
-            groupe
-            for groupe in groupes_jour
-            if not selection_par_groupe[groupe.id] and capacite_generique(groupe) > 0
-        ]
-        couverture = _meilleure_affectation(
-            restants,
-            groupes_a_couvrir,
-            {groupe.id: 1 for groupe in groupes_a_couvrir},
-            score_candidat,
-        )
-        for animateur, groupe in couverture:
+        restants = [a for a in disponibles_jour if a.id not in utilises]
+        for animateur, groupe in _meilleure_affectation(
+            restants, groupes_jour, {g.id: capacite_generique(g) for g in groupes_jour}, score_affinite_preferences
+        ):
             ajouter(animateur, groupe)
 
-        # Passage 3 : compléter les autres postes, sans consommer les places
-        # réservées aux qualifications encore manquantes.
-        restants = [animateur for animateur in disponibles_jour if animateur.id not in utilises]
-        capacites = {groupe.id: capacite_generique(groupe) for groupe in groupes_jour}
-        complements = _meilleure_affectation(
-            restants,
-            groupes_jour,
-            capacites,
-            score_candidat,
-        )
-        for animateur, groupe in complements:
-            ajouter(animateur, groupe)
-
-        groupes_du_jour_par_animateur = defaultdict(set)
+        groupes_du_jour = defaultdict(set)
         for groupe in groupes_jour:
-            selection = selection_par_groupe[groupe.id]
+            selection = selections[groupe.id]
             for animateur in selection:
                 planning.append((jour, animateur, groupe))
                 semaine_groupes[(animateur.id, groupe.id)] += 1
                 semaine_centres[(animateur.id, groupe.centre_id)] += 1
-                groupes_du_jour_par_animateur[animateur.id].add(groupe.id)
-
-            manques = manques_qualifications(groupe, selection)
-            if manques:
-                qualifications_manquantes_total += sum(manques.values())
-                libelles = ", ".join(
-                    f"{nombre} × {noms_qualifications.get(qualification_id, 'qualification')}"
-                    for qualification_id, nombre in manques.items()
-                )
+                groupes_du_jour[animateur.id].add(groupe.id)
+            tous_manques = {
+                **manques(selection, besoins_statuts, groupe.id),
+                **manques(selection, besoins_diplomes, groupe.id),
+            }
+            if tous_manques:
+                qualifications_manquantes_total += sum(tous_manques.values())
+                libelles = ", ".join(f"{nombre} × {noms.get(qid, 'besoin')}" for qid, nombre in tous_manques.items())
                 details_qualifications.append(
                     f"{jour.strftime('%d/%m')} - {groupe.centre.code} / {groupe.nom} : {libelles} manquant(s)"
                 )
-
-        groupes_veille = groupes_du_jour_par_animateur
+        groupes_veille = groupes_du_jour
 
     with transaction.atomic():
-        supprimees, _ = Affectation.objects.filter(
-            debut__lt=fin_dt,
-            fin__gt=debut_dt,
-        ).delete()
+        supprimees, _ = Affectation.objects.filter(debut__lt=fin_dt, fin__gt=debut_dt).delete()
         a_creer = [
             Affectation(
                 animateur=animateur,
@@ -454,60 +342,37 @@ def generer_planning_auto(payload):
             for jour, animateur, groupe in planning
         ]
         Affectation.objects.bulk_create(a_creer)
-
-    # ``bulk_create`` ne déclenche pas les signaux Django. Une synchronisation
-    # explicite garantit donc que la génération d'une semaine déjà passée met
-    # elle aussi immédiatement à jour les scores d'affinité.
     synchroniser_affinites_groupes()
 
-    total_places = sum(
-        groupe.effectif_cible
-        for groupes_jour in groupes_par_jour.values()
-        for groupe in groupes_jour
-    )
-    remplis_par_cle = defaultdict(int)
+    total_places = sum(g.effectif_cible for groupes_jour in groupes_par_jour.values() for g in groupes_jour)
+    remplis = defaultdict(int)
     for jour, _, groupe in planning:
-        remplis_par_cle[(jour, groupe.id)] += 1
-
+        remplis[(jour, groupe.id)] += 1
     details_non_remplis = []
-    groupes_complets = 0
-    groupes_partiels = 0
-    groupes_vides = 0
+    groupes_complets = groupes_partiels = groupes_vides = 0
     for jour in jours:
         for groupe in groupes_par_jour[jour]:
-            remplis = remplis_par_cle[(jour, groupe.id)]
-            manque = groupe.effectif_cible - remplis
+            nombre = remplis[(jour, groupe.id)]
+            manque = groupe.effectif_cible - nombre
             if manque <= 0:
                 groupes_complets += 1
-                continue
-            if remplis:
+            elif nombre:
                 groupes_partiels += 1
+                details_non_remplis.append(f"{jour.strftime('%d/%m')} - {groupe.centre.code} / {groupe.nom} : {manque} place(s) vide(s)")
             else:
                 groupes_vides += 1
-            details_non_remplis.append(
-                f"{jour.strftime('%d/%m')} - {groupe.centre.code} / {groupe.nom} : "
-                f"{manque} place(s) vide(s)"
-            )
+                details_non_remplis.append(f"{jour.strftime('%d/%m')} - {groupe.centre.code} / {groupe.nom} : {manque} place(s) vide(s)")
 
     creees = len(a_creer)
     non_remplies = total_places - creees
-    animateurs_utilises = len({affectation.animateur_id for affectation in a_creer})
     message = (
-        f"{creees}/{total_places} place(s) remplie(s), "
-        f"{groupes_complets} groupe(s)-jour complet(s), "
-        f"{groupes_partiels} partiel(s) et {groupes_vides} vide(s). "
-        f"{supprimees} ancienne(s) affectation(s) remplacée(s)."
+        f"{creees}/{total_places} place(s) remplie(s), {groupes_complets} groupe(s)-jour complet(s), "
+        f"{groupes_partiels} partiel(s) et {groupes_vides} vide(s). {supprimees} ancienne(s) affectation(s) remplacée(s)."
     )
     if qualifications_manquantes_total:
-        message += (
-            f" {qualifications_manquantes_total} exigence(s) de qualification "
-            "reste(nt) non couverte(s)."
-        )
+        message += f" {qualifications_manquantes_total} besoin(s) de statut ou diplôme reste(nt) non couvert(s)."
     if non_remplies:
-        message += (
-            " Les places restantes correspondent à un manque de salariés disponibles, "
-            "autorisés ou suffisamment qualifiés."
-        )
+        message += " Les places restantes manquent de salariés disponibles, autorisés ou adaptés aux besoins."
 
     return {
         "ok": True,
@@ -515,7 +380,7 @@ def generer_planning_auto(payload):
         "deleted": supprimees,
         "total_places": total_places,
         "unfilled": non_remplies,
-        "animateurs_utilises": animateurs_utilises,
+        "animateurs_utilises": len({a.animateur_id for a in a_creer}),
         "groupes_complets": groupes_complets,
         "groupes_partiels": groupes_partiels,
         "groupes_vides": groupes_vides,

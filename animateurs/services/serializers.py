@@ -1,34 +1,72 @@
 """Sérialisation JSON centralisée des modèles de l'application."""
 
-from animateurs.models import EquivalenceQualification, jours_feries_france
+from django.utils import timezone
+
+from animateurs.models import jours_feries_france
+from animateurs.services.flottants import est_groupe_flottants, type_affectation
+from animateurs.services.status_colors import (
+    couleur_pour_statut,
+    couleur_texte_pour_fond,
+    statut_payload,
+)
 
 
 def affectation_to_event(affectation):
+    qualifications = list(affectation.animateur.qualifications.all())
+    statut = statut_payload(qualifications)
+    horaires = {
+        horaire.date.isoformat(): {
+            "heure_arrivee": horaire.heure_arrivee.strftime("%H:%M"),
+            "heure_depart": horaire.heure_depart.strftime("%H:%M"),
+        }
+        for horaire in affectation.horaires_journaliers.all()
+    }
+    titre = f"{affectation.animateur.prenom} {affectation.animateur.nom[0]}."
+    flottant = est_groupe_flottants(affectation.evenement)
+    type_affectation_valeur = type_affectation(affectation)
+    if flottant:
+        titre = f"↔ {titre}"
+    if len(horaires) == 1:
+        plage = next(iter(horaires.values()))
+        titre += f" · {plage['heure_arrivee']}–{plage['heure_depart']}"
+    debut_local = timezone.localtime(affectation.debut).date()
+    fin_locale = timezone.localtime(affectation.fin).date()
     return {
         "id": affectation.id,
-        "title": f"{affectation.animateur.prenom} {affectation.animateur.nom[0]}.",
-        "start": affectation.debut.isoformat(),
-        "end": affectation.fin.isoformat(),
+        "title": titre,
+        # Une affectation FullCalendar est une plage de journées entières :
+        # envoyer des dates locales évite tout décalage UTC au changement de fuseau.
+        "start": debut_local.isoformat(),
+        "end": fin_locale.isoformat(),
         "allDay": True,
-        "backgroundColor": affectation.animateur.couleur,
-        "borderColor": affectation.animateur.couleur,
-        "textColor": "#ffffff",
+        "backgroundColor": statut["couleur_fond_statut"],
+        "borderColor": statut["couleur_statut"],
+        "textColor": statut["couleur_texte_statut"],
         "extendedProps": {
             "animateur_id": affectation.animateur_id,
+            "animateur_nom": f"{affectation.animateur.prenom} {affectation.animateur.nom}",
             "centre_id": affectation.centre_id,
             # Noms modernes et alias historiques pour ne pas casser un ancien cache JS.
             "groupe_id": affectation.evenement_id,
             "groupe_nom": affectation.evenement.nom,
             "evenement_id": affectation.evenement_id,
             "evenement_nom": affectation.evenement.nom,
+            "horaires": horaires,
+            "type_affectation": type_affectation_valeur,
         },
     }
 
 
 def animateur_to_dict(animateur):
     qualifications = list(animateur.qualifications.all())
+    statut = statut_payload(qualifications)
     preferences = list(animateur.preferences.all())
-    disponibilites = list(animateur.disponibilites.all())
+    disponibilites_source = (
+        animateur._filtre_disponibilites
+        if hasattr(animateur, "_filtre_disponibilites")
+        else animateur.disponibilites.all()
+    )
+    disponibilites = list(disponibilites_source)
     affectations = list(getattr(animateur, "_filtre_affectations", []))
     affinites = list(animateur.affinites_groupes.all())
 
@@ -41,14 +79,10 @@ def animateur_to_dict(animateur):
             "centre_nom": affinite.evenement.centre.nom,
             "jours_travailles": affinite.jours_travailles,
             "score_affinite": affinite.score,
-            "dernier_jour": (
-                affinite.dernier_jour_travaille.isoformat()
-                if affinite.dernier_jour_travaille
-                else None
-            ),
+            "dernier_jour": (affinite.dernier_jour_travaille.isoformat() if affinite.dernier_jour_travaille else None),
         }
         for affinite in affinites
-        if affinite.jours_travailles > 0
+        if affinite.jours_travailles > 0 and not est_groupe_flottants(affinite.evenement)
     ]
     affinites_groupes.sort(
         key=lambda entree: (
@@ -99,9 +133,19 @@ def animateur_to_dict(animateur):
         "numero_securite_sociale": animateur.numero_securite_sociale,
         "paie_jour": str(animateur.paie_jour) if animateur.paie_jour is not None else None,
         "age": animateur.age,
-        "couleur": animateur.couleur,
-        "qualification_ids": [q.id for q in qualifications],
+        # Couleur historique conservée en base, mais les interfaces utilisent
+        # désormais exclusivement la couleur automatique du statut.
+        "couleur": statut["couleur_statut"],
+        **statut,
+        # Les catégories sont ajoutées aux identifiants effectifs pour que les
+        # filtres puissent trouver tous les diplômes d'une même famille.
+        "qualification_ids": sorted({identifiant for q in qualifications for identifiant in (q.id, q.statut_id) if identifiant}),
         "qualifications": [q.nom for q in qualifications],
+        "qualification_icones": [
+            {"id": q.id, "nom": q.nom, "icone": q.icone}
+            for q in qualifications
+            if not q.est_statut and q.icone
+        ],
         "centre_prefere": centre_prefere,
         "centres_secondaires": centres_secondaires,
         "centres_preferes": centres_preferes,
@@ -112,11 +156,14 @@ def animateur_to_dict(animateur):
         "evenement_preferee": evenement_preferee,
         "evenement_preferee_id": evenement_preferee["id"] if evenement_preferee else None,
         "disponibilites": [
-            {"debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()}
-            for dispo in disponibilites
+            {"debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()} for dispo in disponibilites
         ],
         "affectations": [
-            {"debut": affectation.debut.isoformat(), "fin": affectation.fin.isoformat(), "centre_id": affectation.centre_id}
+            {
+                "debut": affectation.debut.isoformat(),
+                "fin": affectation.fin.isoformat(),
+                "centre_id": affectation.centre_id,
+            }
             for affectation in affectations
         ],
         "affinites_groupes": affinites_groupes,
@@ -132,6 +179,77 @@ def animateur_to_dict(animateur):
     }
 
 
+def animateur_planning_to_dict(animateur):
+    """Version compacte de l'animateur pour la barre latérale du Planning.
+
+    La fiche complète contient des données administratives et l'historique des
+    affinités, inutiles pour afficher les badges. Cette sérialisation réduit donc
+    le volume JSON et permet de ne charger que les disponibilités/affectations de
+    la semaine demandée.
+    """
+
+    qualifications = list(animateur.qualifications.all())
+    statut = statut_payload(qualifications)
+    preferences = list(animateur.preferences.all())
+    disponibilites_source = (
+        animateur._filtre_disponibilites
+        if hasattr(animateur, "_filtre_disponibilites")
+        else animateur.disponibilites.all()
+    )
+    disponibilites = list(disponibilites_source)
+    affectations = list(getattr(animateur, "_filtre_affectations", []))
+
+    prefere_relations = [pref for pref in preferences if pref.est_prefere and not pref.est_interdit]
+    interdites_relations = [pref for pref in preferences if pref.est_interdit]
+
+    def centre_dict(pref):
+        return {
+            "id": pref.centre_id,
+            "nom": pref.centre.nom,
+            "code": pref.centre.code,
+            "couleur": pref.centre.couleur,
+        }
+
+    centres_preferes = [centre_dict(pref) for pref in prefere_relations]
+    centres_interdits = [centre_dict(pref) for pref in interdites_relations]
+    centre_prefere = centres_preferes[0] if centres_preferes else None
+
+    return {
+        "id": animateur.id,
+        "prenom": animateur.prenom,
+        "nom": animateur.nom,
+        "telephone": animateur.telephone,
+        "email": animateur.email,
+        "couleur": statut["couleur_statut"],
+        **statut,
+        "qualification_ids": sorted(
+            {identifiant for q in qualifications for identifiant in (q.id, q.statut_id) if identifiant}
+        ),
+        "qualifications": [q.nom for q in qualifications],
+        "qualification_icones": [
+            {"id": q.id, "nom": q.nom, "icone": q.icone}
+            for q in qualifications
+            if not q.est_statut and q.icone
+        ],
+        "centre_prefere": centre_prefere,
+        "centres_preferes": centres_preferes,
+        "centres_interdits": centres_interdits,
+        "centres_autorises": centres_preferes,
+        "disponibilites": [
+            {"debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()} for dispo in disponibilites
+        ],
+        "affectations": [
+            {
+                "debut": timezone.localtime(affectation.debut).date().isoformat(),
+                "fin": timezone.localtime(affectation.fin).date().isoformat(),
+                "centre_id": affectation.centre_id,
+            }
+            for affectation in affectations
+        ],
+        "situation_semaine": getattr(animateur, "_situation_semaine", None),
+    }
+
+
 def centre_to_dict(centre):
     return {
         "id": centre.id,
@@ -143,14 +261,23 @@ def centre_to_dict(centre):
     }
 
 
-
-def evenement_to_dict(evenement):
-    besoins = list(evenement.besoins_qualifications.select_related("qualification").all())
-    nb_affectations = getattr(evenement, "nb_affectations", evenement.affectations.count())
+def evenement_to_dict(evenement, *, include_effectifs=True):
+    besoins_prefetches = getattr(evenement, "_prefetched_objects_cache", {}).get("besoins_qualifications")
+    besoins = (
+        list(besoins_prefetches)
+        if besoins_prefetches is not None
+        else list(evenement.besoins_qualifications.select_related("qualification").all())
+    )
+    nb_affectations = (
+        evenement.nb_affectations
+        if hasattr(evenement, "nb_affectations")
+        else evenement.affectations.count()
+    )
     periodes = list(evenement.periodes_scolaires.all())
-    effectifs_enfants = list(evenement.effectifs_enfants.all())
+    effectifs_enfants = list(evenement.effectifs_enfants.all()) if include_effectifs else []
     return {
         "id": evenement.id,
+        "groupe_id": evenement.groupe_id,
         "centre_id": evenement.centre_id,
         "nom": evenement.nom,
         "permanent": evenement.permanent,
@@ -169,36 +296,36 @@ def evenement_to_dict(evenement):
             for periode in periodes
         ],
         "ferme_jours_feries": evenement.ferme_jours_feries,
-        "dates_feriees_fermees": sorted({
-            jour.isoformat()
-            for periode in periodes
-            for annee in range(periode.debut.year, evenement.fin_ouverture_periode(periode).year + 1)
-            for jour in jours_feries_france(annee)
-            if evenement.ferme_jours_feries and periode.debut <= jour <= evenement.fin_ouverture_periode(periode)
-        }),
+        "dates_feriees_fermees": sorted(
+            {
+                jour.isoformat()
+                for periode in periodes
+                for annee in range(periode.debut.year, evenement.fin_ouverture_periode(periode).year + 1)
+                for jour in jours_feries_france(annee)
+                if evenement.ferme_jours_feries and periode.debut <= jour <= evenement.fin_ouverture_periode(periode)
+            }
+        ),
         "effectif_cible": evenement.effectif_cible,
         "enfants_par_animateur_defaut": evenement.enfants_par_animateur_defaut,
-        # Inclus dans la réponse des groupes pour que le Planning dispose déjà
-        # des valeurs persistées au premier rendu, avant même l'appel ciblé par
-        # semaine. Cela évite tout écran vide après un refresh.
+        # Les écrans de gestion conservent la liste complète. Le chargement
+        # groupé du Planning passe ``include_effectifs=False`` puis récupère
+        # uniquement la semaine visible via l'endpoint dédié.
         "effectifs_enfants": [
             {
                 "date": effectif.date.isoformat(),
                 "nombre": effectif.nombre,
                 "enfants_par_animateur": effectif.ratio_encadrement_effectif,
                 "ratio_encadrement_exceptionnel": effectif.ratio_encadrement_exceptionnel,
+                "heure_arrivee": effectif.heure_arrivee.strftime("%H:%M") if effectif.heure_arrivee else "",
+                "heure_depart": effectif.heure_depart.strftime("%H:%M") if effectif.heure_depart else "",
             }
             for effectif in effectifs_enfants
         ],
         "jours_ouverts": [int(numero) for numero in (evenement.jours_ouverts or [])],
         "dates_exclues": [fermeture.date.isoformat() for fermeture in evenement.dates_exclues.all()],
         "ordre": evenement.ordre,
-        "qualifications_requises": {
-            str(b.qualification_id): b.nombre_minimum for b in besoins
-        },
-        "qualifications_libelle": [
-            f"{b.nombre_minimum} × {b.qualification.nom}" for b in besoins
-        ],
+        "qualifications_requises": {str(b.qualification_id): b.nombre_minimum for b in besoins},
+        "qualifications_libelle": [f"{b.nombre_minimum} × {b.qualification.nom}" for b in besoins],
         "nb_affectations": nb_affectations,
         "peut_supprimer": nb_affectations == 0,
         "a_des_periodes": evenement.permanent or bool(periodes),
@@ -206,43 +333,18 @@ def evenement_to_dict(evenement):
 
 
 def qualification_to_dict(qualification):
-    relations = []
-
-    for relation in qualification.relations_equivalence_a.all():
-        sens = {
-            EquivalenceQualification.SENS_A_VERS_B: "sortante",
-            EquivalenceQualification.SENS_B_VERS_A: "entrante",
-            EquivalenceQualification.SENS_DOUBLE: "double",
-        }[relation.sens]
-        relations.append({
-            "qualification_id": relation.qualification_b_id,
-            "id": relation.qualification_b_id,
-            "nom": relation.qualification_b.nom,
-            "sens": sens,
-        })
-
-    for relation in qualification.relations_equivalence_b.all():
-        sens = {
-            EquivalenceQualification.SENS_A_VERS_B: "entrante",
-            EquivalenceQualification.SENS_B_VERS_A: "sortante",
-            EquivalenceQualification.SENS_DOUBLE: "double",
-        }[relation.sens]
-        relations.append({
-            "qualification_id": relation.qualification_a_id,
-            "id": relation.qualification_a_id,
-            "nom": relation.qualification_a.nom,
-            "sens": sens,
-        })
-
-    relations.sort(key=lambda item: (item["nom"].casefold(), item["id"]))
+    statut_couleur = qualification if qualification.est_statut else qualification.statut
+    couleur = couleur_pour_statut(statut_couleur)
     return {
         "id": qualification.id,
         "nom": qualification.nom,
         "selectionnable_remplissage_auto": qualification.selectionnable_remplissage_auto,
-        # Compatibilité de lecture avec l'ancien écran : tous les liens connus.
-        "equivalence_ids": [relation["qualification_id"] for relation in relations],
-        "equivalences": relations,
-        "relations_equivalence": relations,
+        "est_statut": qualification.est_statut,
+        "statut_id": qualification.statut_id,
+        "statut_nom": qualification.statut.nom if qualification.statut_id else "",
+        "icone": qualification.icone,
+        "couleur_statut": couleur,
+        "couleur_texte_statut": couleur_texte_pour_fond(couleur),
     }
 
 
@@ -258,5 +360,16 @@ def document_to_dict(document):
         "periode_fin": document.periode_fin.isoformat() if document.periode_fin else None,
         "libelle_periode": document.libelle_periode,
         "periode_ids": [periode.id for periode in periodes],
-        "periodes": [{"id": periode.id, "nom": periode.nom, "libelle": periode.libelle_avec_annee, "debut": periode.debut.isoformat(), "fin": periode.fin.isoformat(), "annee_scolaire": periode.annee_scolaire, "vacances": periode.vacances} for periode in periodes],
+        "periodes": [
+            {
+                "id": periode.id,
+                "nom": periode.nom,
+                "libelle": periode.libelle_avec_annee,
+                "debut": periode.debut.isoformat(),
+                "fin": periode.fin.isoformat(),
+                "annee_scolaire": periode.annee_scolaire,
+                "vacances": periode.vacances,
+            }
+            for periode in periodes
+        ],
     }

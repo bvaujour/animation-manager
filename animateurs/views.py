@@ -16,35 +16,41 @@ code HTTP adapté (400 = requête invalide, 404 = introuvable,
 
 import datetime
 import json
-import re
-import secrets
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Prefetch
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
-from django.utils.dateparse import parse_date
+from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .access import est_direction
 from .models import (
+    QUALIFICATION_ICON_CHOICES,
     Affectation,
+    AffiniteGroupeAnimateur,
     Animateur,
     Centre,
     Disponibilite,
     Document,
-    EquivalenceQualification,
     Evenement,
+    Groupe,
+    HoraireAffectationJour,
     PeriodeScolaire,
+    PreferenceCentre,
     Qualification,
     normaliser_cle_unique,
 )
-from .services.affectations import creer_affectation, modifier_affectation
+from .services.affectations import (
+    creer_affectation,
+    creer_ou_deplacer_affectation_flottante,
+    modifier_affectation,
+)
 from .services.affinites import synchroniser_affinites_groupes
 from .services.animateurs import (
     appliquer_centres_hierarchises,
@@ -68,22 +74,27 @@ from .services.evenements import (
     reordonner_evenements,
     supprimer_evenement,
 )
-from .services.planning_exports import generer_planning_excel, generer_planning_pdf
+from .services.planning_exports import (
+    generer_planning_excel,
+    generer_planning_pdf,
+    horaires_manquants_export,
+)
 from .services.recapitulatif import generer_recapitulatif
 from .services.serializers import (
     affectation_to_event,
+    animateur_planning_to_dict,
     animateur_to_dict,
     centre_to_dict,
     document_to_dict,
     evenement_to_dict,
     qualification_to_dict,
 )
-
-ANIMATEUR_COLOR_PALETTE = (
-    "#2563EB", "#7C3AED", "#DB2777", "#DC2626",
-    "#EA580C", "#CA8A04", "#16A34A", "#059669",
-    "#0891B2", "#4F46E5", "#9333EA", "#475569",
+from .services.flottants import (
+    est_groupe_flottants,
+    groupes_partages_visibles,
+    groupes_visibles,
 )
+from .services.situation_semaine import jours_ouverts_planning, situation_animateur_semaine
 
 # ---------------------------------------------------------------------------
 # Pages HTML
@@ -91,6 +102,7 @@ ANIMATEUR_COLOR_PALETTE = (
 # Chaque vue ci-dessous se contente de rendre un template quasi vide : les
 # données sont chargées côté client par le JS correspondant (voir
 # static/js/<nom-de-la-page>.js), qui appelle les endpoints API plus bas.
+
 
 def changer_mot_de_passe(request):
     """Impose le remplacement du mot de passe provisoire à la première connexion."""
@@ -124,9 +136,7 @@ def api_tableau_de_bord(request):
     """Données agrégées de l'ensemble des centres pour une semaine."""
 
     date_reference = (
-        parse_date(request.GET.get("semaine", ""))
-        or parse_date(request.GET.get("date", ""))
-        or timezone.localdate()
+        parse_date(request.GET.get("semaine", "")) or parse_date(request.GET.get("date", "")) or timezone.localdate()
     )
     return JsonResponse(generer_tableau_de_bord(date_reference))
 
@@ -137,15 +147,18 @@ def planning(request):
     return render(request, "planning.html", {"active_page": "planning"})
 
 
-
 def gestion(request):
     """Gestion des lieux, groupes, qualifications, périodes et documents."""
     onglet = request.GET.get("onglet", "lieux")
     active_page = "documents" if onglet == "documents" else "gestion"
-    return render(request, "gestion.html", {
-        "active_page": active_page,
-        "gestion_onglet": onglet,
-    })
+    return render(
+        request,
+        "gestion.html",
+        {
+            "active_page": active_page,
+            "gestion_onglet": onglet,
+        },
+    )
 
 
 def employes(request):
@@ -181,22 +194,29 @@ def mes_disponibilites(request):
         return redirect("employes")
     animateur = getattr(request.user, "profil_animateur", None)
     if animateur is None:
-        return render(request, "mes_disponibilites.html", {
+        return render(
+            request,
+            "mes_disponibilites.html",
+            {
+                "active_page": "disponibilites",
+                "animateur": None,
+                "erreur_profil": True,
+            },
+        )
+    return render(
+        request,
+        "mes_disponibilites.html",
+        {
             "active_page": "disponibilites",
-            "animateur": None,
-            "erreur_profil": True,
-        })
-    return render(request, "mes_disponibilites.html", {
-        "active_page": "disponibilites",
-        "animateur": animateur,
-        "erreur_profil": False,
-    })
+            "animateur": animateur,
+            "erreur_profil": False,
+        },
+    )
 
 
 def emails(request):
     """Accès direct au module d’e-mails intégré à l’administration."""
     return redirect("/administration/?onglet=emails")
-
 
 
 def administration(request):
@@ -260,20 +280,26 @@ def administration(request):
     for periode in periodes:
         nombre_jours = (periode.fin - periode.debut).days
         dates_disponibles.update(
-            periode.debut + datetime.timedelta(days=decalage)
-            for decalage in range(nombre_jours + 1)
+            periode.debut + datetime.timedelta(days=decalage) for decalage in range(nombre_jours + 1)
         )
 
     if not dates_disponibles:
-        dates_disponibles.update(
-            today + datetime.timedelta(days=decalage)
-            for decalage in range(-183, 184)
-        )
+        dates_disponibles.update(today + datetime.timedelta(days=decalage) for decalage in range(-183, 184))
 
     jours_fr = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
     mois_fr = [
-        "janvier", "février", "mars", "avril", "mai", "juin",
-        "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+        "janvier",
+        "février",
+        "mars",
+        "avril",
+        "mai",
+        "juin",
+        "juillet",
+        "août",
+        "septembre",
+        "octobre",
+        "novembre",
+        "décembre",
     ]
     dates_triees = sorted(dates_disponibles)
     options_dates = [
@@ -284,49 +310,88 @@ def administration(request):
         for jour in dates_triees
     ]
 
-    date_fin = today if today in dates_disponibles else min(
-        dates_triees,
-        key=lambda jour: abs((jour - today).days),
+    date_fin = (
+        today
+        if today in dates_disponibles
+        else min(
+            dates_triees,
+            key=lambda jour: abs((jour - today).days),
+        )
     )
     debut_mois = date_fin.replace(day=1)
     dates_avant_fin = [jour for jour in dates_triees if jour <= date_fin]
-    date_debut = debut_mois if debut_mois in dates_disponibles else (
-        dates_avant_fin[0] if dates_avant_fin else dates_triees[0]
+    date_debut = (
+        debut_mois if debut_mois in dates_disponibles else (dates_avant_fin[0] if dates_avant_fin else dates_triees[0])
     )
 
     active_tab = request.POST.get("onglet") or request.GET.get("onglet") or "export"
     if active_tab not in {"export", "emails", "superusers", "mot-de-passe"}:
         active_tab = "export"
 
-    return render(request, "administration.html", {
-        "active_page": "emails" if active_tab == "emails" else "administration",
-        "active_tab": active_tab,
-        "periode_debut": date_debut.isoformat(),
-        "periode_fin": date_fin.isoformat(),
-        "options_dates": options_dates,
-        "superusers": User.objects.filter(is_superuser=True).order_by("username"),
-        "message_admin": message_admin,
-        "erreur_admin": erreur_admin,
-    })
+    return render(
+        request,
+        "administration.html",
+        {
+            "active_page": "emails" if active_tab == "emails" else "administration",
+            "active_tab": active_tab,
+            "periode_debut": date_debut.isoformat(),
+            "periode_fin": date_fin.isoformat(),
+            "options_dates": options_dates,
+            "semaines_export": PeriodeScolaire.objects.all().order_by("-annee_scolaire", "debut", "ordre", "nom"),
+            "superusers": User.objects.filter(is_superuser=True).order_by("username"),
+            "message_admin": message_admin,
+            "erreur_admin": erreur_admin,
+        },
+    )
 
 
 def _periode_export(request):
+    ids_bruts = request.GET.getlist("periode_ids")
+    if ids_bruts:
+        try:
+            ids = {int(valeur) for valeur in ids_bruts}
+        except ValueError:
+            return None, None, None, "La sélection des semaines est invalide."
+        periodes = list(PeriodeScolaire.objects.filter(pk__in=ids))
+        if not ids or len(periodes) != len(ids):
+            return None, None, None, "Une semaine sélectionnée est introuvable."
+        jours = {
+            periode.debut + datetime.timedelta(days=decalage)
+            for periode in periodes
+            for decalage in range((periode.fin - periode.debut).days + 1)
+        }
+        return min(jours), max(jours), jours, None
+
     debut = parse_date(request.GET.get("debut", ""))
     fin = parse_date(request.GET.get("fin", ""))
     if not debut or not fin:
-        return None, None, "Les dates de début et de fin sont obligatoires."
+        return None, None, None, "Sélectionne au moins une semaine."
     if fin < debut:
-        return None, None, "La date de fin doit être postérieure ou égale à la date de début."
+        return None, None, None, "La date de fin doit être postérieure ou égale à la date de début."
     if (fin - debut).days > 366:
-        return None, None, "La période d'export ne peut pas dépasser 366 jours."
-    return debut, fin, None
+        return None, None, None, "La période d'export ne peut pas dépasser 366 jours."
+    return debut, fin, None, None
+
+
+def api_verification_export_planning(request):
+    """Vérifie les horaires juste avant le téléchargement d'un planning."""
+    debut, fin, jours_selectionnes, erreur = _periode_export(request)
+    if erreur:
+        return JsonResponse({"error": erreur}, status=400)
+    manquants = horaires_manquants_export(debut, fin, jours_selectionnes)
+    return JsonResponse(
+        {
+            "nombre": len(manquants),
+            "manquants": manquants[:20],
+        }
+    )
 
 
 def export_planning_excel(request):
-    debut, fin, erreur = _periode_export(request)
+    debut, fin, jours_selectionnes, erreur = _periode_export(request)
     if erreur:
         return HttpResponse(erreur, status=400, content_type="text/plain; charset=utf-8")
-    contenu = generer_planning_excel(debut, fin)
+    contenu = generer_planning_excel(debut, fin, jours_selectionnes)
     response = HttpResponse(
         contenu,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -336,10 +401,10 @@ def export_planning_excel(request):
 
 
 def export_planning_pdf(request):
-    debut, fin, erreur = _periode_export(request)
+    debut, fin, jours_selectionnes, erreur = _periode_export(request)
     if erreur:
         return HttpResponse(erreur, status=400, content_type="text/plain; charset=utf-8")
-    contenu = generer_planning_pdf(debut, fin)
+    contenu = generer_planning_pdf(debut, fin, jours_selectionnes)
     response = HttpResponse(contenu, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="planning_{debut:%Y%m%d}_{fin:%Y%m%d}.pdf"'
     return response
@@ -350,7 +415,6 @@ def export_planning_pdf(request):
 # ---------------------------------------------------------------------------
 
 
-
 @require_http_methods(["GET", "POST"])
 def api_animateurs(request):
     """GET : liste tous les animateurs.
@@ -358,6 +422,15 @@ def api_animateurs(request):
 
     if request.method == "GET":
         inclure_affectations = request.GET.get("include_affectations") == "1"
+        format_planning = request.GET.get("format") == "planning"
+        debut_brut = request.GET.get("debut", "")
+        fin_brut = request.GET.get("fin", "")
+        debut_filtre = parse_date(debut_brut)
+        fin_filtre = parse_date(fin_brut)
+        plage_incomplete = bool(debut_brut) != bool(fin_brut)
+        plage_invalide = bool(debut_brut) and (not debut_filtre or not fin_filtre or fin_filtre <= debut_filtre)
+        if plage_incomplete or plage_invalide:
+            return JsonResponse({"error": "La plage debut/fin est invalide."}, status=400)
         # Cette route doit rester strictement en lecture seule. Les affinités
         # sont déjà recalculées par les signaux lors des créations, déplacements
         # et suppressions d’affectations, ainsi qu’avant/après le remplissage
@@ -373,25 +446,70 @@ def api_animateurs(request):
         # Les disponibilités sont déjà normalisées lorsqu'elles sont ajoutées
         # ou modifiées dans les routes dédiées. Ici, on charge simplement
         # toutes les relations utiles en un nombre fixe de requêtes.
-        animateurs = Animateur.objects.select_related(
-            "evenement_preferee__centre", "utilisateur",
-        ).prefetch_related(
-            "qualifications",
-            "preferences__centre",
-            "disponibilites",
-            "affinites_groupes__evenement__centre",
+        disponibilites = Disponibilite.objects.only("id", "animateur_id", "debut", "fin")
+        if debut_filtre and fin_filtre:
+            disponibilites = disponibilites.filter(debut__lt=fin_filtre, fin__gte=debut_filtre)
+
+        qualifications = Qualification.objects.select_related("statut").only(
+            "id", "nom", "icone", "est_statut", "statut_id",
+            "statut__id", "statut__nom", "statut__est_statut",
         )
+        preferences = PreferenceCentre.objects.select_related("centre").only(
+            "id",
+            "animateur_id",
+            "centre_id",
+            "est_prefere",
+            "est_interdit",
+            "centre__id",
+            "centre__nom",
+            "centre__code",
+            "centre__couleur",
+        )
+        animateurs = Animateur.objects.prefetch_related(
+            Prefetch("qualifications", queryset=qualifications),
+            Prefetch("preferences", queryset=preferences),
+            Prefetch("disponibilites", queryset=disponibilites, to_attr="_filtre_disponibilites"),
+        )
+        if format_planning:
+            animateurs = animateurs.only("id", "prenom", "nom", "telephone", "email")
+        else:
+            affinites = AffiniteGroupeAnimateur.objects.select_related("evenement__centre")
+            animateurs = animateurs.select_related(
+                "evenement_preferee__centre",
+                "utilisateur",
+            ).prefetch_related(Prefetch("affinites_groupes", queryset=affinites))
         if inclure_affectations:
+            affectations = Affectation.objects.only("id", "animateur_id", "centre_id", "debut", "fin")
+            if debut_filtre and fin_filtre:
+                tz = timezone.get_current_timezone()
+                debut_dt = timezone.make_aware(datetime.datetime.combine(debut_filtre, datetime.time.min), tz)
+                fin_dt = timezone.make_aware(datetime.datetime.combine(fin_filtre, datetime.time.min), tz)
+                affectations = affectations.filter(debut__lt=fin_dt, fin__gt=debut_dt)
             animateurs = animateurs.prefetch_related(
                 Prefetch(
                     "affectations",
-                    queryset=Affectation.objects.select_related("evenement__centre"),
+                    queryset=affectations,
                     to_attr="_filtre_affectations",
                 )
             )
-        animateurs = animateurs.order_by("prenom", "nom", "id")
+        animateurs = list(animateurs.order_by("prenom", "nom", "id"))
 
-        return JsonResponse([animateur_to_dict(a) for a in animateurs], safe=False)
+        # La situation de la semaine est calculée côté serveur à partir de tous
+        # les groupes, y compris ceux dont le centre est masqué dans l'interface.
+        # Cela évite de dépendre du chargement asynchrone des calendriers et des
+        # conversions de fuseau horaire dans le navigateur.
+        if format_planning and debut_filtre and fin_filtre:
+            jours_ouverts = jours_ouverts_planning(debut_filtre, fin_filtre)
+            for animateur in animateurs:
+                animateur._situation_semaine = situation_animateur_semaine(
+                    animateur,
+                    jours_ouverts,
+                    debut_filtre,
+                    fin_filtre,
+                )
+
+        serializer = animateur_planning_to_dict if format_planning else animateur_to_dict
+        return JsonResponse([serializer(a) for a in animateurs], safe=False)
 
     try:
         payload = json.loads(request.body)
@@ -413,7 +531,6 @@ def api_animateurs(request):
             if paie_jour < 0:
                 return JsonResponse({"error": "La paie par jour ne peut pas être négative."}, status=400)
         date_naissance = parse_date(date_naissance_raw) if date_naissance_raw else None
-        couleur = (payload.get("couleur") or "").strip() or secrets.choice(ANIMATEUR_COLOR_PALETTE)
         qualification_ids = payload.get("qualifications", [])
         centres_preferes, centres_interdits, erreur_centres = normaliser_centres_hierarchises(payload)
         if erreur_centres:
@@ -435,9 +552,6 @@ def api_animateurs(request):
         if date_naissance_raw and date_naissance is None:
             return JsonResponse({"error": "La date de naissance est invalide."}, status=400)
 
-        if couleur and not re.fullmatch(r"#[0-9A-Fa-f]{6}", couleur):
-            return JsonResponse({"error": "La couleur doit être au format #RRGGBB."}, status=400)
-
     except (KeyError, TypeError, AttributeError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
@@ -451,16 +565,13 @@ def api_animateurs(request):
             adresse=adresse,
             numero_securite_sociale=numero_securite_sociale,
             paie_jour=paie_jour,
-            couleur=couleur,
             role=role,
             evenement_preferee=evenement_preferee if evenement_preferee_fournie else None,
         )
 
         if qualification_ids:
             # .set() sur un ManyToMany remplace toute la liste en une requête.
-            animateur.qualifications.set(
-                Qualification.objects.filter(pk__in=qualification_ids)
-            )
+            animateur.qualifications.set(Qualification.objects.filter(pk__in=qualification_ids))
 
         appliquer_centres_hierarchises(animateur, centres_preferes, centres_interdits)
 
@@ -473,14 +584,19 @@ def api_animateurs(request):
         except ValidationError as exc:
             return JsonResponse({"error": exc.messages[0]}, status=400)
 
-    animateur = Animateur.objects.select_related(
-        "evenement_preferee__centre", "utilisateur",
-    ).prefetch_related(
-        "qualifications",
-        "preferences__centre",
-        "disponibilites",
-        "affinites_groupes__evenement__centre",
-    ).get(pk=animateur.id)
+    animateur = (
+        Animateur.objects.select_related(
+            "evenement_preferee__centre",
+            "utilisateur",
+        )
+        .prefetch_related(
+            "qualifications",
+            "preferences__centre",
+            "disponibilites",
+            "affinites_groupes__evenement__centre",
+        )
+        .get(pk=animateur.id)
+    )
 
     resultat = animateur_to_dict(animateur)
     if identifiants:
@@ -495,26 +611,36 @@ def api_animateur_detail(request, animateur_id):
     DELETE : supprime l'animateur et, par cascade, son planning/disponibilités/centres autorisés."""
 
     try:
-        animateur = Animateur.objects.select_related(
-            "evenement_preferee__centre", "utilisateur",
-        ).prefetch_related(
-            "qualifications",
-            "preferences__centre",
-            "disponibilites",
-        ).get(pk=animateur_id)
+        animateur = (
+            Animateur.objects.select_related(
+                "evenement_preferee__centre",
+                "utilisateur",
+            )
+            .prefetch_related(
+                "qualifications",
+                "preferences__centre",
+                "disponibilites",
+            )
+            .get(pk=animateur_id)
+        )
     except Animateur.DoesNotExist:
         return JsonResponse({"error": "Animateur introuvable."}, status=404)
 
     if request.method == "GET":
         synchroniser_affinites_groupes(animateur_ids=[animateur.id])
-        animateur = Animateur.objects.select_related(
-            "evenement_preferee__centre", "utilisateur",
-        ).prefetch_related(
-            "qualifications",
-            "preferences__centre",
-            "disponibilites",
-            "affinites_groupes__evenement__centre",
-        ).get(pk=animateur.id)
+        animateur = (
+            Animateur.objects.select_related(
+                "evenement_preferee__centre",
+                "utilisateur",
+            )
+            .prefetch_related(
+                "qualifications",
+                "preferences__centre",
+                "disponibilites",
+                "affinites_groupes__evenement__centre",
+            )
+            .get(pk=animateur.id)
+        )
         return JsonResponse(animateur_to_dict(animateur))
 
     if request.method == "DELETE":
@@ -565,18 +691,14 @@ def api_animateur_detail(request, animateur_id):
                     return JsonResponse({"error": "La paie par jour ne peut pas être négative."}, status=400)
                 animateur.paie_jour = paie_jour
 
-        if "couleur" in payload:
-            couleur = (payload.get("couleur") or "").strip()
-            if couleur and not re.fullmatch(r"#[0-9A-Fa-f]{6}", couleur):
-                return JsonResponse({"error": "La couleur doit être au format #RRGGBB."}, status=400)
-            animateur.couleur = couleur
-
         if not animateur.prenom or not animateur.nom:
             return JsonResponse({"error": "Le prénom et le nom sont obligatoires."}, status=400)
 
-        if Animateur.objects.exclude(pk=animateur.pk).filter(
-            cle_unique=normaliser_cle_unique(animateur.prenom, animateur.nom)
-        ).exists():
+        if (
+            Animateur.objects.exclude(pk=animateur.pk)
+            .filter(cle_unique=normaliser_cle_unique(animateur.prenom, animateur.nom))
+            .exists()
+        ):
             return JsonResponse({"error": f"L’employé « {animateur.prenom} {animateur.nom} » existe déjà."}, status=409)
 
         qualification_ids = payload.get("qualifications", None)
@@ -606,9 +728,7 @@ def api_animateur_detail(request, animateur_id):
         animateur.save()
 
         if qualification_ids is not None:
-            animateur.qualifications.set(
-                Qualification.objects.filter(pk__in=qualification_ids)
-            )
+            animateur.qualifications.set(Qualification.objects.filter(pk__in=qualification_ids))
 
         appliquer_centres_hierarchises(animateur, centres_preferes, centres_interdits)
 
@@ -621,14 +741,19 @@ def api_animateur_detail(request, animateur_id):
         except ValidationError as exc:
             return JsonResponse({"error": exc.messages[0]}, status=400)
 
-    animateur = Animateur.objects.select_related(
-        "evenement_preferee__centre", "utilisateur",
-    ).prefetch_related(
-        "qualifications",
-        "preferences__centre",
-        "disponibilites",
-        "affinites_groupes__evenement__centre",
-    ).get(pk=animateur.id)
+    animateur = (
+        Animateur.objects.select_related(
+            "evenement_preferee__centre",
+            "utilisateur",
+        )
+        .prefetch_related(
+            "qualifications",
+            "preferences__centre",
+            "disponibilites",
+            "affinites_groupes__evenement__centre",
+        )
+        .get(pk=animateur.id)
+    )
 
     resultat = animateur_to_dict(animateur)
     if identifiants:
@@ -645,10 +770,9 @@ def api_disponibilites(request, animateur_id):
     journées cochées reçue dans ``jours_disponibles``.
     """
     try:
-        animateur = (
-            Animateur.objects.prefetch_related("qualifications", "preferences__centre", "disponibilites", "affectations")
-            .get(pk=animateur_id)
-        )
+        animateur = Animateur.objects.prefetch_related(
+            "qualifications", "preferences__centre", "disponibilites", "affectations"
+        ).get(pk=animateur_id)
     except Animateur.DoesNotExist:
         return JsonResponse({"error": "Animateur introuvable."}, status=404)
 
@@ -663,15 +787,18 @@ def api_disponibilites(request, animateur_id):
         groupes = {}
         for periode in PeriodeScolaire.objects.order_by("debut", "ordre", "id"):
             cle = (periode.nom, periode.annee_scolaire, periode.zone)
-            groupe = groupes.setdefault(cle, {
-                "id": f"{periode.annee_scolaire}-{periode.zone}-{periode.nom}",
-                "nom": periode.nom,
-                "annee_scolaire": periode.annee_scolaire,
-                "zone": periode.zone,
-                "debut": periode.debut,
-                "fin": periode.fin,
-                "jours": set(),
-            })
+            groupe = groupes.setdefault(
+                cle,
+                {
+                    "id": f"{periode.annee_scolaire}-{periode.zone}-{periode.nom}",
+                    "nom": periode.nom,
+                    "annee_scolaire": periode.annee_scolaire,
+                    "zone": periode.zone,
+                    "debut": periode.debut,
+                    "fin": periode.fin,
+                    "jours": set(),
+                },
+            )
             groupe["debut"] = min(groupe["debut"], periode.debut)
             groupe["fin"] = max(groupe["fin"], periode.fin)
             groupe["jours"].update(jours_ouvres(periode.debut, periode.fin))
@@ -689,11 +816,7 @@ def api_disponibilites(request, animateur_id):
         except (ValueError, TypeError, json.JSONDecodeError):
             return JsonResponse({"error": "Liste de jours invalide."}, status=400)
 
-        jours_autorises = {
-            jour
-            for groupe in periodes_regroupees()
-            for jour in groupe["jours"]
-        }
+        jours_autorises = {jour for groupe in periodes_regroupees() for jour in groupe["jours"]}
         if any(jour not in jours_autorises for jour in jours):
             return JsonResponse({"error": "Un jour ne correspond à aucune période enregistrée."}, status=400)
 
@@ -710,32 +833,31 @@ def api_disponibilites(request, animateur_id):
 
         with transaction.atomic():
             animateur.disponibilites.all().delete()
-            Disponibilite.objects.bulk_create([
-                Disponibilite(animateur=animateur, debut=debut, fin=fin)
-                for debut, fin in plages
-            ])
+            Disponibilite.objects.bulk_create(
+                [Disponibilite(animateur=animateur, debut=debut, fin=fin) for debut, fin in plages]
+            )
 
     disponibilites = list(animateur.disponibilites.all())
+
     def est_disponible(jour):
         return any(plage.debut <= jour <= plage.fin for plage in disponibilites)
 
     resultat = []
     for groupe in periodes_regroupees():
         jours = sorted(groupe["jours"])
-        jours_json = [
-            {"date": jour.isoformat(), "disponible": est_disponible(jour)}
-            for jour in jours
-        ]
-        resultat.append({
-            "id": groupe["id"],
-            "nom": groupe["nom"],
-            "annee_scolaire": groupe["annee_scolaire"],
-            "zone": groupe["zone"],
-            "debut": groupe["debut"].isoformat(),
-            "fin": groupe["fin"].isoformat(),
-            "selectionnee": any(item["disponible"] for item in jours_json),
-            "jours": jours_json,
-        })
+        jours_json = [{"date": jour.isoformat(), "disponible": est_disponible(jour)} for jour in jours]
+        resultat.append(
+            {
+                "id": groupe["id"],
+                "nom": groupe["nom"],
+                "annee_scolaire": groupe["annee_scolaire"],
+                "zone": groupe["zone"],
+                "debut": groupe["debut"].isoformat(),
+                "fin": groupe["fin"].isoformat(),
+                "selectionnee": any(item["disponible"] for item in jours_json),
+                "jours": jours_json,
+            }
+        )
 
     plages_json = [
         {"id": dispo.id, "debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()}
@@ -785,6 +907,7 @@ def api_disponibilite_detail(request, animateur_id, disponibilite_id):
 # API - Planning (lecture des groupes + écriture individuelle)
 # ---------------------------------------------------------------------------
 
+
 def api_planning(request):
     """Renvoie les affectations au format FullCalendar.
 
@@ -799,7 +922,17 @@ def api_planning(request):
     start = request.GET.get("start")
     end = request.GET.get("end")
 
-    affectations = Affectation.objects.select_related("animateur", "centre", "evenement")
+    qualifications_statuts = Qualification.objects.select_related("statut").only(
+        "id", "nom", "icone", "est_statut", "statut_id",
+        "statut__id", "statut__nom", "statut__est_statut",
+    )
+    affectations = (
+        Affectation.objects.select_related("animateur", "centre", "evenement", "evenement__groupe")
+        .prefetch_related(
+            "horaires_journaliers",
+            Prefetch("animateur__qualifications", queryset=qualifications_statuts),
+        )
+    )
 
     if evenement_id:
         affectations = affectations.filter(evenement_id=evenement_id)
@@ -834,7 +967,7 @@ def api_affectation_create(request):
         centre_id = payload.get("centre_id")
 
         if evenement_id is not None:
-            evenement = Evenement.objects.select_related("centre").get(pk=evenement_id)
+            evenement = Evenement.objects.select_related("centre", "groupe").get(pk=evenement_id)
             centre = evenement.centre
             if centre_id is not None and int(centre_id) != centre.id:
                 return JsonResponse(
@@ -852,11 +985,7 @@ def api_affectation_create(request):
         # borne de fin EXCLUSIVE, donc une journée = debut + 1 jour. Mettre
         # fin = debut donnerait un groupe de durée nulle (start == end)
         # qui ne s'affiche pas dans le calendrier.
-        fin = (
-            parse_to_aware_datetime(payload["fin"])
-            if payload.get("fin")
-            else debut + datetime.timedelta(days=1)
-        )
+        fin = parse_to_aware_datetime(payload["fin"]) if payload.get("fin") else debut + datetime.timedelta(days=1)
 
     except (Animateur.DoesNotExist, Centre.DoesNotExist, Evenement.DoesNotExist):
         return JsonResponse({"error": "Animateur, centre ou groupe introuvable."}, status=404)
@@ -864,8 +993,27 @@ def api_affectation_create(request):
         return JsonResponse({"error": "Requête invalide."}, status=400)
 
     try:
+        type_demande = payload.get("type_affectation", "groupe")
+        if type_demande == "flottant":
+            affectation, creation = creer_ou_deplacer_affectation_flottante(
+                animateur=animateur,
+                centre=centre,
+                debut=debut,
+                fin=fin,
+            )
+            return JsonResponse(
+                affectation_to_event(affectation),
+                status=201 if creation else 200,
+            )
+        if type_demande != "groupe":
+            return JsonResponse({"error": "Type d’affectation invalide."}, status=400)
+
         affectation = creer_affectation(
-            animateur=animateur, centre=centre, evenement=evenement, debut=debut, fin=fin
+            animateur=animateur,
+            centre=centre,
+            evenement=evenement,
+            debut=debut,
+            fin=fin,
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=409)
@@ -891,21 +1039,44 @@ def api_affectation_detail(request, affectation_id):
     try:
         payload = json.loads(request.body)
 
-        debut = (
-            parse_to_aware_datetime(payload["debut"])
-            if "debut" in payload
-            else affectation.debut
-        )
-        fin = (
-            parse_to_aware_datetime(payload["fin"])
-            if "fin" in payload
-            else affectation.fin
-        )
+        if "horaires" in payload:
+            horaires = payload["horaires"]
+            if not isinstance(horaires, list):
+                raise ValueError
+            debut_jour = timezone.localtime(affectation.debut).date()
+            fin_jour = timezone.localtime(affectation.fin).date()
+            normalises = []
+            for item in horaires:
+                if not isinstance(item, dict):
+                    raise ValueError
+                jour = parse_date(item.get("date", ""))
+                arrivee = parse_time(item.get("heure_arrivee", ""))
+                depart = parse_time(item.get("heure_depart", ""))
+                if not jour or not arrivee or not depart or depart <= arrivee or not (debut_jour <= jour < fin_jour):
+                    raise ValueError
+                normalises.append((jour, arrivee, depart))
+            with transaction.atomic():
+                affectation.horaires_journaliers.exclude(date__in=[item[0] for item in normalises]).delete()
+                for jour, arrivee, depart in normalises:
+                    HoraireAffectationJour.objects.update_or_create(
+                        affectation=affectation,
+                        date=jour,
+                        defaults={"heure_arrivee": arrivee, "heure_depart": depart},
+                    )
+            # L'affectation de cette vue n'est pas toujours chargée avec
+            # prefetch_related : le cache peut donc ne pas exister du tout.
+            getattr(affectation, "_prefetched_objects_cache", {}).pop("horaires_journaliers", None)
+            return JsonResponse(affectation_to_event(affectation))
+
+        debut = parse_to_aware_datetime(payload["debut"]) if "debut" in payload else affectation.debut
+        fin = parse_to_aware_datetime(payload["fin"]) if "fin" in payload else affectation.fin
 
         nouvelle_evenement = None
         nouveau_centre = None
         if "evenement_id" in payload:
-            nouvelle_evenement = Evenement.objects.select_related("centre").get(pk=payload["evenement_id"])
+            nouvelle_evenement = Evenement.objects.select_related("centre", "groupe").get(pk=payload["evenement_id"])
+            if est_groupe_flottants(nouvelle_evenement) and payload.get("type_affectation") != "flottant":
+                return JsonResponse({"error": "Groupe introuvable."}, status=404)
             if "centre_id" in payload and int(payload["centre_id"]) != nouvelle_evenement.centre_id:
                 return JsonResponse(
                     {"error": "Le groupe sélectionné n'appartient pas à ce centre."},
@@ -926,11 +1097,70 @@ def api_affectation_detail(request, affectation_id):
             fin=fin,
             centre=nouveau_centre,
             evenement=nouvelle_evenement,
+            type_affectation=payload.get("type_affectation") if "type_affectation" in payload else None,
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=409)
 
     return JsonResponse(affectation_to_event(affectation))
+
+
+@require_POST
+def api_horaires_affectations_groupe(request, evenement_id):
+    """Enregistre les horaires de chaque animateur du groupe sur la semaine."""
+    try:
+        evenement = Evenement.objects.select_related("groupe").get(pk=evenement_id)
+        if est_groupe_flottants(evenement):
+            raise Evenement.DoesNotExist
+        payload = json.loads(request.body)
+        horaires = payload.get("horaires")
+        if not isinstance(horaires, list):
+            raise ValueError
+
+        normalises = []
+        for item in horaires:
+            if not isinstance(item, dict):
+                raise ValueError
+            affectation_id = int(item.get("affectation_id"))
+            jour = parse_date(item.get("date", ""))
+            arrivee = parse_time(item.get("heure_arrivee", ""))
+            depart = parse_time(item.get("heure_depart", ""))
+            if not jour or not arrivee or not depart or depart <= arrivee:
+                raise ValueError
+            normalises.append((affectation_id, jour, arrivee, depart))
+    except Evenement.DoesNotExist:
+        return JsonResponse({"error": "Groupe introuvable."}, status=404)
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return JsonResponse({"error": "Horaires invalides."}, status=400)
+
+    affectations = {
+        affectation.id: affectation
+        for affectation in Affectation.objects.filter(
+            evenement=evenement,
+            id__in=[item[0] for item in normalises],
+        )
+    }
+    if len(affectations) != len({item[0] for item in normalises}):
+        return JsonResponse({"error": "Une affectation ne correspond pas à ce groupe."}, status=400)
+    for affectation_id, jour, _, _ in normalises:
+        affectation = affectations[affectation_id]
+        debut_jour = timezone.localtime(affectation.debut).date()
+        fin_jour = timezone.localtime(affectation.fin).date()
+        if not debut_jour <= jour < fin_jour:
+            return JsonResponse({"error": "La date est hors de l’affectation."}, status=400)
+
+    nombre = 0
+    with transaction.atomic():
+        for affectation_id, jour, arrivee, depart in normalises:
+            affectation = affectations[affectation_id]
+            HoraireAffectationJour.objects.update_or_create(
+                affectation=affectation,
+                date=jour,
+                defaults={"heure_arrivee": arrivee, "heure_depart": depart},
+            )
+            nombre += 1
+
+    return JsonResponse({"ok": True, "nombre": nombre})
 
 
 @require_http_methods(["DELETE"])
@@ -998,8 +1228,32 @@ def api_centres(request):
     """GET : liste des centres. POST : création d'un centre."""
 
     if request.method == "GET":
-        centres = Centre.objects.all()
-        return JsonResponse([centre_to_dict(c) for c in centres], safe=False)
+        inclure_groupes = request.GET.get("include_groupes") == "1"
+        if not inclure_groupes:
+            centres = Centre.objects.all()
+            return JsonResponse([centre_to_dict(c) for c in centres], safe=False)
+
+        groupes = (
+            groupes_visibles(Evenement.objects.all()).prefetch_related(
+                "periodes_scolaires",
+                "dates_exclues",
+                "besoins_qualifications__qualification",
+            )
+            .annotate(nb_affectations=Count("affectations", distinct=True))
+            .order_by("ordre", "nom")
+        )
+        centres = Centre.objects.prefetch_related(
+            Prefetch("evenements", queryset=groupes, to_attr="_groupes_planning")
+        )
+        data = []
+        for centre in centres:
+            item = centre_to_dict(centre)
+            item["evenements"] = [
+                evenement_to_dict(groupe, include_effectifs=False)
+                for groupe in centre._groupes_planning
+            ]
+            data.append(item)
+        return JsonResponse(data, safe=False)
 
     try:
         payload = json.loads(request.body)
@@ -1105,6 +1359,76 @@ def api_centre_detail(request, centre_id):
     return JsonResponse(centre_to_dict(centre))
 
 
+def _groupe_partage_to_dict(groupe):
+    return {
+        "id": groupe.id,
+        "nom": groupe.nom,
+        "enfants_par_animateur_defaut": groupe.enfants_par_animateur_defaut,
+        "nombre_instances": groupe.instances.count(),
+        "lieux": [
+            {"id": instance.centre_id, "nom": instance.centre.nom}
+            for instance in groupe.instances.select_related("centre").order_by("centre__nom")
+        ],
+    }
+
+
+def _enregistrer_caracteristiques_groupe(groupe, payload):
+    nom = str(payload.get("nom", groupe.nom)).strip()
+    ratio = int(payload.get("enfants_par_animateur_defaut", groupe.enfants_par_animateur_defaut))
+    if not nom or ratio < 1 or ratio > 999:
+        raise ValidationError("Le nom et un ratio compris entre 1 et 999 sont obligatoires.")
+    groupe.nom = nom
+    groupe.enfants_par_animateur_defaut = ratio
+    groupe.save()
+
+    for instance in groupe.instances.all():
+        instance.nom = groupe.nom
+        instance.enfants_par_animateur_defaut = groupe.enfants_par_animateur_defaut
+        instance.save()
+    return groupe
+
+
+@require_http_methods(["GET", "POST"])
+def api_groupes_partages(request):
+    groupes = groupes_partages_visibles(Groupe.objects.all()).prefetch_related("instances__centre")
+    if request.method == "GET":
+        return JsonResponse([_groupe_partage_to_dict(groupe) for groupe in groupes], safe=False)
+    try:
+        payload = json.loads(request.body)
+        with transaction.atomic():
+            groupe = _enregistrer_caracteristiques_groupe(Groupe(), payload)
+    except (TypeError, ValueError, KeyError, json.JSONDecodeError, ValidationError) as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+    except IntegrityError:
+        return JsonResponse({"error": "Un groupe de ce nom existe déjà."}, status=409)
+    return JsonResponse(_groupe_partage_to_dict(groupe), status=201)
+
+
+@require_http_methods(["PATCH", "DELETE"])
+def api_groupe_partage_detail(request, groupe_id):
+    try:
+        groupe = groupes_partages_visibles(Groupe.objects.all()).get(pk=groupe_id)
+    except Groupe.DoesNotExist:
+        return JsonResponse({"error": "Groupe partagé introuvable."}, status=404)
+    if request.method == "DELETE":
+        if groupe.instances.exists():
+            return JsonResponse(
+                {"error": "Ce groupe est encore utilisé dans un ou plusieurs lieux."},
+                status=409,
+            )
+        groupe.delete()
+        return JsonResponse({"ok": True})
+    try:
+        payload = json.loads(request.body)
+        with transaction.atomic():
+            _enregistrer_caracteristiques_groupe(groupe, payload)
+    except (TypeError, ValueError, KeyError, json.JSONDecodeError, ValidationError) as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+    except IntegrityError:
+        return JsonResponse({"error": "Un groupe de ce nom existe déjà."}, status=409)
+    return JsonResponse(_groupe_partage_to_dict(groupe))
+
+
 @require_http_methods(["GET", "POST"])
 def api_groupes(request, centre_id):
     """Liste ou crée les groupes d’un lieu."""
@@ -1116,8 +1440,9 @@ def api_groupes(request, centre_id):
 
     if request.method == "GET":
         evenements = (
-            centre.evenements
-            .prefetch_related("periodes_scolaires", "dates_exclues", "besoins_qualifications__qualification", "effectifs_enfants")
+            groupes_visibles(centre.evenements.all()).prefetch_related(
+                "periodes_scolaires", "dates_exclues", "besoins_qualifications__qualification", "effectifs_enfants"
+            )
             .annotate(nb_affectations=Count("affectations", distinct=True))
             .order_by("ordre", "nom")
         )
@@ -1130,29 +1455,55 @@ def api_groupes(request, centre_id):
 
     try:
         payload = json.loads(request.body)
+        groupe_id = payload.get("groupe_id")
+        if groupe_id:
+            groupe_partage = groupes_partages_visibles(Groupe.objects.all()).get(pk=int(groupe_id))
+        else:
+            nom_groupe = str(payload.get("nom", "")).strip()
+            groupe_partage, creation = Groupe.objects.get_or_create(
+                cle_unique=normaliser_cle_unique(nom_groupe),
+                defaults={
+                    "nom": nom_groupe,
+                    "enfants_par_animateur_defaut": int(payload.get("enfants_par_animateur_defaut", 8) or 8),
+                },
+            )
+            if creation:
+                _enregistrer_caracteristiques_groupe(groupe_partage, payload)
+        if centre.evenements.filter(groupe=groupe_partage).exists():
+            return JsonResponse(
+                {"error": "Ce groupe possède déjà une instance dans ce lieu."},
+                status=409,
+            )
         evenement = creer_evenement(
             centre=centre,
-            nom=payload.get("nom", ""),
+            nom=groupe_partage.nom,
+            groupe_partage=groupe_partage,
             periode_ids=payload.get("periode_ids", []),
             effectif_cible=int(payload.get("effectif_cible", 1) or 1),
-            enfants_par_animateur_defaut=int(payload.get("enfants_par_animateur_defaut", 8) or 8),
-            qualifications=payload.get("qualifications_requises", {}),
+            enfants_par_animateur_defaut=groupe_partage.enfants_par_animateur_defaut,
+            qualifications=payload.get("qualifications_requises"),
             jours_ouverts=payload.get("jours_ouverts", [0, 1, 2, 3, 4, 5]),
             ferme_jours_feries=payload.get("ferme_jours_feries", True) is not False,
             permanent=bool(payload.get("permanent", False)),
         )
     except (TypeError, ValueError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
+    except Groupe.DoesNotExist:
+        return JsonResponse({"error": "Groupe partagé introuvable."}, status=404)
     except ValidationError as exc:
         return JsonResponse({"error": _message_validation(exc)}, status=400)
     except IntegrityError:
         return JsonResponse({"error": "Un groupe de ce nom existe déjà dans ce lieu."}, status=409)
 
-    evenement = Evenement.objects.select_related("centre").prefetch_related(
-        "periodes_scolaires", "dates_exclues", "besoins_qualifications__qualification", "effectifs_enfants"
-    ).get(pk=evenement.pk)
+    evenement = (
+        Evenement.objects.select_related("centre")
+        .prefetch_related(
+            "periodes_scolaires", "dates_exclues", "besoins_qualifications__qualification", "effectifs_enfants"
+        )
+        .get(pk=evenement.pk)
+    )
     evenement.nb_affectations = 0
-    evenement.nb_evenements_centre = centre.evenements.count()
+    evenement.nb_evenements_centre = groupes_visibles(centre.evenements.all()).count()
     return JsonResponse(evenement_to_dict(evenement), status=201)
 
 
@@ -1161,7 +1512,9 @@ def api_groupe_detail(request, evenement_id):
     """Modifie ou supprime un groupe sans détruire ses affectations."""
 
     try:
-        evenement = Evenement.objects.select_related("centre").get(pk=evenement_id)
+        evenement = Evenement.objects.select_related("centre", "groupe").get(pk=evenement_id)
+        if est_groupe_flottants(evenement):
+            raise Evenement.DoesNotExist
     except Evenement.DoesNotExist:
         return JsonResponse({"error": "Groupe introuvable."}, status=404)
 
@@ -1174,29 +1527,32 @@ def api_groupe_detail(request, evenement_id):
 
     try:
         payload = json.loads(request.body)
+        if any(cle in payload for cle in ("nom", "enfants_par_animateur_defaut")):
+            _enregistrer_caracteristiques_groupe(evenement.groupe, payload)
         evenement = modifier_evenement(
             evenement,
-            nom=payload.get("nom") if "nom" in payload else None,
+            nom=None,
             periode_ids=payload.get("periode_ids", []),
             periodes_fournies="periode_ids" in payload,
             effectif_cible=payload.get("effectif_cible") if "effectif_cible" in payload else None,
-            enfants_par_animateur_defaut=payload.get("enfants_par_animateur_defaut") if "enfants_par_animateur_defaut" in payload else None,
-            qualifications=payload.get("qualifications_requises", {}),
+            enfants_par_animateur_defaut=None,
+            qualifications=payload.get("qualifications_requises"),
             qualifications_fournies="qualifications_requises" in payload,
             jours_ouverts=payload.get("jours_ouverts") if "jours_ouverts" in payload else None,
             ferme_jours_feries=payload.get("ferme_jours_feries") if "ferme_jours_feries" in payload else None,
             permanent=payload.get("permanent") if "permanent" in payload else None,
-            supprimer_affectations_dates_fermees=bool(
-                payload.get("supprimer_affectations_dates_fermees", False)
-            ),
+            supprimer_affectations_dates_fermees=bool(payload.get("supprimer_affectations_dates_fermees", False)),
         )
     except FermetureAvecAffectationsError as exc:
-        return JsonResponse({
-            "error": _message_validation(exc),
-            "code": "affectations_dates_fermees",
-            "nb_affectations": len(exc.affectations),
-            "dates": [date.isoformat() for date in exc.dates],
-        }, status=409)
+        return JsonResponse(
+            {
+                "error": _message_validation(exc),
+                "code": "affectations_dates_fermees",
+                "nb_affectations": len(exc.affectations),
+                "dates": [date.isoformat() for date in exc.dates],
+            },
+            status=409,
+        )
     except (TypeError, ValueError, json.JSONDecodeError):
         return JsonResponse({"error": "Requête invalide."}, status=400)
     except ValidationError as exc:
@@ -1204,11 +1560,15 @@ def api_groupe_detail(request, evenement_id):
     except IntegrityError:
         return JsonResponse({"error": "Un groupe de ce nom existe déjà dans ce lieu."}, status=409)
 
-    evenement = Evenement.objects.select_related("centre").prefetch_related(
-        "periodes_scolaires", "dates_exclues", "besoins_qualifications__qualification", "effectifs_enfants"
-    ).get(pk=evenement.pk)
+    evenement = (
+        Evenement.objects.select_related("centre")
+        .prefetch_related(
+            "periodes_scolaires", "dates_exclues", "besoins_qualifications__qualification", "effectifs_enfants"
+        )
+        .get(pk=evenement.pk)
+    )
     evenement.nb_affectations = evenement.affectations.count()
-    evenement.nb_evenements_centre = evenement.centre.evenements.count()
+    evenement.nb_evenements_centre = groupes_visibles(evenement.centre.evenements.all()).count()
     return JsonResponse(evenement_to_dict(evenement))
 
 
@@ -1231,103 +1591,36 @@ def api_groupes_reordonner(request, centre_id):
     return JsonResponse({"ok": True})
 
 
-SENS_EQUIVALENCE_API = {"sortante", "entrante", "double"}
-
-
-def _relations_equivalence_depuis_payload(payload, obligatoire=False):
-    """Lit les règles depuis le JSON, avec compatibilité pour l'ancien format."""
-
-    if "relations_equivalence" in payload:
-        brutes = payload.get("relations_equivalence")
-        if not isinstance(brutes, list):
-            raise ValueError("Le format des équivalences est invalide.")
-        relations = {}
-        for brute in brutes:
-            if not isinstance(brute, dict):
-                raise ValueError("Le format des équivalences est invalide.")
-            qualification_id = int(brute.get("qualification_id"))
-            sens = str(brute.get("sens", "")).strip()
-            if sens not in SENS_EQUIVALENCE_API:
-                raise ValueError("Le sens d'une équivalence est invalide.")
-            relations[qualification_id] = sens
-        return relations
-
-    if "equivalence_ids" in payload:
-        # L'ancien écran ne connaissait que le double sens.
-        return {int(value): "double" for value in payload.get("equivalence_ids", [])}
-
-    return {} if obligatoire else None
-
-
-def _remplacer_relations_equivalence(qualification, relations):
-    """Remplace toutes les règles impliquant la qualification donnée."""
-
-    relations = relations or {}
-    relations.pop(qualification.id, None)
-    autres = Qualification.objects.in_bulk(relations.keys())
-
-    EquivalenceQualification.objects.filter(
-        Q(qualification_a=qualification) | Q(qualification_b=qualification)
-    ).delete()
-
-    nouvelles = []
-    for autre_id, sens_perspective in relations.items():
-        autre = autres.get(autre_id)
-        if not autre:
-            continue
-
-        if qualification.id < autre.id:
-            qualification_a = qualification
-            qualification_b = autre
-            sens_stocke = {
-                "sortante": EquivalenceQualification.SENS_A_VERS_B,
-                "entrante": EquivalenceQualification.SENS_B_VERS_A,
-                "double": EquivalenceQualification.SENS_DOUBLE,
-            }[sens_perspective]
-        else:
-            qualification_a = autre
-            qualification_b = qualification
-            sens_stocke = {
-                "sortante": EquivalenceQualification.SENS_B_VERS_A,
-                "entrante": EquivalenceQualification.SENS_A_VERS_B,
-                "double": EquivalenceQualification.SENS_DOUBLE,
-            }[sens_perspective]
-
-        nouvelles.append(EquivalenceQualification(
-            qualification_a=qualification_a,
-            qualification_b=qualification_b,
-            sens=sens_stocke,
-        ))
-
-    EquivalenceQualification.objects.bulk_create(nouvelles)
-
-
-def _qualifications_avec_relations():
-    return Qualification.objects.prefetch_related(
-        "relations_equivalence_a__qualification_b",
-        "relations_equivalence_b__qualification_a",
-    )
+def _diplomes_avec_statut():
+    return Qualification.objects.select_related("statut")
 
 
 @require_http_methods(["GET", "POST"])
 def api_qualifications(request):
-    """GET : liste des qualifications. POST : création d'une qualification."""
+    """GET : liste des diplômes/statuts. POST : création."""
 
     if request.method == "GET":
-        qualifications = _qualifications_avec_relations().order_by("nom", "id")
+        qualifications = _diplomes_avec_statut().order_by("nom", "id")
         return JsonResponse([qualification_to_dict(q) for q in qualifications], safe=False)
 
     try:
         payload = json.loads(request.body)
         nom = payload["nom"].strip()
-        selectionnable_auto = bool(payload.get("selectionnable_remplissage_auto", False))
-        relations = _relations_equivalence_depuis_payload(payload, obligatoire=True)
+        selectionnable_auto = bool(payload.get("selectionnable_remplissage_auto", True))
+        est_statut = bool(payload.get("est_statut", False))
+        statut_id = payload.get("statut_id") or None
+        icone = str(payload.get("icone", "") or "").strip()
+        icones_valides = {cle for cle, _libelle in QUALIFICATION_ICON_CHOICES}
 
         if not nom:
             return JsonResponse({"error": "Le nom est obligatoire."}, status=400)
 
         if Qualification.objects.filter(cle_unique=normaliser_cle_unique(nom)).exists():
-            return JsonResponse({"error": f"La qualification « {nom} » existe déjà."}, status=409)
+            return JsonResponse({"error": f"Le diplôme ou statut « {nom} » existe déjà."}, status=409)
+        if statut_id and not Qualification.objects.filter(pk=statut_id, est_statut=True).exists():
+            return JsonResponse({"error": "Le statut sélectionné est invalide."}, status=400)
+        if icone not in icones_valides:
+            return JsonResponse({"error": "L’icône sélectionnée est invalide."}, status=400)
 
     except ValueError as exc:
         return JsonResponse({"error": str(exc) or "Requête invalide."}, status=400)
@@ -1339,23 +1632,25 @@ def api_qualifications(request):
             qualification = Qualification.objects.create(
                 nom=nom,
                 selectionnable_remplissage_auto=selectionnable_auto,
+                est_statut=est_statut,
+                statut_id=None if est_statut else statut_id,
+                icone="" if est_statut else icone,
             )
-            _remplacer_relations_equivalence(qualification, relations)
     except IntegrityError:
-        return JsonResponse({"error": f"La qualification « {nom} » existe déjà."}, status=409)
+        return JsonResponse({"error": f"Le diplôme ou statut « {nom} » existe déjà."}, status=409)
 
-    qualification = _qualifications_avec_relations().get(pk=qualification.pk)
+    qualification = _diplomes_avec_statut().get(pk=qualification.pk)
     return JsonResponse(qualification_to_dict(qualification), status=201)
 
 
 @require_http_methods(["GET", "PATCH", "DELETE"])
 def api_qualification_detail(request, qualification_id):
-    """Consulte, modifie ou supprime une qualification et ses équivalences."""
+    """Consulte, modifie ou supprime un diplôme ou un statut."""
 
     try:
-        qualification = _qualifications_avec_relations().get(pk=qualification_id)
+        qualification = _diplomes_avec_statut().get(pk=qualification_id)
     except Qualification.DoesNotExist:
-        return JsonResponse({"error": "Qualification introuvable."}, status=404)
+        return JsonResponse({"error": "Diplôme ou statut introuvable."}, status=404)
 
     if request.method == "GET":
         return JsonResponse(qualification_to_dict(qualification))
@@ -1373,10 +1668,17 @@ def api_qualification_detail(request, qualification_id):
                 qualification.selectionnable_remplissage_auto,
             )
         )
-        relations = _relations_equivalence_depuis_payload(payload)
+        est_statut = bool(payload.get("est_statut", qualification.est_statut))
+        statut_id = payload.get("statut_id", qualification.statut_id) or None
+        icone = str(payload.get("icone", qualification.icone) or "").strip()
+        icones_valides = {cle for cle, _libelle in QUALIFICATION_ICON_CHOICES}
 
         if not nom:
             return JsonResponse({"error": "Le nom est obligatoire."}, status=400)
+        if statut_id and not Qualification.objects.filter(pk=statut_id, est_statut=True).exclude(pk=qualification.pk).exists():
+            return JsonResponse({"error": "Le statut sélectionné est invalide."}, status=400)
+        if icone not in icones_valides:
+            return JsonResponse({"error": "L’icône sélectionnée est invalide."}, status=400)
 
     except ValueError as exc:
         return JsonResponse({"error": str(exc) or "Requête invalide."}, status=400)
@@ -1387,19 +1689,21 @@ def api_qualification_detail(request, qualification_id):
         with transaction.atomic():
             qualification.nom = nom
             qualification.selectionnable_remplissage_auto = selectionnable_auto
-            qualification.save(update_fields=["nom", "selectionnable_remplissage_auto", "cle_unique"])
-            if relations is not None:
-                _remplacer_relations_equivalence(qualification, relations)
+            qualification.est_statut = est_statut
+            qualification.statut_id = None if est_statut else statut_id
+            qualification.icone = "" if est_statut else icone
+            qualification.save(update_fields=["nom", "selectionnable_remplissage_auto", "est_statut", "statut", "icone", "cle_unique"])
     except IntegrityError:
-        return JsonResponse({"error": f"La qualification « {nom} » existe déjà."}, status=409)
+        return JsonResponse({"error": f"Le diplôme ou statut « {nom} » existe déjà."}, status=409)
 
-    qualification = _qualifications_avec_relations().get(pk=qualification.pk)
+    qualification = _diplomes_avec_statut().get(pk=qualification.pk)
     return JsonResponse(qualification_to_dict(qualification))
 
 
 # ---------------------------------------------------------------------------
 # API - Périodes scolaires indépendantes
 # ---------------------------------------------------------------------------
+
 
 def _periode_scolaire_to_dict(periode):
     return {
@@ -1452,9 +1756,7 @@ def api_periodes_scolaires_previsualiser(request):
         return JsonResponse({"error": str(exc)}, status=400)
 
     existantes = set(
-        PeriodeScolaire.objects.filter(
-            annee_scolaire=annee_scolaire, zone=zone
-        ).values_list("debut", "fin")
+        PeriodeScolaire.objects.filter(annee_scolaire=annee_scolaire, zone=zone).values_list("debut", "fin")
     )
     resultat = []
     for semaine in semaines:
@@ -1462,12 +1764,14 @@ def api_periodes_scolaires_previsualiser(request):
         item["deja_enregistree"] = (semaine.debut, semaine.fin) in existantes
         resultat.append(item)
 
-    return JsonResponse({
-        "annee_scolaire": annee_scolaire,
-        "zone": zone,
-        "periodes": resultat,
-        "nombre": len(resultat),
-    })
+    return JsonResponse(
+        {
+            "annee_scolaire": annee_scolaire,
+            "zone": zone,
+            "periodes": resultat,
+            "nombre": len(resultat),
+        }
+    )
 
 
 @require_POST
@@ -1497,7 +1801,7 @@ def api_periodes_scolaires_importer(request):
             if creee:
                 creees += 1
                 # Toute nouvelle semaine appartient automatiquement aux groupes permanents.
-                for groupe in Evenement.objects.filter(permanent=True).only("id"):
+                for groupe in groupes_visibles(Evenement.objects.filter(permanent=True)).only("id"):
                     groupe.periodes_scolaires.add(periode)
                 continue
             champs = []
@@ -1514,15 +1818,16 @@ def api_periodes_scolaires_importer(request):
                 periode.save(update_fields=champs)
                 mises_a_jour += 1
 
-    periodes = PeriodeScolaire.objects.filter(
-        annee_scolaire=annee_scolaire, zone=zone
+    periodes = PeriodeScolaire.objects.filter(annee_scolaire=annee_scolaire, zone=zone)
+    return JsonResponse(
+        {
+            "ok": True,
+            "cree": creees,
+            "mis_a_jour": mises_a_jour,
+            "periodes": [_periode_scolaire_to_dict(p) for p in periodes],
+        },
+        status=201 if creees else 200,
     )
-    return JsonResponse({
-        "ok": True,
-        "cree": creees,
-        "mis_a_jour": mises_a_jour,
-        "periodes": [_periode_scolaire_to_dict(p) for p in periodes],
-    }, status=201 if creees else 200)
 
 
 @require_http_methods(["DELETE"])
@@ -1538,6 +1843,7 @@ def api_periode_scolaire_detail(request, periode_id):
 # ---------------------------------------------------------------------------
 # API - Récapitulatif (statistiques pour la page de suivi)
 # ---------------------------------------------------------------------------
+
 
 def api_recapitulatif(request):
     """Tableau de bord du planning sur une ou plusieurs périodes enregistrées.
@@ -1599,20 +1905,23 @@ def api_recapitulatif(request):
 
     recap = generer_recapitulatif(debut, fin, jours_selectionnes=jours_selectionnes)
 
-    return JsonResponse({
-        "periode": {
-            "debut": debut.date().isoformat(),
-            "fin": fin.date().isoformat(),
-            "ids": [periode.id for periode in periodes],
-            "libelles": [periode.libelle_avec_annee for periode in periodes],
-        },
-        "dates": recap["dates"],
-        "centres": recap["centres"],
-        "animateurs": recap["animateurs"],
-        "total_jours": recap["total_jours"],
-        "total_paie_connue": recap["total_paie_connue"],
-        "tarifs_manquants": recap["tarifs_manquants"],
-    })
+    return JsonResponse(
+        {
+            "periode": {
+                "debut": debut.date().isoformat(),
+                "fin": fin.date().isoformat(),
+                "ids": [periode.id for periode in periodes],
+                "libelles": [periode.libelle_avec_annee for periode in periodes],
+            },
+            "dates": recap["dates"],
+            "centres": recap["centres"],
+            "animateurs": recap["animateurs"],
+            "total_jours": recap["total_jours"],
+            "total_paie_connue": recap["total_paie_connue"],
+            "tarifs_manquants": recap["tarifs_manquants"],
+        }
+    )
+
 
 # ---------------------------------------------------------------------------
 # API - Documents (liste, upload, suppression)
@@ -1717,8 +2026,6 @@ def api_document_detail(request, document_id):
     document.periodes.set(periodes)
 
     return JsonResponse(document_to_dict(document))
-
-
 
 
 @require_POST

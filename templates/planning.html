@@ -4,30 +4,26 @@
 {% block body_class %}page-planning{% endblock %}
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
-<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v=20260720-group-days-fix-1">
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v=20260720-group-days-fix-1">
-<link rel="stylesheet" href="{% static 'css/planning.css' %}?v=20260720-staff-balance-below-1">
+{% endblock %}
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/planning.css' %}?v=20260722-flottant-label-4">
 {% endblock %}
 {% block content %}
-<header class="planning-page-header planning-page-header-compact app-page-header app-page-header--tabs">
-    <h1>Planning</h1>
-    <nav class="planning-tabs" aria-label="Sections du planning">
-        <button id="planning-tab-affectations" class="planning-tab active" type="button" role="tab" aria-selected="true" aria-controls="layout" data-planning-mode="affectations">
-            <span class="planning-tab-icon" aria-hidden="true">♟</span>
-            <strong>Affectations</strong>
-        </button>
-        <button id="planning-tab-effectifs" class="planning-tab" type="button" role="tab" aria-selected="false" aria-controls="layout" data-planning-mode="effectifs">
-            <span class="planning-tab-icon" aria-hidden="true">◎</span>
-            <strong>Effectifs enfants</strong>
-        </button>
-    </nav>
-    <div class="app-page-week">
-        {% include "partials/_week_navigation.html" with container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
-    </div>
-</header>
+{% include "partials/_page_header.html" with title="Planning" header_class="planning-page-header planning-page-header-compact" container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
+<nav class="planning-tabs app-page-tabs app-page-tabs-row" aria-label="Sections du planning">
+    <button id="planning-tab-affectations" class="planning-tab active" type="button" role="tab" aria-selected="true" aria-controls="layout" data-planning-mode="affectations">
+        <span class="planning-tab-icon" aria-hidden="true">♟</span>
+        <strong>Affectations</strong>
+    </button>
+    <button id="planning-tab-effectifs" class="planning-tab" type="button" role="tab" aria-selected="false" aria-controls="layout" data-planning-mode="effectifs">
+        <span class="planning-tab-icon" aria-hidden="true">◎</span>
+        <strong>Effectifs enfants</strong>
+    </button>
+</nav>
 <main id="layout" class="planning-workspace" data-planning-mode="affectations" tabindex="-1">
     <aside id="animateurs-panel">
-        {% include "partials/_staff_filter.html" with toolbar_class="planning-animateurs-toolbar" search_id="animateurs-search-input" details_id="animateurs-filters" count_id="animateurs-filter-count" qualifications_id="animateurs-filter-qualifications" availability_id="animateurs-filter-disponibilite" assignment_id="animateurs-filter-affectation" centres_id="animateurs-filter-centres" reset_id="animateurs-filter-reset" %}
+        {% include "partials/_staff_filter.html" with toolbar_class="planning-animateurs-toolbar" search_id="animateurs-search-input" details_id="animateurs-filters" count_id="animateurs-filter-count" statuts_id="animateurs-filter-statuts" qualifications_id="animateurs-filter-qualifications" situation_id="animateurs-filter-situation" centres_id="animateurs-filter-centres" reset_id="animateurs-filter-reset" reset_label="Réinitialiser" show_status_filters=True %}
         <div id="animateurs-list"></div>
     </aside>
     <section id="calendars-section">
@@ -41,6 +37,9 @@
                 </summary>
                 <div id="planning-add-centre-menu" class="planning-centres-dropdown-menu" role="menu"></div>
             </details>
+            <button id="btn-effectifs-excel" class="btn btn-secondary planning-excel-trigger" type="button">
+                <span aria-hidden="true">⇩</span> Excel
+            </button>
             <div id="planning-actions" class="planning-control-block toolbar-actions planning-top-actions">
                 <button id="btn-auto-semaine" class="btn btn-primary" type="button">Remplir auto</button>
                 <button id="btn-vider-semaine" class="btn btn-danger-solid" type="button">Vider la semaine</button>
@@ -56,6 +55,7 @@
             
             <div id="effectifs-enfants-fields" class="effectifs-enfants-fields"></div>
             <div class="modal-actions">
+                <button class="btn btn-danger-ghost" id="effectifs-enfants-vider-semaine" type="button">Vider la semaine</button>
                 <button class="btn btn-secondary" data-modal-close type="button">Annuler</button>
                 <button class="btn btn-primary" type="submit">Enregistrer</button>
             </div>
@@ -75,6 +75,113 @@
         </form>
     </div>
 </div>
+<div class="modal-backdrop" id="modal-horaires-affectation" hidden>
+    <div class="modal-box modal-box-small planning-effectifs-modal">
+        <div class="modal-header"><h2 id="horaires-affectation-title">Horaires de l’animateur</h2><button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button></div>
+        <form id="horaires-affectation-form" class="modal-body">
+            <label class="planning-floating-toggle"><input id="affectation-case-flottante" type="checkbox"> <span><strong>Case flottante du lieu</strong><small>L’animateur couvre uniquement les enfants restant à encadrer dans ce lieu.</small></span></label>
+            <div id="horaires-affectation-fields" class="effectifs-enfants-fields"></div>
+            <div class="modal-actions">
+                <button class="btn btn-danger-ghost" id="supprimer-affectation" type="button">Supprimer l’affectation</button>
+                <button class="btn btn-secondary" data-modal-close type="button">Annuler</button>
+                <button class="btn btn-primary" type="submit">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="modal-backdrop" id="modal-horaires-groupe" hidden>
+    <div class="modal-box modal-box-small planning-effectifs-modal">
+        <div class="modal-header"><h2 id="horaires-groupe-title">Horaires du groupe</h2><button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button></div>
+        <form id="horaires-groupe-form" class="modal-body">
+            <div id="horaires-groupe-fields" class="effectifs-enfants-fields"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" data-modal-close type="button">Annuler</button>
+                <button class="btn btn-primary" type="submit">Enregistrer les horaires</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="modal-effectifs-excel" hidden>
+    <div class="modal-box effectifs-excel-modal" role="dialog" aria-modal="true" aria-labelledby="effectifs-excel-title">
+        <div class="modal-header">
+            <div>
+                <h2 id="effectifs-excel-title">Effectifs enfants — Excel</h2>
+                <p id="effectifs-excel-subtitle">Téléchargez un gabarit ou importez un classeur existant.</p>
+            </div>
+            <button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button>
+        </div>
+        <div class="modal-body effectifs-excel-body">
+            <section id="effectifs-excel-home" class="effectifs-excel-step">
+                <div class="effectifs-excel-choice-grid">
+                    <article class="effectifs-excel-card">
+                        <div class="effectifs-excel-card-icon" aria-hidden="true">▦</div>
+                        <div>
+                            <h3>Télécharger un gabarit</h3>
+                            <p>Choisissez plusieurs lieux et une période. Le classeur contiendra une feuille par lieu.</p>
+                        </div>
+                        <div class="effectifs-excel-date-grid">
+                            <label class="field"><span>Du</span><input id="effectifs-excel-debut" type="date"></label>
+                            <label class="field"><span>Au</span><input id="effectifs-excel-fin" type="date"></label>
+                        </div>
+                        <div>
+                            <div class="effectifs-excel-label-row"><strong>Lieux</strong><button id="effectifs-excel-tous-lieux" class="btn-link" type="button">Tout sélectionner</button></div>
+                            <div id="effectifs-excel-centres" class="effectifs-excel-checks"></div>
+                        </div>
+                        <button id="effectifs-excel-download" class="btn btn-primary" type="button">Télécharger le gabarit</button>
+                    </article>
+                    <article class="effectifs-excel-card">
+                        <div class="effectifs-excel-card-icon" aria-hidden="true">↥</div>
+                        <div>
+                            <h3>Importer un fichier Excel</h3>
+                            <p>Les gabarits Animation Manager sont reconnus automatiquement. Les autres fichiers passent par l’assistant de correspondance.</p>
+                        </div>
+                        <label class="effectifs-excel-dropzone" for="effectifs-excel-file">
+                            <input id="effectifs-excel-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                            <strong>Choisir un fichier .xlsx</strong>
+                            <span id="effectifs-excel-file-name">Aucun fichier sélectionné</span>
+                        </label>
+                        <button id="effectifs-excel-analyse" class="btn btn-primary" type="button" disabled>Analyser le fichier</button>
+                    </article>
+                </div>
+            </section>
+            <section id="effectifs-excel-mapping" class="effectifs-excel-step" hidden>
+                <div class="effectifs-excel-toolbar">
+                    <button class="btn btn-secondary" data-excel-back="home" type="button">← Retour</button>
+                    <label class="field effectifs-excel-profile-select"><span>Profil enregistré</span><select id="effectifs-excel-profile"><option value="">Aucun profil</option></select></label>
+                    <button id="effectifs-excel-delete-profile" class="btn btn-danger-ghost" type="button" hidden>Supprimer</button>
+                </div>
+                <div id="effectifs-excel-sheets" class="effectifs-excel-sheets"></div>
+                <div class="effectifs-excel-profile-save">
+                    <label class="field"><span>Nom du profil</span><input id="effectifs-excel-profile-name" maxlength="120" placeholder="Ex. Export Millibase"></label>
+                    <button id="effectifs-excel-save-profile" class="btn btn-secondary" type="button">Enregistrer la correspondance</button>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" data-modal-close type="button">Annuler</button>
+                    <button id="effectifs-excel-preview" class="btn btn-primary" type="button">Vérifier les effectifs</button>
+                </div>
+            </section>
+            <section id="effectifs-excel-preview-step" class="effectifs-excel-step" hidden>
+                <div class="effectifs-excel-toolbar">
+                    <button id="effectifs-excel-preview-back" class="btn btn-secondary" type="button">← Corriger la correspondance</button>
+                    <div id="effectifs-excel-preview-summary" class="effectifs-excel-summary"></div>
+                </div>
+                <div id="effectifs-excel-errors" class="effectifs-excel-errors" hidden></div>
+                <div class="effectifs-excel-table-wrap">
+                    <table class="effectifs-excel-table">
+                        <thead><tr><th><input id="effectifs-excel-select-all" type="checkbox" aria-label="Tout sélectionner"></th><th>Date</th><th>Lieu</th><th>Groupe</th><th>Actuel</th><th>Importé</th></tr></thead>
+                        <tbody id="effectifs-excel-preview-rows"></tbody>
+                    </table>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" data-modal-close type="button">Annuler</button>
+                    <button id="effectifs-excel-confirm" class="btn btn-primary" type="button">Importer les lignes sélectionnées</button>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
 <div class="modal-backdrop" id="modal-auto-remplissage" hidden>
     <div class="modal-box modal-box-small">
         <div class="modal-header"><h2>Remplissage automatique</h2><button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button></div>
@@ -84,5 +191,6 @@
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/planning/utils.js' %}?v=20260719-clean-ui-1"></script>
-<script src="{% static 'js/planning.js' %}?v=20260720-staff-balance-below-1"></script>
+<script src="{% static 'js/planning.js' %}?v=20260722-flottant-delete-live-4"></script>
+<script src="{% static 'js/effectifs-excel.js' %}?v=20260721-excel-import-1"></script>
 {% endblock %}

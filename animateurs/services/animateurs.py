@@ -2,6 +2,8 @@
 
 from animateurs.models import Centre, Evenement, PreferenceCentre
 
+from .flottants import est_groupe_flottants
+
 
 def _normaliser_id_centre(valeur, libelle):
     if valeur in (None, ""):
@@ -92,8 +94,10 @@ def normaliser_evenement_preferee(payload, centre_prefere_id):
         return None, True, "Le groupe préféré est invalide."
 
     try:
-        evenement = Evenement.objects.select_related("centre").get(pk=evenement_id)
+        evenement = Evenement.objects.select_related("centre", "groupe").get(pk=evenement_id)
     except Evenement.DoesNotExist:
+        return None, True, "Le groupe préféré est introuvable."
+    if est_groupe_flottants(evenement):
         return None, True, "Le groupe préféré est introuvable."
 
     if centre_prefere_id is None:

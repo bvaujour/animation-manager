@@ -16,7 +16,9 @@ from io import BytesIO
 from django.db.models import Q
 from django.utils import timezone
 
-from ..models import Affectation, Evenement
+from ..models import Affectation, EffectifEnfantsJour, Evenement
+from .flottants import est_groupe_flottants
+from .status_colors import statut_payload
 
 JOURS_FR = [
     "Lundi",
@@ -40,11 +42,54 @@ def dates_visibles(debut: date, fin: date) -> list[date]:
 
 
 def libelle_evenement(evenement: Evenement) -> str:
-    """Nom lisible du groupe."""
-    return evenement.nom
+    """Nom lisible du groupe, y compris la ligne flottante du lieu."""
+    return "Animateurs flottants" if est_groupe_flottants(evenement) else evenement.nom
 
 
-def _planning_matrix(debut: date, fin: date):
+def libelle_affectation(affectation: Affectation) -> str:
+    """Nom de l'animateur affecté ; les horaires appartiennent à la journée."""
+    return f"{affectation.animateur.prenom} {affectation.animateur.nom}"
+
+
+def _journees_par_case(groupes, dates):
+    return {
+        (ligne.evenement_id, ligne.date): ligne
+        for ligne in EffectifEnfantsJour.objects.filter(
+            evenement__in=groupes,
+            date__in=dates,
+        )
+    }
+
+
+def horaires_manquants_export(
+    debut: date,
+    fin: date,
+    jours_selectionnes: set[date] | None = None,
+) -> list[dict]:
+    """Liste les animateurs affectés sans plage horaire journalière."""
+    dates, _, _, _ = _planning_matrix(debut, fin, jours_selectionnes)
+    affectations = Affectation.objects.filter(
+        debut__date__lte=fin,
+        fin__date__gt=debut,
+    ).select_related("animateur", "centre", "evenement").prefetch_related("horaires_journaliers")
+    manquants = []
+    for affectation in affectations:
+        horaires = {horaire.date for horaire in affectation.horaires_journaliers.all()}
+        debut_affectation = timezone.localtime(affectation.debut).date()
+        fin_affectation = timezone.localtime(affectation.fin).date()
+        for jour in dates:
+            if not (debut_affectation <= jour < fin_affectation) or jour in horaires:
+                continue
+            manquants.append({
+                "date": jour.isoformat(),
+                "centre": affectation.centre.nom,
+                "groupe": libelle_evenement(affectation.evenement),
+                "animateur": f"{affectation.animateur.prenom} {affectation.animateur.nom}",
+            })
+    return manquants
+
+
+def _planning_matrix(debut: date, fin: date, jours_selectionnes: set[date] | None = None):
     """Construit les lignes et cellules communes aux exports.
 
     Seules les dates réellement ouvertes pour au moins un groupe sont
@@ -52,7 +97,9 @@ def _planning_matrix(debut: date, fin: date):
     visible, même si le groupe n'a plus de période configurée.
     """
     affectations = list(
-        Affectation.objects.select_related("animateur", "centre", "evenement")
+        Affectation.objects.select_related("animateur", "centre", "evenement").prefetch_related(
+            "animateur__qualifications", "horaires_journaliers"
+        )
         .filter(debut__date__lte=fin, fin__date__gt=debut)
         .order_by(
             "centre__nom",
@@ -74,19 +121,21 @@ def _planning_matrix(debut: date, fin: date):
 
     intervalles_affectes = []
     for affectation in affectations:
-        intervalles_affectes.append((
-            timezone.localtime(affectation.debut).date(),
-            timezone.localtime(affectation.fin).date(),
-        ))
+        intervalles_affectes.append(
+            (
+                timezone.localtime(affectation.debut).date(),
+                timezone.localtime(affectation.fin).date(),
+            )
+        )
 
-    dates_exclues = {
-        groupe.id: set(groupe.dates_exclues.values_list("date", flat=True))
-        for groupe in groupes
-    }
+    dates_exclues = {groupe.id: set(groupe.dates_exclues.values_list("date", flat=True)) for groupe in groupes}
     dates = []
     for jour in dates_visibles(debut, fin):
+        if jours_selectionnes is not None and jour not in jours_selectionnes:
+            continue
         groupe_ouvert = any(
-            groupe.est_ouvert_le(jour, dates_exclues[groupe.id])
+            not est_groupe_flottants(groupe)
+            and groupe.est_ouvert_le(jour, dates_exclues[groupe.id])
             for groupe in groupes
         )
         affectation_historique = any(debut_aff <= jour < fin_aff for debut_aff, fin_aff in intervalles_affectes)
@@ -99,14 +148,18 @@ def _planning_matrix(debut: date, fin: date):
     for affectation in affectations:
         debut_local = timezone.localtime(affectation.debut).date()
         fin_local = timezone.localtime(affectation.fin).date()
+        horaires = {horaire.date: horaire for horaire in affectation.horaires_journaliers.all()}
         for jour in dates:
             if debut_local <= jour < fin_local:
                 key = (affectation.evenement_id, jour)
-                nom = f"{affectation.animateur.prenom} {affectation.animateur.nom}"
+                nom = libelle_affectation(affectation)
+                horaire = horaires.get(jour)
+                if horaire:
+                    nom += f" · {horaire.heure_arrivee:%H:%M}–{horaire.heure_depart:%H:%M}"
                 if nom not in noms_par_case[key]:
                     noms_par_case[key].append(nom)
                     couleurs_par_case[key].append(
-                        affectation.animateur.couleur or "#1f6f54"
+                        statut_payload(affectation.animateur.qualifications.all())["couleur_statut"]
                     )
 
     return dates, groupes, noms_par_case, couleurs_par_case
@@ -126,47 +179,60 @@ def _groupes_centres(evenements: list[Evenement]):
     return groupes
 
 
-def generer_planning_excel(debut: date, fin: date) -> bytes:
+def generer_planning_excel(
+    debut: date,
+    fin: date,
+    jours_selectionnes: set[date] | None = None,
+) -> bytes:
     import xlsxwriter
 
-    dates, evenements, noms_par_case, _ = _planning_matrix(debut, fin)
+    dates, evenements, noms_par_case, _ = _planning_matrix(debut, fin, jours_selectionnes)
+    journees_par_case = _journees_par_case(evenements, dates)
     output = BytesIO()
     workbook = xlsxwriter.Workbook(output, {"in_memory": True})
     sheet = workbook.add_worksheet("Calendrier")
 
-    title = workbook.add_format({
-        "bold": True,
-        "font_size": 16,
-        "font_color": "#FFFFFF",
-        "bg_color": "#1F6F54",
-        "align": "center",
-        "valign": "vcenter",
-    })
-    header = workbook.add_format({
-        "bold": True,
-        "font_color": "#FFFFFF",
-        "bg_color": "#355C7D",
-        "align": "center",
-        "valign": "vcenter",
-        "border": 1,
-        "text_wrap": True,
-    })
-    evenement_format = workbook.add_format({
-        "bold": True,
-        "font_color": "#1E2A22",
-        "bg_color": "#EDF3F1",
-        "align": "left",
-        "valign": "vcenter",
-        "border": 1,
-        "text_wrap": True,
-    })
-    cell = workbook.add_format({
-        "align": "center",
-        "valign": "vcenter",
-        "border": 1,
-        "text_wrap": True,
-        "font_size": 10,
-    })
+    title = workbook.add_format(
+        {
+            "bold": True,
+            "font_size": 16,
+            "font_color": "#FFFFFF",
+            "bg_color": "#1F6F54",
+            "align": "center",
+            "valign": "vcenter",
+        }
+    )
+    header = workbook.add_format(
+        {
+            "bold": True,
+            "font_color": "#FFFFFF",
+            "bg_color": "#355C7D",
+            "align": "center",
+            "valign": "vcenter",
+            "border": 1,
+            "text_wrap": True,
+        }
+    )
+    evenement_format = workbook.add_format(
+        {
+            "bold": True,
+            "font_color": "#1E2A22",
+            "bg_color": "#EDF3F1",
+            "align": "left",
+            "valign": "vcenter",
+            "border": 1,
+            "text_wrap": True,
+        }
+    )
+    cell = workbook.add_format(
+        {
+            "align": "center",
+            "valign": "vcenter",
+            "border": 1,
+            "text_wrap": True,
+            "font_size": 10,
+        }
+    )
 
     last_col = max(2, len(dates) + 1)
     sheet.merge_range(
@@ -191,35 +257,44 @@ def generer_planning_excel(debut: date, fin: date) -> bytes:
         max_lines = max(1, libelle_evenement(evenement).count("\n") + 1)
         for col, jour in enumerate(dates, start=2):
             noms = noms_par_case.get((evenement.id, jour), [])
-            max_lines = max(max_lines, len(noms))
-            sheet.write(row, col, "\n".join(noms), cell)
+            journee = journees_par_case.get((evenement.id, jour))
+            lignes = []
+            if journee:
+                lignes.append(f"{journee.nombre} enfants")
+            lignes.extend(noms)
+            max_lines = max(max_lines, len(lignes))
+            sheet.write(row, col, "\n".join(lignes), cell)
         sheet.set_row(row, max(38, 18 * max_lines))
 
     for debut_index, fin_index, centre in _groupes_centres(evenements):
         start_row = first_data_row + debut_index
         end_row = first_data_row + fin_index
-        centre_fmt = workbook.add_format({
-            "bold": True,
-            "font_color": "#FFFFFF",
-            "bg_color": centre.couleur or "#1F6F54",
-            "align": "center",
-            "valign": "vcenter",
-            "border": 1,
-            "text_wrap": True,
-        })
+        centre_fmt = workbook.add_format(
+            {
+                "bold": True,
+                "font_color": "#FFFFFF",
+                "bg_color": centre.couleur or "#1F6F54",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+                "text_wrap": True,
+            }
+        )
         if start_row == end_row:
             sheet.write(start_row, 0, centre.nom, centre_fmt)
         else:
             sheet.merge_range(start_row, 0, end_row, 0, centre.nom, centre_fmt)
 
     if not evenements:
-        empty_format = workbook.add_format({
-            "italic": True,
-            "font_color": "#64748B",
-            "align": "center",
-            "valign": "vcenter",
-            "border": 1,
-        })
+        empty_format = workbook.add_format(
+            {
+                "italic": True,
+                "font_color": "#64748B",
+                "align": "center",
+                "valign": "vcenter",
+                "border": 1,
+            }
+        )
         sheet.merge_range(2, 0, 2, last_col, "Aucun groupe à afficher", empty_format)
 
     sheet.set_column(0, 0, 22)
@@ -239,12 +314,20 @@ def generer_planning_excel(debut: date, fin: date) -> bytes:
     return output.read()
 
 
-def _chunks(items, size):
-    for index in range(0, len(items), size):
-        yield items[index:index + size]
+def _dates_par_semaine(dates: list[date]) -> list[list[date]]:
+    """Regroupe les seuls jours ouverts par semaine civile pour le PDF."""
+    semaines: dict[date, list[date]] = {}
+    for jour in dates:
+        lundi = jour - timedelta(days=jour.weekday())
+        semaines.setdefault(lundi, []).append(jour)
+    return list(semaines.values())
 
 
-def generer_planning_pdf(debut: date, fin: date) -> bytes:
+def generer_planning_pdf(
+    debut: date,
+    fin: date,
+    jours_selectionnes: set[date] | None = None,
+) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT
     from reportlab.lib.pagesizes import A4, landscape
@@ -258,7 +341,8 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
         TableStyle,
     )
 
-    dates, evenements, noms_par_case, couleurs_par_case = _planning_matrix(debut, fin)
+    dates, evenements, noms_par_case, couleurs_par_case = _planning_matrix(debut, fin, jours_selectionnes)
+    journees_par_case = _journees_par_case(evenements, dates)
     output = BytesIO()
     doc = SimpleDocTemplate(
         output,
@@ -324,7 +408,9 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
     )
 
     story = []
-    pages = list(_chunks(dates, 6)) or [[]]
+    # Un tableau représente une semaine sélectionnée. Il contient exactement
+    # les dates ouvertes calculées par la matrice, sans colonne artificielle.
+    pages = _dates_par_semaine(dates) or [[]]
     groupes = _groupes_centres(evenements)
     first_team_index_by_centre = {debut_index for debut_index, _, _ in groupes}
 
@@ -340,9 +426,7 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
 
         data = [[Paragraph("Centre", header_style), Paragraph("Groupe", header_style)]]
         for jour in jours_page:
-            data[0].append(
-                Paragraph(f"{JOURS_FR[jour.weekday()]}<br/>{jour:%d/%m}", header_style)
-            )
+            data[0].append(Paragraph(f"{JOURS_FR[jour.weekday()]}<br/>{jour:%d/%m}", header_style))
 
         for index, evenement in enumerate(evenements):
             centre_texte = evenement.centre.nom if index in first_team_index_by_centre else ""
@@ -355,17 +439,22 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
                 noms = noms_par_case.get((evenement.id, jour), [])
                 couleurs_anim = couleurs_par_case.get((evenement.id, jour), [])
                 lignes = []
+                journee = journees_par_case.get((evenement.id, jour))
+                if journee:
+                    lignes.append(f"<b>{journee.nombre} enfants</b>")
                 for nom, couleur in zip(noms, couleurs_anim, strict=True):
                     lignes.append(f'<font color="{couleur}"><b>●</b></font> {nom}')
                 row.append(Paragraph("<br/>".join(lignes) if lignes else "", name_style))
             data.append(row)
 
         if not evenements:
-            data.append([
-                Paragraph("Aucun groupe à afficher", empty_style),
-                "",
-                *([""] * len(jours_page)),
-            ])
+            data.append(
+                [
+                    Paragraph("Aucun groupe à afficher", empty_style),
+                    "",
+                    *([""] * len(jours_page)),
+                ]
+            )
 
         usable_width = landscape(A4)[0] - 14 * mm
         centre_col = 36 * mm
@@ -396,15 +485,15 @@ def generer_planning_pdf(debut: date, fin: date) -> bytes:
             table_style.append(("BACKGROUND", (0, index), (0, index), centre_color))
             table_style.append(("TEXTCOLOR", (0, index), (0, index), colors.white))
             if (index - 1) in first_team_index_by_centre:
-                table_style.append(
-                    ("LINEABOVE", (0, index), (-1, index), 1.4, centre_color)
-                )
+                table_style.append(("LINEABOVE", (0, index), (-1, index), 1.4, centre_color))
 
         if not evenements:
-            table_style.extend([
-                ("SPAN", (0, 1), (-1, 1)),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#F8FAFC")),
-            ])
+            table_style.extend(
+                [
+                    ("SPAN", (0, 1), (-1, 1)),
+                    ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#F8FAFC")),
+                ]
+            )
 
         table.setStyle(TableStyle(table_style))
         story.append(table)

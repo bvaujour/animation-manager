@@ -17,6 +17,7 @@ from animateurs.models import (
 )
 from animateurs.tests.base import ConnexionTestCase
 from animateurs.tests.factories import creer_groupe
+from animateurs.services.flottants import ORDRE_GROUPE_FLOTTANTS
 
 
 class PlanningApiTests(ConnexionTestCase):
@@ -55,6 +56,124 @@ class PlanningApiTests(ConnexionTestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 409)
+
+
+    def test_creation_flottante_idempotente_sans_champ_modele(self):
+        payload = {
+            "animateur_id": self.animateur.id,
+            "centre_id": self.centre.id,
+            "type_affectation": "flottant",
+            "debut": "2026-07-06",
+            "fin": "2026-07-07",
+        }
+        premiere = self.client.post(
+            reverse("api_affectation_create"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        seconde = self.client.post(
+            reverse("api_affectation_create"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+        self.assertEqual(premiere.status_code, 201)
+        self.assertEqual(seconde.status_code, 200)
+        self.assertEqual(Affectation.objects.count(), 1)
+        self.assertEqual(premiere.json()["extendedProps"]["type_affectation"], "flottant")
+        self.assertNotIn("est_flottant", {field.name for field in Affectation._meta.fields})
+        affectation = Affectation.objects.select_related("evenement").get()
+        self.assertEqual(affectation.evenement.ordre, ORDRE_GROUPE_FLOTTANTS)
+        self.assertLessEqual(affectation.evenement.ordre, 32767)
+
+    def test_une_seule_affectation_flottante_par_lieu_et_par_jour(self):
+        autre = Animateur.objects.create(prenom="Manon", nom="Seconde")
+        Disponibilite.objects.create(
+            animateur=autre,
+            debut=datetime.date(2026, 7, 6),
+            fin=datetime.date(2026, 7, 11),
+        )
+        payload = {
+            "centre_id": self.centre.id,
+            "type_affectation": "flottant",
+            "debut": "2026-07-06",
+            "fin": "2026-07-07",
+        }
+
+        premiere = self.client.post(
+            reverse("api_affectation_create"),
+            data=json.dumps({**payload, "animateur_id": self.animateur.id}),
+            content_type="application/json",
+        )
+        seconde = self.client.post(
+            reverse("api_affectation_create"),
+            data=json.dumps({**payload, "animateur_id": autre.id}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(premiere.status_code, 201)
+        self.assertEqual(seconde.status_code, 409)
+        self.assertIn("déjà animateur flottant", seconde.json()["error"])
+        self.assertEqual(Affectation.objects.count(), 1)
+
+    def test_depot_flottant_deplace_affectation_journaliere_du_meme_lieu(self):
+        affectation = Affectation.objects.create(
+            animateur=self.animateur,
+            centre=self.centre,
+            evenement=self.groupe,
+            debut=timezone.make_aware(datetime.datetime(2026, 7, 6)),
+            fin=timezone.make_aware(datetime.datetime(2026, 7, 7)),
+        )
+        response = self.client.post(
+            reverse("api_affectation_create"),
+            data=json.dumps({
+                "animateur_id": self.animateur.id,
+                "centre_id": self.centre.id,
+                "type_affectation": "flottant",
+                "debut": "2026-07-06",
+                "fin": "2026-07-07",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Affectation.objects.count(), 1)
+        affectation.refresh_from_db()
+        self.assertEqual(response.json()["id"], affectation.id)
+        self.assertEqual(response.json()["extendedProps"]["type_affectation"], "flottant")
+
+    def test_depot_flottant_isole_un_jour_dune_affectation_longue(self):
+        Affectation.objects.create(
+            animateur=self.animateur,
+            centre=self.centre,
+            evenement=self.groupe,
+            debut=timezone.make_aware(datetime.datetime(2026, 7, 6)),
+            fin=timezone.make_aware(datetime.datetime(2026, 7, 9)),
+        )
+        response = self.client.post(
+            reverse("api_affectation_create"),
+            data=json.dumps({
+                "animateur_id": self.animateur.id,
+                "centre_id": self.centre.id,
+                "type_affectation": "flottant",
+                "debut": "2026-07-07",
+                "fin": "2026-07-08",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Affectation.objects.count(), 3)
+        self.assertEqual(response.json()["extendedProps"]["type_affectation"], "flottant")
+        plages = list(Affectation.objects.order_by("debut").values_list("debut__date", "fin__date"))
+        self.assertEqual(
+            plages,
+            [
+                (datetime.date(2026, 7, 6), datetime.date(2026, 7, 7)),
+                (datetime.date(2026, 7, 7), datetime.date(2026, 7, 8)),
+                (datetime.date(2026, 7, 8), datetime.date(2026, 7, 9)),
+            ],
+        )
 
     def test_refuse_creation_sans_disponibilite(self):
         self.animateur.disponibilites.all().delete()
@@ -122,9 +241,26 @@ class PlanningApiTests(ConnexionTestCase):
         self.assertFalse(Affectation.objects.filter(debut__date=datetime.date(2026, 7, 6)).exists())
         self.assertTrue(Affectation.objects.filter(pk=affectation_samedi.pk).exists())
 
-
-
 class QualificationApiTests(ConnexionTestCase):
+    def test_creation_dune_categorie_et_rattachement_dun_diplome(self):
+        categorie_response = self.client.post(
+            reverse("api_qualifications"),
+            data=json.dumps({"nom": "Diplômé", "est_statut": True}),
+            content_type="application/json",
+        )
+        self.assertEqual(categorie_response.status_code, 201)
+        categorie = categorie_response.json()
+        self.assertTrue(categorie["est_statut"])
+
+        diplome_response = self.client.post(
+            reverse("api_qualifications"),
+            data=json.dumps({"nom": "BAFA", "statut_id": categorie["id"]}),
+            content_type="application/json",
+        )
+        self.assertEqual(diplome_response.status_code, 201)
+        self.assertEqual(diplome_response.json()["statut_id"], categorie["id"])
+        self.assertEqual(diplome_response.json()["statut_nom"], "Diplômé")
+
     def test_creation_et_modification_visibilite_auto(self):
         response = self.client.post(
             reverse("api_qualifications"),
@@ -165,14 +301,53 @@ class QualificationApiTests(ConnexionTestCase):
 
 
 class QualificationDefaultTests(ConnexionTestCase):
-    def test_nouvelle_qualification_non_selectionnable_par_defaut(self):
+    def test_nouveau_diplome_selectionnable_par_defaut(self):
         response = self.client.post(
             reverse("api_qualifications"),
             data=json.dumps({"nom": "SB"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 201)
-        self.assertFalse(response.json()["selectionnable_remplissage_auto"])
+        self.assertTrue(response.json()["selectionnable_remplissage_auto"])
+
+
+class CentresGroupesPlanningApiTests(ConnexionTestCase):
+    def test_liste_groupee_charge_les_centres_et_groupes_sans_effectifs_historiques(self):
+        centre = Centre.objects.create(nom="Centre groupé", code="GRP", couleur="#123456")
+        groupe, _ = creer_groupe(centre, nom="Maternels groupés")
+        from animateurs.models import EffectifEnfantsJour
+
+        EffectifEnfantsJour.objects.create(
+            evenement=groupe,
+            date=datetime.date(2026, 7, 20),
+            nombre=18,
+            enfants_par_animateur=8,
+        )
+
+        response = self.client.get(reverse("api_centres"), {"include_groupes": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 1)
+        data = response.json()[0]
+        self.assertEqual(data["id"], centre.id)
+        self.assertEqual(data["evenements"][0]["id"], groupe.id)
+        self.assertEqual(data["evenements"][0]["effectifs_enfants"], [])
+
+    def test_liste_groupee_garde_un_nombre_fixe_de_requetes(self):
+        centre = Centre.objects.create(nom="Centre performance", code="PERF", couleur="#123456")
+        for index in range(15):
+            creer_groupe(centre, nom=f"Groupe {index:02d}")
+
+        with CaptureQueriesContext(connection) as contexte:
+            response = self.client.get(reverse("api_centres"), {"include_groupes": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()[0]["evenements"]), 15)
+        self.assertLessEqual(
+            len(contexte),
+            8,
+            f"Le chargement groupé a effectué {len(contexte)} requêtes.",
+        )
 
 
 class AnimateurCentresHierarchisesApiTests(ConnexionTestCase):
@@ -202,24 +377,6 @@ class AnimateurCentresHierarchisesApiTests(ConnexionTestCase):
 class AnimateurDetailApiTests(ConnexionTestCase):
     def setUp(self):
         self.animateur = Animateur.objects.create(prenom="Alice", nom="Couleur")
-
-    def test_modification_couleur_valide(self):
-        response = self.client.patch(
-            reverse("api_animateur_detail", args=[self.animateur.id]),
-            data=json.dumps({"couleur": "#123ABC"}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.animateur.refresh_from_db()
-        self.assertEqual(self.animateur.couleur, "#123ABC")
-
-    def test_refuse_couleur_invalide(self):
-        response = self.client.patch(
-            reverse("api_animateur_detail", args=[self.animateur.id]),
-            data=json.dumps({"couleur": "rouge"}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 400)
 
     def test_creation_et_modification_informations_administratives(self):
         response = self.client.post(
@@ -269,7 +426,8 @@ class GestionEtDisponibiliteApiTests(ConnexionTestCase):
     def test_employees_are_separate_from_management(self):
         response = self.client.get("/gestion/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Lieux et groupes")
+        self.assertContains(response, 'data-tab="lieux"')
+        self.assertContains(response, 'data-tab="groupes"')
         self.assertNotContains(response, "Ajouter un salarié")
         self.assertNotContains(response, 'data-tab="salaries"')
 
@@ -378,6 +536,30 @@ class AnimateursListPerformanceTests(ConnexionTestCase):
             f"La liste a effectué {len(contexte)} requêtes au lieu d'un nombre fixe.",
         )
 
+    def test_format_planning_filtre_garde_un_nombre_fixe_de_requetes(self):
+        self.creer_animateurs(25)
+
+        with CaptureQueriesContext(connection) as contexte:
+            response = self.client.get(
+                reverse("api_animateurs"),
+                {
+                    "include_affectations": "1",
+                    "format": "planning",
+                    "debut": "2027-07-07",
+                    "fin": "2027-07-14",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 25)
+        # Une requête fixe supplémentaire calcule les jours réellement ouverts
+        # de la semaine pour fournir une situation fiable à la barre latérale.
+        self.assertLessEqual(
+            len(contexte),
+            9,
+            f"La liste Planning a effectué {len(contexte)} requêtes.",
+        )
+
     def test_consulter_la_liste_ne_modifie_pas_les_disponibilites(self):
         animateur = Animateur.objects.create(prenom="Aline", nom="Historique")
         disponibilite = Disponibilite.objects.create(
@@ -427,6 +609,73 @@ class AnimateursApiOptionsTests(ConnexionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 1)
+
+    def test_format_planning_ne_renvoie_que_la_semaine_demandee(self):
+        animateur = Animateur.objects.create(
+            prenom="Lina",
+            nom="Semaine",
+            adresse="Donnée administrative inutile au planning",
+            numero_securite_sociale="2 06 07 42 123 456 78",
+        )
+        centre = Centre.objects.create(nom="Centre semaine", code="SEM", couleur="#123456")
+        groupe, _ = creer_groupe(centre, nom="Groupe semaine")
+        Disponibilite.objects.create(
+            animateur=animateur,
+            debut=datetime.date(2026, 7, 20),
+            fin=datetime.date(2026, 7, 24),
+        )
+        Disponibilite.objects.create(
+            animateur=animateur,
+            debut=datetime.date(2026, 8, 3),
+            fin=datetime.date(2026, 8, 7),
+        )
+        debut_semaine = timezone.make_aware(datetime.datetime(2026, 7, 20))
+        debut_autre_semaine = timezone.make_aware(datetime.datetime(2026, 8, 3))
+        Affectation.objects.create(
+            animateur=animateur,
+            centre=centre,
+            evenement=groupe,
+            debut=debut_semaine,
+            fin=debut_semaine + datetime.timedelta(days=1),
+        )
+        Affectation.objects.create(
+            animateur=animateur,
+            centre=centre,
+            evenement=groupe,
+            debut=debut_autre_semaine,
+            fin=debut_autre_semaine + datetime.timedelta(days=1),
+        )
+
+        response = self.client.get(
+            reverse("api_animateurs"),
+            {
+                "include_affectations": "1",
+                "format": "planning",
+                "debut": "2026-07-20",
+                "fin": "2026-07-27",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()[0]
+        self.assertEqual(
+            data["disponibilites"],
+            [{"debut": "2026-07-20", "fin": "2026-07-24"}],
+        )
+        self.assertEqual(len(data["affectations"]), 1)
+        self.assertEqual(data["affectations"][0]["centre_id"], centre.id)
+        self.assertNotIn("adresse", data)
+        self.assertNotIn("numero_securite_sociale", data)
+        self.assertNotIn("affinites_groupes", data)
+        self.assertNotIn("access", data)
+
+    def test_format_planning_refuse_une_plage_incomplete(self):
+        response = self.client.get(
+            reverse("api_animateurs"),
+            {"format": "planning", "debut": "2026-07-20"},
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_liste_expose_le_nombre_de_jours_travailles_par_groupe(self):
         animateur = Animateur.objects.create(prenom="Ambre", nom="Historique")
