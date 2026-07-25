@@ -13,8 +13,11 @@
         return `${normaliseDate(start)}|${normaliseDate(end)}`;
     }
 
-    function fetchCentresWithGroups() {
-        return apiFetch("/api/centres/?include_groupes=1");
+    function fetchCentresWithGroups(start = null, end = null) {
+        const query = new URLSearchParams({ include_groupes: "1" });
+        if (start) query.set("start", normaliseDate(start));
+        if (end) query.set("end", normaliseDate(end));
+        return apiFetch(`/api/centres/?${query.toString()}`);
     }
 
     function fetchWeekEvents(start, end, { force = false } = {}) {

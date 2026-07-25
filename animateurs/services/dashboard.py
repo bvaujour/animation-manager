@@ -16,7 +16,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 
 from animateurs.models import Affectation, Animateur, Centre, EffectifEnfantsJour, Evenement
-from animateurs.services.flottants import groupes_visibles
+from animateurs.services.flottants import est_groupe_flottants, groupes_visibles
 from animateurs.services.qualifications import couvertures_qualifications
 
 ETAT_OK = "ok"
@@ -132,16 +132,17 @@ def generer_tableau_de_bord(date_reference: datetime.date):
 
     affectations = list(
         Affectation.objects.filter(
-            evenement_id__in=groupes_par_id,
+            centre_id__in=ids_centres,
             debut__lt=_dt_locale(fin_recherche),
             fin__gt=_dt_locale(debut_recherche),
         )
-        .select_related("animateur", "centre", "evenement")
+        .select_related("animateur", "centre", "evenement", "evenement__groupe")
         .prefetch_related("animateur__qualifications", "horaires_journaliers")
         .order_by("debut", "animateur__prenom", "animateur__nom")
     )
 
     affectes_par_cle = defaultdict(set)
+    flottants_par_cle = defaultdict(set)
     horaires_par_cle = defaultdict(set)
     animateurs_par_id: dict[int, Animateur] = {}
     for affectation in affectations:
@@ -150,7 +151,10 @@ def generer_tableau_de_bord(date_reference: datetime.date):
         debut_affectation = max(timezone.localtime(affectation.debut).date(), debut_recherche)
         fin_affectation = min(timezone.localtime(affectation.fin).date(), fin_recherche)
         for jour in _jours(debut_affectation, fin_affectation):
-            affectes_par_cle[(affectation.evenement_id, jour)].add(animateur.id)
+            if est_groupe_flottants(affectation.evenement):
+                flottants_par_cle[(affectation.centre_id, jour)].add(animateur.id)
+            else:
+                affectes_par_cle[(affectation.evenement_id, jour)].add(animateur.id)
         for horaire in affectation.horaires_journaliers.all():
             horaires_par_cle[(affectation.evenement_id, horaire.date)].add(animateur.id)
 
@@ -248,12 +252,48 @@ def generer_tableau_de_bord(date_reference: datetime.date):
             return jour_cache[jour]
 
         groupes_jour = [metriques_groupe(groupe, jour) for groupe in groupes_ouverts(jour)]
+
+        # Le planning raisonne en enfants restant à couvrir, et non en postes
+        # arrondis groupe par groupe : un même flottant peut ainsi absorber les
+        # petits reliquats de plusieurs groupes du lieu.
+        for centre in centres:
+            groupes_centre = [item for item in groupes_jour if item["centre_id"] == centre.id]
+            reliquats = []
+            for groupe in groupes_centre:
+                if groupe["effectif_saisi"]:
+                    restant = max(
+                        0,
+                        groupe["enfants"] - groupe["animateurs_affectes"] * groupe["ratio"],
+                    )
+                else:
+                    restant = groupe["manque_animateurs"] * groupe["ratio"]
+                reliquats.append({"groupe": groupe, "restant": restant})
+
+            for _animateur_id in flottants_par_cle.get((centre.id, jour), set()):
+                groupes_restants = [item for item in reliquats if item["restant"] > 0]
+                if not groupes_restants:
+                    break
+                capacite = min(item["groupe"]["ratio"] for item in groupes_restants)
+                groupes_restants.sort(key=lambda item: (item["groupe"]["ratio"], item["groupe"]["id"]))
+                for item in groupes_restants:
+                    couverts = min(item["restant"], capacite)
+                    item["restant"] -= couverts
+                    capacite -= couverts
+                    if capacite <= 0:
+                        break
+
+            for item in reliquats:
+                item["groupe"]["manque_animateurs"] = math.ceil(
+                    item["restant"] / item["groupe"]["ratio"]
+                )
+
         centres_jour = []
         for centre in centres:
             groupes_centre = [groupe for groupe in groupes_jour if groupe["centre_id"] == centre.id]
             if not groupes_centre:
                 continue
             ids_affectes = set().union(*(groupe["animateur_ids"] for groupe in groupes_centre))
+            ids_affectes.update(flottants_par_cle.get((centre.id, jour), set()))
             enfants = sum(groupe["enfants"] for groupe in groupes_centre)
             necessaires = sum(groupe["animateurs_necessaires"] for groupe in groupes_centre)
             affectes = len(ids_affectes)

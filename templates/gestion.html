@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Gestion{% endblock %}
-{% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v=20260720-besoins-instances-1">
-<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260720-group-days-fix-1">
-<link rel="stylesheet" href="{% static 'css/administration.css' %}?v=20260720-group-days-fix-1">
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/documents.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/administration.css' %}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide gestion-page gestion-page-compact">
@@ -54,8 +54,8 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/gestion.js' %}?v=20260720-performance-instances-1"></script>
-<script src="{% static 'js/documents-management.js' %}?v=20260719-clean-ui-1"></script>
+<script src="{% static 'js/gestion.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'js/documents-management.js' %}?v={{ asset_version }}"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     GestionApp.mountCentres(document.getElementById("panel-centres"));

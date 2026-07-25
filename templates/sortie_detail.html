@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Fiche sortie{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/sorties.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main class="page-shell page-shell--fluid sorties-page" id="sortie-detail" data-sortie-id="{{ sortie_id }}">
+  <header class="sortie-detail-header"><div><a href="{% url 'sorties' %}" class="back-link">‹ Retour aux sorties</a><h1 id="sortie-title">Chargement…</h1><p id="sortie-subtitle"></p></div><div class="sortie-actions"><button class="btn btn-secondary" id="edit-sortie-main" type="button">Modifier</button><button class="btn btn-ghost" type="button" disabled title="Export PDF prévu ultérieurement">PDF bientôt</button><button class="btn btn-danger-ghost" id="delete-sortie" type="button">Supprimer</button></div></header>
+  <section id="sortie-blocks" class="sortie-blocks" aria-live="polite"></section>
+</main>
+<dialog id="sortie-editor" class="sortie-dialog sortie-editor"><form method="dialog" id="sortie-editor-form"><header><h2 id="editor-title"></h2><button value="cancel" aria-label="Fermer">×</button></header><div id="editor-body"></div><p class="form-error" hidden></p><footer><button class="btn btn-ghost" value="cancel">Annuler</button><button class="btn btn-primary" value="default">Enregistrer</button></footer></form></dialog>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/sortie-detail.js' %}?v={{ asset_version }}"></script>{% endblock %}

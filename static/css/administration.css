@@ -9,20 +9,38 @@
 .admin-message{padding:.55rem .7rem;border-radius:.6rem;margin:0 0 .45rem;font-weight:700}
 .admin-message.success{background:#ecfdf3;color:#166534;border:1px solid #bbf7d0}
 .admin-message.error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
-.export-form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:.7rem;margin:0}
+.export-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,230px);align-items:start;gap:.75rem;margin:0}
 .export-form label{display:grid;gap:.25rem;font-weight:600;font-size:.88rem}
 .export-form input,.export-form select{width:100%}
-.export-weeks{min-width:0;margin:0;padding:.65rem;border:1px solid var(--color-border,#e2e8f0);border-radius:.7rem;background:var(--color-surface-sunken,#f8fafc)}
-.export-weeks legend{padding:0 .3rem;font-size:.88rem;font-weight:800}
-.export-weeks-group+.export-weeks-group{margin-top:.65rem;padding-top:.6rem;border-top:1px solid var(--color-border,#e2e8f0)}
-.export-weeks-group>strong{display:block;margin-bottom:.35rem;color:var(--color-primary-dark);font-size:.8rem}
-.export-weeks-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:.35rem}
-.export-weeks-list label{display:flex;grid-template-columns:none;align-items:flex-start;gap:.45rem;padding:.45rem .55rem;border:1px solid var(--color-border,#e2e8f0);border-radius:.55rem;background:#fff;cursor:pointer}
+.export-weeks{min-width:0;margin:0;padding:.7rem;border:1px solid var(--color-border,#e2e8f0);border-radius:.75rem;background:var(--color-surface-sunken,#f8fafc)}
+.export-weeks-heading{display:flex;align-items:center;gap:.55rem;margin-bottom:.65rem}
+.export-weeks-heading h2{margin:0;font-size:1rem}
+.export-weeks-heading .btn{margin-left:auto}
+.export-selection-count{color:var(--color-primary-dark);font-size:.76rem;font-weight:750}
+.export-weeks-group{margin:0;border:1px solid var(--color-border,#e2e8f0);border-radius:.65rem;background:#fff;overflow:hidden}
+.export-weeks-group+.export-weeks-group{margin-top:.5rem}
+.export-weeks-group[hidden]{display:none}
+.export-weeks-group summary{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.55rem .65rem;color:var(--color-primary-dark);background:color-mix(in srgb,var(--color-primary) 5%,white);font-size:.82rem;font-weight:800;cursor:pointer}
+.export-weeks-group summary small{color:var(--color-text-muted,#64748b);font-size:.68rem;font-weight:650}
+.export-vacations{display:grid;gap:.5rem;padding:.55rem;border-top:1px solid var(--color-border,#e2e8f0)}
+.export-vacation-group{border:1px solid var(--color-border,#e2e8f0);border-radius:.6rem;background:var(--color-surface-sunken,#f8fafc);overflow:hidden}
+.export-vacation-group>summary{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem .6rem;background:color-mix(in srgb,var(--color-primary) 4%,white);cursor:pointer}
+.export-vacation-group>summary h3{margin:0;color:var(--color-primary-dark);font-size:.74rem;letter-spacing:.06em}
+.export-vacation-group>summary small{color:var(--color-text-muted,#64748b);font-size:.68rem;font-weight:650}
+.export-vacation-actions{display:flex;justify-content:flex-end;padding:.4rem .5rem 0}
+.export-weeks-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:.4rem;padding:.4rem .5rem .5rem}
+.export-weeks-list label{display:flex;grid-template-columns:none;align-items:center;gap:.55rem;min-height:56px;padding:.5rem .6rem;border:1px solid var(--color-border,#e2e8f0);border-radius:.58rem;background:#fff;cursor:pointer}
+.export-weeks-list label:hover{border-color:color-mix(in srgb,var(--color-primary) 50%,var(--color-border,#e2e8f0));background:color-mix(in srgb,var(--color-primary) 3%,white)}
 .export-weeks-list label:has(input:checked){border-color:var(--color-primary);background:color-mix(in srgb,var(--color-primary) 8%,white)}
 .export-weeks-list input{flex:0 0 auto;width:16px;height:16px;margin-top:2px}
 .export-weeks-list span{display:grid;gap:.08rem}
-.export-weeks-list small{color:var(--color-text-muted,#64748b);font-size:.7rem;font-weight:500}
-.export-actions{display:flex;flex-wrap:wrap;gap:.4rem}
+.export-weeks-list strong{font-size:.8rem;line-height:1.2}
+.export-weeks-list small{color:var(--color-text-muted,#64748b);font-size:.72rem;font-weight:550}
+.export-actions{position:sticky;top:.65rem;display:grid;gap:.45rem;padding:.7rem;border:1px solid var(--color-border,#e2e8f0);border-radius:.75rem;background:#fff;box-shadow:var(--shadow-sm,0 2px 8px rgba(15,23,42,.06))}
+.export-actions-heading{display:grid;gap:.08rem;margin-bottom:.15rem;padding-bottom:.55rem;border-bottom:1px solid var(--color-border,#e2e8f0)}
+.export-actions-heading strong{font-size:.95rem}
+.export-actions-heading span{color:var(--color-text-muted,#64748b);font-size:.74rem;font-weight:650}
+.export-actions .btn{width:100%;justify-content:center}
 .superuser-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(270px,.75fr);gap:.55rem}
 .admin-card{background:#fff;border:1px solid var(--border-color,#d8dee8);border-radius:.65rem;padding:.65rem;box-shadow:none}
 .admin-card h2{margin:0 0 .5rem;font-size:.98rem}
@@ -50,6 +68,9 @@
 .export-form{grid-template-columns:1fr}
 .export-actions{grid-column:auto}
 .export-actions .btn{flex:1 1 140px}
+.export-weeks-heading{align-items:flex-start;flex-wrap:wrap}
+.export-weeks-heading .btn{margin-left:0}
+.export-weeks-list{grid-template-columns:minmax(0,1fr)}
 .superuser-row{align-items:flex-start}
 }
 .page-shell.administration-page{--page-gutter:8px;--page-bottom-space:10px;width:calc(100% - 16px);max-width:none;padding-top:.3rem !important}

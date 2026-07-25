@@ -179,7 +179,6 @@ document.addEventListener("DOMContentLoaded", () => {
         centresPeriod.textContent = label;
         alertsPeriod.textContent = label;
         picker?.setActiveDate(data.periode.debut_semaine, {
-            updateLabel: true,
             persist: false,
         });
     }
@@ -266,6 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return `
                 <a class="dashboard-week-day dashboard-week-day--${state}" href="${urlPlanning(day.date, day.effectifs_non_renseignes ? "effectifs" : "affectations")}">
                     <header><strong>${date.toLocaleDateString("fr-FR", { weekday: "long" })}</strong><small>${date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}</small></header>
+                    <span class="dashboard-week-metric"><span>Total enfants</span><strong>${day.enfants}</strong></span>
                     <span class="dashboard-week-metric"><span>Maternels</span><strong>${day.enfants_maternels}</strong></span>
                     <span class="dashboard-week-metric"><span>Élémentaires</span><strong>${day.enfants_elementaires}</strong></span>
                     <span class="dashboard-week-metric"><span>Animateurs</span><strong>${day.animateurs_affectes}</strong></span>
@@ -325,9 +325,18 @@ document.addEventListener("DOMContentLoaded", () => {
         selectedDate = event.detail?.period?.debut || event.detail?.date || selectedDate;
         loadDashboard();
     });
-    pickerRoot?.addEventListener("week-picker:ready", () => {
-        if (currentPeriod) syncPeriodLabels({ periode: currentPeriod });
+    pickerRoot?.addEventListener("week-picker:ready", (event) => {
+        if (currentPeriod) {
+            syncPeriodLabels({ periode: currentPeriod });
+            return;
+        }
+        selectedDate = event.detail?.picker?.activeDate || selectedDate;
+        loadDashboard();
     });
+    pickerRoot?.addEventListener("week-picker:error", loadDashboard);
 
-    loadDashboard();
+    if (picker?.ready) {
+        selectedDate = picker.activeDate || selectedDate;
+        loadDashboard();
+    }
 });

@@ -654,6 +654,12 @@ class PeriodeScolaire(models.Model):
             return self.nom.replace(separateur, f" {annee}{separateur}")
         return f"{self.nom} {annee}"
 
+    @property
+    def categorie_vacances(self):
+        """Libellé commun utilisé pour regrouper les semaines d'une période."""
+        categorie = re.split(r"\s*[—–-]\s*Semaine\b", self.nom, maxsplit=1, flags=re.IGNORECASE)[0]
+        return re.sub(r"\s+\d{4}$", "", categorie).strip() or "Autres périodes"
+
     def __str__(self):
         return f"{self.libelle_avec_annee} ({self.debut:%d/%m/%Y} au {self.fin:%d/%m/%Y})"
 
@@ -898,6 +904,155 @@ class Document(models.Model):
 
     def __str__(self):
         return self.titre
+
+
+class Sortie(models.Model):
+    """Préparation d'une sortie ; les effectifs restent calculés depuis le Planning."""
+
+    nom = models.CharField(max_length=150)
+    date = models.DateField(db_index=True)
+    destination = models.CharField(max_length=180)
+    meteo_lieu_libelle = models.CharField(max_length=180, blank=True, default="")
+    meteo_adresse = models.CharField(max_length=300, blank=True, default="")
+    meteo_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    meteo_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    meteo_code_departement = models.CharField(max_length=3, blank=True, default="")
+    mode_transport = models.CharField(max_length=100, blank=True, default="")
+    nombre_vehicules = models.PositiveSmallIntegerField(null=True, blank=True)
+    heure_depart = models.TimeField(null=True, blank=True)
+    heure_arrivee = models.TimeField(null=True, blank=True)
+    heure_depart_site = models.TimeField(null=True, blank=True)
+    heure_retour = models.TimeField(null=True, blank=True)
+    trajet_ramassage = models.TextField(blank=True, default="")
+    consignes_transport = models.TextField(blank=True, default="")
+    objectifs_pedagogiques = models.TextField(blank=True, default="")
+    consignes_encadrement = models.TextField(blank=True, default="")
+    organisation_maternels = models.TextField(blank=True, default="")
+    organisation_elementaires = models.TextField(blank=True, default="")
+    repas_gouter = models.TextField(blank=True, default="")
+    documents = models.ManyToManyField(Document, related_name="sorties", blank=True)
+    groupes = models.ManyToManyField(Evenement, through="SortieParticipation", related_name="sorties")
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("date", "nom")
+
+    def save(self, *args, **kwargs):
+        self.nom = self.nom.strip()
+        self.destination = self.destination.strip()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.nom} — {self.date:%d/%m/%Y}"
+
+
+class SortieResponsabilite(models.Model):
+    """Responsabilité opérationnelle définie pour une sortie.
+
+    Une ligne représente un seul périmètre : toute la sortie (direction),
+    un lieu ou un groupe. Le formulaire peut néanmoins regrouper plusieurs
+    lignes afin d'attribuer plusieurs lieux ou groupes au même responsable.
+    """
+
+    TYPE_DIRECTION = "direction"
+    TYPE_LIEU = "lieu"
+    TYPE_GROUPE = "groupe"
+    TYPE_CHOICES = [
+        (TYPE_DIRECTION, "Direction"),
+        (TYPE_LIEU, "Responsable de lieu"),
+        (TYPE_GROUPE, "Responsable de groupe"),
+    ]
+
+    sortie = models.ForeignKey(Sortie, on_delete=models.CASCADE, related_name="responsabilites")
+    animateur = models.ForeignKey(
+        Animateur,
+        on_delete=models.PROTECT,
+        related_name="responsabilites_sorties",
+    )
+    type = models.CharField(max_length=12, choices=TYPE_CHOICES)
+    centre = models.ForeignKey(
+        Centre,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="responsabilites_sorties",
+    )
+    evenement = models.ForeignKey(
+        Evenement,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="responsabilites_sorties",
+    )
+    affectation_creee = models.ForeignKey(
+        Affectation,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="responsabilites_sorties_creees",
+        help_text="Affectation ajoutée automatiquement lors de la nomination du responsable.",
+    )
+    ordre = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("ordre", "type", "centre__ordre", "evenement__ordre", "id")
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(type="direction", centre__isnull=True, evenement__isnull=True)
+                    | models.Q(type="lieu", centre__isnull=False, evenement__isnull=True)
+                    | models.Q(type="groupe", centre__isnull=True, evenement__isnull=False)
+                ),
+                name="responsabilite_sortie_perimetre_coherent",
+            ),
+            models.UniqueConstraint(
+                fields=("sortie", "animateur"),
+                condition=models.Q(type="direction"),
+                name="unique_direction_anim_par_sortie",
+            ),
+            models.UniqueConstraint(
+                fields=("sortie", "animateur", "centre"),
+                condition=models.Q(type="lieu"),
+                name="unique_lieu_anim_par_sortie",
+            ),
+            models.UniqueConstraint(
+                fields=("sortie", "animateur", "evenement"),
+                condition=models.Q(type="groupe"),
+                name="unique_groupe_anim_par_sortie",
+            ),
+        ]
+
+    def __str__(self):
+        if self.type == self.TYPE_LIEU and self.centre_id:
+            perimetre = self.centre.nom
+        elif self.type == self.TYPE_GROUPE and self.evenement_id:
+            perimetre = f"{self.evenement.centre.nom} — {self.evenement.nom}"
+        else:
+            perimetre = "Direction"
+        return f"{self.animateur} — {perimetre}"
+
+
+class SortieParticipation(models.Model):
+    sortie = models.ForeignKey(Sortie, on_delete=models.CASCADE, related_name="participations")
+    evenement = models.ForeignKey(Evenement, on_delete=models.PROTECT, related_name="participations_sorties")
+    activite_horaire = models.CharField(max_length=240, blank=True, default="")
+
+    class Meta:
+        ordering = ("evenement__centre__ordre", "evenement__ordre", "evenement__nom")
+        constraints = [
+            models.UniqueConstraint(fields=("sortie", "evenement"), name="unique_groupe_par_sortie"),
+        ]
+
+
+class SortieLien(models.Model):
+    sortie = models.ForeignKey(Sortie, on_delete=models.CASCADE, related_name="liens")
+    libelle = models.CharField(max_length=120)
+    url = models.URLField(max_length=500)
+    ordre = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("ordre", "id")
 
 
 class ModeleEmail(models.Model):

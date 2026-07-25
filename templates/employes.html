@@ -2,8 +2,8 @@
 {% load static %}
 {% block title %}Salariés{% endblock %}
 {% block body_class %}page-employes{% endblock %}
-{% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v=20260721-status-colors-1">
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--fluid employees-workspace" data-animateur-page>
@@ -28,5 +28,5 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/animateurs.js' %}?v=20260721-status-colors-1"></script>
+<script src="{% static 'js/animateurs.js' %}?v={{ asset_version }}"></script>
 {% endblock %}

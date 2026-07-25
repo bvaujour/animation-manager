@@ -7,6 +7,9 @@
         <a href="{% url 'planning' %}" class="app-rail-link{% if active == 'planning' %} active{% endif %}" aria-label="Planning" title="Planning"{% if active == 'planning' %} aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
         </a>
+        <a href="{% url 'sorties' %}" class="app-rail-link{% if active == 'sorties' %} active{% endif %}" aria-label="Sorties" title="Sorties"{% if active == 'sorties' %} aria-current="page"{% endif %}>
+            <span class="material-symbols-outlined" aria-hidden="true">confirmation_number</span>
+        </a>
         <a href="{% url 'employes' %}" class="app-rail-link{% if active == 'employes' %} active{% endif %}" aria-label="Salariés" title="Salariés"{% if active == 'employes' %} aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">groups</span>
         </a>
@@ -20,12 +23,10 @@
             <span class="material-symbols-outlined" aria-hidden="true">analytics</span>
         </a>
         {% else %}
-        <a href="{% url 'documents' %}" class="app-rail-link{% if active == 'documents' %} active{% endif %}" aria-label="Documents" title="Documents"{% if active == 'documents' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">description</span>
-        </a>
-        <a href="{% url 'mes_disponibilites' %}" class="app-rail-link{% if active == 'disponibilites' %} active{% endif %}" aria-label="Mes disponibilités" title="Mes disponibilités"{% if active == 'disponibilites' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">event_available</span>
-        </a>
+        <a href="{% url 'mon_planning' %}" class="app-rail-link{% if active == 'mon_planning' %} active{% endif %}" aria-label="Planning et séjours" title="Planning et séjours"{% if active == 'mon_planning' %} aria-current="page"{% endif %}><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span></a>
+        <a href="{% url 'mon_profil' %}" class="app-rail-link{% if active == 'mon_profil' %} active{% endif %}" aria-label="Profil" title="Profil"{% if active == 'mon_profil' %} aria-current="page"{% endif %}><span class="material-symbols-outlined" aria-hidden="true">groups</span></a>
+        <a href="{% url 'mes_disponibilites' %}" class="app-rail-link{% if active == 'disponibilites' %} active{% endif %}" aria-label="Disponibilités" title="Disponibilités"{% if active == 'disponibilites' %} aria-current="page"{% endif %}><span class="material-symbols-outlined" aria-hidden="true">event_available</span></a>
+        <a href="{% url 'documents' %}" class="app-rail-link{% if active == 'documents' %} active{% endif %}" aria-label="Documents" title="Documents"{% if active == 'documents' %} aria-current="page"{% endif %}><span class="material-symbols-outlined" aria-hidden="true">description</span></a>
         {% endif %}
     </nav>
 

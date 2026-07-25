@@ -4,31 +4,42 @@ Application Django de gestion des salariés, lieux, groupes, périodes scolaires
 
 ## Installation locale
 
+La commande suivante crée `.venv`, installe les dépendances de développement,
+crée `.env` si nécessaire et applique les migrations :
+
+```bash
+make install
+source .venv/bin/activate
+make run
+```
+
+Installation manuelle équivalente :
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 cp .env.example .env
 python manage.py migrate
 python manage.py runserver
 ```
 
-Pour contribuer au projet et lancer les contrôles de style :
-
-```bash
-pip install -r requirements-dev.txt
-ruff check config animateurs
-```
-
-Sans variables `DB_*`, l'application utilise SQLite. En production, renseigner `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` et `DB_PASSWORD` pour PostgreSQL/Supabase.
+Sans variables `DB_*`, l'application crée une base SQLite locale. Cette base
+n'est pas versionnée. En production, renseigner `DB_HOST`, `DB_PORT`, `DB_NAME`,
+`DB_USER` et `DB_PASSWORD` pour PostgreSQL/Supabase.
 
 ## Vérifications
 
 ```bash
-python manage.py check
-python manage.py test animateurs.tests
-python manage.py check --deploy
+make check     # audit statique + contrôles Django
+make test      # suite Django
+make lint      # Ruff
+make verify    # tous les contrôles disponibles
 ```
+
+`scripts/static_audit.py` ne dépend d'aucun paquet externe. Il contrôle la
+syntaxe Python, les références de templates et de fichiers statiques, la façade
+des vues, les migrations et, lorsqu'elle existe, l'intégrité de SQLite.
 
 ## Déploiement Render
 
@@ -44,8 +55,15 @@ Définir impérativement `SECRET_KEY`, `DEBUG=False`, `ALLOWED_HOSTS` et les var
 
 - `animateurs/models.py` : modèle de données actuel ;
 - `animateurs/services/` : règles métier et exports ;
-- `animateurs/views.py` : pages et API ;
+- `animateurs/views.py` : façade stable utilisée par les routes ;
+- `animateurs/views_pages.py` : pages, administration et exports ;
+- `animateurs/views_staff.py` : salariés et disponibilités ;
+- `animateurs/views_planning.py` : planning et affectations ;
+- `animateurs/views_catalogue.py` : centres, groupes, qualifications et périodes ;
+- `animateurs/views_reporting.py` : documents et récapitulatif ;
+- `animateurs/views_communications.py`, `views_effectifs.py` et `views_sorties.py` : domaines déjà séparés ;
 - `static/js/` : interfaces clientes ;
+- `scripts/` : installation et contrôles reproductibles ;
 - `animateurs/tests/` : tests correspondant au modèle actuel. Les tests HTTP
   héritent de `animateurs/tests/base.py` (`ConnexionTestCase`), qui connecte
   automatiquement un compte maître pour traverser l'authentification obligatoire.
@@ -151,7 +169,7 @@ Toutes les pages utilisent désormais le même langage visuel que le tableau de 
 - espaces de travail adaptés à leur usage : Planning dense, Salariés en maître/détail, Gestion en cartes par lieu et Administration organisée par outils ;
 - mise en page responsive conservant l'accès à toutes les fonctions sur tablette et mobile.
 
-Les fondations et composants communs se trouvent dans `static/css/common-base.css` et `static/css/common-ui.css`. Les pages ne chargent ensuite que leur feuille spécialisée.
+Les fondations et composants communs se trouvent dans `static/css/common-base.css` et `static/css/common-ui.css`. Les pages ne chargent ensuite que leur feuille spécialisée. Les en-têtes de pages et la navigation de semaine sont rendus par les partials communs de `templates/partials/`, et toutes les ressources statiques utilisent la même variable `ASSET_VERSION`.
 
 ## Disposition modulable des centres dans le Planning
 

@@ -142,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function selectPeriod(period) {
         if (!period) return;
         selectedPeriod = period;
-        picker?.setActiveDate(period.debut, { updateLabel: true });
+        picker?.setActiveDate(period.debut);
         loadRecap();
     }
 

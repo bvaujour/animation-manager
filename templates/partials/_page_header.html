@@ -1,6 +1,19 @@
-<header class="page-header app-page-header app-page-header--week-only{% if header_class %} {{ header_class }}{% endif %}">
+<header class="page-header app-page-header{% if picker_mode == 'multiple' %} app-page-header--picker-actions{% elif picker_mode == 'none' %} app-page-header--title-only{% else %} app-page-header--week-only{% endif %}{% if header_class %} {{ header_class }}{% endif %}">
     <h1 class="app-page-title">{{ title }}</h1>
-    <div class="app-page-week" aria-label="{{ week_aria_label|default:'Choix de la période' }}">
-        {% include "partials/_week_navigation.html" with container_id=container_id previous_id=previous_id today_id=today_id next_id=next_id label_id=label_id generic_navigation=generic_navigation %}
-    </div>
+    {% if picker_mode != "none" or action_id and action_label %}
+        <div class="app-page-week{% if actions_class %} {{ actions_class }}{% endif %}" aria-label="{{ week_aria_label|default:'Choix de la période' }}">
+            {% if picker_mode == "multiple" %}
+                {% if picker_placeholder %}
+                    {% include "partials/_week_picker.html" with picker_id=picker_id picker_class=picker_class mode="multiple" placeholder=picker_placeholder %}
+                {% else %}
+                    {% include "partials/_week_picker.html" with picker_id=picker_id picker_class=picker_class mode="multiple" placeholder="Choisir une période" %}
+                {% endif %}
+            {% elif picker_mode != "none" %}
+                {% include "partials/_week_navigation.html" with container_id=container_id previous_id=previous_id today_id=today_id next_id=next_id label_id=label_id generic_navigation=generic_navigation %}
+            {% endif %}
+            {% if action_id and action_label %}
+                <button class="btn {{ action_class|default:'btn-primary' }}" id="{{ action_id }}" type="button">{{ action_label }}</button>
+            {% endif %}
+        </div>
+    {% endif %}
 </header>

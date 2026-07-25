@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Récapitulatif{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}?v=20260720-css-refactor-2">{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide recap-page">
     {% include "partials/_page_header.html" with title="Récapitulatif" header_class="recap-header" container_id="periode-select" previous_id="recap-prev-week" today_id="recap-current-week" next_id="recap-next-week" label_id="periode-select-label" %}
@@ -32,4 +32,4 @@
     </section>
 </main>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/recapitulatif.js' %}?v=20260721-week-persistence-1"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/recapitulatif.js' %}?v={{ asset_version }}"></script>{% endblock %}

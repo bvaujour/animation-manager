@@ -46,6 +46,36 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const exportForm = document.querySelector("[data-export-planning-form]");
+    const exportWeeks = Array.from(exportForm?.querySelectorAll("[data-export-week]") || []);
+    const exportCheckboxes = exportWeeks.map((week) => week.querySelector('input[name="periode_ids"]'));
+    const exportSelectionCount = exportForm?.querySelector("[data-export-selection-count]");
+    const exportActionsCount = exportForm?.querySelector("[data-export-actions-count]");
+    const exportButtons = Array.from(exportForm?.querySelectorAll('.export-actions button[type="submit"]') || []);
+
+    function updateExportSelection() {
+        const count = exportCheckboxes.filter((checkbox) => checkbox.checked).length;
+        const label = count
+            ? `${count} semaine${count > 1 ? "s" : ""} sélectionnée${count > 1 ? "s" : ""}`
+            : "Aucune semaine sélectionnée";
+        if (exportSelectionCount) exportSelectionCount.textContent = label;
+        if (exportActionsCount) exportActionsCount.textContent = count ? label : "Aucune semaine";
+        exportButtons.forEach((button) => { button.disabled = count === 0; });
+    }
+
+    exportCheckboxes.forEach((checkbox) => checkbox.addEventListener("change", updateExportSelection));
+    exportForm?.querySelectorAll("[data-export-select-group]").forEach((button) => {
+        button.addEventListener("click", () => {
+            button.closest(".export-vacation-group")?.querySelectorAll('input[name="periode_ids"]')
+                .forEach((checkbox) => { checkbox.checked = true; });
+            updateExportSelection();
+        });
+    });
+    exportForm?.querySelector("[data-export-clear]")?.addEventListener("click", () => {
+        exportCheckboxes.forEach((checkbox) => { checkbox.checked = false; });
+        updateExportSelection();
+    });
+    updateExportSelection();
+
     let exportConfirme = false;
     exportForm?.addEventListener("submit", async (event) => {
         if (exportConfirme) {

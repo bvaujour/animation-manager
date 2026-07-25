@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Mon profil{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v={{ asset_version }}"><link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main id="main-content" class="page-shell page-shell--medium employee-detail-page">
+    {% include "partials/_page_header.html" with title="Mon profil" picker_mode="none" %}
+    {% if animateur %}<section class="ui-card fiche-section fiche-card employee-profile-card"><div class="employee-profile-avatar" aria-hidden="true">{{ animateur.prenom|first }}{{ animateur.nom|first }}</div><div><p class="employee-card-label">Identité</p><h2>{{ animateur.prenom }} {{ animateur.nom }}</h2><p>{{ animateur.email|default:"E-mail non renseigné" }}</p><p>{{ animateur.telephone|default:"Téléphone non renseigné" }}</p>{% if animateur.date_naissance %}<p>Né(e) le {{ animateur.date_naissance|date:"d/m/Y" }}</p>{% endif %}<p>{{ animateur.adresse|default:"Adresse non renseignée"|linebreaksbr }}</p></div></section>{% else %}<section class="ui-card fiche-card"><p class="empty-note">Profil introuvable. Contacte la direction.</p></section>{% endif %}
+</main>
+{% endblock %}

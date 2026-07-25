@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Mon planning et mes séjours{% endblock %}
+{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}"><link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main id="main-content" class="page-shell page-shell--wide home-page" data-personal-calendar="true">
+    {% include "partials/_page_header.html" with title="Planning / séjours" header_class="home-page-header" container_id="home-period-nav" previous_id="home-prev-week" today_id="home-current-week" next_id="home-next-week" label_id="home-visible-period" %}
+    <section class="employee-overview" aria-label="Mes affectations">
+        <article class="ui-card employee-centres-card"><p class="employee-card-label">Mes centres</p><div class="employee-badges">{% for centre in centres_affectes %}<span style="--badge-color:{{ centre.couleur }}">{{ centre.nom }}</span>{% empty %}<p class="empty-note">Aucune affectation.</p>{% endfor %}</div></article>
+        <article class="ui-card employee-stays-card"><p class="employee-card-label">Mes séjours à venir</p><div class="employee-stays">{% for sejour in sejours %}<div><strong>{{ sejour.evenement.nom }}</strong><span>{{ sejour.centre.nom }} · {{ sejour.debut|date:"d/m/Y" }}</span></div>{% empty %}<p class="empty-note">Aucun séjour prévu.</p>{% endfor %}</div></article>
+    </section>
+    <section class="ui-card ui-section home-section home-planning-section"><div class="ui-section-heading section-heading"><h2>Mon planning</h2></div><div id="home-calendars" class="home-calendars calendar-sites"></div></section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}"></script>{% endblock %}

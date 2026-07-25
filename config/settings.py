@@ -75,7 +75,9 @@ AWS_LOCATION = os.getenv("SUPABASE_S3_LOCATION", "")
 # Stockage des documents uploadés : S3 (Supabase) si les clés sont
 # configurées, sinon stockage local dans MEDIA_ROOT pour pouvoir
 # travailler sans compte Supabase.
-if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+# Une suite de tests doit rester hermétique : elle ne doit jamais écrire dans
+# le stockage Supabase réel, même si le poste charge les clés du fichier .env.
+if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and "test" not in sys.argv:
     _default_storage = {"BACKEND": "storages.backends.s3.S3Storage"}
 else:
     _default_storage = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
@@ -209,6 +211,10 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
+# Version unique des ressources statiques pour invalider le cache navigateur.
+# En production, WhiteNoise ajoute aussi des empreintes de contenu.
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20260724-audit-1").strip()
+
 
 # Envoi d'e-mails aux salariés. En local, sans serveur SMTP configuré,
 # Django affiche les messages dans la console. En production, EMAIL_HOST est
@@ -237,6 +243,10 @@ EMAIL_REPLY_TO = os.getenv("EMAIL_REPLY_TO", "").strip()
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Réservée à une future intégration de la Vigilance officielle. Elle n'est
+# jamais transmise au navigateur et son absence n'empêche pas les prévisions.
+METEOFRANCE_VIGILANCE_API_KEY = os.getenv("METEOFRANCE_VIGILANCE_API_KEY", "").strip()
 
 
 # Durcissement production (activé automatiquement lorsque DEBUG=False).

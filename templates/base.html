@@ -8,10 +8,10 @@
     <link rel="icon" href="{% static 'favicon.ico' %}" sizes="any">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20,400,0&amp;icon_names=admin_panel_settings,analytics,calendar_month,category,description,event_available,groups,home,logout,space_dashboard&amp;display=block" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/common-base.css' %}?v=20260721-filter-modal-1">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20,400,0&amp;icon_names=admin_panel_settings,analytics,calendar_month,category,confirmation_number,description,event_available,groups,home,logout,space_dashboard&amp;display=block" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/common-base.css' %}?v={{ asset_version }}">
     {% block extra_head %}{% endblock %}
-    <link rel="stylesheet" href="{% static 'css/common-ui.css' %}?v=20260721-refactor-1">
+    <link rel="stylesheet" href="{% static 'css/common-ui.css' %}?v={{ asset_version }}">
     {% block page_styles %}{% endblock %}
 </head>
 <body class="app-body {% block body_class %}{% endblock %}">
@@ -19,13 +19,13 @@
     {% include "partials/_nav.html" with active=active_page %}
     {% block content %}{% endblock %}
 
-    <script src="{% static 'js/ui.js' %}?v=20260721-icon-rail-1"></script>
-    <script src="{% static 'js/common/planning-data.js' %}?v=20260721-api-performance-1"></script>
-    <script src="{% static 'js/common/documents.js' %}?v=20260718-week-period-1"></script>
-    <script src="{% static 'js/common/colors.js' %}?v=20260718-week-period-1"></script>
-    <script src="{% static 'js/common/forms.js' %}?v=20260718-week-period-1"></script>
-    <script src="{% static 'js/common/week-picker.js' %}?v=20260721-global-header-1"></script>
-    <script src="{% static 'js/common/staff-filter.js' %}?v=20260721-status-colors-1"></script>
+    <script src="{% static 'js/ui.js' %}?v={{ asset_version }}"></script>
+    <script src="{% static 'js/common/planning-data.js' %}?v={{ asset_version }}"></script>
+    <script src="{% static 'js/common/documents.js' %}?v={{ asset_version }}"></script>
+    <script src="{% static 'js/common/colors.js' %}?v={{ asset_version }}"></script>
+    <script src="{% static 'js/common/forms.js' %}?v={{ asset_version }}"></script>
+    <script src="{% static 'js/common/week-picker.js' %}?v={{ asset_version }}"></script>
+    <script src="{% static 'js/common/staff-filter.js' %}?v={{ asset_version }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

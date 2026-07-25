@@ -1133,7 +1133,15 @@ function libelleDate(dateStr)
 		const scrollTopAvant = calendarsContainer.scrollTop;
 		modePlanning = ["affectations", "effectifs"].includes(nouveauMode)
 			? nouveauMode : "affectations";
-		if (memoriser) localStorage.setItem("planning-mode", modePlanning);
+		if (memoriser)
+		{
+			localStorage.setItem("planning-mode", modePlanning);
+			// L'URL doit refléter l'onglet choisi : au rechargement, son paramètre
+			// est prioritaire sur la préférence conservée dans localStorage.
+			const urlCourante = new URL(window.location.href);
+			urlCourante.searchParams.set("mode", modePlanning);
+			window.history.replaceState({}, "", urlCourante);
+		}
 		layoutPlanning.dataset.planningMode = modePlanning;
 		document.body.classList.toggle("planning-mode-effectifs", estModeEffectifs());
 		document.body.classList.toggle("planning-mode-affectations", modePlanning === "affectations");
@@ -1546,13 +1554,9 @@ function libelleDate(dateStr)
 			totauxParJour.push({ dateStr, totalJour });
 		}
 
-		const joursHtml = totauxParJour.map(({ dateStr, totalJour }) =>
-		{
-			const date = parseLocalDate(dateStr);
-			const jour = date.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
-			const numero = date.toLocaleDateString("fr-FR", { day: "2-digit" });
-			return `<span class="centre-effectifs-day"><span>${jour} ${numero}</span><strong>${totalJour}</strong></span>`;
-		}).join("");
+		const joursHtml = totauxParJour.map(({ totalJour }) =>
+			`<span class="centre-effectifs-day"><strong class="centre-effectifs-total">${totalJour}</strong></span>`
+		).join("");
 
 		resume.innerHTML = `
 			<div class="centre-effectifs-summary-label">Total</div>

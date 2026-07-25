@@ -1,138 +1,138 @@
 # Audit complet — Animation Manager
 
-**Date de l’audit : 20 juillet 2026**  
-**Périmètre :** application Django, règles métier, navigation, gabarits HTML, CSS, JavaScript, configuration, migrations et tests.
+**Date : 24 juillet 2026**
+**Archive auditée :** `anim(2).zip`
+**Périmètre :** structure Django, configuration, routes, vues, services, modèles, migrations, base locale, templates, CSS, JavaScript, tests et fichiers générés.
 
-## 1. Synthèse
+## 1. Résultat général
 
-Le projet est fonctionnel et déjà riche : gestion des salariés, centres, groupes, périodes, disponibilités, documents, effectifs enfants, planning, remplissage automatique, exports et e-mails. Son principal défaut n’était pas l’absence de fonctions, mais l’accumulation de plusieurs générations d’interface et de règles CSS qui finissaient par se contredire.
+Le projet possède une base métier cohérente et une suite de tests importante. Le principal risque venait de l'accumulation historique : une copie complète du projet était imbriquée dans l'archive, des fichiers compilés et `staticfiles` étaient versionnés, plusieurs rapports de corrections temporaires restaient à la racine et le fichier principal des vues dépassait 2 100 lignes.
 
-L’audit a donc privilégié une consolidation sans réécriture risquée : navigation réorganisée, espaces de travail stabilisés, accès directs aux outils, correction des compatibilités métier et validation complète du projet.
+La version remise est nettoyée et plus modulaire. Les routes publiques, noms de vues et fonctionnalités encore utilisées ont été conservés. Le seul écran fonctionnel supprimé est l'ancien import PDF, qui n'avait plus ni route ni vue ; l'import Excel actuellement utilisé dans le Planning est conservé.
 
-**État remis :** 182 tests réussis, contrôles Django et déploiement réussis, migrations cohérentes, Python et JavaScript valides.
+## 2. Nettoyage réalisé
 
-## 2. Architecture constatée
+Éléments retirés :
 
-- Django 5.2.15, application principale `animateurs`.
-- SQLite en local, PostgreSQL/Supabase lorsqu’un `DB_HOST` est défini.
-- 50 routes, 17 gabarits HTML, 19 fichiers JavaScript, 14 feuilles CSS.
-- Services métier séparés pour les affectations, disponibilités, e-mails, exports, calendrier scolaire, qualifications et remplissage automatique.
-- Authentification à deux niveaux métier : superutilisateur pour la direction, compte ordinaire relié à une fiche salarié pour un animateur.
-- WhiteNoise pour les fichiers statiques en production et stockage local ou Supabase S3 pour les documents.
+- copie historique complète `anim_manager_effectifs_icons/` ;
+- répertoire généré `staticfiles/` ;
+- caches Python `__pycache__`, fichiers `.pyc` et `.pyo` ;
+- ancien écran orphelin d'import PDF : template, CSS et JavaScript ;
+- notes transitoires `CORRECTIF_*.md`, `REFACTOR_*.md`, `ANIMATEURS_FLOTTANTS*.md` et ancien rapport de suppression des historiques ;
+- base `db.sqlite3` fournie, car elle ne contenait aucune donnée métier ni aucun utilisateur et n'était migrée que jusqu'à `0056`, alors que le code contient les migrations jusqu'à `0072`.
 
-## 3. Problèmes importants trouvés et corrigés
+Tous les fichiers statiques et templates conservés ont au moins une référence identifiée dans le projet. La base locale sera recréée proprement par `python manage.py migrate`.
 
-### Navigation et lisibilité — corrigé
+## 3. Refactorisation du backend
 
-L’ancien menu latéral pouvait recouvrir le contenu sur ordinateur et plusieurs outils étaient dissimulés dans des onglets secondaires. Le menu est maintenant structuré par usage : Pilotage, Équipe, Organisation, Communication et Paramètres. Les pages Documents et E-mails ont un accès direct. Le menu ouvert réserve sa largeur ; le mode replié conserve un rail compact.
+L'ancien `animateurs/views.py` de 2 163 lignes a été découpé sans changer le contrat des routes :
 
-### Planning — corrigé
+| Module | Responsabilité |
+|---|---|
+| `views.py` | façade de compatibilité et exports publics |
+| `views_pages.py` | pages, administration, tableau de bord et exports |
+| `views_staff.py` | salariés et disponibilités |
+| `views_planning.py` | planning, affectations et remplissage automatique |
+| `views_catalogue.py` | centres, groupes, qualifications et périodes scolaires |
+| `views_reporting.py` | documents et récapitulatif |
 
-Le Planning cumulait des règles contradictoires de hauteur, largeur et défilement. La nouvelle disposition réserve une colonne à la liste des salariés, maintient les actions principales sur une ligne, empêche le défilement horizontal et laisse uniquement la zone des calendriers défiler verticalement. Les filtres ont été ramenés aux critères utiles : qualification et centre préféré.
+Les modules déjà spécialisés (`views_communications.py`, `views_effectifs.py` et `views_sorties.py`) restent séparés. Un contrôle automatique compare désormais les 44 vues importées par `urls.py` avec les exports explicites de la façade.
 
-### Salariés — corrigé
+## 4. Normalisation de l'interface
 
-La page contenait deux actions d’ajout et plusieurs comportements hérités de l’ancienne fiche séparée. Elle utilise désormais une vraie vue maître/détail : liste compacte à gauche, fiche éditable à droite, défilements internes et un seul bouton d’ajout.
+Les éléments récurrents ont été rapprochés d'une source commune :
 
-### Administration et e-mails — corrigé
+- les pages utilisent un bloc `page_styles` homogène pour leurs feuilles spécialisées ;
+- les en-têtes de Tableau de bord, Planning, Salariés, Gestion, Documents, Disponibilités, Récapitulatif, Administration, Sorties et Mon profil utilisent le partial commun `_page_header.html` ;
+- le même composant gère maintenant une navigation hebdomadaire, un sélecteur multi-périodes ou un simple titre ;
+- les versions de cache codées en dur ont été remplacées par une variable globale `ASSET_VERSION` injectée par le context processor ;
+- la page Sorties conserve les mêmes identifiants attendus par son JavaScript tout en utilisant l'en-tête partagé.
 
-L’accès direct aux e-mails redirige maintenant vers le bon onglet de l’Administration. Le serveur rend immédiatement l’onglet actif et son contenu visible, même avant l’exécution du JavaScript. Cela évite une page apparemment vide en cas de script lent ou indisponible.
+Cette normalisation limite les divergences futures sans réécrire brutalement les écrans existants.
 
+## 5. Environnement de développement reproductible
 
-### Compatibilité des centres salariés — corrigé
+Ajouts réalisés :
 
-Le passage de l’ancien système « centre préféré + centres secondaires » au nouveau système « plusieurs préférés + interdits » cassait deux cas : la relecture des anciennes données et le respect d’une ancienne liste explicite de centres autorisés par le solveur. Les services acceptent maintenant les deux formats sans perdre les préférences existantes.
+- `.env.example` complet pour Django, PostgreSQL/Supabase, stockage et SMTP ;
+- `.gitignore` pour les environnements, caches, secrets, médias, `staticfiles` et bases SQLite locales ;
+- `Makefile` avec `install`, `check`, `test`, `lint`, `verify` et `run` ;
+- `scripts/setup_dev.sh` pour créer `.venv`, installer les dépendances et migrer ;
+- `scripts/verify.sh` pour enchaîner les contrôles disponibles ;
+- `scripts/static_audit.py`, exécutable sans Django ;
+- `build.sh` renforcé avec `set -Eeuo pipefail`, `python -m pip`, `manage.py check` et migration non interactive.
 
-### Cohérence des migrations — corrigé
+Un environnement virtuel isolé a été créé pendant l'audit. L'installation des dépendances n'a toutefois pas pu aboutir dans le bac à sable d'analyse : aucun accès DNS à PyPI et aucun cache local de Django n'étaient disponibles. Ce blocage appartient à l'environnement d'audit, pas au projet.
 
-Le modèle `PreferenceCentre.est_prefere` n’était plus parfaitement aligné avec l’état déclaré par les migrations. La migration `0054_alter_preferencecentre_est_prefere.py` remet cet état en cohérence. `makemigrations --check` ne détecte plus de changement oublié.
+## 6. Contrôles réellement exécutés
 
-### Configuration locale et production — corrigé
-
-Le README demandait de copier `.env.example`, mais ce fichier n’existait pas. Il a été ajouté avec les variables Django, PostgreSQL, Supabase et SMTP. Les paramètres S3 de Supabase sont maintenant surchargeables par variables d’environnement tout en conservant les valeurs actuelles par défaut.
-
-## 4. Réorganisation visuelle réalisée
-
-Les feuilles `static/css/common-base.css` et `static/css/common-ui.css` consolident les fondations et composants communs :
-
-- contenu décalé à côté du menu au lieu d’être recouvert ;
-- largeur des pages et cartes harmonisée ;
-- tableaux et formulaires contenus dans leur espace ;
-- Planning et Salariés traités comme de vrais espaces de travail pleine hauteur ;
-- menus de filtres correctement positionnés et superposés ;
-- Administration et e-mails adaptables à la largeur disponible ;
-- règles tablette et mobile conservées ;
-- suppression du défilement horizontal global.
-
-Les pages principales ont également reçu une cible de contenu cohérente pour la navigation et l’accessibilité.
-
-## 5. Vérifications exécutées
-
-| Vérification | Résultat |
+| Contrôle | Résultat |
 |---|---:|
-| `python manage.py check` | Réussi |
-| `python manage.py check --deploy` avec configuration de production | Réussi |
-| `python manage.py makemigrations --check --dry-run` | Aucun changement détecté |
-| `python manage.py collectstatic --noinput` | Réussi |
-| Compilation Python | Réussie |
-| Vérification syntaxique de tous les fichiers JavaScript | Réussie |
-| Ruff sur `animateurs` et `config` | Réussi |
-| Suite Django | **182 tests réussis** |
-| Contrôle structurel visuel en 1440 × 900 | Aucun débordement horizontal sur les écrans principaux |
+| Analyse syntaxique Python par AST | **159 fichiers valides** |
+| Syntaxe JavaScript avec `node --check` | **Tous les fichiers valides** |
+| Templates analysés | **21** |
+| Références statiques littérales contrôlées | **44, aucune manquante** |
+| Vues de façade comparées aux routes | **44, cohérentes** |
+| Fonctions déplacées comparées à leur AST d’origine | **52 sur 52 identiques** |
+| Migrations numérotées | **70, aucun numéro en double** |
+| Recherche de templates restants sans référence | **Aucun** |
+| Recherche de fichiers statiques restants sans référence | **Aucun** |
+| Recherche d'artefacts générés interdits | **Aucun** |
+| `git diff --check` | **Réussi** |
 
-Les tests couvrent les droits d’accès, l’accès direct aux e-mails et l’affichage serveur du bon onglet.
+La suite présente dans le dépôt contient **34 fichiers de tests et 292 méthodes `test_*`**. Elle n'a pas été exécutée dans cet environnement, car Django 5.2.15 n'a pas pu être installé. Pour la même raison, `manage.py check`, `makemigrations --check`, `collectstatic`, Ruff et les tests Django ne doivent pas être considérés comme validés ici. La commande `make verify` les exécutera automatiquement dès que les dépendances seront installées.
 
-## 6. Dette technique encore présente
+## 7. Points de vigilance encore présents
 
-### Fichiers trop volumineux — priorité haute à moyen terme
+### JavaScript du Planning
 
-- `animateurs/views.py` : environ 2 600 lignes ;
-- `static/js/planning.js` : environ 2 600 lignes ;
-- `static/css/planning.css` : environ 1 000 lignes ;
-- `static/css/common-base.css` : environ 1 350 lignes ;
-- `static/css/common-ui.css` : environ 470 lignes.
+`static/js/planning.js` reste le fichier le plus volumineux, environ 128 Ko. Il regroupe encore chargement, rendu, glisser-déposer, effectifs, affectations et interactions. Son découpage doit être progressif et accompagné de tests navigateur, car une séparation mécanique serait risquée.
 
-Ils fonctionnent, mais rendent chaque évolution plus risquée. La prochaine refonte devrait découper les vues par domaine, le Planning JavaScript par responsabilité et les feuilles CSS par composant. La couche d’audit limite actuellement les conflits, sans effacer cette dette.
+### CSS historique
 
-### Dépendances CDN — priorité moyenne
+Les feuilles communes et spécialisées contiennent encore plusieurs redéfinitions de sélecteurs. Une partie est volontaire dans les media queries et dans les surcharges par page ; une suppression automatique pourrait modifier l'affichage. La prochaine étape raisonnable est de migrer composant par composant vers `common-ui.css`, avec comparaison visuelle à chaque écran.
 
-FullCalendar est chargé depuis un CDN. Une indisponibilité réseau peut empêcher le Planning avancé de fonctionner. Il serait préférable de le figer dans les fichiers statiques du projet ou de prévoir une stratégie de repli.
+### Modèle principal
 
-### Tests d’interface réels — priorité moyenne
+`animateurs/models.py` reste volumineux, environ 40 Ko. Une séparation en paquet `models/` est possible mais ne doit être faite qu'avec Django installé, migrations vérifiées et suite complète verte.
 
-La suite Django couvre bien les services, routes et sorties HTML, mais le dépôt ne contient pas encore de tests de parcours navigateur. Ajouter Playwright permettrait de vérifier automatiquement le glisser-déposer, l’ouverture des filtres, le repli du menu, les onglets et les formulaires sur plusieurs tailles d’écran.
+### Tests d'interface
 
+Les tests Django sont nombreux, mais aucun environnement Playwright/Cypress n'est présent pour valider réellement le glisser-déposer, les dialogues, le menu, les filtres et les différents formats d'écran.
 
-### Architecture des rôles — à documenter strictement
+### Configuration de production
 
-Le code considère uniquement les superutilisateurs comme direction. Le README a été corrigé en ce sens. Toute future création d’un rôle intermédiaire devra passer par une permission dédiée plutôt que par le simple statut `staff`.
+Les valeurs par défaut `DEBUG=True` et la clé de développement sont adaptées au local uniquement. Sur Render, `DEBUG=False`, une vraie `SECRET_KEY`, `ALLOWED_HOSTS`, la base PostgreSQL et les paramètres SMTP doivent être définis. `manage.py check --deploy` doit faire partie de la validation avant mise en production.
 
-## 7. Ordre conseillé pour la suite
+## 8. Procédure de validation recommandée
 
-1. Tester la version corrigée avec les données réelles sur une copie de la base de production.
-2. Ajouter des tests Playwright sur Planning, Salariés, Gestion et E-mails.
-3. Découper progressivement `views.py` et `planning.js`, sans modifier simultanément les règles métier.
-5. Regrouper à terme les anciennes feuilles CSS autour d’une bibliothèque de composants unique.
+```bash
+make install
+source .venv/bin/activate
+make verify
+python manage.py check --deploy
+```
 
-## 8. Fichiers principaux modifiés
+Puis tester manuellement, avec une copie des données réelles : connexion direction et animateur, Planning, affectations flottantes, effectifs Excel, Gestion, Salariés, Documents, E-mails, Sorties et exports.
 
-- `templates/partials/_nav.html`
-- `templates/base.html`
-- `static/css/common-base.css`
-- `static/css/common-ui.css`
-- `templates/planning.html`
-- `templates/employes.html`
-- `templates/gestion.html`
-- `templates/administration.html`
-- `templates/partials/_staff_filter.html`
-- `templates/partials/_emails_admin.html`
+## 9. Fichiers structurants modifiés ou ajoutés
+
 - `animateurs/views.py`
-- `config/urls.py`
-- `animateurs/services/animateurs.py`
-- `animateurs/services/serializers.py`
-- `animateurs/services/planning_solver.py`
+- `animateurs/views_pages.py`
+- `animateurs/views_staff.py`
+- `animateurs/views_planning.py`
+- `animateurs/views_catalogue.py`
+- `animateurs/views_reporting.py`
+- `animateurs/context_processors.py`
 - `config/settings.py`
+- `templates/base.html`
+- `templates/partials/_page_header.html`
+- templates des pages principales
 - `.env.example`
-- tests concernés et migration `0054`
-
-La base SQLite livrée a été remise dans son état d’origine : les données temporaires utilisées pour le contrôle visuel ne sont pas incluses dans l’archive finale.
+- `.gitignore`
+- `Makefile`
+- `scripts/setup_dev.sh`
+- `scripts/verify.sh`
+- `scripts/static_audit.py`
+- `build.sh`
+- `README.md`

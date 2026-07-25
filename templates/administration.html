@@ -2,9 +2,9 @@
 {% load static %}
 
 {% block title %}{% if active_tab == "emails" %}E-mails{% else %}Administration{% endif %} - Gestion animation{% endblock %}
-{% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/administration.css' %}?v=20260720-export-semaines-1">
-<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260720-css-refactor-2">
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/administration.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/documents.css' %}?v={{ asset_version }}">
 {% endblock %}
 
 {% block content %}
@@ -24,20 +24,40 @@
             <div class="admin-compact-heading">
                 <div>
                     <h1 id="export-planning-title">Planning calendrier par groupe</h1>
-                    
                 </div>
             </div>
             <form class="export-form" method="get" data-export-planning-form data-verification-url="{% url 'api_verification_export_planning' %}">
                 <input type="hidden" name="onglet" value="export">
-                <fieldset class="export-weeks"><legend>Semaines à exporter</legend>
+                <section class="export-weeks" aria-labelledby="export-weeks-title">
+                    <div class="export-weeks-heading">
+                        <h2 id="export-weeks-title">Choisir les semaines</h2>
+                        <span class="export-selection-count" data-export-selection-count aria-live="polite">Aucune semaine sélectionnée</span>
+                        <button class="btn btn-ghost btn-small" type="button" data-export-clear>Effacer la sélection</button>
+                    </div>
                     {% regroup semaines_export by annee_scolaire as semaines_par_annee %}
                     {% for annee in semaines_par_annee %}
-                    <div class="export-weeks-group"><strong>{{ annee.grouper }}</strong><div class="export-weeks-list">
-                        {% for semaine in annee.list %}<label><input type="checkbox" name="periode_ids" value="{{ semaine.id }}"> <span>{{ semaine.libelle_avec_annee }}<small>{{ semaine.debut|date:"d/m/Y" }} au {{ semaine.fin|date:"d/m/Y" }}</small></span></label>{% endfor %}
-                    </div></div>
+                    <details class="export-weeks-group"{% if annee.list.0.export_annee_ouverte %} open{% endif %}>
+                        <summary><span>Année scolaire {{ annee.grouper }}</span><small>{{ annee.list|length }} semaine{{ annee.list|length|pluralize }}</small></summary>
+                        <div class="export-vacations">
+                            {% regroup annee.list by categorie_vacances as vacances_annee %}
+                            {% for vacances in vacances_annee %}
+                            <details class="export-vacation-group"{% if vacances.list.0.export_vacances_ouvertes %} open{% endif %}>
+                                <summary><h3>{{ vacances.grouper|upper }}</h3><small>{{ vacances.list|length }} semaine{{ vacances.list|length|pluralize }}</small></summary>
+                                <div class="export-vacation-actions"><button class="btn btn-ghost btn-small" type="button" data-export-select-group>Tout sélectionner</button></div>
+                                <div class="export-weeks-list">
+                                    {% for semaine in vacances.list %}<label data-export-week><input type="checkbox" name="periode_ids" value="{{ semaine.id }}"> <span><strong>{{ semaine.libelle_avec_annee }}</strong><small>Du {{ semaine.debut|date:"d/m/Y" }} au {{ semaine.fin|date:"d/m/Y" }}</small></span></label>{% endfor %}
+                                </div>
+                            </details>
+                            {% endfor %}
+                        </div>
+                    </details>
                     {% empty %}<p class="empty-note">Aucune semaine enregistrée.</p>{% endfor %}
-                </fieldset>
-                <div class="export-actions"><button class="btn btn-primary" type="submit" formaction="{% url 'export_planning_excel' %}">Télécharger Excel</button><button class="btn btn-secondary" type="submit" formaction="{% url 'export_planning_pdf' %}">Télécharger PDF</button></div>
+                </section>
+                <aside class="export-actions" aria-label="Formats d’export">
+                    <div class="export-actions-heading"><strong>Exporter</strong><span data-export-actions-count>Aucune semaine</span></div>
+                    <button class="btn btn-primary" type="submit" formaction="{% url 'export_planning_excel' %}" disabled><span aria-hidden="true">↓</span> Planning Excel</button>
+                    <button class="btn btn-secondary" type="submit" formaction="{% url 'export_planning_pdf' %}" disabled><span aria-hidden="true">↓</span> Planning PDF</button>
+                </aside>
             </form>
         </section>
     </div>
@@ -92,6 +112,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{% static 'js/administration.js' %}?v=20260720-export-horaires-2"></script>
-<script src="{% static 'js/emails.js' %}?v=20260718-audit-1"></script>
+<script src="{% static 'js/administration.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'js/emails.js' %}?v={{ asset_version }}"></script>
 {% endblock %}
