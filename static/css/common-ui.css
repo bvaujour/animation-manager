@@ -188,6 +188,14 @@ body.page-employes .employees-list .salarie-directory-item.active{box-shadow:ins
 .gestion-page .lieux-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
 .gestion-page .lieu-card,.gestion-page .gestion-form,.gestion-page .periode-library,.gestion-page .period-create-panel,.gestion-page .entity-list,.gestion-documents{border:1px solid var(--color-border);border-radius:15px;background:#fff;box-shadow:var(--shadow-sm)}
 .gestion-page .gestion-form{padding:15px}
+
+/* Autocomplétion géographique partagée par les formulaires Sortie et Lieu. */
+[data-location-autocomplete]{position:relative}
+[data-location-suggestions]{position:absolute;z-index:30;right:0;left:0;display:grid;max-height:230px;overflow-y:auto;padding:5px;border:1px solid #d9deea;border-radius:11px;background:#fff;box-shadow:0 12px 26px rgba(40,45,75,.14)}
+[data-location-suggestions][hidden]{display:none}
+[data-location-suggestions] button{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border:0;border-radius:8px;background:transparent;color:#111;text-align:left;cursor:pointer}
+[data-location-suggestions] button:hover,[data-location-suggestions] button.is-active{background:#f0edff;color:#4933b2}
+[data-location-status]{display:block;min-height:1em;color:var(--color-text-muted);font-size:.68rem}
 .gestion-page .lieu-card{overflow:hidden}
 .gestion-page .lieu-card-header{background:linear-gradient(135deg,color-mix(in srgb,var(--centre-color,var(--color-primary)) 10%,#fff),#fff)}
 .gestion-page .entity-row{border:1px solid #e5e8f1;background:#fafbfe}

@@ -4,31 +4,42 @@ Application Django de gestion des salariés, lieux, groupes, périodes scolaires
 
 ## Installation locale
 
+La commande suivante crée `.venv`, installe les dépendances de développement,
+crée `.env` si nécessaire et applique les migrations :
+
+```bash
+make install
+source .venv/bin/activate
+make run
+```
+
+Installation manuelle équivalente :
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 cp .env.example .env
 python manage.py migrate
 python manage.py runserver
 ```
 
-Pour contribuer au projet et lancer les contrôles de style :
-
-```bash
-pip install -r requirements-dev.txt
-ruff check config animateurs
-```
-
-Sans variables `DB_*`, l'application utilise SQLite. En production, renseigner `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` et `DB_PASSWORD` pour PostgreSQL/Supabase.
+Sans variables `DB_*`, l'application crée une base SQLite locale. Cette base
+n'est pas versionnée. En production, renseigner `DB_HOST`, `DB_PORT`, `DB_NAME`,
+`DB_USER` et `DB_PASSWORD` pour PostgreSQL/Supabase.
 
 ## Vérifications
 
 ```bash
-python manage.py check
-python manage.py test animateurs.tests
-python manage.py check --deploy
+make check     # audit statique + contrôles Django
+make test      # suite Django
+make lint      # Ruff
+make verify    # tous les contrôles disponibles
 ```
+
+`scripts/static_audit.py` ne dépend d'aucun paquet externe. Il contrôle la
+syntaxe Python, les références de templates et de fichiers statiques, la façade
+des vues, les migrations et, lorsqu'elle existe, l'intégrité de SQLite.
 
 ## Déploiement Render
 
@@ -40,12 +51,60 @@ gunicorn config.wsgi:application
 
 Définir impérativement `SECRET_KEY`, `DEBUG=False`, `ALLOWED_HOSTS` et les variables de base de données. Les fichiers utilisateurs doivent être stockés dans Supabase Storage en production.
 
+### Estimation des trajets des sorties
+
+L'estimation automatique utilise les services publics de la Géoplateforme IGN
+côté serveur. Aucune clé API n'est nécessaire. Les valeurs suivantes peuvent
+être conservées dans les variables d'environnement Render :
+
+```text
+ROUTING_PROVIDER=geoplateforme
+ROUTING_API_URL=https://data.geopf.fr/navigation/itineraire
+ROUTING_GEOCODING_URL=https://data.geopf.fr/geocodage/search
+ROUTING_RESOURCE=bdtopo-osrm
+ROUTING_TIMEOUT_SECONDS=8
+```
+
+Les itinéraires et le géocodage sont mis en cache afin de limiter les requêtes.
+Le calcul utilise le réseau routier BD TOPO de l'IGN et respecte l'ordre des
+lieux enregistré dans la sortie. Si le service public est momentanément
+indisponible, les heures d'arrivée restent saisissables manuellement.
+
+### Localisation des sorties
+
+La destination d'une sortie est enregistrée sous forme structurée : nom,
+adresse ou lieu-dit facultatif, code postal, commune, code INSEE, coordonnées
+et niveau de précision. L'autocomplétion commune/code postal passe par l'API
+publique officielle `geo.api.gouv.fr` via Django ; aucune clé ni donnée secrète
+n'est envoyée au navigateur. Le géocodage précis utilise le service de
+géocodage de la Géoplateforme. Les recherches sont mises en cache et une panne
+externe n'empêche jamais l'enregistrement manuel de la sortie.
+
+La météo et l'itinéraire consomment les mêmes coordonnées de destination. Les
+anciens champs météo restent présents pour compatibilité de schéma, mais ne
+sont plus utilisés comme une seconde localisation modifiable.
+
+Les lieux de Gestion utilisent le même composant commune/code postal et le
+même service de géocodage. Leurs coordonnées sont enregistrées avec le code
+INSEE et le niveau de précision, puis reprises directement par les étapes des
+circuits aller et retour. En cas d'échec, l'API Transport renvoie un code métier
+(`ROUTING_NOT_CONFIGURED`, `LOCATION_MISSING`, `GEOCODING_FAILED`,
+`ROUTING_FAILED`, `INVALID_ROUTE` ou `PROVIDER_TIMEOUT`) sans exposer la clé ni
+la réponse technique du fournisseur.
+
 ## Organisation
 
 - `animateurs/models.py` : modèle de données actuel ;
 - `animateurs/services/` : règles métier et exports ;
-- `animateurs/views.py` : pages et API ;
+- `animateurs/views.py` : façade stable utilisée par les routes ;
+- `animateurs/views_pages.py` : pages, administration et exports ;
+- `animateurs/views_staff.py` : salariés et disponibilités ;
+- `animateurs/views_planning.py` : planning et affectations ;
+- `animateurs/views_catalogue.py` : centres, groupes, qualifications et périodes ;
+- `animateurs/views_reporting.py` : documents et récapitulatif ;
+- `animateurs/views_communications.py`, `views_effectifs.py` et `views_sorties.py` : domaines déjà séparés ;
 - `static/js/` : interfaces clientes ;
+- `scripts/` : installation et contrôles reproductibles ;
 - `animateurs/tests/` : tests correspondant au modèle actuel. Les tests HTTP
   héritent de `animateurs/tests/base.py` (`ConnexionTestCase`), qui connecte
   automatiquement un compte maître pour traverser l'authentification obligatoire.
@@ -151,7 +210,7 @@ Toutes les pages utilisent désormais le même langage visuel que le tableau de 
 - espaces de travail adaptés à leur usage : Planning dense, Salariés en maître/détail, Gestion en cartes par lieu et Administration organisée par outils ;
 - mise en page responsive conservant l'accès à toutes les fonctions sur tablette et mobile.
 
-Les fondations et composants communs se trouvent dans `static/css/common-base.css` et `static/css/common-ui.css`. Les pages ne chargent ensuite que leur feuille spécialisée.
+Les fondations et composants communs se trouvent dans `static/css/common-base.css` et `static/css/common-ui.css`. Les pages ne chargent ensuite que leur feuille spécialisée. Les en-têtes de pages et la navigation de semaine sont rendus par les partials communs de `templates/partials/`, et toutes les ressources statiques utilisent la même variable `ASSET_VERSION`.
 
 ## Disposition modulable des centres dans le Planning
 

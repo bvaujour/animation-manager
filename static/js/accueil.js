@@ -6,6 +6,7 @@ document.addEventListener("DOMContentLoaded", () =>
     const btnCurrentWeek = document.getElementById("home-current-week");
     const btnNextWeek = document.getElementById("home-next-week");
     const visiblePeriod = document.getElementById("home-visible-period");
+    const calendrierPersonnel = document.querySelector("[data-personal-calendar]") !== null;
 
 
     const CENTRES_REPLIES_KEY = "calendar-centres-replies";
@@ -30,12 +31,14 @@ document.addEventListener("DOMContentLoaded", () =>
         localStorage.setItem(CENTRES_REPLIES_KEY, JSON.stringify([...centresReplies]));
     }
     const calendars = [];
+    let chargementCalendriers = 0;
     const today = new Date();
     const persistedWeek = WeekPicker.getPersistedDate();
     let currentDate = persistedWeek ? parseLocalDate(persistedWeek) : new Date(today);
 
     function message(container, texte)
     {
+        if (!container) return;
         container.innerHTML = `<p class="empty-note">${texte}</p>`;
     }
 
@@ -43,7 +46,10 @@ document.addEventListener("DOMContentLoaded", () =>
 
     function periodePourDate(dateStr)
     {
-        return periodesOuvertes().find((periode) => periode.debut <= dateStr && periode.fin >= dateStr) || null;
+        const periodesEnregistrees = WeekPicker.get("home-period-nav")?.periods || [];
+        return periodesEnregistrees.find((periode) => periode.debut <= dateStr && periode.fin >= dateStr)
+            || periodesOuvertes().find((periode) => periode.debut <= dateStr && periode.fin >= dateStr)
+            || null;
     }
 
     function mettreAJourPeriodeVisible()
@@ -54,7 +60,17 @@ document.addEventListener("DOMContentLoaded", () =>
         const periode = periodePourDate(dateCourante);
         visiblePeriod.textContent = periode
             ? libellePeriodeAvecDates(periode)
-            : "Aucune période ouverte";
+            : libelleSemaine(currentDate);
+    }
+
+    function libelleSemaine(dateReference)
+    {
+        const lundi = new Date(dateReference);
+        lundi.setDate(lundi.getDate() - ((lundi.getDay() + 6) % 7));
+        const dimanche = new Date(lundi);
+        dimanche.setDate(dimanche.getDate() + 6);
+        const format = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+        return `Semaine du ${format.format(lundi)} au ${format.format(dimanche)}`;
     }
 
     function synchroniserCalendriers()
@@ -66,6 +82,28 @@ document.addEventListener("DOMContentLoaded", () =>
 
     function changerPeriode(delta)
     {
+        if (calendrierPersonnel)
+        {
+            const picker = WeekPicker.get("home-period-nav");
+            const periodes = [...(picker?.periods || [])]
+                .sort((a, b) => String(a.debut).localeCompare(String(b.debut)));
+            const dateCourante = dateIsoLocale(currentDate);
+            const indexCourant = periodes.findIndex(
+                (periode) => periode.debut <= dateCourante && periode.fin >= dateCourante
+            );
+            let cible = indexCourant >= 0 ? periodes[indexCourant + delta] : null;
+            if (!cible)
+            {
+                cible = delta > 0
+                    ? periodes.find((periode) => periode.debut > dateCourante)
+                    : [...periodes].reverse().find((periode) => periode.fin < dateCourante);
+            }
+            if (!cible) return;
+            currentDate = new Date(`${cible.debut}T12:00:00`);
+            mettreAJourPeriodeVisible();
+            chargerCalendriers();
+            return;
+        }
         const periodes = periodesOuvertes();
         if (!periodes.length) return;
         const dateCourante = dateIsoLocale(currentDate);
@@ -74,17 +112,34 @@ document.addEventListener("DOMContentLoaded", () =>
             : [...periodes].reverse().find((periode) => periode.debut < dateCourante);
         if (!cible) return;
         currentDate = new Date(`${cible.debut}T12:00:00`);
-        synchroniserCalendriers();
+        chargerCalendriers();
     }
 
     document.getElementById("home-period-nav")?.addEventListener("week-picker:select", (event) => {
         if (!event.detail?.date) return;
         currentDate = new Date(`${event.detail.date}T12:00:00`);
-        synchroniserCalendriers();
+        chargerCalendriers();
+    });
+
+    document.getElementById("home-period-nav")?.addEventListener("week-picker:ready", (event) => {
+        const dateInitiale = event.detail?.picker?.activeDate;
+        if (!dateInitiale) return;
+        const dateNormalisee = new Date(`${dateInitiale}T12:00:00`);
+        const doitRecharger = dateIsoLocale(currentDate) !== dateInitiale;
+        currentDate = dateNormalisee;
+        mettreAJourPeriodeVisible();
+        if (doitRecharger) chargerCalendriers();
     });
 
     function retourPeriodeActuelle()
     {
+        if (calendrierPersonnel)
+        {
+            currentDate = new Date(today);
+            mettreAJourPeriodeVisible();
+            chargerCalendriers();
+            return;
+        }
         const periodes = periodesOuvertes();
         const aujourdHui = dateIsoLocale(today);
         const courante = periodes.find((periode) => periode.debut <= aujourdHui && periode.fin >= aujourdHui);
@@ -92,7 +147,7 @@ document.addEventListener("DOMContentLoaded", () =>
         const cible = courante || prochaine || periodes.at(-1);
         if (!cible) return;
         currentDate = new Date(`${cible.debut}T12:00:00`);
-        synchroniserCalendriers();
+        chargerCalendriers();
     }
 
     function dateIsoLocale(date)
@@ -107,7 +162,7 @@ document.addEventListener("DOMContentLoaded", () =>
     {
         const iso = dateIsoLocale(date);
         const periodes = Array.isArray(groupe.periodes) ? groupe.periodes : [];
-        if (!periodes.some((periode) => iso >= periode.debut && iso <= (periode.fin_ouverture || periode.fin))) return false;
+        if (!groupe.permanent && !periodes.some((periode) => iso >= periode.debut && iso <= (periode.fin_ouverture || periode.fin))) return false;
         const numeroJour = (date.getDay() + 6) % 7;
         const joursOuverts = Array.isArray(groupe.jours_ouverts)
             ? groupe.jours_ouverts.map(Number)
@@ -125,7 +180,7 @@ document.addEventListener("DOMContentLoaded", () =>
 
     function groupeChevauchePlage(groupe, debutStr, finExclusiveStr)
     {
-        return (groupe.periodes || []).some((periode) => periode.debut < finExclusiveStr && (periode.fin_ouverture || periode.fin) >= debutStr);
+        return groupe.permanent || (groupe.periodes || []).some((periode) => periode.debut < finExclusiveStr && (periode.fin_ouverture || periode.fin) >= debutStr);
     }
 
     function periodesOuvertes()
@@ -227,14 +282,33 @@ document.addEventListener("DOMContentLoaded", () =>
             droppable: false,
             selectable: false,
             events: (fetchInfo, successCallback, failureCallback) => {
-                PlanningData.fetchWeekEvents(fetchInfo.startStr, fetchInfo.endStr)
-                    .then((events) => successCallback((events || []).filter(
-                        (item) => Number(item.extendedProps?.evenement_id || item.extendedProps?.groupe_id)
-                            === Number(evenement.id)
-                    )))
+                Promise.all([
+                    PlanningData.fetchWeekEvents(fetchInfo.startStr, fetchInfo.endStr),
+                    PlanningData.fetchWeekEffectifs(fetchInfo.startStr, fetchInfo.endStr),
+                ])
+                    .then(([events, effectifs]) => {
+                        const affectations = (events || []).filter(
+                            (item) => Number(item.extendedProps?.evenement_id || item.extendedProps?.groupe_id)
+                                === Number(evenement.id)
+                        );
+                        const nombresEnfants = (effectifs || [])
+                            .filter((item) => Number(item.groupe_id) === Number(evenement.id))
+                            .map((item) => ({
+                                id: `effectif-${evenement.id}-${item.date}`,
+                                title: `${item.nombre} enfant${Number(item.nombre) > 1 ? "s" : ""}`,
+                                start: item.date,
+                                allDay: true,
+                                backgroundColor: "#fff2c7",
+                                borderColor: "#e4bd55",
+                                textColor: "#725510",
+                                extendedProps: { type_affichage: "effectif_enfants" },
+                            }));
+                        successCallback([...nombresEnfants, ...affectations]);
+                    })
                     .catch(failureCallback);
             },
-            eventOrder: "title",
+            eventOrder: (a, b) => (a.extendedProps.type_affichage === "effectif_enfants" ? -1 : 1)
+                - (b.extendedProps.type_affichage === "effectif_enfants" ? -1 : 1),
             dayCellClassNames: (info) => evenementCouvreJour(evenement, info.date)
                 ? []
                 : ["home-evenement-hors-periode"],
@@ -251,22 +325,100 @@ document.addEventListener("DOMContentLoaded", () =>
         calendar.render();
     }
 
+    function creerCalendrierCentre(centre, liste, calendriersCentre)
+    {
+        const groupes = centre.evenements || [];
+        const nomsGroupes = new Map(groupes.map((groupe) => [Number(groupe.id), groupe.nom]));
+        const groupeIds = new Set(nomsGroupes.keys());
+        const eventCard = document.createElement("article");
+        eventCard.className = "home-event-calendar-card calendar-group-card";
+        // Un identifiant négatif distingue ce calendrier agrégé des groupes.
+        eventCard.dataset.groupeId = String(-Number(centre.id));
+        eventCard.innerHTML = '<header class="home-event-calendar-header calendar-group-header"><h3 class="calendar-group-name">Tous les groupes</h3><span class="calendar-group-meta">Planning de l’équipe</span></header><div class="home-calendar shared-calendar"></div>';
+        liste.appendChild(eventCard);
+
+        const groupesOuverts = groupes.filter((groupe) => !groupe.est_flottant);
+        const joursOuverts = new Set(groupes.flatMap((groupe) => (groupe.jours_ouverts || []).map(Number)));
+        const groupeSynthese = {
+            id: -Number(centre.id),
+            permanent: groupes.some((groupe) => groupe.permanent),
+            periodes: groupesOuverts.flatMap((groupe) => groupe.periodes || []),
+            jours_ouverts: [...joursOuverts],
+        };
+        const calendar = new FullCalendar.Calendar(eventCard.querySelector(".home-calendar"), {
+            initialView: "dayGridWeek",
+            initialDate: currentDate,
+            locale: "fr",
+            firstDay: 1,
+            hiddenDays: [0, 1, 2, 3, 4, 5, 6].filter((jourJs) => !joursOuverts.has((jourJs + 6) % 7)),
+            height: "auto",
+            fixedWeekCount: false,
+            dayMaxEvents: false,
+            dayMaxEventRows: false,
+            headerToolbar: false,
+            editable: false,
+            selectable: false,
+            events: (fetchInfo, successCallback, failureCallback) => {
+                Promise.all([
+                    PlanningData.fetchWeekEvents(fetchInfo.startStr, fetchInfo.endStr),
+                    PlanningData.fetchWeekEffectifs(fetchInfo.startStr, fetchInfo.endStr),
+                ]).then(([events, effectifs]) => {
+                    const affectations = (events || [])
+                        .filter((item) => groupeIds.has(Number(item.extendedProps?.evenement_id || item.extendedProps?.groupe_id)))
+                        .map((item) => {
+                            const groupeId = Number(item.extendedProps?.evenement_id || item.extendedProps?.groupe_id);
+                            return { ...item, title: `${nomsGroupes.get(groupeId)} · ${item.title}` };
+                        });
+                    const nombresEnfants = (effectifs || [])
+                        .filter((item) => groupeIds.has(Number(item.groupe_id)))
+                        .map((item) => ({
+                            id: `effectif-${item.groupe_id}-${item.date}`,
+                            title: `${nomsGroupes.get(Number(item.groupe_id))} · ${item.nombre} enfant${Number(item.nombre) > 1 ? "s" : ""}`,
+                            start: item.date,
+                            allDay: true,
+                            backgroundColor: "#fff2c7",
+                            borderColor: "#e4bd55",
+                            textColor: "#725510",
+                            extendedProps: { type_affichage: "effectif_enfants" },
+                        }));
+                    successCallback([...nombresEnfants, ...affectations]);
+                }).catch(failureCallback);
+            },
+            eventOrder: (a, b) => (a.extendedProps.type_affichage === "effectif_enfants" ? -1 : 1)
+                - (b.extendedProps.type_affichage === "effectif_enfants" ? -1 : 1),
+            datesSet: (info) => {
+                mettreAJourVisibilite(info);
+                mettreAJourPeriodeVisible();
+            },
+        });
+        calendar.centrePlanning = centre;
+        calendar.evenementPlanning = groupeSynthese;
+        calendars.push(calendar);
+        calendriersCentre.push(calendar);
+        calendar.render();
+    }
+
     async function chargerCalendriers()
     {
+        const numeroChargement = ++chargementCalendriers;
         try
         {
-            const centresAvecEvenements = (await PlanningData.fetchCentresWithGroups()).map((centre) => ({
+            const plage = PlanningData.weekRange(currentDate);
+            const centresAvecEvenements = (await PlanningData.fetchCentresWithGroups(plage.debut, plage.fin)).map((centre) => ({
                 ...centre,
-                evenements: (centre.evenements || []).filter((groupe) => (groupe.periodes || []).length > 0),
+                evenements: (centre.evenements || []).filter((groupe) => groupe.permanent || (groupe.periodes || []).length > 0),
             }));
+            if (numeroChargement !== chargementCalendriers) return;
 
+            calendars.forEach((calendar) => calendar.destroy());
             calendarsContainer.innerHTML = "";
             calendars.length = 0;
 
             if (!centresAvecEvenements.length)
             {
-                message(calendarsContainer, "Aucun lieu n’est encore enregistré.");
-                if (visiblePeriod) visiblePeriod.textContent = "aucun planning";
+                // Une semaine sans affectation reste volontairement vide ; les
+                // flèches permettent toujours de rejoindre une autre semaine.
+                mettreAJourPeriodeVisible();
                 return;
             }
 
@@ -310,6 +462,9 @@ document.addEventListener("DOMContentLoaded", () =>
                 calendarsContainer.appendChild(card);
 
                 const calendriersCentre = [];
+                // Le planning personnel reprend la même lecture que le planning
+                // principal : un lieu contient un calendrier distinct par groupe.
+                // Chaque calendrier charge aussi l'effectif enfants du jour.
                 centre.evenements.forEach((evenement) =>
                 {
                     creerCalendrierEvenement(centre, evenement, listeEvenements, calendriersCentre);
@@ -377,6 +532,7 @@ document.addEventListener("DOMContentLoaded", () =>
 
     function chargerDocuments()
     {
+        if (!documentsContainer) return;
         apiFetch("/api/documents/")
             .then((documents) =>
             {

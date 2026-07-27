@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Mes disponibilités{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v=20260720-css-refactor-2">{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--medium employee-detail-page availability-self-page">
     {% include "partials/_page_header.html" with title="Mes disponibilités" header_class="employee-detail-header" container_id="availability-period-nav" previous_id="availability-prev-week" today_id="availability-current-week" next_id="availability-next-week" label_id="availability-visible-period" generic_navigation="true" %}
@@ -17,4 +17,4 @@
     {% endif %}
 </main>
 {% endblock %}
-{% block scripts %}{% if animateur %}<script src="{% static 'js/mes-disponibilites.js' %}?v=20260718-audit-1"></script>{% endif %}{% endblock %}
+{% block scripts %}{% if animateur %}<script src="{% static 'js/mes-disponibilites.js' %}?v={{ asset_version }}"></script>{% endif %}{% endblock %}

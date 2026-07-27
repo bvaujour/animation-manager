@@ -2,13 +2,11 @@
 {% load static %}
 {% block title %}{% if utilisateur_est_direction %}Tableau de bord{% else %}Accueil{% endif %}{% endblock %}
 {% block body_class %}{% if utilisateur_est_direction %}dashboard-body{% endif %}{% endblock %}
-{% block extra_head %}
+{% block page_styles %}
 {% if utilisateur_est_direction %}
-<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=20260720-dashboard-metrics-2">
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}">
 {% else %}
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
-<link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260720-css-refactor-2">
-<link rel="stylesheet" href="{% static 'css/calendars.css' %}?v=20260720-css-refactor-2">
+<link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -91,22 +89,20 @@
     <div id="dashboard-loading" class="dashboard-loading" role="status" aria-live="polite">Mise à jour du tableau de bord…</div>
 </main>
 {% else %}
-<main id="main-content" class="page-shell page-shell--wide home-page">
-    {% include "partials/_page_header.html" with title="Accueil" header_class="home-page-header" container_id="home-period-nav" previous_id="home-prev-week" today_id="home-current-week" next_id="home-next-week" label_id="home-visible-period" %}
-    <section class="ui-card ui-section home-section home-planning-section">
-        <div id="home-calendars" class="home-calendars calendar-sites"></div>
-    </section>
-    <section class="ui-card ui-section home-section">
-        <div class="ui-section-heading section-heading"><h2>Documents disponibles</h2></div>
-        <div id="home-documents" class="home-documents"></div>
+<main id="main-content" class="page-shell page-shell--wide employee-dashboard-page">
+    <header class="employee-dashboard-heading"><p>Bonjour {{ animateur.prenom }}</p><h1>Mon tableau de bord</h1></header>
+    <section class="employee-dashboard-actions" aria-label="Mes espaces">
+        <a class="ui-card employee-dashboard-action employee-dashboard-action--blue" href="{% url 'mon_planning' %}"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span><div><strong>Planning / séjours</strong><small>Consulter mes affectations</small></div><b aria-hidden="true">›</b></a>
+        <a class="ui-card employee-dashboard-action employee-dashboard-action--purple" href="{% url 'mon_profil' %}"><span class="material-symbols-outlined" aria-hidden="true">groups</span><div><strong>Mon profil</strong><small>Voir mes informations</small></div><b aria-hidden="true">›</b></a>
+        <a class="ui-card employee-dashboard-action employee-dashboard-action--green" href="{% url 'mes_disponibilites' %}"><span class="material-symbols-outlined" aria-hidden="true">event_available</span><div><strong>Mes disponibilités</strong><small>Renseigner mes journées</small></div><b aria-hidden="true">›</b></a>
+        <a class="ui-card employee-dashboard-action employee-dashboard-action--orange" href="{% url 'documents' %}"><span class="material-symbols-outlined" aria-hidden="true">description</span><div><strong>Mes documents</strong><small>Consulter les fichiers partagés</small></div><b aria-hidden="true">›</b></a>
     </section>
 </main>
 {% endif %}
 {% endblock %}
 {% block scripts %}
 {% if utilisateur_est_direction %}
-<script src="{% static 'js/dashboard.js' %}?v=20260721-dashboard-age-totals-1"></script>
+<script src="{% static 'js/dashboard.js' %}?v={{ asset_version }}"></script>
 {% else %}
-<script src="{% static 'js/accueil.js' %}?v=20260721-api-performance-1"></script>
 {% endif %}
 {% endblock %}

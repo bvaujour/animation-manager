@@ -587,7 +587,7 @@ class AnimateursListPerformanceTests(ConnexionTestCase):
         )
 
 class AnimateursApiOptionsTests(ConnexionTestCase):
-    @mock.patch("animateurs.views.synchroniser_affinites_groupes")
+    @mock.patch("animateurs.views_staff.synchroniser_affinites_groupes")
     def test_liste_avec_affectations_reste_en_lecture_seule(self, synchroniser):
         Animateur.objects.create(prenom="Aline", nom="Lecture seule")
 

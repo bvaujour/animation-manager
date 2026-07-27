@@ -36,6 +36,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -55,6 +56,18 @@ QUALIFICATION_ICON_CHOICES = [
     ("direction", "Direction"),
     ("repas", "Repas / alimentation"),
 ]
+
+code_postal_francais = RegexValidator(
+    regex=r"^\d{5}$",
+    message="Le code postal doit contenir exactement 5 chiffres.",
+)
+
+PRECISIONS_LOCALISATION = (
+    ("adresse", "Adresse"),
+    ("commune", "Commune"),
+    ("code_postal", "Code postal"),
+    ("non_localisee", "Non localisée"),
+)
 
 
 
@@ -274,6 +287,20 @@ class Centre(models.Model):
         help_text="Abréviation courte affichée dans les badges, ex: PAC",
     )
 
+    adresse = models.CharField(max_length=240, blank=True, default="")
+    code_postal = models.CharField(
+        max_length=5, blank=True, default="", validators=[code_postal_francais]
+    )
+    commune = models.CharField(max_length=120, blank=True, default="")
+    code_insee = models.CharField(max_length=5, blank=True, default="")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    precision_localisation = models.CharField(
+        max_length=14,
+        choices=PRECISIONS_LOCALISATION,
+        default="non_localisee",
+    )
+
     couleur = models.CharField(
         max_length=7,
         default="#e03c00",
@@ -293,6 +320,10 @@ class Centre(models.Model):
     def save(self, *args, **kwargs):
         self.nom = self.nom.strip()
         self.code = self.code.strip().upper()
+        self.adresse = self.adresse.strip()
+        self.code_postal = self.code_postal.strip()
+        self.commune = self.commune.strip()
+        self.code_insee = self.code_insee.strip().upper()
         self.cle_unique = normaliser_cle_unique(self.nom)
         super().save(*args, **kwargs)
 
@@ -654,6 +685,12 @@ class PeriodeScolaire(models.Model):
             return self.nom.replace(separateur, f" {annee}{separateur}")
         return f"{self.nom} {annee}"
 
+    @property
+    def categorie_vacances(self):
+        """Libellé commun utilisé pour regrouper les semaines d'une période."""
+        categorie = re.split(r"\s*[—–-]\s*Semaine\b", self.nom, maxsplit=1, flags=re.IGNORECASE)[0]
+        return re.sub(r"\s+\d{4}$", "", categorie).strip() or "Autres périodes"
+
     def __str__(self):
         return f"{self.libelle_avec_annee} ({self.debut:%d/%m/%Y} au {self.fin:%d/%m/%Y})"
 
@@ -898,6 +935,258 @@ class Document(models.Model):
 
     def __str__(self):
         return self.titre
+
+
+class Sortie(models.Model):
+    """Préparation d'une sortie ; les effectifs restent calculés depuis le Planning."""
+
+    MODE_CAR = "Car"
+    MODE_MINIBUS = "Minibus"
+    MODE_LIGNE_REGULIERE = "Ligne régulière"
+    MODE_TRANSPORT_COMMUN = "Transport en commun"
+    MODES_TRANSPORT = (
+        (MODE_CAR, MODE_CAR),
+        (MODE_MINIBUS, MODE_MINIBUS),
+        (MODE_LIGNE_REGULIERE, MODE_LIGNE_REGULIERE),
+        (MODE_TRANSPORT_COMMUN, MODE_TRANSPORT_COMMUN),
+    )
+
+    nom = models.CharField(max_length=150)
+    date = models.DateField(db_index=True)
+    destination = models.CharField(max_length=180)
+    destination_adresse = models.CharField(max_length=240, blank=True, default="")
+    destination_code_postal = models.CharField(
+        max_length=5, blank=True, default="", validators=[code_postal_francais]
+    )
+    destination_commune = models.CharField(max_length=120, blank=True, default="")
+    destination_code_insee = models.CharField(max_length=5, blank=True, default="")
+    destination_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    destination_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    PRECISION_ADRESSE = "adresse"
+    PRECISION_COMMUNE = "commune"
+    PRECISION_CODE_POSTAL = "code_postal"
+    PRECISION_NON_LOCALISEE = "non_localisee"
+    PRECISIONS_DESTINATION = PRECISIONS_LOCALISATION
+    destination_precision = models.CharField(
+        max_length=14,
+        choices=PRECISIONS_DESTINATION,
+        default=PRECISION_NON_LOCALISEE,
+    )
+    meteo_lieu_libelle = models.CharField(max_length=180, blank=True, default="")
+    meteo_adresse = models.CharField(max_length=300, blank=True, default="")
+    meteo_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    meteo_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    meteo_code_departement = models.CharField(max_length=3, blank=True, default="")
+    mode_transport = models.CharField(max_length=100, choices=MODES_TRANSPORT, blank=True, default="")
+    nombre_vehicules = models.PositiveSmallIntegerField(null=True, blank=True)
+    heure_depart = models.TimeField(null=True, blank=True)
+    heure_arrivee = models.TimeField(null=True, blank=True)
+    heure_depart_site = models.TimeField(null=True, blank=True)
+    heure_retour = models.TimeField(null=True, blank=True)
+    heure_arrivee_retour = models.TimeField(null=True, blank=True)
+    temps_arret_par_site = models.PositiveSmallIntegerField(
+        default=10,
+        validators=[MinValueValidator(0), MaxValueValidator(60)],
+    )
+    SOURCE_HORAIRE_AUTOMATIQUE = "automatique"
+    SOURCE_HORAIRE_MANUELLE = "manuelle"
+    SOURCE_HORAIRE_CHOICES = (
+        (SOURCE_HORAIRE_AUTOMATIQUE, "Estimation automatique"),
+        (SOURCE_HORAIRE_MANUELLE, "Heure ajustée manuellement"),
+    )
+    source_heure_arrivee = models.CharField(
+        max_length=12, choices=SOURCE_HORAIRE_CHOICES, blank=True, default=""
+    )
+    source_heure_arrivee_retour = models.CharField(
+        max_length=12, choices=SOURCE_HORAIRE_CHOICES, blank=True, default=""
+    )
+    trajet_ramassage = models.TextField(blank=True, default="")
+    consignes_transport = models.TextField(blank=True, default="")
+    objectifs_pedagogiques = models.TextField(blank=True, default="")
+    consignes_encadrement = models.TextField(blank=True, default="")
+    organisation_maternels = models.TextField(blank=True, default="")
+    organisation_elementaires = models.TextField(blank=True, default="")
+    repas_gouter = models.TextField(blank=True, default="")
+    documents = models.ManyToManyField(Document, related_name="sorties", blank=True)
+    groupes = models.ManyToManyField(Evenement, through="SortieParticipation", related_name="sorties")
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("date", "nom")
+
+    def save(self, *args, **kwargs):
+        self.nom = self.nom.strip()
+        self.destination = self.destination.strip()
+        self.destination_adresse = self.destination_adresse.strip()
+        self.destination_code_postal = self.destination_code_postal.strip()
+        self.destination_commune = self.destination_commune.strip()
+        self.destination_code_insee = self.destination_code_insee.strip()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.nom} — {self.date:%d/%m/%Y}"
+
+
+class SortieEtapeTransport(models.Model):
+    """Lieu ordonné d'un circuit de transport, sans horaire individuel."""
+
+    SENS_ALLER = "aller"
+    SENS_RETOUR = "retour"
+    SENS_CHOICES = ((SENS_ALLER, "Aller"), (SENS_RETOUR, "Retour"))
+
+    sortie = models.ForeignKey(Sortie, on_delete=models.CASCADE, related_name="etapes_transport")
+    centre = models.ForeignKey(Centre, on_delete=models.PROTECT, related_name="etapes_transport_sorties")
+    sens = models.CharField(max_length=6, choices=SENS_CHOICES)
+    ordre = models.PositiveSmallIntegerField()
+
+    class Meta:
+        ordering = ("sens", "ordre", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("sortie", "sens", "centre"),
+                name="unique_centre_par_circuit_sortie",
+            ),
+            models.UniqueConstraint(
+                fields=("sortie", "sens", "ordre"),
+                name="unique_ordre_par_circuit_sortie",
+            ),
+        ]
+
+
+class PreferenceTransportUtilisateur(models.Model):
+    """Dernier mode de transport choisi, isolé par compte utilisateur."""
+
+    utilisateur = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="preference_transport",
+    )
+    mode_transport = models.CharField(max_length=100, choices=Sortie.MODES_TRANSPORT)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+
+class SortieResponsabilite(models.Model):
+    """Responsabilité opérationnelle définie pour une sortie.
+
+    Une ligne représente un seul périmètre : toute la sortie (direction),
+    un lieu ou un groupe. Le formulaire peut néanmoins regrouper plusieurs
+    lignes afin d'attribuer plusieurs lieux ou groupes au même responsable.
+    """
+
+    TYPE_DIRECTION = "direction"
+    TYPE_LIEU = "lieu"
+    TYPE_GROUPE = "groupe"
+    TYPE_CHOICES = [
+        (TYPE_DIRECTION, "Direction"),
+        (TYPE_LIEU, "Responsable de lieu"),
+        (TYPE_GROUPE, "Responsable de groupe"),
+    ]
+
+    sortie = models.ForeignKey(Sortie, on_delete=models.CASCADE, related_name="responsabilites")
+    animateur = models.ForeignKey(
+        Animateur,
+        on_delete=models.PROTECT,
+        related_name="responsabilites_sorties",
+    )
+    type = models.CharField(max_length=12, choices=TYPE_CHOICES)
+    centre = models.ForeignKey(
+        Centre,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="responsabilites_sorties",
+    )
+    evenement = models.ForeignKey(
+        Evenement,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="responsabilites_sorties",
+    )
+    affectation_creee = models.ForeignKey(
+        Affectation,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="responsabilites_sorties_creees",
+        help_text="Affectation ajoutée automatiquement lors de la nomination du responsable.",
+    )
+    ordre = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("ordre", "type", "centre__ordre", "evenement__ordre", "id")
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(type="direction", centre__isnull=True, evenement__isnull=True)
+                    | models.Q(type="lieu", centre__isnull=False, evenement__isnull=True)
+                    | models.Q(type="groupe", centre__isnull=True, evenement__isnull=False)
+                ),
+                name="responsabilite_sortie_perimetre_coherent",
+            ),
+            models.UniqueConstraint(
+                fields=("sortie", "animateur"),
+                condition=models.Q(type="direction"),
+                name="unique_direction_anim_par_sortie",
+            ),
+            models.UniqueConstraint(
+                fields=("sortie", "animateur", "centre"),
+                condition=models.Q(type="lieu"),
+                name="unique_lieu_anim_par_sortie",
+            ),
+            models.UniqueConstraint(
+                fields=("sortie", "animateur", "evenement"),
+                condition=models.Q(type="groupe"),
+                name="unique_groupe_anim_par_sortie",
+            ),
+        ]
+
+    def __str__(self):
+        if self.type == self.TYPE_LIEU and self.centre_id:
+            perimetre = self.centre.nom
+        elif self.type == self.TYPE_GROUPE and self.evenement_id:
+            perimetre = f"{self.evenement.centre.nom} — {self.evenement.nom}"
+        else:
+            perimetre = "Direction"
+        return f"{self.animateur} — {perimetre}"
+
+
+class SortieRenfort(models.Model):
+    """Trace qu'une affectation Planning a été créée depuis une sortie."""
+
+    sortie = models.ForeignKey(Sortie, on_delete=models.CASCADE, related_name="renforts")
+    affectation = models.OneToOneField(
+        Affectation,
+        on_delete=models.CASCADE,
+        related_name="renfort_sortie",
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("affectation__animateur__nom", "affectation__animateur__prenom", "id")
+
+
+class SortieParticipation(models.Model):
+    sortie = models.ForeignKey(Sortie, on_delete=models.CASCADE, related_name="participations")
+    evenement = models.ForeignKey(Evenement, on_delete=models.PROTECT, related_name="participations_sorties")
+    activite_horaire = models.CharField(max_length=240, blank=True, default="")
+
+    class Meta:
+        ordering = ("evenement__centre__ordre", "evenement__ordre", "evenement__nom")
+        constraints = [
+            models.UniqueConstraint(fields=("sortie", "evenement"), name="unique_groupe_par_sortie"),
+        ]
+
+
+class SortieLien(models.Model):
+    sortie = models.ForeignKey(Sortie, on_delete=models.CASCADE, related_name="liens")
+    libelle = models.CharField(max_length=120)
+    url = models.URLField(max_length=500)
+    ordre = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("ordre", "id")
 
 
 class ModeleEmail(models.Model):

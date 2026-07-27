@@ -1,0 +1,68 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Sorties{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/sorties.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main class="page-shell page-shell--fluid sorties-page">
+  {% include "partials/_page_header.html" with title="Sorties" header_class="sorties-header" picker_mode="multiple" picker_id="sorties-periods" picker_placeholder="Choisir une période" actions_class="sorties-toolbar" action_id="nouvelle-sortie" action_label="Nouvelle sortie" %}
+  <aside class="sortie-status-legend" aria-label="Légende du statut des sorties">
+    <span class="sortie-status sortie-status--prete">Prête</span>
+    <span>Nom, date et destination · Groupes et effectifs renseignés · Animateurs affectés · Encadrement conforme · Horaires de départ et retour</span>
+  </aside>
+  <div id="sorties-content" class="sorties-period"><p class="empty-note">Choisissez une période.</p></div>
+</main>
+
+<dialog id="sortie-create" class="sortie-dialog sortie-create-dialog">
+  <form id="sortie-create-form" novalidate>
+    <header>
+      <div>
+        <h2>Nouvelle sortie</h2>
+        <p>Les effectifs et les équipes seront repris directement du Planning.</p>
+      </div>
+      <button type="button" data-close-dialog aria-label="Fermer">×</button>
+    </header>
+
+    <div class="sortie-create-content">
+      <section class="sortie-create-section sortie-create-main">
+        <div class="sortie-form-grid sortie-form-grid--compact">
+          <label>Nom de la sortie<input name="nom" required maxlength="150" autocomplete="off"></label>
+          <label>Date<input name="date" type="date" required></label>
+          <div class="full sortie-location-fields" data-location-autocomplete>
+            <label class="full">Nom du lieu ou de la destination<input name="destination" required maxlength="180" autocomplete="organization"></label>
+            <div class="sortie-location-locality"><label>Code postal<input name="destination_code_postal" data-location-postal maxlength="5" inputmode="numeric" pattern="[0-9]{5}" placeholder="03800"></label><label>Commune<input name="destination_commune" data-location-city maxlength="120" autocomplete="address-level2"></label></div>
+            <div class="sortie-location-suggestions" data-location-suggestions role="listbox" hidden></div><small class="sortie-location-status" data-location-status aria-live="polite"></small>
+            <label class="full">Adresse ou lieu-dit <small>(facultatif)</small><input name="destination_adresse" maxlength="240" autocomplete="street-address"></label>
+            <input type="hidden" name="destination_code_insee" data-location-insee><input type="hidden" name="destination_localisation_demandee" data-location-requested value="1">
+          </div>
+        </div>
+      </section>
+
+      <section class="sortie-create-section">
+        <div class="sortie-section-heading">
+          <div><h3>Participants</h3><p>Sélectionnez les groupes concernés.</p></div>
+          <span id="sortie-groups-count" class="sortie-selection-count">0 groupe</span>
+        </div>
+        <div id="sortie-create-groups" class="sortie-groups-picker" aria-live="polite">
+          <p class="empty-note">Choisissez une date pour afficher les groupes.</p>
+        </div>
+      </section>
+
+      <section class="sortie-create-section sortie-preview-section">
+        <div class="sortie-section-heading">
+          <div><h3>Aperçu du Planning</h3><p>Calcul automatique pour la date et les groupes choisis.</p></div>
+          <span id="sortie-preview-loading" class="sortie-preview-loading" hidden>Calcul en cours…</span>
+        </div>
+        <div id="sortie-create-preview" class="sortie-create-preview" aria-live="polite">
+          <p class="empty-note">Sélectionnez au moins un groupe pour afficher le récapitulatif.</p>
+        </div>
+      </section>
+    </div>
+
+    <p class="form-error" hidden></p>
+    <footer>
+      <button class="btn btn-ghost" type="button" data-close-dialog>Annuler</button>
+      <button class="btn btn-primary" type="submit" id="sortie-create-submit">Créer la sortie</button>
+    </footer>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/common/location-autocomplete.js' %}?v={{ asset_version }}"></script><script src="{% static 'js/sorties.js' %}?v={{ asset_version }}"></script>{% endblock %}

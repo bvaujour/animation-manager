@@ -403,12 +403,17 @@ function bouton(label, classes, onClick)
 						<input type="text" id="lieu-nom" name="lieu_nom" placeholder="ex : Pacaudière">
 					</div>
 					<div class="field">
-						<label for="lieu-code">Code</label>
+						<label for="lieu-code">Nom court ou abréviation</label>
 						<input type="text" id="lieu-code" name="lieu_code" placeholder="ex : PAC" maxlength="10">
 					</div>
 					<div class="field">
 						<label for="lieu-couleur">Couleur</label>
 						<input type="color" id="lieu-couleur" name="lieu_couleur" value="#1f6f54">
+					</div>
+					<div class="lieu-location-fields" data-location-autocomplete>
+						<div class="field"><label for="lieu-adresse">Adresse ou lieu-dit <small>(facultatif)</small></label><input type="text" id="lieu-adresse" name="lieu_adresse" autocomplete="street-address"></div>
+						<div class="lieu-location-locality"><div class="field"><label for="lieu-code-postal">Code postal</label><input type="text" id="lieu-code-postal" name="lieu_code_postal" data-location-postal inputmode="numeric" maxlength="5" pattern="[0-9]{5}" placeholder="42640"></div><div class="field"><label for="lieu-commune">Commune</label><input type="text" id="lieu-commune" name="lieu_commune" data-location-city autocomplete="address-level2"></div></div>
+						<div data-location-suggestions role="listbox" hidden></div><small data-location-status aria-live="polite"></small><input type="hidden" data-location-insee><input type="hidden" data-location-requested value="1">
 					</div>
 				</div>
 				<p class="form-error" id="lieu-error"></p>
@@ -422,7 +427,12 @@ function bouton(label, classes, onClick)
 		const nomEl = container.querySelector("#lieu-nom");
 		const codeEl = container.querySelector("#lieu-code");
 		const couleurEl = container.querySelector("#lieu-couleur");
+		const adresseEl = container.querySelector("#lieu-adresse");
+		const codePostalEl = container.querySelector("#lieu-code-postal");
+		const communeEl = container.querySelector("#lieu-commune");
+		const codeInseeEl = container.querySelector("#lieu-form [data-location-insee]");
 		const errorEl = container.querySelector("#lieu-error");
+		initLocationAutocomplete(container.querySelector("#lieu-form [data-location-autocomplete]"));
 
 		const JOURS_EVENEMENT = [
 			{ numero: 0, court: "Lun", long: "Lundi" },
@@ -664,24 +674,33 @@ function bouton(label, classes, onClick)
 			const nomId = `edit-lieu-${c.id}-nom`;
 			const codeId = `edit-lieu-${c.id}-code`;
 			const couleurId = `edit-lieu-${c.id}-couleur`;
+			const adresseId = `edit-lieu-${c.id}-adresse`;
+			const codePostalId = `edit-lieu-${c.id}-code-postal`;
+			const communeId = `edit-lieu-${c.id}-commune`;
 			const header = card.querySelector(".lieu-card-header");
 			header.innerHTML = `
 				<div class="lieu-edit-grid">
 					<div class="field"><label for="${nomId}">Nom</label><input type="text" id="${nomId}" name="lieu_${c.id}_nom" class="edit-lieu-nom" value="${escapeHtml(c.nom)}"></div>
-					<div class="field"><label for="${codeId}">Code</label><input type="text" id="${codeId}" name="lieu_${c.id}_code" class="edit-lieu-code" value="${escapeHtml(c.code)}" maxlength="10"></div>
+					<div class="field"><label for="${codeId}">Nom court ou abréviation</label><input type="text" id="${codeId}" name="lieu_${c.id}_code" class="edit-lieu-code" value="${escapeHtml(c.code)}" maxlength="10"></div>
 					<div class="field"><label for="${couleurId}">Couleur</label><input type="color" id="${couleurId}" name="lieu_${c.id}_couleur" class="edit-lieu-couleur" value="${escapeHtml(c.couleur)}"></div>
+					<div class="lieu-location-fields" data-location-autocomplete><div class="field"><label for="${adresseId}">Adresse ou lieu-dit <small>(facultatif)</small></label><input type="text" id="${adresseId}" class="edit-lieu-adresse" value="${escapeHtml(c.adresse||"")}" autocomplete="street-address"></div><div class="lieu-location-locality"><div class="field"><label for="${codePostalId}">Code postal</label><input type="text" id="${codePostalId}" class="edit-lieu-code-postal" data-location-postal value="${escapeHtml(c.code_postal||"")}" inputmode="numeric" maxlength="5" pattern="[0-9]{5}"></div><div class="field"><label for="${communeId}">Commune</label><input type="text" id="${communeId}" class="edit-lieu-commune" data-location-city value="${escapeHtml(c.commune||"")}" autocomplete="address-level2"></div></div><div data-location-suggestions role="listbox" hidden></div><small data-location-status aria-live="polite"></small><input type="hidden" data-location-insee value="${escapeHtml(c.code_insee||"")}"><input type="hidden" data-location-requested value="1"></div>
 					<div class="lieu-total-readonly"><span>Effectif global</span><strong>${escapeHtml(c.effectif_cible)}</strong></div>
 					<p class="form-error edit-lieu-error"></p>
 				</div>
 			`;
 			const error = header.querySelector(".edit-lieu-error");
 			const couleurInput = header.querySelector(".edit-lieu-couleur");
+			initLocationAutocomplete(header.querySelector("[data-location-autocomplete]"));
 			couleurInput.addEventListener("input", () => appliquerCouleurLieu(card, couleurInput.value));
 			header.appendChild(creerFormActions(() =>
 			{
 				const nom = champValeur(header, ".edit-lieu-nom");
 				const code = champValeur(header, ".edit-lieu-code");
 				const couleur = champValeur(header, ".edit-lieu-couleur");
+				const adresse = champValeur(header, ".edit-lieu-adresse");
+				const code_postal = champValeur(header, ".edit-lieu-code-postal");
+				const commune = champValeur(header, ".edit-lieu-commune");
+				const code_insee = champValeur(header, "[data-location-insee]");
 				if (!nom || !code)
 				{
 					error.textContent = "Le nom et le code sont obligatoires.";
@@ -689,10 +708,10 @@ function bouton(label, classes, onClick)
 				}
 				apiFetch(`/api/centres/${c.id}/`, {
 					method: "PATCH",
-					body: JSON.stringify({ nom, code, couleur }),
-				}).then(() =>
+					body: JSON.stringify({ nom, code, couleur, adresse, code_postal, commune, code_insee, localisation_demandee:true }),
+				}).then((resultat) =>
 				{
-					afficherToast("Lieu modifié.");
+					afficherToast(resultat.localisation_warning||"Lieu modifié.",Boolean(resultat.localisation_warning));
 					charger();
 					if (options.onChange) options.onChange();
 				}).catch((err) => { error.textContent = erreurMessage(err, "Modification impossible."); });
@@ -836,7 +855,7 @@ function bouton(label, classes, onClick)
 				<div class="lieu-card-header">
 					<div class="lieu-card-identity">
 						<span class="swatch lieu-swatch" style="background:${escapeHtml(c.couleur)}"></span>
-						<div><h3>${escapeHtml(c.nom)}</h3><span class="lieu-code">${escapeHtml(c.code)}</span></div>
+						<div><h3>${escapeHtml(c.nom)}</h3><span class="lieu-code">${escapeHtml(c.code)}</span>${c.code_postal?`<small>${escapeHtml(c.adresse||"")}${c.adresse?" · ":""}${escapeHtml(c.code_postal)} ${escapeHtml(c.commune||"")}</small>`:"<small>Coordonnées routières à compléter</small>"}</div>
 					</div>
 					<div class="lieu-summary"><strong>${escapeHtml(c.effectif_cible)}</strong><span>animateur${c.effectif_cible > 1 ? "s" : ""} / jour</span></div>
 					<div class="lieu-actions"></div>
@@ -942,17 +961,25 @@ function bouton(label, classes, onClick)
 			const nom = nomEl.value.trim();
 			const code = codeEl.value.trim();
 			const couleur = couleurEl.value;
+			const adresse = adresseEl.value.trim();
+			const code_postal = codePostalEl.value.trim();
+			const commune = communeEl.value.trim();
+			const code_insee = codeInseeEl.value.trim();
 			if (!nom || !code)
 			{
 				errorEl.textContent = "Le nom et le code sont obligatoires.";
 				return;
 			}
-			apiFetch("/api/centres/", { method: "POST", body: JSON.stringify({ nom, code, couleur }) })
+			apiFetch("/api/centres/", { method: "POST", body: JSON.stringify({ nom, code, couleur, adresse, code_postal, commune, code_insee, localisation_demandee:true }) })
 				.then((nouveau) =>
 				{
 					nomEl.value = "";
 					codeEl.value = "";
-					afficherToast("Lieu ajouté. Tu peux maintenant y créer un groupe.");
+					adresseEl.value = "";
+					codePostalEl.value = "";
+					communeEl.value = "";
+					codeInseeEl.value = "";
+					afficherToast(nouveau.localisation_warning||"Lieu ajouté. Tu peux maintenant y créer un groupe.",Boolean(nouveau.localisation_warning));
 					charger();
 					if (options.onChange) options.onChange(nouveau);
 				})

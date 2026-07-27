@@ -161,6 +161,53 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("const effectifsCache = new Map()", donnees_partagees)
         self.assertNotIn("evenement.effectifs_enfants || []", planning)
 
+    def test_planning_personnel_affiche_chaque_groupe_avec_son_effectif(self):
+        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text()
+
+        self.assertIn("centre.evenements.forEach((evenement)", accueil)
+        self.assertIn("creerCalendrierEvenement(centre, evenement", accueil)
+        self.assertIn("PlanningData.fetchWeekEffectifs", accueil)
+        self.assertIn("item.groupe_id", accueil)
+        self.assertIn("item.nombre", accueil)
+
+    def test_entetes_ne_proposent_pas_la_selection_de_plusieurs_semaines(self):
+        navigation = (Path(settings.BASE_DIR) / "templates/partials/_week_navigation.html").read_text()
+        selecteur = (Path(settings.BASE_DIR) / "templates/partials/_week_picker.html").read_text()
+
+        self.assertIn("navigation_only=True", navigation)
+        self.assertIn("generic_navigation=True", navigation)
+        self.assertIn("{% if navigation_only %}", selecteur)
+
+    def test_planning_personnel_reste_navigable_quand_une_semaine_est_vide(self):
+        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text()
+
+        self.assertIn("periodes[indexCourant + delta]", accueil)
+        self.assertIn("periode.debut > dateCourante", accueil)
+        self.assertIn("if (!cible) return;", accueil)
+        self.assertIn("libelleSemaine(currentDate)", accueil)
+        self.assertNotIn('visiblePeriod.textContent = "aucun planning"', accueil)
+
+    def test_navigation_globale_ne_depasse_pas_les_periodes_enregistrees(self):
+        selecteur = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text()
+
+        self.assertIn("updateNavigationState()", selecteur)
+        self.assertIn("previous.disabled = !hasPrevious", selecteur)
+        self.assertIn("next.disabled = !hasNext", selecteur)
+
+    def test_libelle_semaine_suit_toujours_la_date_active(self):
+        selecteur = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text()
+
+        self.assertIn("this.updateSingleLabel();", selecteur)
+        self.assertNotIn("if (updateLabel)", selecteur)
+        self.assertIn("period ? periodLabel(period) : this.placeholder", selecteur)
+        self.assertIn("const activeExists = this.periods.some", selecteur)
+        self.assertIn('addEventListener("week-picker:ready"', (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text())
+
+    def test_page_sans_zone_documents_ne_declenche_pas_son_chargement(self):
+        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text()
+
+        self.assertIn("if (!documentsContainer) return;", accueil)
+
     def test_import_excel_actualise_immediatement_les_effectifs_du_planning(self):
         planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text()
 
@@ -239,7 +286,9 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
     def test_tableau_de_bord_conserve_le_libelle_commun_du_selecteur_de_semaine(self):
         script = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text()
 
-        self.assertIn("updateLabel: true", script)
+        self.assertIn("picker?.setActiveDate(data.periode.debut_semaine", script)
+        self.assertIn('addEventListener("week-picker:ready", (event)', script)
+        self.assertIn("selectedDate = event.detail?.picker?.activeDate", script)
         self.assertNotIn('getElementById("dashboard-visible-period")', script)
 
     def test_tableau_de_bord_regroupe_les_alertes_et_affiche_les_nouvelles_metriques(self):

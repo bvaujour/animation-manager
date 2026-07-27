@@ -3,6 +3,7 @@
 import datetime
 
 from django.db import transaction
+from django.utils import timezone
 
 from animateurs.models import Affectation, Animateur, Centre, Evenement
 
@@ -65,6 +66,10 @@ def valider_affectation(animateur, debut, fin, evenement=None, exclude_id=None):
 
 @transaction.atomic
 def creer_affectation(*, animateur, centre, debut, fin, evenement=None):
+    # Sérialise les créations concurrentes pour un même salarié. Ainsi, une
+    # fiche Sorties restée ouverte ne peut pas créer un doublon si le Planning
+    # a changé entre le chargement de la liste et la confirmation.
+    animateur = Animateur.objects.select_for_update().get(pk=animateur.pk)
     evenement = evenement or evenement_par_defaut_pour_centre(centre)
     _valider_ouverture_evenement(evenement, debut, fin)
     erreur = valider_affectation(animateur, debut, fin, evenement=evenement)
@@ -80,6 +85,42 @@ def creer_affectation(*, animateur, centre, debut, fin, evenement=None):
         debut=debut,
         fin=fin,
     )
+
+
+@transaction.atomic
+def supprimer_jour_affectation(affectation, jour):
+    """Retire un jour d'une affectation en conservant ses autres journées."""
+    debut_jour = timezone.localtime(affectation.debut).date()
+    fin_jour = timezone.localtime(affectation.fin - datetime.timedelta(microseconds=1)).date()
+    if not debut_jour <= jour <= fin_jour:
+        raise ValueError("Cette affectation ne couvre pas la date demandée.")
+
+    debut_retrait = timezone.make_aware(datetime.datetime.combine(jour, datetime.time.min))
+    fin_retrait = debut_retrait + datetime.timedelta(days=1)
+    ancien_debut, ancienne_fin = affectation.debut, affectation.fin
+    horaires = list(affectation.horaires_journaliers.all())
+
+    def creer_segment(debut, fin, predicat):
+        segment = Affectation.objects.create(
+            animateur=affectation.animateur,
+            centre=affectation.centre,
+            evenement=affectation.evenement,
+            debut=debut,
+            fin=fin,
+        )
+        for horaire in horaires:
+            if predicat(horaire.date):
+                segment.horaires_journaliers.create(
+                    date=horaire.date,
+                    heure_arrivee=horaire.heure_arrivee,
+                    heure_depart=horaire.heure_depart,
+                )
+
+    if ancien_debut < debut_retrait:
+        creer_segment(ancien_debut, debut_retrait, lambda date: date < jour)
+    if fin_retrait < ancienne_fin:
+        creer_segment(fin_retrait, ancienne_fin, lambda date: date > jour)
+    affectation.delete()
 
 
 def _isoler_plage_en_flottant(affectation, evenement_flottant, debut, fin):

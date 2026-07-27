@@ -155,6 +155,9 @@
 .lieu-card .team-create-form .btn-primary,.lieu-card .team-add-toggle{border-color:var(--lieu-color);background:var(--lieu-color);color:var(--lieu-contrast)}
 .lieu-card .team-create-form .btn-primary:hover,.lieu-card .team-add-toggle:hover{filter:brightness(.92)}
 .lieu-edit-grid{display:grid;grid-template-columns:repeat(3,minmax(130px,1fr)) minmax(150px,auto);gap:10px 12px;width:100%}
+.lieu-location-fields{position:relative;display:grid;grid-column:1/-1;gap:8px}
+.lieu-location-locality{display:grid;grid-template-columns:minmax(120px,.45fr) minmax(220px,1fr);gap:10px}
+.lieu-location-fields [data-location-suggestions]{top:100%}
 .lieu-card-header:has(.lieu-edit-grid){align-items:end}
 .lieu-card-header .lieu-edit-grid .field label,.lieu-card-header .lieu-total-readonly span,.lieu-card-header .lieu-total-readonly small{color:color-mix(in srgb,var(--lieu-contrast) 88%,transparent)}
 .lieu-card-header .lieu-edit-grid input{border-color:color-mix(in srgb,var(--lieu-contrast) 45%,transparent);background:color-mix(in srgb,#ffffff 96%,var(--lieu-color))}
@@ -169,6 +172,7 @@
 .lieu-edit-grid .form-error,.lieu-total-readonly{grid-column:1 / -1}
 }
 @media (max-width:520px){.lieux-cards{gap:18px}
+.lieu-location-locality{grid-template-columns:1fr}
 .lieu-card{border-radius:14px}
 .lieu-card-header,.lieu-teams-block{padding:12px}
 .lieu-edit-grid{grid-template-columns:1fr}
@@ -317,6 +321,11 @@
 .gestion-page .gestion-form{margin:0 0 22px;padding:16px}
 .gestion-page input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),.gestion-page select,.gestion-page textarea{width:100%;min-width:0;min-height:40px}
 .gestion-page .field label,.gestion-page .field-label{display:block;margin-bottom:5px;color:var(--color-text);font-size:.78rem;font-weight:750}
+
+/* Les légendes des champs de l'onglet Lieux restent lisibles quelle que soit
+   la couleur personnalisée du lieu affichée derrière le formulaire. */
+.gestion-page [data-panel="lieux"] label,
+.gestion-page [data-panel="lieux"] legend{color:#000}
 .gestion-page .edit-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .gestion-page .edit-grid-single{grid-template-columns:1fr}
 .gestion-page .form-error:not(:empty){margin:8px 0 0;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--color-danger) 9%,white)}

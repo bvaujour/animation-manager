@@ -51,6 +51,8 @@ from .views import (
     export_planning_pdf,
     gestion,
     mes_disponibilites,
+    mon_planning,
+    mon_profil,
     planning,
     recapitulatif,
 )
@@ -72,6 +74,17 @@ from .views_effectifs import (
     api_profil_import_effectifs_detail,
     api_profils_import_effectifs,
 )
+from .views_sorties import (
+    api_sortie_detail,
+    api_sortie_estimation_trajet,
+    api_sortie_meteo,
+    api_sortie_renforts,
+    api_sorties,
+    api_sorties_apercu,
+    api_communes_recherche,
+    sortie_detail,
+    sorties,
+)
 
 urlpatterns = [
     path("connexion/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
@@ -79,6 +92,8 @@ urlpatterns = [
     path("changer-mot-de-passe/", connexion_requise_page(changer_mot_de_passe), name="changer_mot_de_passe"),
     # --- Pages ---
     path("", connexion_requise_page(accueil), name="accueil"),
+    path("mon-planning/", connexion_requise_page(mon_planning), name="mon_planning"),
+    path("mon-profil/", connexion_requise_page(mon_profil), name="mon_profil"),
     path("documents/", connexion_requise_page(documents), name="documents"),
     path("mes-disponibilites/", connexion_requise_page(mes_disponibilites), name="mes_disponibilites"),
     path("emails/", direction_requise(emails), name="emails"),
@@ -96,6 +111,16 @@ urlpatterns = [
     path("employes/nouveau/", direction_requise(employe_detail), name="employe_nouveau"),
     path("employes/<int:animateur_id>/", direction_requise(employe_detail), name="employe_detail"),
     path("recapitulatif/", direction_requise(recapitulatif), name="recapitulatif"),
+    path("sorties/", direction_requise(sorties), name="sorties"),
+    path("sorties/<int:sortie_id>/", direction_requise(sortie_detail), name="sortie_detail"),
+    path("api/sorties/", direction_requise_api(api_sorties), name="api_sorties"),
+    path("api/sorties/apercu/", direction_requise_api(api_sorties_apercu), name="api_sorties_apercu"),
+    path("api/localisation/communes/", direction_requise_api(api_communes_recherche), name="api_communes_recherche"),
+    path("api/sorties/<int:sortie_id>/meteo/", direction_requise_api(api_sortie_meteo), name="api_sortie_meteo"),
+    path("api/sorties/<int:sortie_id>/estimation-trajet/", direction_requise_api(api_sortie_estimation_trajet), name="api_sortie_estimation_trajet"),
+    path("api/sorties/<int:sortie_id>/renforts/", direction_requise_api(api_sortie_renforts), name="api_sortie_renforts"),
+    path("api/sorties/<int:sortie_id>/renforts/<int:renfort_id>/", direction_requise_api(api_sortie_renforts), name="api_sortie_renfort_detail"),
+    path("api/sorties/<int:sortie_id>/", direction_requise_api(api_sortie_detail), name="api_sortie_detail"),
     # --- API : animateurs ---
     path("api/animateurs/", direction_requise_api(api_animateurs), name="api_animateurs"),
     path(
@@ -140,7 +165,7 @@ urlpatterns = [
     ),
     path(
         "api/effectifs-enfants/",
-        direction_requise_api(api_effectifs_enfants_plage),
+        lecture_partagee_api(api_effectifs_enfants_plage),
         name="api_effectifs_enfants_plage",
     ),
     path(

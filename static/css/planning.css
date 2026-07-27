@@ -97,7 +97,9 @@ body.planning-mode-effectifs #layout,
 body.planning-mode-effectifs #animateurs-panel,
 #layout[data-planning-mode="effectifs"] #animateurs-panel,
 body.planning-mode-effectifs #planning-actions,
-#layout[data-planning-mode="effectifs"] #planning-actions {
+#layout[data-planning-mode="effectifs"] #planning-actions,
+body.planning-mode-effectifs .planning-floating-lane,
+#layout[data-planning-mode="effectifs"] .planning-floating-lane {
   display: none;
 }
 
@@ -593,6 +595,18 @@ body.planning-mode-effectifs .planning-group-hours-actions,
   text-align: center;
   pointer-events: auto;
 }
+.planning-inline-editor input[type="number"],
+.effectif-enfants-row input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.planning-inline-editor input[type="number"]::-webkit-inner-spin-button,
+.planning-inline-editor input[type="number"]::-webkit-outer-spin-button,
+.effectif-enfants-row input[type="number"]::-webkit-inner-spin-button,
+.effectif-enfants-row input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
 .planning-inline-prefix { font-size: .62rem; font-weight: 750; }
 
 .planning-uncovered-children {
@@ -651,6 +665,7 @@ body.planning-mode-effectifs .planning-group-hours-actions,
 .centre-effectifs-day {
   min-width: 0;
   padding: 4px;
+  display: grid;
   border-radius: 6px;
   background: var(--color-surface-sunken);
   text-align: center;

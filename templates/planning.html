@@ -4,10 +4,10 @@
 {% block body_class %}page-planning{% endblock %}
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
-<link rel="stylesheet" href="{% static 'css/calendars.css' %}?v=20260720-group-days-fix-1">
 {% endblock %}
 {% block page_styles %}
-<link rel="stylesheet" href="{% static 'css/planning.css' %}?v=20260722-flottant-label-4">
+<link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/planning.css' %}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
 {% include "partials/_page_header.html" with title="Planning" header_class="planning-page-header planning-page-header-compact" container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
@@ -190,7 +190,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/planning/utils.js' %}?v=20260719-clean-ui-1"></script>
-<script src="{% static 'js/planning.js' %}?v=20260722-flottant-delete-live-4"></script>
-<script src="{% static 'js/effectifs-excel.js' %}?v=20260721-excel-import-1"></script>
+<script src="{% static 'js/planning/utils.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'js/planning.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'js/effectifs-excel.js' %}?v={{ asset_version }}"></script>
 {% endblock %}

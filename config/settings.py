@@ -75,7 +75,9 @@ AWS_LOCATION = os.getenv("SUPABASE_S3_LOCATION", "")
 # Stockage des documents uploadés : S3 (Supabase) si les clés sont
 # configurées, sinon stockage local dans MEDIA_ROOT pour pouvoir
 # travailler sans compte Supabase.
-if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
+# Une suite de tests doit rester hermétique : elle ne doit jamais écrire dans
+# le stockage Supabase réel, même si le poste charge les clés du fichier .env.
+if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and "test" not in sys.argv:
     _default_storage = {"BACKEND": "storages.backends.s3.S3Storage"}
 else:
     _default_storage = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
@@ -97,6 +99,9 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Les API du planning renvoient des volumes JSON importants. La compression
+    # diminue le temps de transfert, en particulier sur les connexions distantes.
+    'django.middleware.gzip.GZipMiddleware',
     # WhiteNoise doit rester actif sur Render, même si DEBUG a été laissé à True
     # par erreur dans les variables d'environnement. Sans lui, Gunicorn renvoie
     # une page HTML 404 pour chaque fichier /static/.
@@ -152,6 +157,10 @@ if os.getenv("DB_HOST"):
             "PASSWORD": os.getenv("DB_PASSWORD"),
             "HOST": os.getenv("DB_HOST"),
             "PORT": os.getenv("DB_PORT"),
+            # PostgreSQL est hébergé à distance : réutiliser la connexion évite
+            # une négociation réseau + TLS à chaque requête HTTP Django.
+            "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+            "CONN_HEALTH_CHECKS": True,
             "OPTIONS": {
                 "sslmode": "require",
             },
@@ -164,6 +173,15 @@ else:
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+
+# Itinéraires des sorties via les services publics de la Géoplateforme IGN.
+# Aucune clé API n'est nécessaire ; les URLs restent configurables afin de
+# pouvoir basculer proprement si le service public évolue.
+ROUTING_PROVIDER = os.getenv("ROUTING_PROVIDER", "geoplateforme")
+ROUTING_API_URL = os.getenv("ROUTING_API_URL", "https://data.geopf.fr/navigation/itineraire")
+ROUTING_GEOCODING_URL = os.getenv("ROUTING_GEOCODING_URL", "https://data.geopf.fr/geocodage/search")
+ROUTING_RESOURCE = os.getenv("ROUTING_RESOURCE", "bdtopo-osrm")
+ROUTING_TIMEOUT_SECONDS = int(os.getenv("ROUTING_TIMEOUT_SECONDS", "8"))
 
 
 # Password validation
@@ -209,6 +227,10 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
+# Version unique des ressources statiques pour invalider le cache navigateur.
+# En production, WhiteNoise ajoute aussi des empreintes de contenu.
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20260724-audit-1").strip()
+
 
 # Envoi d'e-mails aux salariés. En local, sans serveur SMTP configuré,
 # Django affiche les messages dans la console. En production, EMAIL_HOST est
@@ -237,6 +259,10 @@ EMAIL_REPLY_TO = os.getenv("EMAIL_REPLY_TO", "").strip()
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Réservée à une future intégration de la Vigilance officielle. Elle n'est
+# jamais transmise au navigateur et son absence n'empêche pas les prévisions.
+METEOFRANCE_VIGILANCE_API_KEY = os.getenv("METEOFRANCE_VIGILANCE_API_KEY", "").strip()
 
 
 # Durcissement production (activé automatiquement lorsque DEBUG=False).

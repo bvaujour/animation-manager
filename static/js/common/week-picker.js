@@ -38,6 +38,7 @@
             picker.activeDate = value;
             picker.updateActiveOption();
             picker.updateSingleLabel();
+            picker.updateNavigationState();
         });
         window.dispatchEvent(new CustomEvent("animation-manager:week-change", {
             detail: { date: value, source: source?.root?.id || "" },
@@ -80,6 +81,9 @@
                 && referenceDate <= String(period?.fin || "")
             ));
             if (active) return active;
+            return periods.find((period) => String(period?.debut || "") > referenceDate)
+                || periods.at(-1)
+                || null;
         }
 
         const today = localIsoDate();
@@ -184,11 +188,20 @@
             this.selectAllButton?.addEventListener("click", () => this.selectAll());
             if (this.mode === "single" && this.genericNavigation) {
                 this.root.querySelector('[data-week-nav="previous"]')
-                    ?.addEventListener("click", () => this.navigateGeneric(-1));
+                    ?.addEventListener("click", (event) => {
+                        event.stopImmediatePropagation();
+                        this.navigateGeneric(-1);
+                    });
                 this.root.querySelector('[data-week-nav="next"]')
-                    ?.addEventListener("click", () => this.navigateGeneric(1));
+                    ?.addEventListener("click", (event) => {
+                        event.stopImmediatePropagation();
+                        this.navigateGeneric(1);
+                    });
                 this.root.querySelector('[data-week-nav="today"]')
-                    ?.addEventListener("click", () => this.goToCurrentGeneric());
+                    ?.addEventListener("click", (event) => {
+                        event.stopImmediatePropagation();
+                        this.goToCurrentGeneric();
+                    });
             }
         }
 
@@ -217,8 +230,11 @@
                 const current = this.periods.find((period) => isCurrentPeriod(period));
                 if (current) this.selectedIds.add(Number(current.id));
             }
-            if (this.mode === "single" && !this.activeDate && this.defaultCurrent) {
-                const reference = closestPeriod(this.periods);
+            if (this.mode === "single" && this.defaultCurrent) {
+                const activeExists = this.periods.some(
+                    (period) => this.periodContainsDate(period, this.activeDate)
+                );
+                const reference = activeExists ? null : closestPeriod(this.periods, this.activeDate);
                 if (reference) {
                     this.activeDate = String(reference.debut || "").slice(0, 10);
                     if (this.genericNavigation) persistDate(this.activeDate, this);
@@ -227,6 +243,7 @@
             this.render();
             this.updateLabel();
             this.updateSingleLabel();
+            this.updateNavigationState();
             this.ready = true;
             if (emitReady) {
                 this.root.dispatchEvent(new CustomEvent("week-picker:ready", {
@@ -412,7 +429,23 @@
         updateSingleLabel() {
             if (!this.label || this.mode !== "single") return;
             const period = this.periods.find((item) => this.periodContainsDate(item, this.activeDate));
-            if (period) this.label.textContent = periodLabel(period);
+            this.label.textContent = period ? periodLabel(period) : this.placeholder;
+        }
+
+        updateNavigationState() {
+            if (this.mode !== "single") return;
+            const previous = this.root.querySelector('[data-week-nav="previous"]');
+            const next = this.root.querySelector('[data-week-nav="next"]');
+            const date = this.activeDate;
+            const currentIndex = this.periods.findIndex((period) => this.periodContainsDate(period, date));
+            const hasPrevious = currentIndex >= 0
+                ? currentIndex > 0
+                : this.periods.some((period) => String(period.fin || "") < date);
+            const hasNext = currentIndex >= 0
+                ? currentIndex < this.periods.length - 1
+                : this.periods.some((period) => String(period.debut || "") > date);
+            if (previous) previous.disabled = !hasPrevious;
+            if (next) next.disabled = !hasNext;
         }
 
         getSelectedIds() {
@@ -437,19 +470,20 @@
             if (emit) this.emitChange();
         }
 
-        setActiveDate(date, { updateLabel = false, persist = true } = {}) {
+        setActiveDate(date, { persist = true } = {}) {
             this.activeDate = String(date || "").slice(0, 10);
             this.updateActiveOption();
-            if (updateLabel) {
-                this.updateSingleLabel();
-            }
+            this.updateNavigationState();
+            // Le libellé fait partie de l'état du sélecteur : il doit toujours
+            // suivre la date active, quelle que soit la page appelante.
+            this.updateSingleLabel();
             if (persist && this.mode === "single") persistDate(this.activeDate, this);
         }
 
 
         selectPeriod(period) {
             if (!period) return;
-            this.setActiveDate(period.debut, { updateLabel: true });
+            this.setActiveDate(period.debut);
             this.root.dispatchEvent(new CustomEvent("week-picker:select", {
                 bubbles: true,
                 detail: { date: period.debut, period, picker: this },

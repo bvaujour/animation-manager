@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Documents{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/documents.css' %}?v=20260720-css-refactor-2">{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/documents.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--medium documents-page documents-shared-page">
     {% include "partials/_page_header.html" with title="Documents" header_class="documents-heading" container_id="documents-period-nav" previous_id="documents-prev-week" today_id="documents-current-week" next_id="documents-next-week" label_id="documents-visible-period" generic_navigation="true" %}
     <div id="documents-partages" class="ui-grid documents-grid"></div>
 </main>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/documents-partages.js' %}?v=20260718-audit-1"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/documents-partages.js' %}?v={{ asset_version }}"></script>{% endblock %}

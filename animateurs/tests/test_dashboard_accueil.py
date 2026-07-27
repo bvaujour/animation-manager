@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from animateurs.models import Affectation, Animateur, Centre, EffectifEnfantsJour, Evenement, HoraireAffectationJour
+from animateurs.services.flottants import groupe_flottants_pour_centre
 from animateurs.tests.base import ConnexionTestCase
 from animateurs.tests.factories import creer_periode
 
@@ -94,6 +95,49 @@ class DashboardAccueilTests(ConnexionTestCase):
         self.assertEqual(
             sum(1 for alerte in data["alertes"] if alerte["titre"] == "Effectif enfants non renseigné"),
             5,
+        )
+
+    def test_api_compte_un_animateur_flottant_dans_la_couverture_du_lieu(self):
+        # Chaque groupe laisse un petit reliquat. Le flottant doit pouvoir les
+        # couvrir ensemble, comme dans l'indicateur du planning.
+        EffectifEnfantsJour.objects.filter(evenement=self.groupe, date=self.jour).update(nombre=18)
+        autre_groupe = Evenement.objects.create(
+            centre=self.centre,
+            nom="Élémentaires",
+            effectif_cible=1,
+            enfants_par_animateur_defaut=8,
+            jours_ouverts=[0, 1, 2, 3, 4],
+            ferme_jours_feries=False,
+        )
+        autre_groupe.periodes_scolaires.add(self.periode)
+        EffectifEnfantsJour.objects.create(
+            evenement=autre_groupe,
+            date=self.jour,
+            nombre=6,
+            enfants_par_animateur=8,
+        )
+        flottant = Animateur.objects.create(prenom="Chloé", nom="Test")
+        Affectation.objects.create(
+            animateur=flottant,
+            centre=self.centre,
+            evenement=groupe_flottants_pour_centre(self.centre),
+            debut=timezone.make_aware(datetime.datetime.combine(self.jour, datetime.time.min)),
+            fin=timezone.make_aware(
+                datetime.datetime.combine(self.jour + datetime.timedelta(days=1), datetime.time.min)
+            ),
+        )
+
+        response = self.client.get(reverse("api_tableau_de_bord"), {"semaine": self.jour.isoformat()})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["semaine"][0]["animateurs_affectes"], 3)
+        self.assertEqual(data["semaine"][0]["manque_animateurs"], 0)
+        self.assertFalse(
+            any(
+                alerte["date"] == self.jour.isoformat() and "Il manque" in alerte["titre"]
+                for alerte in data["alertes"]
+            )
         )
 
     def test_api_alerte_sur_les_horaires_non_renseignes(self):
@@ -198,9 +242,10 @@ class DashboardAccueilTests(ConnexionTestCase):
         self.assertEqual(lundi["enfants_elementaires"], 31)
         self.assertEqual(lundi["animateurs_affectes"], 3)
 
-    def test_detail_semaine_affiche_les_totaux_par_age_sans_nombre_de_groupes(self):
+    def test_detail_semaine_affiche_le_total_enfants_et_les_totaux_par_age(self):
         script = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text(encoding="utf-8")
 
+        self.assertIn("<span>Total enfants</span><strong>${day.enfants}</strong>", script)
         self.assertIn("<span>Maternels</span>", script)
         self.assertIn("<span>Élémentaires</span>", script)
         self.assertIn("${day.animateurs_affectes}</strong>", script)

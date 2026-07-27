@@ -1,14 +1,16 @@
 """Endpoint de saisie et de lecture des effectifs enfants."""
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.db import transaction
 from django.http import JsonResponse
+from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
+from .access import est_direction
 from .models import EffectifEnfantsJour, Evenement
 from .services.effectifs import enregistrer_nombre_effectif
 from .services.flottants import est_groupe_flottants, groupes_partages_visibles, groupes_visibles
@@ -53,6 +55,20 @@ def api_effectifs_enfants_plage(request):
         )
         .order_by("evenement_id", "date")
     )
+    if not est_direction(request.user):
+        animateur = getattr(request.user, "profil_animateur", None)
+        if animateur is None:
+            queryset = queryset.none()
+        else:
+            # Le lieu visible dépend de la semaine demandée : une ancienne
+            # affectation dans un autre centre ne doit pas exposer ses effectifs.
+            debut_dt = timezone.make_aware(datetime.combine(debut, datetime.min.time()))
+            fin_dt = timezone.make_aware(datetime.combine(fin, datetime.min.time()))
+            centre_ids = animateur.affectations.filter(
+                debut__lt=fin_dt,
+                fin__gt=debut_dt,
+            ).values_list("centre_id", flat=True).distinct()
+            queryset = queryset.filter(evenement__centre_id__in=centre_ids)
     return JsonResponse(
         [_effectif_to_dict(item, inclure_groupe=True) for item in queryset],
         safe=False,

@@ -55,7 +55,7 @@ class PeriodesScolairesApiTests(ConnexionTestCase):
             ),
         ]
 
-    @patch("animateurs.views.recuperer_semaines")
+    @patch("animateurs.views_catalogue.recuperer_semaines")
     def test_previsualisation_ne_cree_aucune_donnee(self, recuperer):
         recuperer.return_value = self.semaines
         response = self.client.post(
@@ -68,7 +68,7 @@ class PeriodesScolairesApiTests(ConnexionTestCase):
         self.assertEqual(response.json()["nombre"], 2)
         self.assertEqual(PeriodeScolaire.objects.count(), 0)
 
-    @patch("animateurs.views.recuperer_semaines")
+    @patch("animateurs.views_catalogue.recuperer_semaines")
     def test_import_est_idempotent(self, recuperer):
         recuperer.return_value = self.semaines
         url = reverse("api_periodes_scolaires_importer")
@@ -106,7 +106,7 @@ class PeriodesScolairesApiTests(ConnexionTestCase):
         self.assertEqual(len(response.json()), 1)
         self.assertEqual(response.json()[0]["annee_scolaire"], "2027-2028")
 
-    @patch("animateurs.views.recuperer_semaines")
+    @patch("animateurs.views_catalogue.recuperer_semaines")
     def test_import_ne_modifie_pas_les_groupes_existants(self, recuperer):
         recuperer.return_value = self.semaines
         centre = Centre.objects.create(nom="La Pacaudière", code="PAC")

@@ -26,7 +26,35 @@ from .models import (
     PeriodeScolaire,
     PreferenceCentre,
     Qualification,
+    Sortie,
+    SortieLien,
+    SortieParticipation,
+    SortieResponsabilite,
 )
+
+
+class SortieParticipationInline(admin.TabularInline):
+    model = SortieParticipation
+    extra = 0
+
+
+class SortieLienInline(admin.TabularInline):
+    model = SortieLien
+    extra = 0
+
+
+class SortieResponsabiliteInline(admin.TabularInline):
+    model = SortieResponsabilite
+    extra = 0
+
+
+
+@admin.register(Sortie)
+class SortieAdmin(admin.ModelAdmin):
+    list_display = ("nom", "date", "destination", "modifie_le")
+    list_filter = ("date",)
+    search_fields = ("nom", "destination")
+    inlines = (SortieParticipationInline, SortieResponsabiliteInline, SortieLienInline)
 
 
 @admin.register(ModeleEmail)
