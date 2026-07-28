@@ -12,6 +12,7 @@ from django.contrib import admin
 from django.forms import CheckboxSelectMultiple
 
 from .models import (
+    ActiviteTravailComplementaire,
     Affectation,
     AffiniteGroupeAnimateur,
     Animateur,
@@ -24,6 +25,8 @@ from .models import (
     Groupe,
     ModeleEmail,
     PeriodeScolaire,
+    ParticipationTravailComplementaire,
+    PrimeJournalierePeriode,
     PreferenceCentre,
     Qualification,
     Sortie,
@@ -31,6 +34,27 @@ from .models import (
     SortieParticipation,
     SortieResponsabilite,
 )
+
+
+class ParticipationTravailComplementaireInline(admin.TabularInline):
+    model = ParticipationTravailComplementaire
+    extra = 0
+
+
+@admin.register(ActiviteTravailComplementaire)
+class ActiviteTravailComplementaireAdmin(admin.ModelAdmin):
+    list_display = ("intitule", "type", "date", "date_modification")
+    list_filter = ("type", "date")
+    search_fields = ("intitule", "remarque")
+    filter_horizontal = ("periodes",)
+    inlines = (ParticipationTravailComplementaireInline,)
+
+
+@admin.register(PrimeJournalierePeriode)
+class PrimeJournalierePeriodeAdmin(admin.ModelAdmin):
+    list_display = ("animateur", "periode", "montant", "date_modification")
+    list_filter = ("periode",)
+    search_fields = ("animateur__prenom", "animateur__nom")
 
 
 class SortieParticipationInline(admin.TabularInline):

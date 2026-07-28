@@ -33,6 +33,7 @@ Vue d'ensemble des tables et de leurs relations :
 import re
 import unicodedata
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -850,6 +851,138 @@ class Affectation(models.Model):
 
     def __str__(self):
         return f"{self.animateur} @ {self.evenement} ({self.debut:%d/%m/%Y})"
+
+
+class ActiviteTravailComplementaire(models.Model):
+    """Temps de travail hors affectation dans un lieu ou un groupe."""
+
+    TYPE_REUNION = "reunion"
+    TYPE_PREPARATION = "preparation"
+    TYPES = [
+        (TYPE_REUNION, "Réunion"),
+        (TYPE_PREPARATION, "Télétravail / préparation"),
+    ]
+
+    type = models.CharField(max_length=20, choices=TYPES)
+    intitule = models.CharField(max_length=160)
+    date = models.DateField(null=True, blank=True)
+    remarque = models.TextField(blank=True, default="")
+    periodes = models.ManyToManyField(
+        PeriodeScolaire,
+        related_name="activites_travail_complementaires",
+    )
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("date", "intitule", "id")
+        indexes = [models.Index(fields=("type", "date"), name="activite_travail_type_date_idx")]
+        verbose_name = "activité de travail complémentaire"
+        verbose_name_plural = "activités de travail complémentaires"
+
+    def clean(self):
+        super().clean()
+        if self.type == self.TYPE_REUNION and self.date is None:
+            raise ValidationError({"date": "Une réunion doit posséder une date."})
+        if self.type == self.TYPE_PREPARATION:
+            self.date = None
+
+    def __str__(self):
+        return self.intitule
+
+
+class ParticipationTravailComplementaire(models.Model):
+    """Nombre de journées complémentaires attribuées à un animateur."""
+
+    activite = models.ForeignKey(
+        ActiviteTravailComplementaire,
+        on_delete=models.CASCADE,
+        related_name="participations",
+    )
+    animateur = models.ForeignKey(
+        Animateur,
+        on_delete=models.CASCADE,
+        related_name="participations_travail_complementaire",
+    )
+    nombre_jours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    remarque = models.CharField(max_length=240, blank=True, default="")
+    autoriser_double_comptage = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("animateur__prenom", "animateur__nom")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("activite", "animateur"),
+                name="unique_participation_activite_animateur",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(nombre_jours__gte=0),
+                name="participation_nombre_jours_positif",
+            ),
+        ]
+        verbose_name = "participation de travail complémentaire"
+        verbose_name_plural = "participations de travail complémentaire"
+
+    def clean(self):
+        super().clean()
+        if self.activite_id and self.activite.type == ActiviteTravailComplementaire.TYPE_REUNION:
+            self.nombre_jours = Decimal("1.00")
+
+    def save(self, *args, **kwargs):
+        if self.activite_id and self.activite.type == ActiviteTravailComplementaire.TYPE_REUNION:
+            self.nombre_jours = Decimal("1.00")
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.animateur} — {self.activite} : {self.nombre_jours} jour(s)"
+
+
+class PrimeJournalierePeriode(models.Model):
+    """Prime journalière propre à un animateur et à une semaine de paie."""
+
+    animateur = models.ForeignKey(
+        Animateur,
+        on_delete=models.CASCADE,
+        related_name="primes_journalieres",
+    )
+    periode = models.ForeignKey(
+        PeriodeScolaire,
+        on_delete=models.CASCADE,
+        related_name="primes_journalieres",
+    )
+    montant = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[
+            MinValueValidator(Decimal("0.00")),
+            MaxValueValidator(Decimal("7.00")),
+        ],
+    )
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("periode__debut", "animateur__prenom", "animateur__nom")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("animateur", "periode"),
+                name="unique_prime_journaliere_animateur_periode",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(montant__gte=0, montant__lte=7),
+                name="prime_journaliere_entre_zero_et_sept",
+            ),
+        ]
+        verbose_name = "prime journalière par période"
+        verbose_name_plural = "primes journalières par période"
+
+    def __str__(self):
+        return f"{self.animateur} — {self.periode} : {self.montant} € / jour"
 
 
 class HoraireAffectationJour(models.Model):

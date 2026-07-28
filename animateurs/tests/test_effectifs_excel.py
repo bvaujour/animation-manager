@@ -43,8 +43,14 @@ class EffectifsExcelTests(ConnexionTestCase):
         workbook = load_workbook(io.BytesIO(response.content))
         self.assertIn("La Pacaudière", workbook.sheetnames)
         self.assertIn("Saint-Forgeux-les-Pins", workbook.sheetnames)
-        self.assertEqual(workbook["La Pacaudière"]["C5"].value, 12)
-        workbook["La Pacaudière"]["C5"] = 18
+        feuille_pacaudiere = workbook["La Pacaudière"]
+        colonne_maternels = next(
+            cellule.column
+            for cellule in feuille_pacaudiere[4]
+            if cellule.value == "Maternels"
+        )
+        self.assertEqual(feuille_pacaudiere.cell(row=5, column=colonne_maternels).value, 12)
+        feuille_pacaudiere.cell(row=5, column=colonne_maternels, value=18)
         fichier = self._xlsx_file(workbook)
 
         analyse = self.client.post(reverse("api_effectifs_excel_analyser"), {"fichier": fichier})

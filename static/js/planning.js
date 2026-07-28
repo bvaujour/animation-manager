@@ -28,12 +28,13 @@ document.addEventListener("DOMContentLoaded", function ()
 	const menuAjouterCentre = document.getElementById("planning-add-centre-menu");
 	const compteurCentresMasques = document.getElementById("planning-hidden-centres-count");
 	const layoutPlanning = document.getElementById("layout");
+	const panneauTempsTravail = document.getElementById("worktime-panel");
 	const ongletsPlanning = Array.from(document.querySelectorAll("[data-planning-mode]"));
 	const planningQuery = new URLSearchParams(window.location.search);
 	const modeDemande = planningQuery.get("mode");
-	let modePlanning = ["affectations", "effectifs"].includes(modeDemande)
+	let modePlanning = ["affectations", "effectifs", "temps-travail"].includes(modeDemande)
 		? modeDemande
-		: (["effectifs"].includes(localStorage.getItem("planning-mode"))
+		: (["effectifs", "temps-travail"].includes(localStorage.getItem("planning-mode"))
 			? localStorage.getItem("planning-mode") : "affectations");
 	const animList = document.getElementById("animateurs-list");
 	const filtresStatutsConteneur = document.getElementById("animateurs-filter-statuts");
@@ -44,6 +45,7 @@ document.addEventListener("DOMContentLoaded", function ()
 	const boutonEffacerFiltresAnimateurs = document.getElementById("animateurs-filter-reset");
 	const rechercheAnimateursInput = document.getElementById("animateurs-search-input");
 	const toolbarLabel = document.getElementById("toolbar-label");
+	const boutonImportEffectifsExcel = document.getElementById("btn-effectifs-excel");
 	const modalEffectifsEnfants = document.getElementById("modal-effectifs-enfants");
 	const formulaireEffectifsEnfants = document.getElementById("effectifs-enfants-form");
 	const champsEffectifsEnfants = document.getElementById("effectifs-enfants-fields");
@@ -880,6 +882,61 @@ function libelleDate(dateStr)
 		});
 	}
 
+	async function affecterAnimateurSurSemaine(animateur, centre, evenement, calendar)
+	{
+		if (!animateur || !calendar?.view) return;
+		const joursOuverts = [];
+		for (
+			let jour = formatDateLocal(calendar.view.activeStart);
+			jour < formatDateLocal(calendar.view.activeEnd);
+			jour = addDays(jour, 1)
+		)
+		{
+			if (evenementOuvertCeJour(evenement, jour)) joursOuverts.push(jour);
+		}
+
+		const joursAffectables = joursOuverts.filter((jour) =>
+			animateurDisponibleCeJour(animateur, jour)
+			&& !animateurDejaAffecteCeJour(animateur.id, jour)
+		);
+		const ignores = joursOuverts.length - joursAffectables.length;
+		if (!joursAffectables.length)
+		{
+			afficherToast(`${animateur.prenom} n’a aucun jour disponible et libre dans ce groupe cette semaine.`, true);
+			return;
+		}
+
+		const confirmation = confirm(
+			`Affecter ${animateur.prenom} ${animateur.nom} à ${centre.nom} — ${evenement.nom} `
+			+ `pour ${joursAffectables.length} jour${joursAffectables.length > 1 ? "s" : ""} cette semaine ?`
+			+ (ignores ? ` (${ignores} jour${ignores > 1 ? "s" : ""} indisponible${ignores > 1 ? "s" : ""} ou déjà affecté${ignores > 1 ? "s" : ""})` : "")
+		);
+		if (!confirmation) return;
+
+		const resultats = await Promise.allSettled(joursAffectables.map((debut) =>
+			apiFetch("/api/affectations/", {
+				method: "POST",
+				body: JSON.stringify({
+					animateur_id: animateur.id,
+					centre_id: centre.id,
+					evenement_id: evenement.id,
+					debut,
+					fin: addDays(debut, 1),
+				}),
+			})
+		));
+		const ajoutes = resultats.filter((resultat) => resultat.status === "fulfilled").length;
+		const echecs = resultats.length - ajoutes;
+		rafraichirAffectationsVisibles(calendar);
+		afficherToast(
+			`${animateur.prenom} : ${ajoutes} jour${ajoutes > 1 ? "s" : ""} ajouté${ajoutes > 1 ? "s" : ""}`
+			+ (ignores ? `, ${ignores} ignoré${ignores > 1 ? "s" : ""}` : "")
+			+ (echecs ? `, ${echecs} en échec` : "")
+			+ ".",
+			Boolean(echecs)
+		);
+	}
+
 	function creerAffectationFlottanteDepuisJour(animateur, centre, debut, cellule = null)
 	{
 		if (!animateur || !centre || !debut) return Promise.reject({ error: "Affectation flottante incomplète." });
@@ -1131,7 +1188,7 @@ function libelleDate(dateStr)
 		// même géométrie de calendriers. On mémorise donc la position de
 		// défilement avant de remplacer uniquement leur contenu visible.
 		const scrollTopAvant = calendarsContainer.scrollTop;
-		modePlanning = ["affectations", "effectifs"].includes(nouveauMode)
+		modePlanning = ["affectations", "effectifs", "temps-travail"].includes(nouveauMode)
 			? nouveauMode : "affectations";
 		if (memoriser)
 		{
@@ -1143,14 +1200,19 @@ function libelleDate(dateStr)
 			window.history.replaceState({}, "", urlCourante);
 		}
 		layoutPlanning.dataset.planningMode = modePlanning;
+		layoutPlanning.hidden = modePlanning === "temps-travail";
+		if (panneauTempsTravail) panneauTempsTravail.hidden = modePlanning !== "temps-travail";
 		document.body.classList.toggle("planning-mode-effectifs", estModeEffectifs());
 		document.body.classList.toggle("planning-mode-affectations", modePlanning === "affectations");
+		document.body.classList.toggle("planning-mode-temps-travail", modePlanning === "temps-travail");
+		if (boutonImportEffectifsExcel) boutonImportEffectifsExcel.hidden = !estModeEffectifs();
 		ongletsPlanning.forEach((onglet) =>
 		{
 			const actif = onglet.dataset.planningMode === modePlanning;
 			onglet.classList.toggle("active", actif);
 			onglet.setAttribute("aria-selected", String(actif));
 		});
+		document.dispatchEvent(new CustomEvent("planning:mode-change", { detail: { mode: modePlanning } }));
 		calendars.forEach((calendar) =>
 		{
 			const modeAffectationsActif = modePlanning === "affectations";
@@ -2296,7 +2358,7 @@ function libelleDate(dateStr)
 		});
 		zoneEvenements.dataset.visibleGroups = String(evenements.length);
 		zoneEvenements.style.setProperty("--planning-visible-group-count", String(Math.max(1, evenements.length)));
-		evenements.forEach((evenement) =>
+			evenements.forEach((evenement) =>
 		{
 			const card = document.createElement("article");
 			card.classList.add("calendar-card", "evenement-calendar-card", "calendar-group-card");
@@ -2307,13 +2369,14 @@ function libelleDate(dateStr)
 			card.innerHTML = `
 				<header class="evenement-calendar-header calendar-group-header">
 					<div class="evenement-calendar-title calendar-group-title">
-						<div><h3 class="calendar-group-name">${escapeHtml(evenement.nom)}</h3></div>
-					</div>
-					<div class="evenement-calendar-meta calendar-group-meta">
+						<h3 class="calendar-group-name">${escapeHtml(evenement.nom)}</h3>
+						<small class="planning-assignment-hint">Animateur sélectionné : cliquez sur une case pour 1 jour, ici pour toute la semaine</small>
 						<span class="planning-objectif-groupe">Objectif ${escapeHtml(evenement.effectif_cible)}</span>
 						<div class="planning-group-hours-actions">
 							<button class="btn btn-secondary btn-horaires-groupe" type="button" title="Remplir les horaires de tous les animateurs du groupe">◷ Horaires</button>
 						</div>
+					</div>
+					<div class="evenement-calendar-meta calendar-group-meta">
 						<div class="planning-effectifs-actions">
 							<button class="btn btn-secondary btn-effectifs-enfants" type="button">Effectifs</button>
 							<button class="btn btn-ghost btn-encadrement-special" type="button">Encadrement spécial</button>
@@ -2324,6 +2387,21 @@ function libelleDate(dateStr)
 
 			zoneEvenements.appendChild(card);
 			const calendar = creerCalendar(centre, evenement, card);
+			const enteteGroupe = card.querySelector(".evenement-calendar-header");
+			enteteGroupe.dataset.weekAssignmentTarget = "true";
+			enteteGroupe.title = "Sélectionne ou dépose un animateur ici pour l’affecter à toute la semaine";
+			enteteGroupe.addEventListener("click", (event) =>
+			{
+				if (event.target.closest("button, a, input, select, textarea")) return;
+				if (enteteGroupe.dataset.ignoreNextClick === "1")
+				{
+					delete enteteGroupe.dataset.ignoreNextClick;
+					return;
+				}
+				if (!animateurActif) return;
+				affecterAnimateurSurSemaine(animateurActif, centre, evenement, calendar)
+					.catch((err) => afficherToast(erreurMessage(err, "L’affectation de la semaine a échoué."), true));
+			});
 			card.querySelector(".btn-effectifs-enfants").addEventListener("click", () => ouvrirSaisieEffectifsEnfants(calendar));
 			card.querySelector(".btn-encadrement-special").addEventListener("click", () => ouvrirSaisieEncadrementSpecial(calendar));
 			card.querySelector(".btn-horaires-groupe").addEventListener("click", () => ouvrirSaisieHorairesGroupe(calendar));
@@ -2504,6 +2582,17 @@ function libelleDate(dateStr)
 		const prochaine = periodes.find((periode) => periode.debut > aujourdHui);
 		const cible = courante?.debut || prochaine?.debut || periodes.at(-1)?.debut;
 		if (cible) allerDateTous(cible);
+	});
+
+	document.getElementById("btn-planning-export")?.addEventListener("click", (event) => {
+		const bouton = event.currentTarget;
+		const url = new URL(bouton.dataset.administrationUrl, window.location.origin);
+		url.searchParams.set("onglet", "export");
+		const dateAffichee = datePeriodeCourante
+			|| (calendars[0] ? formatDateLocal(calendars[0].getDate()) : null);
+		const periode = dateAffichee ? periodePourDate(dateAffichee) : null;
+		if (periode?.id) url.searchParams.set("periode_id", String(periode.id));
+		window.location.assign(url.toString());
 	});
 
 	// NB : le formatage en "YYYY-MM-DD" utilise formatDateLocal() (définie
@@ -3192,16 +3281,39 @@ function libelleDate(dateStr)
 	document.addEventListener("pointermove", (event) =>
 	{
 		document.querySelectorAll(".planning-floating-day.is-drag-over").forEach((cellule) => cellule.classList.remove("is-drag-over"));
+		document.querySelectorAll(".evenement-calendar-header.is-week-drag-over").forEach((entete) => entete.classList.remove("is-week-drag-over"));
 		if (!animateurDragPreview) return;
-		const cible = document.elementFromPoint(event.clientX, event.clientY)?.closest(".planning-floating-day");
+		const element = document.elementFromPoint(event.clientX, event.clientY);
+		const cible = element?.closest(".planning-floating-day");
 		if (cible) cible.classList.add("is-drag-over");
+		const entete = element?.closest("button, a, input, select, textarea")
+			? null
+			: element?.closest(".evenement-calendar-header[data-week-assignment-target]");
+		if (entete) entete.classList.add("is-week-drag-over");
 	}, { passive: true });
 
 	document.addEventListener("pointerup", (event) =>
 	{
 		const animateur = animateurDragPreview;
-		const cible = document.elementFromPoint(event.clientX, event.clientY)?.closest(".planning-floating-day");
+		const element = document.elementFromPoint(event.clientX, event.clientY);
+		const cible = element?.closest(".planning-floating-day");
+		const enteteGroupe = element?.closest("button, a, input, select, textarea")
+			? null
+			: element?.closest(".evenement-calendar-header[data-week-assignment-target]");
 		document.querySelectorAll(".planning-floating-day.is-drag-over").forEach((cellule) => cellule.classList.remove("is-drag-over"));
+		document.querySelectorAll(".evenement-calendar-header.is-week-drag-over").forEach((entete) => entete.classList.remove("is-week-drag-over"));
+		if (animateur && enteteGroupe)
+		{
+			enteteGroupe.dataset.ignoreNextClick = "1";
+			const card = enteteGroupe.closest(".evenement-calendar-card");
+			const calendar = calendars.find((item) => Number(item.evenementPlanning?.id) === Number(card?.dataset.evenementId));
+			if (calendar)
+			{
+				affecterAnimateurSurSemaine(animateur, calendar.centrePlanning, calendar.evenementPlanning, calendar)
+					.catch((err) => afficherToast(erreurMessage(err, "L’affectation de la semaine a échoué."), true));
+			}
+			return;
+		}
 		if (!animateur || !cible || cible.classList.contains("is-saving")) return;
 		if (cible.classList.contains("is-occupied"))
 		{

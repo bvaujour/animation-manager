@@ -70,6 +70,22 @@ class PlanningExportTests(ConnexionTestCase):
         response = self.client.get(reverse("administration"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Planning calendrier par groupe")
+        self.assertContains(response, "Planning PDF")
+
+    def test_page_planning_propose_un_acces_unique_aux_exports(self):
+        response = self.client.get(reverse("planning"))
+
+        self.assertContains(response, 'id="btn-planning-export"')
+        self.assertContains(response, f'data-administration-url="{reverse("administration")}"')
+        self.assertNotContains(response, 'id="btn-planning-pdf"')
+        self.assertNotContains(response, 'id="btn-planning-excel"')
+
+    def test_page_planning_distingue_import_et_export_excel(self):
+        response = self.client.get(reverse("planning"))
+
+        self.assertContains(response, 'id="btn-effectifs-excel"')
+        self.assertContains(response, "⇧</span> Import Excel")
+        self.assertContains(response, 'id="btn-planning-export"')
 
     def test_matrice_separe_les_groupes_du_meme_centre(self):
         dates, groupes, noms_par_case, _ = _planning_matrix(

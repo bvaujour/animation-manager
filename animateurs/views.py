@@ -48,8 +48,9 @@ from .views_planning import (
     api_planning_auto,
     api_planning_plage,
 )
-from .views_reporting import api_document_detail, api_documents, api_recapitulatif
+from .views_reporting import api_document_detail, api_documents, api_prime_journaliere, api_recapitulatif, export_recapitulatif_paie_pdf
 from .views_staff import api_animateur_detail, api_animateurs, api_disponibilite_detail, api_disponibilites
+from .views_worktime import api_conflits_reunion, api_preparation_travail, api_reunion_detail, api_reunions, api_temps_travail
 
 __all__ = [
     "accueil",
@@ -59,6 +60,7 @@ __all__ = [
     "api_animateur_detail",
     "api_animateurs",
     "api_centre_detail",
+    "api_conflits_reunion",
     "api_centres",
     "api_centres_reordonner",
     "api_disponibilite_detail",
@@ -80,9 +82,14 @@ __all__ = [
     "api_planning_plage",
     "api_qualification_detail",
     "api_qualifications",
+    "api_preparation_travail",
+    "api_prime_journaliere",
     "api_recapitulatif",
+    "api_reunion_detail",
+    "api_reunions",
     "api_tableau_de_bord",
     "api_verification_export_planning",
+    "api_temps_travail",
     "changer_mot_de_passe",
     "documents",
     "emails",
@@ -90,6 +97,7 @@ __all__ = [
     "employes",
     "export_planning_excel",
     "export_planning_pdf",
+    "export_recapitulatif_paie_pdf",
     "gestion",
     "mes_disponibilites",
     "mon_planning",

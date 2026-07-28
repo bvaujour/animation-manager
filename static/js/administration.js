@@ -52,6 +52,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const exportActionsCount = exportForm?.querySelector("[data-export-actions-count]");
     const exportButtons = Array.from(exportForm?.querySelectorAll('.export-actions button[type="submit"]') || []);
 
+    const periodeDemandee = new URLSearchParams(window.location.search).get("periode_id");
+    if (periodeDemandee && /^\d+$/.test(periodeDemandee)) {
+        const checkbox = exportCheckboxes.find((item) => item.value === periodeDemandee);
+        if (checkbox) {
+            checkbox.checked = true;
+            let parent = checkbox.parentElement;
+            while (parent && parent !== exportForm) {
+                if (parent.tagName === "DETAILS") parent.open = true;
+                parent = parent.parentElement;
+            }
+        }
+    }
+
     function updateExportSelection() {
         const count = exportCheckboxes.filter((checkbox) => checkbox.checked).length;
         const label = count
