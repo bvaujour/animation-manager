@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}{% if utilisateur_est_direction %}Tableau de bord{% else %}Accueil{% endif %}{% endblock %}
-{% block body_class %}{% if utilisateur_est_direction %}dashboard-body{% endif %}{% endblock %}
+{% block title %}{% if utilisateur_est_direction %}Tableau de bord{% else %}Mon tableau de bord{% endif %}{% endblock %}
+{% block body_class %}{% if utilisateur_est_direction %}dashboard-body{% else %}animator-dashboard-body{% endif %}{% endblock %}
 {% block page_styles %}
 {% if utilisateur_est_direction %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}">
 {% else %}
-<link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}">
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -89,14 +89,180 @@
     <div id="dashboard-loading" class="dashboard-loading" role="status" aria-live="polite">Mise à jour du tableau de bord…</div>
 </main>
 {% else %}
-<main id="main-content" class="page-shell page-shell--wide employee-dashboard-page">
-    <header class="employee-dashboard-heading"><p>Bonjour {{ animateur.prenom }}</p><h1>Mon tableau de bord</h1></header>
-    <section class="employee-dashboard-actions" aria-label="Mes espaces">
-        <a class="ui-card employee-dashboard-action employee-dashboard-action--blue" href="{% url 'mon_planning' %}"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span><div><strong>Planning / séjours</strong><small>Consulter mes affectations</small></div><b aria-hidden="true">›</b></a>
-        <a class="ui-card employee-dashboard-action employee-dashboard-action--purple" href="{% url 'mon_profil' %}"><span class="material-symbols-outlined" aria-hidden="true">groups</span><div><strong>Mon profil</strong><small>Voir mes informations</small></div><b aria-hidden="true">›</b></a>
-        <a class="ui-card employee-dashboard-action employee-dashboard-action--green" href="{% url 'mes_disponibilites' %}"><span class="material-symbols-outlined" aria-hidden="true">event_available</span><div><strong>Mes disponibilités</strong><small>Renseigner mes journées</small></div><b aria-hidden="true">›</b></a>
-        <a class="ui-card employee-dashboard-action employee-dashboard-action--orange" href="{% url 'documents' %}"><span class="material-symbols-outlined" aria-hidden="true">description</span><div><strong>Mes documents</strong><small>Consulter les fichiers partagés</small></div><b aria-hidden="true">›</b></a>
+<main id="main-content" class="animator-dashboard">
+    <header class="animator-dashboard-header">
+        <div>
+            <h1>Bonjour {{ animateur.prenom }}&nbsp;! <span aria-hidden="true">👋</span></h1>
+            <p>Voici ton planning et les informations utiles de la semaine.</p>
+        </div>
+        <a class="animator-profile-chip" href="{% url 'mon_profil' %}">
+            <span class="animator-profile-avatar">{{ animateur.prenom|first }}{{ animateur.nom|first }}</span>
+            <span><strong>{{ animateur.prenom }} {{ animateur.nom|first }}.</strong><small>Animateur·rice</small></span>
+            <b aria-hidden="true">⌄</b>
+        </a>
+    </header>
+
+    <section class="animator-today-strip" aria-label="Ma situation aujourd'hui">
+        <div class="animator-today-item animator-today-item--date">
+            <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
+            <span><small>Aujourd’hui</small><strong>{{ aujourdhui.date_libelle }}</strong></span>
+        </div>
+        <div class="animator-today-item">
+            <span class="animator-mini-icon" aria-hidden="true">⌂</span>
+            <span><small>Lieu</small><strong>{{ aujourdhui.centre }}</strong></span>
+        </div>
+        <div class="animator-today-item">
+            <span class="material-symbols-outlined" aria-hidden="true">groups</span>
+            <span><small>Groupe</small><strong>{{ aujourdhui.groupe }}</strong></span>
+        </div>
+        <div class="animator-today-item">
+            <span class="animator-mini-icon" aria-hidden="true">◉</span>
+            <span><small>Enfants</small><strong>{% if aujourdhui.enfants is not None %}{{ aujourdhui.enfants }} prévu{{ aujourdhui.enfants|pluralize }}{% else %}Non renseigné{% endif %}</strong></span>
+        </div>
+        <div class="animator-today-item">
+            <span class="animator-mini-icon" aria-hidden="true">♙</span>
+            <span><small>Équipe</small><strong>{% if aujourdhui.animateurs is not None %}{{ aujourdhui.animateurs }} animateur{{ aujourdhui.animateurs|pluralize }}{% else %}—{% endif %}</strong></span>
+        </div>
     </section>
+
+    <nav class="animator-week-navigation" aria-label="Navigation des semaines">
+        <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+        <div>
+            <strong>{{ semaine.libelle }}</strong>
+            {% if not semaine.est_courante %}<a href="?semaine={{ semaine.courante|date:'Y-m-d' }}">Revenir à cette semaine</a>{% endif %}
+        </div>
+        <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+    </nav>
+
+    <section class="animator-week-info" aria-labelledby="animator-week-info-title">
+        <span class="animator-week-info-icon" aria-hidden="true">📣</span>
+        <div>
+            <h2 id="animator-week-info-title">Informations de la semaine</h2>
+            <ul>{% for information in infos_semaine %}<li>{{ information }}</li>{% endfor %}</ul>
+        </div>
+        <a href="{% url 'mon_planning' %}">Voir mon planning détaillé</a>
+    </section>
+
+    <section class="animator-panel animator-planning-panel" aria-labelledby="animator-planning-title">
+        <header class="animator-panel-header">
+            <h2 id="animator-planning-title"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span> Mon planning de la semaine</h2>
+            <span>{{ disponibilites.jours_travailles }} jour{{ disponibilites.jours_travailles|pluralize }} travaillé{{ disponibilites.jours_travailles|pluralize }}</span>
+        </header>
+
+        <div class="animator-week-grid">
+            {% for jour in jours %}
+            <article class="animator-day-card{% if jour.est_aujourdhui %} is-today{% endif %}{% if not jour.travaille %} is-rest{% endif %}"{% if jour.centre_couleur %} style="--day-accent:{{ jour.centre_couleur }}"{% endif %}>
+                <header>
+                    <strong>{{ jour.jour|upper }}</strong>
+                    <span>{{ jour.date_libelle|upper }}</span>
+                </header>
+                <div class="animator-day-status-row">
+                    {% if jour.est_aujourdhui %}<span class="animator-today-badge"><i></i>Aujourd’hui</span>{% endif %}
+                    <span class="animator-work-badge{% if not jour.travaille %} animator-work-badge--rest{% endif %}">{% if jour.travaille %}Travaillé{% else %}Repos{% endif %}</span>
+                </div>
+
+                {% if jour.travaille %}
+                <div class="animator-day-content">
+                    <div class="animator-day-place">
+                        <span class="animator-place-icon" aria-hidden="true">⌂</span>
+                        <div><strong>{{ jour.centre }}</strong><small>{{ jour.groupe }}</small></div>
+                    </div>
+                    <dl class="animator-day-facts">
+                        <div><dt>◷</dt><dd>{{ jour.horaire }}</dd></div>
+                        <div><dt>◉</dt><dd>{% if jour.effectif_renseigne %}{{ jour.enfants }} enfant{{ jour.enfants|pluralize }}{% else %}Effectif à confirmer{% endif %}</dd></div>
+                        <div><dt>♙</dt><dd>{{ jour.animateurs }} animateur{{ jour.animateurs|pluralize }}</dd></div>
+                    </dl>
+                    <div class="animator-day-highlight{% if not jour.sortie %} is-empty{% endif %}">
+                        {% if jour.sortie %}
+                        <strong>Sortie : {{ jour.sortie.nom }}</strong>
+                        {% if jour.sortie.depart or jour.sortie.retour %}<span>{% if jour.sortie.depart %}Départ {{ jour.sortie.depart }}{% endif %}{% if jour.sortie.depart and jour.sortie.retour %} · {% endif %}{% if jour.sortie.retour %}Retour {{ jour.sortie.retour }}{% endif %}</span>{% endif %}
+                        {% else %}
+                        <span>Journée au centre</span>
+                        {% endif %}
+                    </div>
+                    <p class="animator-day-team"><strong>Avec&nbsp;:</strong> {% if jour.collegues %}{{ jour.collegues_libelle }}{% else %}Équipe à confirmer{% endif %}</p>
+                    <p class="animator-day-responsibility">{% if jour.responsabilite %}<strong>{{ jour.responsabilite }}</strong>{% else %}<span>Responsabilité non renseignée</span>{% endif %}</p>
+                </div>
+                {% else %}
+                <div class="animator-rest-content">
+                    <span aria-hidden="true">⌂<i>z</i></span>
+                    <strong>Aucune affectation</strong>
+                    <p>{% if jour.disponible %}Tu es disponible ce jour-là.{% else %}Aucune disponibilité déclarée.{% endif %}</p>
+                </div>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="animator-dashboard-grid animator-dashboard-grid--three">
+        <article class="animator-panel animator-compact-card">
+            <header class="animator-panel-header"><h2><span aria-hidden="true">🚌</span> Sorties de la semaine</h2></header>
+            <div class="animator-card-list">
+                {% for sortie in sorties %}
+                <div class="animator-list-item animator-list-item--outing">
+                    <span class="animator-list-date">{{ sortie.date|date:'D' }}<strong>{{ sortie.date|date:'d' }}</strong></span>
+                    <div><strong>{{ sortie.nom }}</strong><small>{% if sortie.horaire %}{{ sortie.horaire }}{% endif %}{% if sortie.destination %} · {{ sortie.destination }}{% endif %}</small>{% if sortie.responsabilite %}<em>{{ sortie.responsabilite }}</em>{% endif %}</div>
+                </div>
+                {% empty %}<p class="animator-empty-state">Aucune sortie ne te concerne cette semaine.</p>{% endfor %}
+            </div>
+            <a class="animator-card-action" href="{% url 'mon_planning' %}">Voir mon planning complet</a>
+        </article>
+
+        <article class="animator-panel animator-compact-card">
+            <header class="animator-panel-header"><h2><span class="material-symbols-outlined" aria-hidden="true">event_available</span> Mes disponibilités</h2></header>
+            <div class="animator-availability-summary">
+                <div><strong>{{ disponibilites.jours_disponibles }}</strong><span>jours disponibles</span></div>
+                <div><strong>{{ disponibilites.jours_travailles }}</strong><span>jours affectés</span></div>
+                <div><strong>{{ disponibilites.jours_libres }}</strong><span>disponibles sans affectation</span></div>
+            </div>
+            <div class="animator-availability-days">
+                {% for jour in jours %}<span class="{% if jour.disponible %}is-available{% endif %}{% if jour.travaille %} is-assigned{% endif %}">{{ jour.jour|slice:':3' }}</span>{% endfor %}
+            </div>
+            <a class="animator-card-action" href="{% url 'mes_disponibilites' %}">Modifier mes disponibilités</a>
+        </article>
+
+        <article class="animator-panel animator-compact-card">
+            <header class="animator-panel-header"><h2><span class="material-symbols-outlined" aria-hidden="true">description</span> Documents utiles</h2></header>
+            <div class="animator-card-list">
+                {% for document in documents %}
+                <a class="animator-list-item animator-list-item--document" href="{{ document.fichier.url }}" target="_blank" rel="noopener">
+                    <span class="material-symbols-outlined" aria-hidden="true">description</span>
+                    <div><strong>{{ document.titre }}</strong><small>{{ document.libelle_periode }}</small></div>
+                    <b aria-hidden="true">›</b>
+                </a>
+                {% empty %}<p class="animator-empty-state">Aucun document pour cette semaine.</p>{% endfor %}
+            </div>
+            <a class="animator-card-action" href="{% url 'documents' %}">Ouvrir tous les documents</a>
+        </article>
+    </section>
+
+    <section class="animator-dashboard-grid animator-dashboard-grid--two">
+        <article class="animator-panel animator-wide-card">
+            <header class="animator-panel-header"><h2><span aria-hidden="true">◷</span> Mes réunions de la semaine</h2></header>
+            <div class="animator-card-list">
+                {% for reunion in reunions %}
+                <div class="animator-list-item animator-list-item--meeting">
+                    <span>◷</span><div><strong>{{ reunion.titre }}</strong><small>{{ reunion.date_libelle }}{% if reunion.remarque %} · {{ reunion.remarque }}{% endif %}</small></div>
+                </div>
+                {% empty %}<p class="animator-empty-state">Aucune réunion renseignée cette semaine.</p>{% endfor %}
+            </div>
+        </article>
+        <article class="animator-panel animator-wide-card animator-profile-summary">
+            <header class="animator-panel-header"><h2><span class="material-symbols-outlined" aria-hidden="true">groups</span> Mes informations</h2></header>
+            <div>
+                <span class="animator-profile-summary-avatar">{{ animateur.prenom|first }}{{ animateur.nom|first }}</span>
+                <p><strong>{{ animateur.prenom }} {{ animateur.nom }}</strong><small>{{ animateur.email|default:'E-mail non renseigné' }}</small><small>{{ animateur.telephone|default:'Téléphone non renseigné' }}</small></p>
+                <a href="{% url 'mon_profil' %}">Consulter ma fiche</a>
+            </div>
+        </article>
+    </section>
+
+    <footer class="animator-dashboard-footer">
+        <span aria-hidden="true">ⓘ</span>
+        <p>Les informations affichées proviennent du planning, des sorties et des documents renseignés par la direction.</p>
+        <a href="{% url 'mon_planning' %}">Ouvrir le planning détaillé&nbsp;›</a>
+    </footer>
 </main>
 {% endif %}
 {% endblock %}

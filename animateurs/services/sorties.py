@@ -12,7 +12,6 @@ from animateurs.models import (
     EffectifEnfantsJour,
     Sortie,
     SortieEtapeTransport,
-    SortieResponsabilite,
 )
 from animateurs.services.categories_groupes import categorie_age_groupe
 from animateurs.services.flottants import est_groupe_flottants

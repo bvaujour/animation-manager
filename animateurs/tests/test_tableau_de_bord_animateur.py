@@ -1,0 +1,156 @@
+import datetime
+from unittest.mock import patch
+
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
+
+from animateurs.models import (
+    ActiviteTravailComplementaire,
+    Affectation,
+    Animateur,
+    Centre,
+    Disponibilite,
+    Document,
+    EffectifEnfantsJour,
+    Evenement,
+    HoraireAffectationJour,
+    ParticipationTravailComplementaire,
+    Sortie,
+    SortieParticipation,
+)
+
+
+class TableauDeBordAnimateurTests(TestCase):
+    def setUp(self):
+        self.lundi = datetime.date(2026, 8, 24)
+        self.user = get_user_model().objects.create_user(
+            username="marine",
+            first_name="Marine",
+            last_name="Lefevre",
+            password="secret-test",
+        )
+        self.animateur = Animateur.objects.create(
+            prenom="Marine",
+            nom="Lefevre",
+            email="marine@example.com",
+            telephone="06 11 22 33 44",
+            utilisateur=self.user,
+        )
+        self.collegue = Animateur.objects.create(prenom="Ambre", nom="Equipe")
+        self.centre = Centre.objects.create(
+            nom="Saint-Martin-d'Estréaux",
+            code="SM",
+            couleur="#2368e8",
+        )
+        self.groupe = Evenement.objects.create(
+            centre=self.centre,
+            nom="Groupe 3/5 ans",
+            permanent=True,
+            jours_ouverts=[0, 1, 2, 3, 4],
+            ferme_jours_feries=False,
+        )
+        debut = timezone.make_aware(datetime.datetime.combine(self.lundi, datetime.time.min))
+        fin = debut + datetime.timedelta(days=1)
+        self.affectation = Affectation.objects.create(
+            animateur=self.animateur,
+            centre=self.centre,
+            evenement=self.groupe,
+            debut=debut,
+            fin=fin,
+        )
+        Affectation.objects.create(
+            animateur=self.collegue,
+            centre=self.centre,
+            evenement=self.groupe,
+            debut=debut,
+            fin=fin,
+        )
+        HoraireAffectationJour.objects.create(
+            affectation=self.affectation,
+            date=self.lundi,
+            heure_arrivee=datetime.time(8, 0),
+            heure_depart=datetime.time(17, 30),
+        )
+        EffectifEnfantsJour.objects.create(
+            evenement=self.groupe,
+            date=self.lundi,
+            nombre=19,
+        )
+        Disponibilite.objects.create(
+            animateur=self.animateur,
+            debut=self.lundi,
+            fin=self.lundi + datetime.timedelta(days=4),
+        )
+        sortie = Sortie.objects.create(
+            nom="Piscine",
+            date=self.lundi,
+            destination="Piscine de Roanne",
+            heure_depart_site=datetime.time(9, 0),
+            heure_arrivee_retour=datetime.time(17, 0),
+        )
+        SortieParticipation.objects.create(sortie=sortie, evenement=self.groupe)
+        reunion = ActiviteTravailComplementaire.objects.create(
+            type=ActiviteTravailComplementaire.TYPE_REUNION,
+            intitule="Réunion d'équipe",
+            date=self.lundi,
+            remarque="À 18h",
+        )
+        ParticipationTravailComplementaire.objects.create(
+            activite=reunion,
+            animateur=self.animateur,
+        )
+        Document.objects.create(
+            titre="Livret animateur",
+            fichier=SimpleUploadedFile("livret.pdf", b"pdf", content_type="application/pdf"),
+            permanent=True,
+        )
+        self.client.force_login(self.user)
+
+    @patch("animateurs.services.animateur_dashboard.timezone.localdate")
+    def test_accueil_affiche_le_tableau_de_bord_hebdomadaire_reel(self, localdate):
+        localdate.return_value = self.lundi
+
+        response = self.client.get(reverse("accueil"), {"semaine": self.lundi.isoformat()})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bonjour Marine")
+        self.assertContains(response, "Mon planning de la semaine")
+        self.assertContains(response, "Saint-Martin-d&#x27;Estréaux")
+        self.assertContains(response, "Groupe 3/5 ans")
+        self.assertContains(response, "8h – 17h30")
+        self.assertContains(response, "19 enfants")
+        self.assertContains(response, "Ambre")
+        self.assertContains(response, "Sortie : Piscine")
+        self.assertContains(response, "Réunion d&#x27;équipe")
+        self.assertContains(response, "Livret animateur")
+        self.assertContains(response, "Mon tableau de bord")
+        self.assertContains(response, 'class="animator-sidebar"')
+
+    @patch("animateurs.services.animateur_dashboard.timezone.localdate")
+    def test_navigation_change_la_semaine_affichee(self, localdate):
+        localdate.return_value = self.lundi
+        semaine_suivante = self.lundi + datetime.timedelta(days=7)
+
+        response = self.client.get(reverse("accueil"), {"semaine": semaine_suivante.isoformat()})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Semaine du 31 août au 4 septembre 2026")
+        self.assertContains(response, "Aucune affectation renseignée pour cette semaine")
+        self.assertContains(response, "Revenir à cette semaine")
+
+    def test_la_direction_conserve_sa_navigation_compacte(self):
+        direction = get_user_model().objects.create_superuser(
+            username="direction",
+            email="direction@example.com",
+            password="secret-test",
+        )
+        self.client.force_login(direction)
+
+        response = self.client.get(reverse("accueil"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="app-rail"')
+        self.assertNotContains(response, 'class="animator-sidebar"')

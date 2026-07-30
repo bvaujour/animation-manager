@@ -231,4 +231,4 @@ Sur ordinateur, le menu ouvert réserve sa propre largeur et ne recouvre plus le
 
 ## Audit technique
 
-Le rapport `AUDIT_COMPLET.md` décrit les corrections réalisées, les vérifications exécutées et les chantiers de modularisation recommandés.
+Le rapport `AUDIT_NETTOYAGE.md` décrit le nettoyage du dépôt, les vérifications exécutées et les limites de la revue.

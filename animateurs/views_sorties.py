@@ -19,7 +19,6 @@ from animateurs.models import (
     PeriodeScolaire,
     Sortie,
     PreferenceTransportUtilisateur,
-    SortieEtapeTransport,
     SortieLien,
     SortieParticipation,
     SortieRenfort,

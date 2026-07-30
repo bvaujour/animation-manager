@@ -8,18 +8,20 @@
     <link rel="icon" href="{% static 'favicon.ico' %}" sizes="any">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20,400,0&amp;icon_names=admin_panel_settings,analytics,calendar_month,category,confirmation_number,description,event_available,groups,home,logout,space_dashboard&amp;display=block" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20,400,0&amp;icon_names=admin_panel_settings,analytics,calendar_month,category,confirmation_number,description,event_available,groups,home,logout,menu,menu_open,space_dashboard&amp;display=block" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/common-base.css' %}?v={{ asset_version }}">
     {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="{% static 'css/common-ui.css' %}?v={{ asset_version }}">
+    {% if request.user.is_authenticated and not utilisateur_est_direction %}<link rel="stylesheet" href="{% static 'css/animator-space.css' %}?v={{ asset_version }}">{% endif %}
     {% block page_styles %}{% endblock %}
 </head>
-<body class="app-body {% block body_class %}{% endblock %}">
+<body class="app-body {% if request.user.is_authenticated and not utilisateur_est_direction %}animator-space-body {% endif %}{% block body_class %}{% endblock %}">
     {% csrf_token %}
     {% include "partials/_nav.html" with active=active_page %}
     {% block content %}{% endblock %}
 
     <script src="{% static 'js/ui.js' %}?v={{ asset_version }}"></script>
+    {% if request.user.is_authenticated and not utilisateur_est_direction %}<script src="{% static 'js/animator-sidebar.js' %}?v={{ asset_version }}"></script>{% endif %}
     <script src="{% static 'js/common/planning-data.js' %}?v={{ asset_version }}"></script>
     <script src="{% static 'js/common/documents.js' %}?v={{ asset_version }}"></script>
     <script src="{% static 'js/common/colors.js' %}?v={{ asset_version }}"></script>

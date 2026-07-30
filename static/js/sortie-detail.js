@@ -203,15 +203,6 @@ function formatSummaryList(raw){
   return `<ul class="sortie-bullets">${lines.map(line=>`<li>${escapeHtml(line.replace(/^[•\-]\s*/,""))}</li>`).join("")}</ul>`;
 }
 
-function formatContacts(person){
-  if(!person){return '<p class="sortie-empty">Non renseigné</p>'}
-  const extras=[];
-  if(person.telephone) extras.push(`<span>${escapeHtml(person.telephone)}</span>`);
-  if(person.email) extras.push(`<span>${escapeHtml(person.email)}</span>`);
-  return `${staffStatusBadge(person)}<strong>${escapeHtml(person.nom)}</strong>${extras.length?`<div class="sortie-contact-lines">${extras.join("")}</div>`:""}`;
-}
-
-
 function responsibilityTitle(item){
   if(item.type==="lieu"&&item.centre) return `Lieu — ${item.centre.nom}`;
   if(item.type==="groupe"&&item.groupe) return `Groupe — ${item.groupe.nom}`;
@@ -388,7 +379,6 @@ function renderLinks(){
   `;
 }
 
-function teamFor(group){return group.animateurs&&group.animateurs.length?escapeHtml(group.animateurs.map(item=>item.nom).join(" · ")):'<span class="sortie-muted">Aucun animateur</span>';}
 function groupCountLabel(groups){return `${(groups||[]).length} groupe${(groups||[]).length>1?"s":""}`;}
 
 function transportCircuit(t,sens){

@@ -97,6 +97,7 @@ __all__ = [
     "employes",
     "export_planning_excel",
     "export_planning_pdf",
+    "export_recapitulatif_excel",
     "export_recapitulatif_paie_pdf",
     "gestion",
     "mes_disponibilites",

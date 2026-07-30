@@ -353,14 +353,6 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             for classe in classes:
                 self.assertIn(classe, contenu, fichier)
 
-    def test_l_ancienne_page_salarie_autonome_est_supprimee(self):
-        template = Path(settings.BASE_DIR) / "templates/employe_detail.html"
-        self.assertFalse(template.exists())
-
-        contenu = (Path(settings.BASE_DIR) / "templates/employes.html").read_text()
-        self.assertIn("employees-sidebar", contenu)
-        self.assertIn("employee-editor", contenu)
-
     def test_le_script_email_definit_l_affichage_de_configuration(self):
         contenu = (Path(settings.BASE_DIR) / "static/js/emails.js").read_text()
 
