@@ -55,7 +55,8 @@ from .views import (
     employes,
     export_planning_excel,
     export_planning_pdf,
-    export_recapitulatif_paie_pdf,
+      export_recapitulatif_paie_pdf,
+      export_recapitulatif_excel,
     gestion,
     mes_disponibilites,
     mon_planning,
@@ -118,7 +119,12 @@ urlpatterns = [
     path("employes/nouveau/", direction_requise(employe_detail), name="employe_nouveau"),
     path("employes/<int:animateur_id>/", direction_requise(employe_detail), name="employe_detail"),
     path("recapitulatif/", direction_requise(recapitulatif), name="recapitulatif"),
-    path(
+      path(
+        "recapitulatif/export.xlsx",
+        direction_requise(export_recapitulatif_excel),
+        name="export_recapitulatif_excel",
+      ),
+      path(
         "recapitulatif/export-paie.pdf",
         direction_requise(export_recapitulatif_paie_pdf),
         name="export_recapitulatif_paie_pdf",

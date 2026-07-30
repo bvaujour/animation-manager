@@ -4,7 +4,7 @@
 {% block page_styles %}<link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide recap-page">
-    {% include "partials/_page_header.html" with title="Récapitulatif" header_class="recap-header" picker_mode="multiple" picker_id="periode-select" picker_placeholder="Choisir des semaines ou une période" action_id="btn-recap-pdf" action_label="Exporter en PDF" action_class="btn-secondary" %}
+    {% include "partials/_page_header.html" with title="Récapitulatif" header_class="recap-header" picker_mode="multiple" picker_id="periode-select" picker_placeholder="Choisir des semaines ou une période" action_id="btn-recap-excel" action_label="Exporter en Excel" action_class="btn-primary" second_action_id="btn-recap-pdf" second_action_label="Exporter en PDF" second_action_class="btn-secondary" %}
     <div class="tabs recap-tabs app-page-tabs app-page-tabs-row" id="recap-tabs" role="tablist" aria-label="Vues du récapitulatif">
         <button class="tab-btn active" data-recap-tab="centres" type="button" role="tab" aria-selected="true">Jours et paie par centre</button>
         <button class="tab-btn" data-recap-tab="totaux" type="button" role="tab" aria-selected="false">Totaux par animateur</button>
@@ -36,11 +36,16 @@
         <div class="ui-section-heading section-header">
             <div>
                 <h2 id="recap-paie-title">Préparation de la paie</h2>
-                <p>La prime saisie s’applique à chaque jour travaillé des semaines sélectionnées.</p>
+                <p>Primes appliquées aux semaines sélectionnées</p>
             </div>
         </div>
+        <div id="recap-payroll-scope" class="payroll-scope" aria-live="polite"></div>
         <div id="recap-payroll" class="recap-table-wrap"></div>
+        <div class="payroll-actions">
+            <button id="cancel-payroll-primes" class="btn btn-secondary" type="button" disabled>Annuler les modifications</button>
+            <button id="save-payroll-primes" class="btn btn-primary" type="button" disabled>Valider les primes</button>
+        </div>
     </section>
 </main>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/recapitulatif.js' %}?v={{ asset_version }}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/recapitulatif.js' %}?v={{ asset_version }}-excel-1"></script>{% endblock %}

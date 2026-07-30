@@ -81,6 +81,13 @@
 .payroll-prime-field input{width:68px;padding:6px;text-align:right;font-variant-numeric:tabular-nums}
 .payroll-prime-field span{color:var(--color-text-muted);font-size:.78rem}
 .payroll-not-applicable{color:var(--color-text-muted)}
+.payroll-scope{margin:0 0 14px;padding:12px 14px;border-radius:12px;background:var(--color-surface-sunken);line-height:1.55}
+.payroll-scope strong{display:block}
+.payroll-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+.payroll-table tr.is-dirty{background:#fff8dc}
+.payroll-prime-detail{display:block;margin-top:4px;color:var(--color-text-muted);font-size:.72rem;line-height:1.4}
+.payroll-row-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
+.btn-small{padding:6px 9px;font-size:.75rem}
 @media (max-width:720px){.recap-centres-table{width:max-content;min-width:var(--recap-min-width)}
 .recap-centres-table .employee-col,.recap-centres-table .employee-cell{width:150px}
 .recap-centres-table .centre-col,.recap-centres-table .centre-heading{width:58px}

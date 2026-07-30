@@ -216,7 +216,7 @@ class TempsTravailComplementaireTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(str(self.julie.id), response.json()["preparation"])
 
-    def test_prime_estimee_inclut_reunion_et_preparation(self):
+    def test_prime_ne_proratise_pas_les_activites_sans_semaine_reelle(self):
         reunion = ActiviteTravailComplementaire.objects.create(
             type="reunion", intitule="Réunion paie", date=datetime.date(2026, 6, 20)
         )
@@ -242,7 +242,10 @@ class TempsTravailComplementaireTests(ConnexionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["total_jour_avec_prime"], "65.00")
-        self.assertEqual(response.json()["total_paie_estime"], "260.00")
+        # La paie de base conserve les 4 jours. La prime ne porte que sur
+        # l'affectation datée dans une semaine sélectionnée : la réunion est
+        # hors période et la préparation n'a pas de date hebdomadaire.
+        self.assertEqual(response.json()["total_paie_estime"], "245.00")
 
     def test_page_planning_contient_le_nouvel_onglet(self):
         response = self.client.get(reverse("planning"))

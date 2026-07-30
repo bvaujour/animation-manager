@@ -48,7 +48,7 @@ from .views_planning import (
     api_planning_auto,
     api_planning_plage,
 )
-from .views_reporting import api_document_detail, api_documents, api_prime_journaliere, api_recapitulatif, export_recapitulatif_paie_pdf
+from .views_reporting import api_document_detail, api_documents, api_prime_journaliere, api_recapitulatif, export_recapitulatif_excel, export_recapitulatif_paie_pdf
 from .views_staff import api_animateur_detail, api_animateurs, api_disponibilite_detail, api_disponibilites
 from .views_worktime import api_conflits_reunion, api_preparation_travail, api_reunion_detail, api_reunions, api_temps_travail
 

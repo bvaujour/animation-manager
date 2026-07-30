@@ -143,6 +143,7 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
 
         jours_comptes = set(jours_totaux)
         jours_reunion = Decimal("0")
+        dates_reunions_comptabilisees = []
         for reunion in reunions:
             participation = next(
                 (item for item in reunion.participations.all() if item.animateur_id == animateur.id),
@@ -153,6 +154,8 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
             if reunion.date in jours_comptes and not participation.autoriser_double_comptage:
                 continue
             jours_reunion += participation.nombre_jours
+            if reunion.date:
+                dates_reunions_comptabilisees.append(reunion.date.isoformat())
             if not participation.autoriser_double_comptage:
                 jours_comptes.add(reunion.date)
 
@@ -175,6 +178,7 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
             "jours_affectation": _nombre_json(jours_affectation),
             "jours_reunion": _nombre_json(jours_reunion),
             "jours_preparation": _nombre_json(jours_preparation),
+            "dates_reunions_comptabilisees": dates_reunions_comptabilisees,
             "jours_travailles": _nombre_json(total_jours),
             "paie_totale": _montant(total_jours, animateur.paie_jour),
             "centres": ventilation,
@@ -201,6 +205,35 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
         "total_paie_connue": str(total_paie.quantize(Decimal("0.01"))),
         "tarifs_manquants": sum(1 for ligne in lignes if ligne["paie_jour"] is None),
     }
+
+
+def _euros_pdf(valeur):
+    if valeur is None:
+        return "Manquant"
+    return f"{Decimal(valeur):,.2f} €".replace(",", " ").replace(".", ",")
+
+
+def lignes_recapitulatif_paie(recap):
+    """Construit le même tableau agrégé que l'onglet Totaux par animateur."""
+    lignes = [["Animateur", "Affectations", "Réunions", "Télétravail / préparation", "Total jours", "Paie par jour", "Paie de base", "Primes", "Paie estimée totale"]]
+    for animateur in recap["animateurs"]:
+        lignes.append([
+            f'{animateur["prenom"]} {animateur["nom"]}',
+            str(animateur["jours_affectation"]), str(animateur["jours_reunion"]),
+            str(animateur["jours_preparation"]), str(animateur["jours_travailles"]),
+            _euros_pdf(animateur["paie_jour"]), _euros_pdf(animateur["paie_base"]),
+            _euros_pdf(animateur["montant_primes"]), _euros_pdf(animateur["total_paie_estime"]),
+        ])
+    lignes.append([
+        "TOTAL",
+        str(sum(Decimal(str(item["jours_affectation"])) for item in recap["animateurs"])),
+        str(sum(Decimal(str(item["jours_reunion"])) for item in recap["animateurs"])),
+        str(sum(Decimal(str(item["jours_preparation"])) for item in recap["animateurs"])),
+        str(recap["total_jours"]), "", _euros_pdf(recap["total_paie_connue"]),
+        _euros_pdf(recap.get("total_primes", 0)),
+        _euros_pdf(recap.get("total_paie_avec_primes", recap["total_paie_connue"])),
+    ])
+    return lignes
 
 
 def generer_recapitulatif_paie_pdf(recap, debut: datetime.date, fin: datetime.date) -> bytes:
@@ -234,25 +267,9 @@ def generer_recapitulatif_paie_pdf(recap, debut: datetime.date, fin: datetime.da
         spaceAfter=5 * mm,
     )
 
-    def euros(valeur):
-        if valeur is None:
-            return "Tarif manquant"
-        return f"{Decimal(valeur):,.2f} €".replace(",", " ").replace(".", ",")
+    lignes = lignes_recapitulatif_paie(recap)
 
-    lignes = [["Animateur", "Affectations", "Réunions", "Télétravail / préparation", "Total", "Tarif / jour", "Paie totale"]]
-    for animateur in recap["animateurs"]:
-        lignes.append([
-            f'{animateur["prenom"]} {animateur["nom"]}',
-            str(animateur["jours_affectation"]),
-            str(animateur["jours_reunion"]),
-            str(animateur["jours_preparation"]),
-            str(animateur["jours_travailles"]),
-            euros(animateur["paie_jour"]),
-            euros(animateur["paie_totale"]),
-        ])
-    lignes.append(["TOTAL", "", "", "", str(recap["total_jours"]), "", euros(recap["total_paie_connue"])])
-
-    tableau = Table(lignes, colWidths=[55 * mm, 25 * mm, 22 * mm, 43 * mm, 20 * mm, 32 * mm, 35 * mm], repeatRows=1)
+    tableau = Table(lignes, colWidths=[43 * mm, 20 * mm, 18 * mm, 34 * mm, 19 * mm, 28 * mm, 29 * mm, 25 * mm, 35 * mm], repeatRows=1)
     tableau.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F6F54")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -265,6 +282,7 @@ def generer_recapitulatif_paie_pdf(recap, debut: datetime.date, fin: datetime.da
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 7),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
     ]))
 
     contenu = [
@@ -288,3 +306,75 @@ def generer_recapitulatif_paie_pdf(recap, debut: datetime.date, fin: datetime.da
     document.build(contenu)
     output.seek(0)
     return output.read()
+
+
+def generer_recapitulatif_excel(recap, debut: datetime.date, fin: datetime.date) -> bytes:
+    """Crée un classeur exploitable reprenant les totaux et la ventilation par centre."""
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    classeur = Workbook()
+    feuille = classeur.active
+    feuille.title = "Totaux paie"
+    entetes = [
+        "Animateur", "Affectations", "Réunions", "Télétravail / préparation",
+        "Total jours", "Paie par jour", "Paie de base", "Primes", "Paie estimée totale",
+    ]
+    feuille.append([f"Récapitulatif du {debut:%d/%m/%Y} au {fin:%d/%m/%Y}"])
+    feuille.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(entetes))
+    feuille.append(entetes)
+    for animateur in recap["animateurs"]:
+        feuille.append([
+            f'{animateur["prenom"]} {animateur["nom"]}',
+            animateur["jours_affectation"], animateur["jours_reunion"],
+            animateur["jours_preparation"], animateur["jours_travailles"],
+            float(animateur["paie_jour"]) if animateur["paie_jour"] is not None else None,
+            float(animateur["paie_base"]) if animateur["paie_base"] is not None else None,
+            float(animateur["montant_primes"]),
+            float(animateur["total_paie_estime"]) if animateur["total_paie_estime"] is not None else None,
+        ])
+    feuille.append([
+        "TOTAL",
+        float(sum(Decimal(str(item["jours_affectation"])) for item in recap["animateurs"])),
+        float(sum(Decimal(str(item["jours_reunion"])) for item in recap["animateurs"])),
+        float(sum(Decimal(str(item["jours_preparation"])) for item in recap["animateurs"])),
+        float(Decimal(str(recap["total_jours"]))), None,
+        float(Decimal(recap["total_paie_connue"])),
+        float(Decimal(str(recap.get("total_primes", 0)))),
+        float(Decimal(str(recap.get("total_paie_avec_primes", recap["total_paie_connue"])))),
+    ])
+
+    centres = classeur.create_sheet("Détail par centre")
+    centres.append(["Animateur", *[centre["nom"] for centre in recap["centres"]], "Total jours"])
+    for animateur in recap["animateurs"]:
+        jours_par_centre = {item["centre_id"]: item["jours_travailles"] for item in animateur["centres"]}
+        centres.append([
+            f'{animateur["prenom"]} {animateur["nom"]}',
+            *[jours_par_centre.get(centre["id"], 0) for centre in recap["centres"]],
+            animateur["jours_travailles"],
+        ])
+
+    vert = "1F6F54"
+    for onglet, ligne_entete in ((feuille, 2), (centres, 1)):
+        onglet.freeze_panes = f"A{ligne_entete + 1}"
+        onglet.auto_filter.ref = f"A{ligne_entete}:{get_column_letter(onglet.max_column)}{onglet.max_row}"
+        for cellule in onglet[ligne_entete]:
+            cellule.fill = PatternFill("solid", fgColor=vert)
+            cellule.font = Font(color="FFFFFF", bold=True)
+            cellule.alignment = Alignment(horizontal="center", vertical="center")
+        for colonne in range(1, onglet.max_column + 1):
+            valeurs = [str(onglet.cell(ligne, colonne).value or "") for ligne in range(1, onglet.max_row + 1)]
+            onglet.column_dimensions[get_column_letter(colonne)].width = min(34, max(12, max(map(len, valeurs)) + 2))
+    feuille["A1"].font = Font(size=15, bold=True, color=vert)
+    feuille["A1"].alignment = Alignment(horizontal="center")
+    for ligne in range(3, feuille.max_row + 1):
+        for colonne in range(6, 10):
+            feuille.cell(ligne, colonne).number_format = '#,##0.00 [$€-fr-FR]'
+    for cellule in feuille[feuille.max_row]:
+        cellule.font = Font(bold=True)
+
+    sortie = BytesIO()
+    classeur.save(sortie)
+    return sortie.getvalue()

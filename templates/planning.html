@@ -7,7 +7,7 @@
 {% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
-<link rel="stylesheet" href="{% static 'css/planning.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/planning.css' %}?v={{ asset_version }}-panel-3">
 {% endblock %}
 {% block content %}
 {% include "partials/_page_header.html" with title="Planning" header_class="planning-page-header planning-page-header-compact" container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
@@ -32,6 +32,9 @@
     </aside>
     <section id="calendars-section">
         <div class="planning-top-controls">
+            <button id="animateurs-panel-toggle" class="animateurs-panel-toggle" type="button" aria-expanded="true" aria-controls="animateurs-panel" aria-label="Réduire la liste des animateurs" title="Réduire la liste des animateurs">
+                <span class="animateurs-panel-toggle-icon" aria-hidden="true">‹</span>
+            </button>
             <details id="planning-centres-toolbar" class="planning-centres-dropdown">
                 <summary class="planning-centres-dropdown-toggle" aria-label="Choisir les centres à afficher">
                     <span class="planning-centres-dropdown-icon" aria-hidden="true">▦</span>
@@ -256,7 +259,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/planning/utils.js' %}?v={{ asset_version }}"></script>
-<script src="{% static 'js/planning.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'js/planning.js' %}?v={{ asset_version }}-panel-3"></script>
 <script src="{% static 'js/effectifs-excel.js' %}?v={{ asset_version }}"></script>
 <script src="{% static 'js/temps-travail.js' %}?v={{ asset_version }}"></script>
 {% endblock %}

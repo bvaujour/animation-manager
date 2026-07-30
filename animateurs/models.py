@@ -984,6 +984,11 @@ class PrimeJournalierePeriode(models.Model):
     def __str__(self):
         return f"{self.animateur} — {self.periode} : {self.montant} € / jour"
 
+    def clean(self):
+        super().clean()
+        if self.montant is not None and self.montant != self.montant.to_integral_value():
+            raise ValidationError({"montant": "La prime doit être indiquée en euros entiers."})
+
 
 class HoraireAffectationJour(models.Model):
     """Horaires propres à un animateur pour une journée de son affectation."""

@@ -9,10 +9,10 @@ from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from .models import Document, PeriodeScolaire, PrimeJournalierePeriode
+from .models import Animateur, Document, PeriodeScolaire, PrimeJournalierePeriode
 from .services.dates import parse_to_aware_datetime
 from .services.documents import valider_periode_document
-from .services.recapitulatif import generer_recapitulatif, generer_recapitulatif_paie_pdf
+from .services.recapitulatif import generer_recapitulatif, generer_recapitulatif_excel, generer_recapitulatif_paie_pdf
 from .services.serializers import document_to_dict
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ def _selection_recapitulatif(request):
 
 
 def _ajouter_preparation_paie(recap, periodes):
-    """Complète les totaux existants sans recalculer les jours travaillés."""
+    """Enrichit le calcul commun avec les primes propres à chaque semaine."""
 
     periode_ids = [periode.id for periode in periodes]
     animateur_ids = [ligne["id"] for ligne in recap["animateurs"]]
@@ -94,16 +94,54 @@ def _ajouter_preparation_paie(recap, periodes):
         prime = montants[0] if montants and not prime_variable else None
         base = Decimal(ligne["paie_jour"]) if ligne["paie_jour"] is not None else None
         total_jour = base + prime if base is not None and prime is not None else None
-        total_estime = (
-            Decimal(str(ligne["jours_travailles"])) * total_jour
-            if total_jour is not None
-            else None
-        )
+        jours_affectation = {item["date"] for item in ligne["jours"]}
+        dates_reunions = ligne.get("dates_reunions_comptabilisees", [])
+        jours_par_periode = []
+        for periode, montant_periode in zip(periodes, montants):
+            jours = sum(
+                1 for jour in jours_affectation
+                if periode.debut.isoformat() <= jour <= periode.fin.isoformat()
+            )
+            jours += sum(
+                1 for jour in dates_reunions
+                if periode.debut.isoformat() <= jour <= periode.fin.isoformat()
+            )
+            jours_par_periode.append(Decimal(jours))
+        # Une préparation sans date ne peut être rattachée sans ambiguïté
+        # que lorsque la sélection contient une seule semaine. Elle n'est
+        # surtout jamais divisée artificiellement entre plusieurs semaines.
+        if len(periodes) == 1:
+            jours_par_periode[0] += Decimal(str(ligne["jours_preparation"]))
+        details = []
+        total_prime = Decimal("0.00")
+        for periode, montant_periode, jours in zip(periodes, montants, jours_par_periode):
+            prime_semaine = (jours * montant_periode).quantize(Decimal("0.01"))
+            total_prime += prime_semaine
+            details.append({
+                "periode_id": periode.id,
+                "libelle": periode.libelle_avec_annee,
+                "jours": int(jours) if jours == jours.to_integral_value() else float(jours),
+                "prime_jour": str(montant_periode.quantize(Decimal("0.01"))),
+                "montant_prime": str(prime_semaine),
+            })
+        paie_base = Decimal(ligne["paie_totale"]) if ligne["paie_totale"] is not None else None
+        total_estime = paie_base + total_prime if paie_base is not None else None
         ligne["prime_jour"] = str(prime.quantize(Decimal("0.01"))) if prime is not None else None
         ligne["prime_jour_variable"] = prime_variable
         ligne["total_jour_avec_prime"] = str(total_jour.quantize(Decimal("0.01"))) if total_jour is not None else None
         ligne["total_paie_estime"] = str(total_estime.quantize(Decimal("0.01"))) if total_estime is not None else None
+        ligne["paie_base"] = ligne["paie_totale"]
+        ligne["montant_primes"] = str(total_prime.quantize(Decimal("0.01")))
+        ligne["primes_detail"] = details
         ligne["prime_modifiable"] = bool(periode_ids and base is not None)
+
+    recap["total_primes"] = str(sum(
+        (Decimal(ligne["montant_primes"]) for ligne in recap["animateurs"]), Decimal("0.00")
+    ).quantize(Decimal("0.01")))
+    recap["total_paie_avec_primes"] = str(sum(
+        (Decimal(ligne["total_paie_estime"]) for ligne in recap["animateurs"] if ligne["total_paie_estime"] is not None),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01")))
 
 
 def api_recapitulatif(request):
@@ -134,31 +172,77 @@ def api_recapitulatif(request):
             "animateurs": recap["animateurs"],
             "total_jours": recap["total_jours"],
             "total_paie_connue": recap["total_paie_connue"],
+            "total_primes": recap["total_primes"],
+            "total_paie_avec_primes": recap["total_paie_avec_primes"],
             "tarifs_manquants": recap["tarifs_manquants"],
         }
     )
 
 
-@require_http_methods(["PUT"])
+@require_http_methods(["PUT", "DELETE"])
 def api_prime_journaliere(request):
-    """Enregistre une prime sur toutes les semaines actuellement sélectionnées."""
+    """Valide en une transaction plusieurs primes sur plusieurs semaines."""
 
     try:
         payload = json.loads(request.body or "{}")
-        animateur_id = int(payload.get("animateur_id"))
         periode_ids = list(dict.fromkeys(int(item) for item in payload.get("periode_ids", [])))
-        montant = Decimal(str(payload.get("montant"))).quantize(Decimal("0.01"))
-    except (TypeError, ValueError, InvalidOperation, json.JSONDecodeError):
+    except (AttributeError, TypeError, ValueError, InvalidOperation, json.JSONDecodeError):
         return JsonResponse({"error": "La prime doit être un montant numérique valide."}, status=400)
-
-    if not montant.is_finite() or montant < 0 or montant > 7:
-        return JsonResponse({"error": "La prime journalière doit être comprise entre 0 € et 7 €."}, status=400)
     if not periode_ids:
         return JsonResponse({"error": "Sélectionne au moins une période."}, status=400)
 
     periodes = list(PeriodeScolaire.objects.filter(pk__in=periode_ids).order_by("debut", "ordre", "nom"))
     if len(periodes) != len(periode_ids):
         return JsonResponse({"error": "Une période sélectionnée est introuvable."}, status=400)
+
+    if request.method == "DELETE":
+        try:
+            animateur_id = int(payload.get("animateur_id"))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "L'animateur transmis est invalide."}, status=400)
+        if not Animateur.objects.filter(pk=animateur_id).exists():
+            return JsonResponse({"error": "L'animateur transmis est introuvable."}, status=400)
+        jours_selectionnes = {
+            periode.debut + datetime.timedelta(days=decalage)
+            for periode in periodes for decalage in range((periode.fin - periode.debut).days + 1)
+        }
+        debut = timezone.make_aware(datetime.datetime.combine(min(jours_selectionnes), datetime.time.min))
+        fin = timezone.make_aware(datetime.datetime.combine(max(jours_selectionnes) + datetime.timedelta(days=1), datetime.time.min))
+        with transaction.atomic():
+            deleted_count, _ = PrimeJournalierePeriode.objects.filter(
+                animateur_id=animateur_id, periode_id__in=periode_ids
+            ).delete()
+        recap = generer_recapitulatif(debut, fin, jours_selectionnes=jours_selectionnes, periode_ids=periode_ids)
+        _ajouter_preparation_paie(recap, periodes)
+        ligne = next((item for item in recap["animateurs"] if item["id"] == animateur_id), None)
+        return JsonResponse({
+            "success": True, "deleted_count": deleted_count,
+            "animateur_id": animateur_id, "periode_ids": periode_ids,
+            "animateur": ligne,
+            "total_primes": recap["total_primes"],
+            "total_paie_avec_primes": recap["total_paie_avec_primes"],
+        })
+
+    primes_payload = payload.get("primes")
+    if primes_payload is None:  # compatibilité avec l'ancien client unitaire
+        primes_payload = [{"animateur_id": payload.get("animateur_id"), "montant": payload.get("montant")}]
+    if not isinstance(primes_payload, list) or not primes_payload:
+        return JsonResponse({"error": "Aucune prime modifiée n'a été transmise."}, status=400)
+    primes_validees = []
+    try:
+        for item in primes_payload:
+            animateur_id = int(item.get("animateur_id"))
+            montant = Decimal(str(item.get("montant")))
+            if not montant.is_finite() or montant != montant.to_integral_value():
+                return JsonResponse({"error": "La prime doit être indiquée en euros entiers."}, status=400)
+            if montant < 0 or montant > 7:
+                raise ValueError
+            primes_validees.append((animateur_id, montant))
+    except (AttributeError, TypeError, ValueError, InvalidOperation):
+        return JsonResponse({"error": "Chaque prime doit être comprise entre 0 € et 7 €."}, status=400)
+    animateur_ids = [item[0] for item in primes_validees]
+    if len(set(animateur_ids)) != len(animateur_ids) or Animateur.objects.filter(pk__in=animateur_ids).count() != len(animateur_ids):
+        return JsonResponse({"error": "Un animateur transmis est invalide ou présent deux fois."}, status=400)
 
     jours_selectionnes = {
         periode.debut + datetime.timedelta(days=decalage)
@@ -175,31 +259,37 @@ def api_prime_journaliere(request):
         jours_selectionnes=jours_selectionnes,
         periode_ids=periode_ids,
     )
-    ligne = next((item for item in recap["animateurs"] if item["id"] == animateur_id), None)
-    if ligne is None:
-        return JsonResponse({"error": "Cet animateur n’a aucun jour travaillé sur cette période."}, status=400)
-    if ligne["paie_jour"] is None:
-        return JsonResponse({"error": "Renseigne d’abord le tarif journalier dans la fiche animateur."}, status=400)
+    lignes = {item["id"]: item for item in recap["animateurs"]}
+    if any(animateur_id not in lignes for animateur_id in animateur_ids):
+        return JsonResponse({"error": "Un animateur n'a aucun jour travaillé sur cette sélection."}, status=400)
+    if any(lignes[animateur_id]["paie_jour"] is None for animateur_id in animateur_ids):
+        return JsonResponse({"error": "Renseigne d'abord tous les tarifs journaliers concernés."}, status=400)
 
     with transaction.atomic():
-        for periode in periodes:
-            if montant == 0:
-                PrimeJournalierePeriode.objects.filter(animateur_id=animateur_id, periode=periode).delete()
-            else:
-                PrimeJournalierePeriode.objects.update_or_create(
-                    animateur_id=animateur_id,
-                    periode=periode,
-                    defaults={"montant": montant},
-                )
+        for animateur_id, montant in primes_validees:
+            for periode in periodes:
+                if montant == 0:
+                    PrimeJournalierePeriode.objects.filter(animateur_id=animateur_id, periode=periode).delete()
+                else:
+                    PrimeJournalierePeriode.objects.update_or_create(
+                        animateur_id=animateur_id, periode=periode, defaults={"montant": montant}
+                    )
 
     _ajouter_preparation_paie(recap, periodes)
-    ligne = next(item for item in recap["animateurs"] if item["id"] == animateur_id)
-    return JsonResponse({
-        "animateur_id": animateur_id,
-        "prime_jour": ligne["prime_jour"],
-        "total_jour_avec_prime": ligne["total_jour_avec_prime"],
-        "total_paie_estime": ligne["total_paie_estime"],
-    })
+    resultat = {
+        "semaines_modifiees": len(periodes),
+        "animateurs_modifies": len(primes_validees),
+        "animateurs": [lignes[animateur_id] for animateur_id in animateur_ids],
+    }
+    if len(primes_validees) == 1:  # réponse historique conservée
+        ligne = lignes[animateur_ids[0]]
+        resultat.update({
+            "animateur_id": animateur_ids[0],
+            "prime_jour": ligne["prime_jour"],
+            "total_jour_avec_prime": ligne["total_jour_avec_prime"],
+            "total_paie_estime": ligne["total_paie_estime"],
+        })
+    return JsonResponse(resultat)
 
 
 def export_recapitulatif_paie_pdf(request):
@@ -214,11 +304,35 @@ def export_recapitulatif_paie_pdf(request):
         jours_selectionnes=jours_selectionnes,
         periode_ids=[periode.id for periode in periodes],
     )
+    _ajouter_preparation_paie(recap, periodes)
     dernier_jour = fin.date() - datetime.timedelta(days=1)
     contenu = generer_recapitulatif_paie_pdf(recap, debut.date(), dernier_jour)
     response = HttpResponse(contenu, content_type="application/pdf")
     response["Content-Disposition"] = (
         f'attachment; filename="recapitulatif_paie_{debut:%Y%m%d}_{dernier_jour:%Y%m%d}.pdf"'
+    )
+    return response
+
+
+def export_recapitulatif_excel(request):
+    """Télécharge le récapitulatif sélectionné sous forme de classeur Excel."""
+
+    debut, fin, jours_selectionnes, periodes, erreur = _selection_recapitulatif(request)
+    if erreur:
+        return HttpResponse(erreur, status=400, content_type="text/plain; charset=utf-8")
+    recap = generer_recapitulatif(
+        debut, fin, jours_selectionnes=jours_selectionnes,
+        periode_ids=[periode.id for periode in periodes],
+    )
+    _ajouter_preparation_paie(recap, periodes)
+    dernier_jour = fin.date() - datetime.timedelta(days=1)
+    contenu = generer_recapitulatif_excel(recap, debut.date(), dernier_jour)
+    response = HttpResponse(
+        contenu,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="recapitulatif_{debut:%Y%m%d}_{dernier_jour:%Y%m%d}.xlsx"'
     )
     return response
 

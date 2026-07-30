@@ -14,6 +14,9 @@
             {% if action_id and action_label %}
                 <button class="btn {{ action_class|default:'btn-primary' }}" id="{{ action_id }}" type="button">{{ action_label }}</button>
             {% endif %}
+            {% if second_action_id and second_action_label %}
+                <button class="btn {{ second_action_class|default:'btn-primary' }}" id="{{ second_action_id }}" type="button">{{ second_action_label }}</button>
+            {% endif %}
         </div>
     {% endif %}
 </header>

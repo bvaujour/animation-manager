@@ -8,7 +8,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const tabButtons = Array.from(document.querySelectorAll("[data-recap-tab]"));
     const tabPanels = Array.from(document.querySelectorAll("[data-recap-panel]"));
     const pdfButton = document.getElementById("btn-recap-pdf");
+    const excelButton = document.getElementById("btn-recap-excel");
+    const scopeRoot = document.getElementById("recap-payroll-scope");
+    const savePrimesButton = document.getElementById("save-payroll-primes");
+    const cancelPrimesButton = document.getElementById("cancel-payroll-primes");
     let selectedPeriods = [];
+    let dirtyPrimes = new Map();
+    let lastData = null;
 
     const currencyFormatter = new Intl.NumberFormat("fr-FR", {
         style: "currency",
@@ -20,6 +26,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (value === null || value === undefined || value === "") return null;
         const number = Number(value);
         return Number.isFinite(number) ? currencyFormatter.format(number) : null;
+    }
+
+    function formatDailyPrime(value) {
+        if (value === null || value === undefined || value === "") return null;
+        const number = Number(value);
+        return Number.isInteger(number) ? `${number} €` : null;
     }
 
     function textColorFor(background) {
@@ -111,17 +123,50 @@ document.addEventListener("DOMContentLoaded", () => {
                 <td class="jours-cell">${animateur.jours_preparation}</td>
                 <td class="jours-cell">${animateur.jours_travailles}</td>
                 <td class="jours-cell">${formatMoney(animateur.paie_jour) || "Non renseigné"}</td>
-                <td class="jours-cell">${formatMoney(animateur.paie_totale) || missingRateCell()}</td>
+                <td class="jours-cell">${formatMoney(animateur.paie_base) || missingRateCell()}</td>
+                <td class="jours-cell">${formatMoney(animateur.montant_primes)}</td>
+                <td class="jours-cell">${formatMoney(animateur.total_paie_estime) || missingRateCell()}</td>
             </tr>`).join("");
         const warning = data.tarifs_manquants
             ? `<span class="recap-warning">${data.tarifs_manquants} tarif${data.tarifs_manquants > 1 ? "s" : ""} journalier${data.tarifs_manquants > 1 ? "s" : ""} manquant${data.tarifs_manquants > 1 ? "s" : ""}</span>`
             : "";
         employeesRoot.innerHTML = `
             <table class="recap-table">
-                <thead><tr><th>Animateur</th><th>Affectations</th><th>Réunions</th><th>Télétravail / préparation</th><th>Total jours</th><th>Paie par jour</th><th>Paie totale</th></tr></thead>
+                <thead><tr><th>Animateur</th><th>Affectations</th><th>Réunions</th><th>Télétravail / préparation</th><th>Total jours</th><th>Paie par jour</th><th>Paie de base</th><th>Primes</th><th>Paie estimée totale</th></tr></thead>
                 <tbody>${rows}</tbody>
-                <tfoot><tr><th>Total ${warning}</th><th></th><th></th><th></th><th class="jours-cell">${data.total_jours}</th><th></th><th class="jours-cell">${formatMoney(data.total_paie_connue)}</th></tr></tfoot>
+                <tfoot><tr><th>Total ${warning}</th><th></th><th></th><th></th><th class="jours-cell">${data.total_jours}</th><th></th><th class="jours-cell">${formatMoney(data.total_paie_connue)}</th><th class="jours-cell">${formatMoney(data.total_primes)}</th><th class="jours-cell">${formatMoney(data.total_paie_avec_primes)}</th></tr></tfoot>
             </table>`;
+    }
+
+    function updateScope() {
+        const groups = new Map();
+        selectedPeriods.forEach((period) => {
+            const name = String(period.nom || period.libelle || "Période").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "");
+            if (!groups.has(name)) groups.set(name, []);
+            groups.get(name).push(period);
+        });
+        scopeRoot.innerHTML = `<strong>${selectedPeriods.length} semaine${selectedPeriods.length > 1 ? "s" : ""} concernée${selectedPeriods.length > 1 ? "s" : ""}</strong>${[...groups.entries()].map(([name, periods]) => {
+            const allCount = (picker?.periods || []).filter((period) => String(period.nom || period.libelle || "").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "") === name).length;
+            return periods.length === allCount
+                ? `Toute la période ${escapeHtml(name)}`
+                : `${escapeHtml(name)} : ${periods.map((p) => escapeHtml(String(p.nom || p.libelle).replace(/^.*Semaine/i, "semaine"))).join(", ")}`;
+        }).join("<br>")}`;
+        savePrimesButton.textContent = `Valider les primes pour ${selectedPeriods.length} semaine${selectedPeriods.length > 1 ? "s" : ""}`;
+    }
+
+    function updateDirtyActions() {
+        const dirty = dirtyPrimes.size > 0;
+        savePrimesButton.disabled = !dirty;
+        cancelPrimesButton.disabled = !dirty;
+    }
+
+    function deletionScopeLabel() {
+        if (!selectedPeriods.length) return "les semaines sélectionnées";
+        const vacationName = String(selectedPeriods[0].nom || selectedPeriods[0].libelle || "").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "");
+        const sameVacation = selectedPeriods.every((period) => String(period.nom || period.libelle || "").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "") === vacationName);
+        const allCount = (picker?.periods || []).filter((period) => String(period.nom || period.libelle || "").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "") === vacationName).length;
+        if (sameVacation && selectedPeriods.length === allCount) return `toute la période ${vacationName}`;
+        return selectedPeriods.length > 1 ? `les ${selectedPeriods.length} semaines sélectionnées` : "la semaine sélectionnée";
     }
 
     function displayPayroll(data) {
@@ -133,7 +178,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const hasRate = animateur.paie_jour !== null;
             const mixedPrime = animateur.prime_jour_variable;
             const primeField = hasRate
-                ? `<div class="payroll-prime-field"><input type="number" min="0" max="7" step="0.01" inputmode="decimal" value="${mixedPrime ? "" : escapeHtml(animateur.prime_jour || "0.00")}" placeholder="${mixedPrime ? "Variable" : "0,00"}" data-payroll-prime data-previous-value="${mixedPrime ? "" : escapeHtml(animateur.prime_jour || "0.00")}" aria-label="Prime journalière de ${escapeHtml(animateur.prenom)} ${escapeHtml(animateur.nom)}"><span>€</span></div>`
+                ? `<div class="payroll-prime-field"><input type="number" min="0" max="7" step="1" inputmode="numeric" value="${mixedPrime ? "" : escapeHtml(String(Number(animateur.prime_jour || 0)))}" placeholder="${mixedPrime ? "Montants différents" : "Aucune prime"}" data-payroll-prime data-previous-value="${mixedPrime ? "" : escapeHtml(String(Number(animateur.prime_jour || 0)))}" aria-label="Prime journalière de ${escapeHtml(animateur.prenom)} ${escapeHtml(animateur.nom)}"><span>€</span></div><span class="payroll-prime-detail">${mixedPrime ? "Montants différents<br>" : ""}${(animateur.primes_detail || []).map((item) => `${escapeHtml(item.libelle)} : ${formatDailyPrime(item.prime_jour)}`).join("<br>")}</span>`
                 : '<span class="payroll-not-applicable" title="Le tarif journalier doit être renseigné dans la fiche animateur">—</span>';
             return `
                 <tr data-payroll-animateur="${animateur.id}">
@@ -143,11 +188,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     <td class="payroll-prime">${primeField}</td>
                     <td class="payroll-money" data-payroll-daily>${formatMoney(animateur.total_jour_avec_prime) || "—"}</td>
                     <td class="payroll-money payroll-estimated" data-payroll-total>${formatMoney(animateur.total_paie_estime) || "—"}</td>
+                    <td class="payroll-row-actions"><button type="button" class="btn btn-secondary btn-small" data-cancel-prime disabled>Annuler la modification</button><button type="button" class="btn btn-danger btn-small" data-delete-prime>Supprimer la prime</button></td>
                 </tr>`;
         }).join("");
         payrollRoot.innerHTML = `
             <table class="recap-table payroll-table">
-                <thead><tr><th>Animateur</th><th>Jours travaillés</th><th>Base/jour</th><th>Prime/jour</th><th>Total/jour</th><th>Total estimé</th></tr></thead>
+                <thead><tr><th>Animateur</th><th>Jours travaillés</th><th>Base/jour</th><th>Prime/jour</th><th>Total/jour</th><th>Total estimé</th><th>Actions</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
     }
@@ -181,6 +227,7 @@ document.addEventListener("DOMContentLoaded", () => {
         legendRoot.innerHTML = "";
         try {
             const data = await apiFetch(url);
+            lastData = data;
             displayCentres(data);
             displayEmployees(data);
             displayPayroll(data);
@@ -194,49 +241,85 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function selectPeriods(periods) {
+        if (dirtyPrimes.size && !window.confirm("Des primes modifiées ne sont pas enregistrées. Abandonner ces modifications ?")) {
+            picker?.setSelectedIds(selectedPeriods.map((period) => period.id));
+            return;
+        }
+        dirtyPrimes.clear();
+        updateDirtyActions();
         selectedPeriods = periods || [];
+        updateScope();
         if (pdfButton) pdfButton.disabled = selectedPeriods.length === 0;
+        if (excelButton) excelButton.disabled = selectedPeriods.length === 0;
         loadRecap();
     }
 
     tabButtons.forEach((button) => button.addEventListener("click", () => openTab(button.dataset.recapTab)));
-    payrollRoot.addEventListener("change", async (event) => {
+    payrollRoot.addEventListener("input", (event) => {
         const input = event.target.closest("[data-payroll-prime]");
         if (!input) return;
         const row = input.closest("[data-payroll-animateur]");
-        const previousValue = input.dataset.previousValue;
-        const amount = Number(input.value);
-        if (input.value.trim() === "" || !Number.isFinite(amount) || amount < 0 || amount > 7) {
-            input.value = previousValue;
-            afficherToast("La prime journalière doit être comprise entre 0 € et 7 €.", true);
-            return;
+        const id = Number(row.dataset.payrollAnimateur);
+        if (input.value.trim() === input.dataset.previousValue) dirtyPrimes.delete(id);
+        else dirtyPrimes.set(id, input.value);
+        row.classList.toggle("is-dirty", dirtyPrimes.has(id));
+        row.querySelector("[data-cancel-prime]").disabled = !dirtyPrimes.has(id);
+        updateDirtyActions();
+    });
+    payrollRoot.addEventListener("click", async (event) => {
+        const row = event.target.closest("[data-payroll-animateur]");
+        if (!row) return;
+        const id = Number(row.dataset.payrollAnimateur);
+        if (event.target.closest("[data-cancel-prime]")) {
+            const input = row.querySelector("[data-payroll-prime]");
+            input.value = input.dataset.previousValue;
+            dirtyPrimes.delete(id); row.classList.remove("is-dirty");
+            event.target.disabled = true; updateDirtyActions(); return;
         }
-        input.disabled = true;
+        const deleteButton = event.target.closest("[data-delete-prime]");
+        if (!deleteButton) return;
+        const employee = row.querySelector(".payroll-employee").textContent.trim().replace(/\s+/g, " ");
+        const scope = deletionScopeLabel();
+        if (!window.confirm(`Supprimer la prime de ${employee} pour ${scope} ?`)) return;
+        deleteButton.disabled = true;
         try {
-            const result = await apiFetch("/api/recapitulatif/prime-journaliere/", {
-                method: "PUT",
-                body: JSON.stringify({
-                    animateur_id: Number(row.dataset.payrollAnimateur),
-                    periode_ids: selectedPeriods.map((period) => period.id),
-                    montant: input.value,
-                }),
-            });
-            input.value = result.prime_jour;
-            input.dataset.previousValue = result.prime_jour;
-            row.querySelector("[data-payroll-daily]").textContent = formatMoney(result.total_jour_avec_prime) || "—";
-            row.querySelector("[data-payroll-total]").textContent = formatMoney(result.total_paie_estime) || "—";
-            afficherToast("Prime journalière enregistrée.");
+            await apiFetch("/api/recapitulatif/prime-journaliere/", {method: "DELETE", body: JSON.stringify({animateur_id: id, periode_ids: selectedPeriods.map((period) => period.id)})});
+            dirtyPrimes.delete(id); updateDirtyActions(); await loadRecap();
+            afficherToast(`La prime de ${employee} a été supprimée pour les semaines sélectionnées.`);
         } catch (error) {
-            input.value = previousValue;
-            afficherToast(erreurMessage(error, "La prime n’a pas pu être enregistrée."), true);
-        } finally {
-            input.disabled = false;
+            deleteButton.disabled = false; afficherToast(erreurMessage(error, "La prime n'a pas pu être supprimée."), true);
         }
     });
+    savePrimesButton?.addEventListener("click", async () => {
+        const primes = [...dirtyPrimes.entries()].map(([animateur_id, montant]) => ({animateur_id, montant}));
+        if (primes.some((item) => item.montant.trim() === "")) {
+            afficherToast("Un champ vidé n'efface aucune prime : saisissez explicitement 0 € pour la supprimer.", true); return;
+        }
+        savePrimesButton.disabled = true;
+        try {
+            await apiFetch("/api/recapitulatif/prime-journaliere/", {
+                method: "PUT",
+                body: JSON.stringify({
+                    periode_ids: selectedPeriods.map((period) => period.id),
+                    primes,
+                }),
+            });
+            dirtyPrimes.clear(); updateDirtyActions(); await loadRecap();
+            afficherToast(`Les primes ont été enregistrées pour ${selectedPeriods.length} semaine${selectedPeriods.length > 1 ? "s" : ""}.`);
+        } catch (error) {
+            afficherToast(erreurMessage(error, "Les primes n'ont pas pu être enregistrées."), true); updateDirtyActions();
+        }
+    });
+    cancelPrimesButton?.addEventListener("click", () => { dirtyPrimes.clear(); updateDirtyActions(); if (lastData) displayPayroll(lastData); });
     pdfButton?.addEventListener("click", () => {
         const ids = selectedPeriods.map((period) => period.id);
         if (!ids.length) return;
         window.location.assign(`/recapitulatif/export-paie.pdf?periode_ids=${ids.join(",")}`);
+    });
+    excelButton?.addEventListener("click", () => {
+        const ids = selectedPeriods.map((period) => period.id);
+        if (!ids.length) return;
+        window.location.assign(`/recapitulatif/export.xlsx?periode_ids=${ids.join(",")}`);
     });
     pickerRoot?.addEventListener("week-picker:change", (event) => selectPeriods(event.detail?.periods));
     pickerRoot?.addEventListener("week-picker:ready", (event) => {
