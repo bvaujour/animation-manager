@@ -953,3 +953,34 @@ body.app-body .app-page-header--week-only .app-page-title{white-space:normal !im
     margin: 0 !important;
   }
 }
+
+/* ========================================================================== 
+   Correction finale de l'espace supérieur
+   La navigation actuelle utilise uniquement le rail latéral sur ordinateur
+   et la barre basse dans l'espace animateur sur téléphone. Aucune barre fixe
+   n'occupe le haut de l'écran : il ne faut donc plus réserver 56 px.
+   ========================================================================== */
+body.app-body:not(.login-body) {
+  padding-top: 0 !important;
+}
+
+/* Espacement discret sur ordinateur, sans coller le contenu au navigateur. */
+@media (min-width: 801px) {
+  body.app-body:not(.login-body) > .page-shell,
+  body.app-body:not(.login-body) > main.page-shell {
+    padding-top: 6px !important;
+  }
+}
+
+/* Sur téléphone, le contenu commence presque immédiatement en haut. */
+@media (max-width: 800px) {
+  body.app-body:not(.login-body) > .page-shell,
+  body.app-body:not(.login-body) > main.page-shell {
+    padding-top: 2px !important;
+  }
+
+  body.animator-space-body.app-body:not(.login-body) > .page-shell,
+  body.animator-space-body.app-body:not(.login-body) > main.page-shell {
+    padding-top: 2px !important;
+  }
+}
