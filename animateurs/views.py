@@ -40,6 +40,7 @@ from .views_pages import (
     mon_profil,
     planning,
     recapitulatif,
+    temps_travail,
 )
 from .views_planning import (
     api_affectation_create,
@@ -109,4 +110,5 @@ __all__ = [
     "mon_profil",
     "planning",
     "recapitulatif",
+    "temps_travail",
 ]

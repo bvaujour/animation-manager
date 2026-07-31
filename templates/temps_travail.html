@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Temps de travail{% endblock %}
+{% block body_class %}page-temps-travail{% endblock %}
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/temps-travail.css' %}?v={{ asset_version }}">
+{% endblock %}
+{% block content %}
+{% include "partials/_page_header.html" with title="Temps de travail" picker_mode="none" header_class="worktime-page-header" %}
+<main id="worktime-panel" class="worktime-page">
+    <section class="ui-card worktime-toolbar" aria-label="Périodes à comptabiliser">
+        <div>
+            <h2>Périodes concernées</h2>
+            <p>Sélectionnez les semaines auxquelles rattacher les réunions et les journées de préparation.</p>
+        </div>
+        {% include "partials/_week_picker.html" with picker_id="worktime-periods" picker_class="worktime-period-picker" mode="multiple" placeholder="Choisir une ou plusieurs semaines" clear_id="worktime-periods-clear" %}
+    </section>
+
+    <div id="worktime-empty" class="ui-card empty-note">Choisissez une ou plusieurs semaines.</div>
+    <div id="worktime-content" class="worktime-content" hidden>
+        <section class="ui-card worktime-card worktime-summary-card" aria-labelledby="worktime-summary-title">
+            <div class="worktime-section-heading">
+                <div>
+                    <h2 id="worktime-summary-title">Jours comptabilisés</h2>
+                    <p>Ces valeurs sont calculées avec les mêmes règles que le récapitulatif de paie.</p>
+                </div>
+                <div class="worktime-summary-actions">
+                    <a class="btn btn-secondary" href="{% url 'recapitulatif' %}">Ouvrir le récapitulatif</a>
+                    <button id="worktime-summary-toggle" class="worktime-collapse-toggle" type="button" aria-expanded="true" aria-controls="worktime-summary" title="Réduire le récapitulatif">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M6.7 14.7a1 1 0 0 1 0-1.4l4.6-4.6a1 1 0 0 1 1.4 0l4.6 4.6a1 1 0 1 1-1.4 1.4L12 10.8l-3.9 3.9a1 1 0 0 1-1.4 0Z"/>
+                        </svg>
+                        <span class="sr-only">Réduire le récapitulatif</span>
+                    </button>
+                </div>
+            </div>
+            <div id="worktime-summary" class="worktime-summary"></div>
+        </section>
+
+        <section class="ui-card worktime-card" aria-labelledby="worktime-meetings-title">
+            <div class="worktime-section-heading">
+                <div><h2 id="worktime-meetings-title">Réunions</h2><p>Une journée par participant, sauf doublon avec une affectation.</p></div>
+                <button id="worktime-add-meeting" class="btn btn-primary" type="button">Ajouter une réunion</button>
+            </div>
+            <div id="worktime-meetings-list" class="worktime-meetings-list"></div>
+        </section>
+
+        <section class="ui-card worktime-card" aria-labelledby="worktime-preparation-title">
+            <div class="worktime-section-heading">
+                <div><h2 id="worktime-preparation-title">Télétravail / préparation</h2><p>Journées sans date ajoutées au total de paie.</p></div>
+            </div>
+            <form id="worktime-preparation-form" class="worktime-preparation-form">
+                <div class="field worktime-preparation-animator">
+                    <label for="worktime-preparation-search">Animateur</label>
+                    <input id="worktime-preparation-search" type="search" role="combobox" autocomplete="off" aria-autocomplete="list" aria-expanded="false" aria-controls="worktime-preparation-suggestions" placeholder="Rechercher un nom ou un prénom" required>
+                    <input id="worktime-preparation-animator-id" type="hidden">
+                    <div id="worktime-preparation-suggestions" class="worktime-preparation-suggestions" role="listbox" hidden></div>
+                </div>
+                <label class="field"><span>Nombre de jours</span><input name="nombre_jours" type="number" min="0.5" max="366" step="0.5" inputmode="decimal" required></label>
+                <label class="field"><span>Remarque facultative</span><input name="remarque" type="text" maxlength="240" placeholder="Ex. préparation séjour"></label>
+                <div class="worktime-preparation-form-actions">
+                    <button id="worktime-preparation-submit" class="btn btn-primary" type="submit">Ajouter</button>
+                    <button id="worktime-preparation-cancel" class="btn btn-secondary" type="button" hidden>Annuler</button>
+                </div>
+                <p id="worktime-preparation-error" class="form-error" hidden></p>
+            </form>
+            <div id="worktime-preparation-table" class="worktime-table-wrap"></div>
+        </section>
+    </div>
+</main>
+
+<div class="modal-backdrop" id="worktime-meeting-modal" hidden>
+    <div class="modal-box worktime-meeting-modal" role="dialog" aria-modal="true" aria-labelledby="worktime-meeting-title">
+        <div class="modal-header"><h2 id="worktime-meeting-title">Ajouter une réunion</h2><button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button></div>
+        <form id="worktime-meeting-form" class="modal-body">
+            <div class="worktime-meeting-fields">
+                <label class="field"><span>Intitulé</span><input name="intitule" maxlength="160" required></label>
+                <label class="field"><span>Date</span><input name="date" type="date" required></label>
+                <label class="field worktime-meeting-note"><span>Remarque facultative</span><textarea name="remarque" rows="2"></textarea></label>
+            </div>
+            <p id="worktime-meeting-date-info" class="worktime-date-info" hidden></p>
+            <div class="worktime-participants-heading"><strong>Participants</strong><button id="worktime-toggle-participants" class="btn-link" type="button">Tout sélectionner</button></div>
+            <div id="worktime-participants" class="worktime-participants"></div>
+            <p id="worktime-meeting-error" class="form-error" hidden></p>
+            <div class="modal-actions"><button class="btn btn-secondary" data-modal-close type="button">Annuler</button><button class="btn btn-primary" type="submit">Enregistrer</button></div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/temps-travail.js' %}?v={{ asset_version }}"></script>
+{% endblock %}

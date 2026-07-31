@@ -195,6 +195,18 @@ class TempsTravailComplementaireTests(ConnexionTestCase):
         self.assertEqual(julie["jours_travailles"], 4)
         self.assertEqual(julie["paie_totale"], "240.00")
 
+        temps_travail = self.client.get(
+            reverse("api_temps_travail"), {"periode_ids": self._selection()}
+        ).json()
+        synthese_julie = next(
+            item for item in temps_travail["synthese"]
+            if item["animateur_id"] == self.julie.id
+        )
+        self.assertEqual(synthese_julie["jours_reunion"], 1)
+        self.assertEqual(synthese_julie["jours_preparation"], 2)
+        self.assertEqual(synthese_julie["jours_complementaires"], 3)
+        self.assertEqual(synthese_julie["jours_total_recapitulatif"], 4)
+
         reunion.delete()
         julie = next(item for item in self.client.get(url).json()["animateurs"] if item["id"] == self.julie.id)
         self.assertEqual(julie["jours_reunion"], 0)
@@ -247,12 +259,18 @@ class TempsTravailComplementaireTests(ConnexionTestCase):
         # hors période et la préparation n'a pas de date hebdomadaire.
         self.assertEqual(response.json()["total_paie_estime"], "245.00")
 
-    def test_page_planning_contient_le_nouvel_onglet(self):
-        response = self.client.get(reverse("planning"))
+    def test_temps_travail_est_une_page_autonome(self):
+        planning = self.client.get(reverse("planning"))
+        self.assertNotContains(planning, 'id="worktime-panel"')
+        self.assertNotContains(planning, 'data-planning-mode="temps-travail"')
 
+        response = self.client.get(reverse("temps_travail"))
         self.assertContains(response, "Temps de travail")
         self.assertContains(response, 'id="worktime-periods"')
         self.assertContains(response, 'data-week-picker-mode="multiple"')
         self.assertContains(response, 'id="worktime-preparation-form"')
+        self.assertContains(response, 'id="worktime-summary"')
         self.assertContains(response, 'placeholder="Rechercher un nom ou un prénom"')
         self.assertNotContains(response, 'id="worktime-save-preparation"')
+        legacy = self.client.get(reverse("planning") + "?mode=temps-travail")
+        self.assertRedirects(legacy, reverse("temps_travail"))

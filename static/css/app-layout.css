@@ -1,5 +1,5 @@
 /* ========================================================================== 
-   Animation Manager — système visuel sobre
+   Animation Manager — layout stable et identité visuelle commune
    Cette feuille est chargée en dernier et constitue la source de vérité pour
    l'apparence commune, le rail PC et la barre mobile.
    ========================================================================== */
@@ -12,25 +12,25 @@
   --site-page-gap: 8px;
   --site-card-gap: 7px;
   --site-card-padding: 10px;
-  --site-card-radius: 5px;
+  --site-card-radius: 12px;
   --site-control-height: 32px;
-  --site-nav-bg: #263844;
-  --site-nav-hover: #344b59;
-  --site-nav-active-bg: #f5f6f7;
-  --site-nav-active-fg: #263844;
-  --site-nav-fg: #e2e7ea;
-  --site-nav-border: #1c2d36;
-  --site-line: #d6dbe0;
-  --site-line-strong: #c3c9cf;
-  --site-soft: #f7f8f9;
-  --site-soft-strong: #eef1f3;
-  --site-ink: #20262d;
-  --site-muted: #66717d;
-  --site-primary: #344c5a;
-  --site-primary-hover: #273b47;
-  --site-success: #3f7457;
-  --site-warning: #8a682e;
-  --site-danger: #a63d40;
+  --site-nav-bg: #24385f;
+  --site-nav-hover: #315083;
+  --site-nav-active-bg: #5d78d6;
+  --site-nav-active-fg: #ffffff;
+  --site-nav-fg: #eaf0ff;
+  --site-nav-border: #1b2d4d;
+  --site-line: #d7e0ed;
+  --site-line-strong: #bdc9dc;
+  --site-soft: #f3f6fb;
+  --site-soft-strong: #e9eff8;
+  --site-ink: #1f2937;
+  --site-muted: #64748b;
+  --site-primary: #4969c7;
+  --site-primary-hover: #3653a5;
+  --site-success: #32805a;
+  --site-warning: #9a6a1f;
+  --site-danger: #c14d5c;
 }
 
 /* --------------------------------------------------------------------------
@@ -59,7 +59,7 @@ body.app-body :is(h1, h2, h3, h4, h5, h6) {
   letter-spacing: 0 !important;
 }
 
-body.app-body :is(p, small, span, label, input, select, textarea, button, a) {
+body.app-body :is(p, small, span, label, input, select, textarea, button, a):not(.material-symbols-outlined) {
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -100,7 +100,7 @@ body.login-body > .app-rail {
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: transparent !important;
   color: var(--site-nav-fg) !important;
   box-shadow: none !important;
@@ -436,7 +436,7 @@ body.app-body :is(.btn, button.btn),
 body.app-body button:not(.app-rail-link):not(.modal-close):not([class*="toggle"]),
 body.app-body :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
   min-height: var(--site-control-height) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   box-shadow: none !important;
   font-size: .78rem !important;
 }
@@ -540,7 +540,7 @@ body.app-body :is(
   min-height: 0 !important;
   padding: 2px 5px !important;
   border: 1px solid var(--site-line-strong) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: var(--site-soft) !important;
   color: var(--site-muted) !important;
   box-shadow: none !important;
@@ -606,7 +606,7 @@ body.app-body :is(.tab-btn, .planning-tab).active {
 
 body.app-body :is(.table-wrap, .recap-table-wrap, .worktime-table-wrap, .period-table-wrap) {
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff;
   box-shadow: none !important;
   overflow: auto;
@@ -637,7 +637,7 @@ body.app-body :is(.entity-row, .team-row, .superuser-row, .period-saved-row, .an
   min-height: 0 !important;
   padding: 6px 7px !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff !important;
   box-shadow: none !important;
 }
@@ -675,7 +675,7 @@ body.app-body :is(.modal-header, .modal-body, .modal-footer, .modal-actions) {
 }
 
 body.app-body :is(.ui-alert, .admin-message, .form-error:not(:empty)) {
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   box-shadow: none !important;
 }
 
@@ -727,7 +727,7 @@ body.dashboard-body .dashboard-kpi-icon {
   height: 27px !important;
   grid-row: 1 / span 2;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
 }
 
 body.dashboard-body .dashboard-kpi-icon svg {
@@ -813,7 +813,7 @@ body.dashboard-body .dashboard-centre-row {
   padding: 6px !important;
   border: 1px solid var(--site-line) !important;
   border-left: 3px solid var(--centre-color, var(--site-primary)) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff !important;
   color: var(--site-ink) !important;
   box-shadow: none !important;
@@ -831,7 +831,7 @@ body.dashboard-body .dashboard-centre-logo {
   width: 28px !important;
   height: 28px !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: var(--site-soft) !important;
   color: var(--site-ink) !important;
   font-size: .62rem !important;
@@ -869,7 +869,7 @@ body.dashboard-body .dashboard-status {
   min-height: 0 !important;
   padding: 2px 5px !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   font-size: .59rem !important;
   font-weight: 700 !important;
   white-space: nowrap;
@@ -894,7 +894,7 @@ body.dashboard-body .dashboard-action {
   gap: 5px !important;
   padding: 6px 7px !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff !important;
   color: var(--site-ink) !important;
   text-align: left !important;
@@ -930,7 +930,7 @@ body.dashboard-body .dashboard-alert-row {
   padding: 6px !important;
   border: 1px solid var(--site-line) !important;
   border-left: 3px solid var(--alert-color, var(--site-warning)) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff !important;
 }
 
@@ -960,7 +960,7 @@ body.dashboard-body .dashboard-alert-copy small {
 body.dashboard-body .dashboard-alert-action {
   padding: 3px 6px !important;
   border: 1px solid var(--site-line-strong) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff !important;
   color: var(--site-ink) !important;
   font-size: .6rem !important;
@@ -970,7 +970,7 @@ body.dashboard-body .dashboard-card-footer-link {
   min-height: 29px !important;
   margin: 0 7px 7px !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: var(--site-soft) !important;
   color: var(--site-primary) !important;
   font-size: .64rem !important;
@@ -988,7 +988,7 @@ body.dashboard-body .dashboard-week-day {
   padding: 6px !important;
   border: 1px solid var(--site-line) !important;
   border-top: 2px solid var(--day-color, var(--site-primary)) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff !important;
   box-shadow: none !important;
 }
@@ -1036,7 +1036,7 @@ body.animator-dashboard-body .animator-week-navigation {
   margin: 0 0 var(--site-page-gap) !important;
   padding: 3px !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff !important;
   box-shadow: none !important;
 }
@@ -1047,7 +1047,7 @@ body.animator-dashboard-body .animator-week-navigation > a {
   display: grid !important;
   place-items: center !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: var(--site-soft) !important;
   color: var(--site-ink) !important;
   text-decoration: none !important;
@@ -1113,7 +1113,7 @@ body.app-body .fc :is(.fc-scrollgrid, .fc-theme-standard td, .fc-theme-standard 
 }
 
 body.app-body .fc .fc-scrollgrid {
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff !important;
   box-shadow: none !important;
   overflow: hidden;
@@ -1152,7 +1152,7 @@ body.app-body .calendar-sortie-marker {
   min-width: 17px !important;
   height: 17px !important;
   padding: 0 3px !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   box-shadow: none !important;
 }
 
@@ -1178,7 +1178,7 @@ body.app-body .document-card :is(.document-icon, .document-card-icon, .document-
   min-width: 28px !important;
   height: 28px !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: var(--site-soft) !important;
   color: var(--site-primary) !important;
 }
@@ -1262,7 +1262,7 @@ body.app-body :is(.sortie-card, .sortie-block) {
 
 body.app-body .sortie-status,
 body.app-body [class*="sortie-status--"] {
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   box-shadow: none !important;
 }
 
@@ -1292,7 +1292,7 @@ body.login-body .login-card {
 }
 
 body.login-body .brand-mark {
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: var(--site-primary) !important;
   color: #fff !important;
 }
@@ -1357,7 +1357,7 @@ body.login-body .login-intro {
     padding: 6px var(--site-desktop-gutter) 14px !important;
   }
 
-  body.page-planning > :is(.planning-page-header, .planning-tabs, #layout, #worktime-panel) {
+  body.page-planning > :is(.planning-page-header, .planning-tabs, #layout) {
     width: calc(100% - (var(--site-desktop-gutter) * 2)) !important;
     max-width: none !important;
     margin-left: var(--site-desktop-gutter) !important;
@@ -1611,7 +1611,7 @@ body.login-body .login-intro {
     font-size: .54rem !important;
   }
 
-  body.page-planning > :is(.planning-page-header, .planning-tabs, #layout, #worktime-panel) {
+  body.page-planning > :is(.planning-page-header, .planning-tabs, #layout) {
     width: calc(100% - (var(--site-mobile-gutter) * 2)) !important;
     max-width: none !important;
     margin-left: var(--site-mobile-gutter) !important;
@@ -1749,7 +1749,7 @@ body.app-body :is(.week-picker, .week-navigation) {
   margin: 0 !important;
   padding: 2px !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: #fff !important;
   box-shadow: none !important;
 }
@@ -1824,7 +1824,7 @@ body.app-body .week-picker__heading {
 
 /* Cases à cocher : géométrie simple, sans pastille décorative. */
 body.app-body :is(.checkbox-chip, .form-check, .group-period-option, .group-weekday-option span) {
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   box-shadow: none !important;
 }
 
@@ -1949,7 +1949,7 @@ body.animator-dashboard-body .animator-week-navigation--header {
   margin: 0 !important;
   padding: 2px !important;
   border: 1px solid var(--site-line) !important;
-  border-radius: 3px !important;
+  border-radius: 9px !important;
   background: var(--site-soft) !important;
 }
 
@@ -1974,8 +1974,7 @@ body.page-employes.has-fixed-page-header > .employees-workspace {
   min-height: 0 !important;
 }
 
-body.page-planning.has-fixed-page-header #layout.planning-workspace,
-body.page-planning.has-fixed-page-header #worktime-panel {
+body.page-planning.has-fixed-page-header #layout.planning-workspace {
   height: calc(100dvh - var(--app-fixed-header-height, 0px) - 45px) !important;
 }
 
@@ -2021,8 +2020,7 @@ body.page-planning.has-fixed-page-header #worktime-panel {
     grid-row: 2;
   }
 
-  body.page-planning.has-fixed-page-header #layout.planning-workspace,
-  body.page-planning.has-fixed-page-header #worktime-panel {
+  body.page-planning.has-fixed-page-header #layout.planning-workspace {
     height: calc(100dvh - var(--app-fixed-header-height, 0px) - var(--site-mobile-nav-size) - 40px) !important;
   }
 }
@@ -2094,8 +2092,7 @@ body.app-body :is(.tabs:not(.app-page-tabs), .employee-detail-tabs) > button {
   line-height: 1.15 !important;
 }
 
-body.page-planning.has-fixed-page-tabs #layout.planning-workspace,
-body.page-planning.has-fixed-page-tabs #worktime-panel {
+body.page-planning.has-fixed-page-tabs #layout.planning-workspace {
   height: calc(100dvh - var(--app-fixed-stack-height, 0px) - 8px) !important;
 }
 
@@ -2126,8 +2123,7 @@ body.page-planning.has-fixed-page-tabs #worktime-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
-  body.page-planning.has-fixed-page-tabs #layout.planning-workspace,
-  body.page-planning.has-fixed-page-tabs #worktime-panel {
+  body.page-planning.has-fixed-page-tabs #layout.planning-workspace {
     height: calc(100dvh - var(--app-fixed-stack-height, 0px) - var(--site-mobile-nav-size) - 6px) !important;
   }
 }
@@ -2876,3 +2872,590 @@ body.page-planning.has-fixed-page-tabs #worktime-panel {
   }
 }
 
+
+
+/*
+ * Animation Manager — identité visuelle arrondie et colorée.
+ * Cette feuille ne pilote pas le layout. Elle centralise uniquement l’aspect
+ * visuel afin de ne pas réintroduire de chevauchements entre PC et mobile.
+ */
+
+:root {
+  --theme-primary: #4969c7;
+  --theme-primary-strong: #3653a5;
+  --theme-secondary: #2f8d83;
+  --theme-secondary-soft: #e7f6f3;
+  --theme-blue-soft: #eaf2ff;
+  --theme-purple-soft: #f0edff;
+  --theme-amber-soft: #fff6dc;
+  --theme-red-soft: #fdecef;
+  --theme-green-soft: #eaf7f1;
+  --theme-surface: #ffffff;
+  --theme-page: #f3f6fb;
+  --theme-border: #d7e0ed;
+  --theme-border-strong: #bdc9dc;
+  --theme-text: #1f2937;
+  --theme-muted: #64748b;
+  --theme-radius-sm: 8px;
+  --theme-radius: 12px;
+  --theme-radius-lg: 15px;
+  --theme-shadow: 0 2px 8px rgba(31, 41, 55, .07);
+  --theme-shadow-hover: 0 6px 18px rgba(31, 41, 55, .10);
+}
+
+html,
+body {
+  background: var(--theme-page) !important;
+  color: var(--theme-text) !important;
+}
+
+/* Les noms Material Symbols doivent rester des pictogrammes. */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined" !important;
+  font-weight: normal !important;
+  font-style: normal !important;
+  line-height: 1 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  white-space: nowrap !important;
+  word-wrap: normal !important;
+  direction: ltr !important;
+  -webkit-font-feature-settings: "liga" !important;
+  -webkit-font-smoothing: antialiased !important;
+}
+
+/* Navigation : même identité à gauche et en bas. */
+.app-rail {
+  background: #24385f !important;
+  border-color: #1b2d4d !important;
+}
+
+.app-rail-link {
+  border-radius: 10px !important;
+  color: #eaf0ff !important;
+}
+
+.app-rail-link:hover {
+  background: #315083 !important;
+  color: #fff !important;
+}
+
+.app-rail-link.active {
+  background: #5d78d6 !important;
+  color: #fff !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18) !important;
+}
+
+.app-rail-avatar {
+  border-color: rgba(255, 255, 255, .42) !important;
+  background: rgba(255, 255, 255, .10) !important;
+}
+
+/* En-têtes : sobres, lisibles, sans modifier leur position. */
+body.app-body :is(
+  .app-page-header,
+  .page-header,
+  .dashboard-header,
+  .administration-header,
+  .recap-header,
+  .documents-heading,
+  .sorties-header,
+  .employees-page-header,
+  .employee-detail-header,
+  .planning-page-header,
+  .animator-mobile-header,
+  .sortie-detail-header
+) {
+  color: var(--theme-text) !important;
+  background: rgba(255, 255, 255, .97) !important;
+  border-color: var(--theme-border) !important;
+  box-shadow: 0 1px 0 rgba(31, 41, 55, .03) !important;
+}
+
+body.app-body :is(
+  .app-page-header,
+  .page-header,
+  .dashboard-header,
+  .administration-header,
+  .recap-header,
+  .documents-heading,
+  .sorties-header,
+  .employees-page-header,
+  .employee-detail-header,
+  .planning-page-header,
+  .animator-mobile-header,
+  .sortie-detail-header
+) h1 {
+  color: var(--theme-text) !important;
+}
+
+/* Cartes et panneaux communs. */
+body.app-body :is(
+  .ui-card,
+  .dashboard-card,
+  .dashboard-kpi,
+  .animator-panel,
+  .animator-dashboard-calendar,
+  .home-planning-section,
+  .administration-section,
+  .admin-card,
+  .recap-card,
+  .fiche-card,
+  .employee-editor,
+  .employees-sidebar,
+  .gestion-form,
+  .lieu-card,
+  .periode-library,
+  .period-create-panel,
+  .gestion-documents,
+  .sortie-card,
+  .sortie-block,
+  .document-card,
+  .disponibilites-card,
+  .availability-period,
+  .material-request-card,
+  .material-form-card,
+  .email-selection-card,
+  .email-compose-card,
+  .email-template-editor,
+  .email-templates-list
+) {
+  border: 1px solid var(--theme-border) !important;
+  border-radius: var(--theme-radius-lg) !important;
+  background: var(--theme-surface) !important;
+  box-shadow: var(--theme-shadow) !important;
+}
+
+body.app-body :is(
+  .ui-card,
+  .dashboard-card,
+  .animator-panel,
+  .admin-card,
+  .document-card,
+  .sortie-card,
+  .material-request-card
+):hover {
+  border-color: var(--theme-border-strong) !important;
+}
+
+/* Titres internes : une légère couleur, sans gros bandeau décoratif. */
+body.app-body :is(
+  .ui-section-heading,
+  .section-heading,
+  .section-heading-compact,
+  .section-header,
+  .dashboard-card-header,
+  .animator-panel-header,
+  .administration-section-heading,
+  .admin-compact-heading,
+  .fiche-section-heading,
+  .gestion-section-heading,
+  .card-header,
+  .material-list-heading,
+  .recap-section-heading
+) {
+  border-color: #e7edf6 !important;
+}
+
+body.app-body :is(
+  .ui-section-heading,
+  .section-heading,
+  .dashboard-card-header,
+  .animator-panel-header,
+  .administration-section-heading,
+  .fiche-section-heading,
+  .gestion-section-heading
+) :is(h1, h2, h3) {
+  color: #273b65 !important;
+}
+
+/* Boutons et champs. */
+body.app-body :is(.btn, button.btn) {
+  border-radius: 9px !important;
+  box-shadow: none !important;
+}
+
+body.app-body :is(.btn-primary, .btn-accent) {
+  border-color: var(--theme-primary) !important;
+  background: var(--theme-primary) !important;
+  color: #fff !important;
+}
+
+body.app-body :is(.btn-primary, .btn-accent):hover {
+  border-color: var(--theme-primary-strong) !important;
+  background: var(--theme-primary-strong) !important;
+}
+
+body.app-body :is(.btn-secondary, .btn-ghost, .btn-link) {
+  border-color: var(--theme-border) !important;
+  background: #f7f9fc !important;
+  color: #42516c !important;
+}
+
+body.app-body :is(.btn-secondary, .btn-ghost, .btn-link):hover {
+  border-color: #bfcbe0 !important;
+  background: var(--theme-blue-soft) !important;
+  color: #304d92 !important;
+}
+
+body.app-body :is(.btn-danger, .btn-danger-ghost) {
+  color: #a33f4c !important;
+}
+
+body.app-body .btn-danger-solid {
+  border-color: #c14d5c !important;
+  background: #c14d5c !important;
+  color: #fff !important;
+}
+
+body.app-body :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+) {
+  border-color: var(--theme-border) !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  box-shadow: inset 0 1px 2px rgba(31, 41, 55, .025) !important;
+}
+
+body.app-body :is(input, select, textarea):focus {
+  border-color: #7891dd !important;
+  outline: 3px solid rgba(73, 105, 199, .12) !important;
+}
+
+body.app-body :is(.checkbox-chip, .checkbox-option, .email-checkbox-option) {
+  border-color: var(--theme-border) !important;
+  border-radius: 999px !important;
+  background: #f7f9fc !important;
+}
+
+body.app-body :is(.checkbox-chip, .checkbox-option, .email-checkbox-option):has(input:checked) {
+  border-color: #9cafeb !important;
+  background: var(--theme-blue-soft) !important;
+  color: #304d92 !important;
+}
+
+/* Onglets : colorés mais sans changer leur géométrie calculée. */
+body.app-body :is(.tabs, .app-page-tabs, .admin-tabs, .documents-tabs, .recap-tabs, .planning-tabs) {
+  border-color: var(--theme-border) !important;
+  border-radius: 11px !important;
+  background: #eaf0f8 !important;
+}
+
+body.app-body :is(.tab-btn, .planning-tab) {
+  border-radius: 8px !important;
+  color: #5e6c83 !important;
+}
+
+body.app-body :is(.tab-btn, .planning-tab):hover {
+  background: rgba(255, 255, 255, .65) !important;
+  color: #3653a5 !important;
+}
+
+body.app-body :is(.tab-btn, .planning-tab).active {
+  border-color: transparent !important;
+  background: #fff !important;
+  color: #3653a5 !important;
+  box-shadow: 0 1px 4px rgba(31, 41, 55, .08) !important;
+}
+
+/* Tableaux, listes et accordéons. */
+body.app-body :is(.table-wrap, .recap-table-wrap, .worktime-table-wrap, .period-table-wrap) {
+  border-color: var(--theme-border) !important;
+  border-radius: var(--theme-radius) !important;
+  background: #fff !important;
+}
+
+body.app-body :is(table, .data-table, .period-table) th {
+  background: #edf2f8 !important;
+  color: #45536a !important;
+}
+
+body.app-body :is(table, .data-table, .period-table) tbody tr:hover td {
+  background: #f6f9fd !important;
+}
+
+body.app-body :is(.entity-row, .team-row, .superuser-row, .period-saved-row, .animator-list-item) {
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: #f8fafd !important;
+}
+
+body.app-body :is(.entity-row, .team-row, .superuser-row, .period-saved-row, .animator-list-item):hover {
+  border-color: #bfcbe0 !important;
+  background: var(--theme-blue-soft) !important;
+}
+
+body.app-body :is(details, .period-year-accordion, .group-period-fieldset) {
+  border-color: var(--theme-border) !important;
+  border-radius: 11px !important;
+  background: #fff !important;
+}
+
+body.app-body details > summary {
+  background: #f2f5fa !important;
+}
+
+/* Tableau de bord direction. */
+body.dashboard-body .dashboard-kpi:nth-child(4n + 1) { background: var(--theme-blue-soft) !important; }
+body.dashboard-body .dashboard-kpi:nth-child(4n + 2) { background: var(--theme-green-soft) !important; }
+body.dashboard-body .dashboard-kpi:nth-child(4n + 3) { background: var(--theme-purple-soft) !important; }
+body.dashboard-body .dashboard-kpi:nth-child(4n + 4) { background: var(--theme-amber-soft) !important; }
+
+body.dashboard-body .dashboard-kpi-icon,
+body.dashboard-body .dashboard-card-icon {
+  border-radius: 10px !important;
+  background: rgba(73, 105, 199, .12) !important;
+  color: var(--theme-primary) !important;
+}
+
+body.dashboard-body .dashboard-centre-row,
+body.dashboard-body .dashboard-alert-row,
+body.dashboard-body .dashboard-action,
+body.dashboard-body .dashboard-week-day {
+  border-color: var(--theme-border) !important;
+  border-radius: 11px !important;
+  background: #f8fafd !important;
+}
+
+body.dashboard-body .dashboard-centre-row:hover,
+body.dashboard-body .dashboard-action:hover {
+  border-color: #bfcbe0 !important;
+  background: var(--theme-blue-soft) !important;
+}
+
+body.dashboard-body .dashboard-status--ok { background: var(--theme-green-soft) !important; color: #286748 !important; border-color: #add8c3 !important; }
+body.dashboard-body .dashboard-status--info { background: var(--theme-blue-soft) !important; color: #315f99 !important; border-color: #b7cdec !important; }
+body.dashboard-body .dashboard-status--vigilance { background: var(--theme-amber-soft) !important; color: #815b19 !important; border-color: #e5cd89 !important; }
+body.dashboard-body .dashboard-status--danger { background: var(--theme-red-soft) !important; color: #9b3947 !important; border-color: #e6b4bd !important; }
+
+/* Tableau de bord animateur. */
+body.animator-dashboard-body .animator-week-navigation,
+body.animator-dashboard-body .animator-week-navigation--header {
+  border-color: #cdd8eb !important;
+  border-radius: 11px !important;
+  background: #edf2fa !important;
+}
+
+body.animator-dashboard-body .animator-panel:nth-of-type(3n + 1) .animator-panel-header { background: var(--theme-blue-soft) !important; }
+body.animator-dashboard-body .animator-panel:nth-of-type(3n + 2) .animator-panel-header { background: var(--theme-green-soft) !important; }
+body.animator-dashboard-body .animator-panel:nth-of-type(3n) .animator-panel-header { background: var(--theme-purple-soft) !important; }
+
+body.animator-dashboard-body .animator-panel-header {
+  border-radius: 14px 14px 0 0 !important;
+}
+
+body.animator-dashboard-body .animator-list-item {
+  background: #f8fafd !important;
+}
+
+/* Salariés et Planning : listes identiques et faciles à repérer. */
+body.app-body :is(.salarie-directory-item, .animator-card, .staff-card, .employee-card) {
+  border-color: var(--theme-border) !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 3px rgba(31, 41, 55, .04) !important;
+}
+
+body.app-body :is(.salarie-directory-item, .animator-card, .staff-card, .employee-card):hover {
+  border-color: #aebee0 !important;
+  background: #f5f8fd !important;
+}
+
+body.app-body :is(.salarie-directory-item, .animator-card, .staff-card, .employee-card).active,
+body.app-body :is(.salarie-directory-item, .animator-card, .staff-card, .employee-card).selected {
+  border-color: #7891dd !important;
+  background: var(--theme-blue-soft) !important;
+}
+
+/* Calendriers. */
+body.app-body .fc {
+  border-radius: var(--theme-radius) !important;
+  background: #fff !important;
+}
+
+body.app-body .fc .fc-scrollgrid {
+  border-color: var(--theme-border) !important;
+  border-radius: var(--theme-radius) !important;
+  overflow: hidden !important;
+}
+
+body.app-body .fc .fc-col-header-cell {
+  background: #edf2f8 !important;
+}
+
+body.app-body .fc .fc-day-today:not(.has-calendar-sortie) {
+  background: #eef4ff !important;
+}
+
+body.app-body .fc .fc-event {
+  border-radius: 7px !important;
+}
+
+body.app-body .calendar-sortie-marker {
+  border-radius: 999px !important;
+  background: #f59e0b !important;
+  color: #fff !important;
+}
+
+/* Documents, sorties et demandes. */
+body.app-body .document-card :is(.document-icon, .document-card-icon, .document-file-type) {
+  border-radius: 10px !important;
+  background: var(--theme-purple-soft) !important;
+  color: #5b4ab6 !important;
+}
+
+body.app-body .document-card:hover {
+  border-color: #bfb5e7 !important;
+  box-shadow: var(--theme-shadow-hover) !important;
+}
+
+body.app-body :is(.status-badge, .place-badge, .sortie-status, [class*="sortie-status--"]) {
+  border-radius: 999px !important;
+}
+
+body.app-body .material-request-card[data-status="validee"],
+body.app-body .material-request-card.is-validated {
+  border-color: #add8c3 !important;
+  background: var(--theme-green-soft) !important;
+}
+
+/* Modales et messages. */
+body.app-body :is(.modal-box, dialog, .sortie-dialog, .planning-effectifs-modal) {
+  border-color: var(--theme-border) !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+  box-shadow: 0 18px 50px rgba(31, 41, 55, .18) !important;
+}
+
+body.app-body .modal-header {
+  background: #f4f7fb !important;
+}
+
+body.app-body :is(.ui-alert, .admin-message, .form-error:not(:empty)) {
+  border-radius: 10px !important;
+}
+
+body.app-body .ui-alert--success { background: var(--theme-green-soft) !important; border-color: #add8c3 !important; color: #286748 !important; }
+body.app-body .ui-alert--danger { background: var(--theme-red-soft) !important; border-color: #e6b4bd !important; color: #9b3947 !important; }
+
+/* Connexion. */
+body.login-body .login-page {
+  background: #edf2fa !important;
+}
+
+body.login-body .login-card {
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 18px !important;
+  background: #fff !important;
+  box-shadow: 0 16px 42px rgba(31, 41, 55, .12) !important;
+}
+
+body.login-body .brand-mark {
+  border-radius: 12px !important;
+  background: var(--theme-primary) !important;
+  box-shadow: none !important;
+}
+
+/* Mobile : uniquement des ajustements visuels, sans changer le layout. */
+@media (max-width: 799px) {
+  body.app-body :is(
+    .ui-card,
+    .dashboard-card,
+    .dashboard-kpi,
+    .animator-panel,
+    .administration-section,
+    .recap-card,
+    .fiche-card,
+    .document-card,
+    .sortie-card,
+    .material-request-card
+  ) {
+    border-radius: 12px !important;
+  }
+
+  .app-rail-link {
+    border-radius: 9px !important;
+  }
+}
+
+
+
+/* Actions rapides : repères colorés utiles, sans agrandir les cartes. */
+body.dashboard-body .dashboard-card-icon {
+  display: inline-grid !important;
+  place-items: center !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin-right: 5px !important;
+  border-radius: 8px !important;
+  background: var(--theme-blue-soft) !important;
+  color: var(--theme-primary) !important;
+  font-size: .82rem !important;
+}
+
+body.dashboard-body .dashboard-action {
+  grid-template-columns: 28px minmax(0, 1fr) !important;
+}
+
+body.dashboard-body .dashboard-action > strong {
+  display: grid !important;
+  place-items: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 9px !important;
+  background: var(--action-soft, var(--theme-blue-soft)) !important;
+  color: var(--action-color, var(--theme-primary)) !important;
+  font-size: .95rem !important;
+}
+
+body.dashboard-body .dashboard-action--blue { --action-color: #3e6fc0; --action-soft: #eaf2ff; }
+body.dashboard-body .dashboard-action--green { --action-color: #2f8061; --action-soft: #e8f6ef; }
+body.dashboard-body .dashboard-action--purple { --action-color: #7056b8; --action-soft: #f0edff; }
+body.dashboard-body .dashboard-action--orange { --action-color: #a76528; --action-soft: #fff0e4; }
+body.dashboard-body .dashboard-action--pink { --action-color: #b64f73; --action-soft: #fdebf2; }
+body.dashboard-body .dashboard-action--slate { --action-color: #53657f; --action-soft: #edf1f6; }
+
+
+/* Planning : les trois onglets restent toujours visibles. */
+body.page-planning .planning-tabs {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  width: auto !important;
+  max-width: none !important;
+  overflow: visible !important;
+}
+
+body.page-planning .planning-tabs > .planning-tab {
+  width: 100% !important;
+  min-width: 0 !important;
+  flex: none !important;
+  justify-content: center !important;
+  white-space: normal !important;
+  text-align: center !important;
+}
+
+@media (max-width: 799px) {
+  body.page-planning .planning-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  body.page-planning .planning-tabs > .planning-tab {
+    padding-inline: 3px !important;
+    font-size: .64rem !important;
+  }
+
+  body.page-planning .planning-tabs .planning-tab-icon {
+    display: none !important;
+  }
+}
+
+
+/* Page Temps de travail autonome : le body réserve déjà le rail ou la barre basse. */
+body.page-temps-travail > .worktime-page {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}

@@ -28,14 +28,12 @@ document.addEventListener("DOMContentLoaded", function ()
 	const menuAjouterCentre = document.getElementById("planning-add-centre-menu");
 	const compteurCentresMasques = document.getElementById("planning-hidden-centres-count");
 	const layoutPlanning = document.getElementById("layout");
-	const panneauTempsTravail = document.getElementById("worktime-panel");
 	const ongletsPlanning = Array.from(document.querySelectorAll("[data-planning-mode]"));
 	const planningQuery = new URLSearchParams(window.location.search);
 	const modeDemande = planningQuery.get("mode");
-	let modePlanning = ["affectations", "effectifs", "temps-travail"].includes(modeDemande)
+	let modePlanning = ["affectations", "effectifs"].includes(modeDemande)
 		? modeDemande
-		: (["effectifs", "temps-travail"].includes(localStorage.getItem("planning-mode"))
-			? localStorage.getItem("planning-mode") : "affectations");
+		: (localStorage.getItem("planning-mode") === "effectifs" ? "effectifs" : "affectations");
 	const animList = document.getElementById("animateurs-list");
 	const filtresStatutsConteneur = document.getElementById("animateurs-filter-statuts");
 	const filtresQualificationsConteneur = document.getElementById("animateurs-filter-qualifications");
@@ -1180,7 +1178,7 @@ function libelleDate(dateStr)
 		// même géométrie de calendriers. On mémorise donc la position de
 		// défilement avant de remplacer uniquement leur contenu visible.
 		const scrollTopAvant = calendarsContainer.scrollTop;
-		modePlanning = ["affectations", "effectifs", "temps-travail"].includes(nouveauMode)
+		modePlanning = ["affectations", "effectifs"].includes(nouveauMode)
 			? nouveauMode : "affectations";
 		if (memoriser)
 		{
@@ -1192,11 +1190,8 @@ function libelleDate(dateStr)
 			window.history.replaceState({}, "", urlCourante);
 		}
 		layoutPlanning.dataset.planningMode = modePlanning;
-		layoutPlanning.hidden = modePlanning === "temps-travail";
-		if (panneauTempsTravail) panneauTempsTravail.hidden = modePlanning !== "temps-travail";
 		document.body.classList.toggle("planning-mode-effectifs", estModeEffectifs());
 		document.body.classList.toggle("planning-mode-affectations", modePlanning === "affectations");
-		document.body.classList.toggle("planning-mode-temps-travail", modePlanning === "temps-travail");
 		if (boutonImportEffectifsExcel) boutonImportEffectifsExcel.hidden = !estModeEffectifs();
 		ongletsPlanning.forEach((onglet) =>
 		{

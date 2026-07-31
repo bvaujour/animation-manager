@@ -65,6 +65,7 @@ from .views import (
     mon_profil,
     planning,
     recapitulatif,
+    temps_travail,
 )
 from .views_communications import (
     api_contact_email_detail,
@@ -118,6 +119,7 @@ urlpatterns = [
         name="api_verification_export_planning",
     ),
     path("planning/", direction_requise(planning), name="planning"),
+    path("temps-travail/", direction_requise(temps_travail), name="temps_travail"),
     path("gestion/", direction_requise(gestion), name="gestion"),
     path("employes/", direction_requise(employes), name="employes"),
     path("employes/nouveau/", direction_requise(employe_detail), name="employe_nouveau"),

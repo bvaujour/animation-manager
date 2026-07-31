@@ -306,10 +306,16 @@ def api_tableau_de_bord(request):
 
 
 def planning(request):
-    """Page principale : un calendrier par centre, avec la liste des
-    animateurs à glisser-déposer ou à affecter par clic."""
+    """Page principale des affectations et des effectifs enfants."""
+    if request.GET.get("mode") == "temps-travail":
+        return redirect("temps_travail")
     return render(request, "planning.html", {"active_page": "planning"})
 
+
+
+def temps_travail(request):
+    """Page autonome de saisie des réunions et journées de préparation."""
+    return render(request, "temps_travail.html", {"active_page": "temps_travail"})
 
 def gestion(request):
     """Gestion des lieux, groupes, qualifications, périodes et documents."""

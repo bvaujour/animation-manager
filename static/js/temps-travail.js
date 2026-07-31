@@ -8,6 +8,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const contentRoot = document.getElementById("worktime-content");
     const meetingsRoot = document.getElementById("worktime-meetings-list");
     const preparationRoot = document.getElementById("worktime-preparation-table");
+    const summaryRoot = document.getElementById("worktime-summary");
+    const summaryCard = summaryRoot?.closest(".worktime-summary-card");
+    const summaryToggle = document.getElementById("worktime-summary-toggle");
     const addMeetingButton = document.getElementById("worktime-add-meeting");
     const preparationForm = document.getElementById("worktime-preparation-form");
     const preparationSearch = document.getElementById("worktime-preparation-search");
@@ -42,6 +45,58 @@ document.addEventListener("DOMContentLoaded", () => {
         emptyRoot.hidden = false;
         contentRoot.hidden = true;
         emptyRoot.textContent = "Chargement du temps de travail…";
+    }
+
+    function setSummaryCollapsed(collapsed) {
+        if (!summaryCard || !summaryToggle) return;
+        summaryCard.classList.toggle("is-collapsed", collapsed);
+        summaryToggle.setAttribute("aria-expanded", String(!collapsed));
+        summaryToggle.title = collapsed ? "Ouvrir le récapitulatif" : "Réduire le récapitulatif";
+        const label = summaryToggle.querySelector(".sr-only");
+        if (label) label.textContent = summaryToggle.title;
+        try {
+            localStorage.setItem("animation-manager:worktime-summary-collapsed", collapsed ? "1" : "0");
+        } catch (_error) {
+            // Le repli reste utilisable même si le stockage local est indisponible.
+        }
+    }
+
+    if (summaryToggle) {
+        let initiallyCollapsed = false;
+        try {
+            initiallyCollapsed = localStorage.getItem("animation-manager:worktime-summary-collapsed") === "1";
+        } catch (_error) {
+            initiallyCollapsed = false;
+        }
+        setSummaryCollapsed(initiallyCollapsed);
+        summaryToggle.addEventListener("click", () => {
+            setSummaryCollapsed(!summaryCard.classList.contains("is-collapsed"));
+        });
+    }
+
+    function renderSummary() {
+        const rows = data?.synthese || [];
+        if (!summaryRoot) return;
+        if (!rows.length) {
+            summaryRoot.innerHTML = '<p class="empty-note">Aucune journée complémentaire à comptabiliser pour cette sélection.</p>';
+            return;
+        }
+        summaryRoot.innerHTML = `
+            <div class="worktime-table-wrap">
+                <table class="worktime-summary-table">
+                    <thead><tr><th>Animateur</th><th>Réunions</th><th>Télétravail / préparation</th><th>Jours ajoutés</th><th>Total dans le récapitulatif</th><th>Paie</th></tr></thead>
+                    <tbody>${rows.map((row) => `
+                        <tr>
+                            <td><strong>${escapeHtml(row.prenom)} ${escapeHtml(row.nom)}</strong></td>
+                            <td>${escapeHtml(row.jours_reunion)}</td>
+                            <td>${escapeHtml(row.jours_preparation)}</td>
+                            <td class="worktime-summary-total">${escapeHtml(row.jours_complementaires)}</td>
+                            <td>${escapeHtml(row.jours_total_recapitulatif)}</td>
+                            <td><span class="worktime-included-badge">Inclus</span></td>
+                        </tr>`).join("")}
+                    </tbody>
+                </table>
+            </div>`;
     }
 
     function renderMeetings() {
@@ -145,6 +200,7 @@ document.addEventListener("DOMContentLoaded", () => {
         emptyRoot.hidden = true;
         contentRoot.hidden = false;
         addMeetingButton.disabled = !(data?.animateurs || []).length;
+        renderSummary();
         renderMeetings();
         renderPreparation();
     }

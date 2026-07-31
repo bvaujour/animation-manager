@@ -7,6 +7,9 @@
         <a href="{% url 'planning' %}" class="app-rail-link{% if active == 'planning' %} active{% endif %}" aria-label="Planning" title="Planning"{% if active == 'planning' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V2Zm12 8H5v10h14V10ZM5 8h14V6H5v2Z"/></svg>
         </a>
+        <a href="{% url 'temps_travail' %}" class="app-rail-link{% if active == 'temps_travail' %} active{% endif %}" aria-label="Temps de travail" title="Temps de travail"{% if active == 'temps_travail' %} aria-current="page"{% endif %}>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8Zm1-13h-2v6l5 3 1-1.7-4-2.3V7Z"/></svg>
+        </a>
         <a href="{% url 'sorties' %}" class="app-rail-link{% if active == 'sorties' %} active{% endif %}" aria-label="Sorties" title="Sorties"{% if active == 'sorties' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a3 3 0 0 0 0 6v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a3 3 0 0 0 0-6V5Zm7 1v2h2V6h-2Zm0 4v2h2v-2h-2Zm0 4v2h2v-2h-2Zm0 4v2h2v-2h-2Z"/></svg>
         </a>

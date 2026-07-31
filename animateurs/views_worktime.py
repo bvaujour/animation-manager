@@ -5,11 +5,12 @@ from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
-from .models import ActiviteTravailComplementaire, ParticipationTravailComplementaire
+from .models import Affectation, ActiviteTravailComplementaire, ParticipationTravailComplementaire
 from .services.temps_travail import (
     SelectionTempsTravailInvalide,
     animateurs_affectes_sur_jours,
@@ -30,18 +31,30 @@ def _selection(request, payload=None):
 
 
 def _activites_selectionnees(periodes):
+    """Charge en une fois les activités correspondant exactement à la sélection."""
+
     ids = {periode.id for periode in periodes}
+    participations = ParticipationTravailComplementaire.objects.select_related("animateur").order_by(
+        "animateur__prenom", "animateur__nom", "animateur_id"
+    )
     candidates = (
         ActiviteTravailComplementaire.objects.filter(periodes__in=periodes)
-        .prefetch_related("periodes", "participations__animateur")
+        .prefetch_related(
+            Prefetch("periodes", to_attr="periodes_chargees"),
+            Prefetch("participations", queryset=participations, to_attr="participations_chargees"),
+        )
         .distinct()
     )
-    return [activite for activite in candidates if {item.id for item in activite.periodes.all()} == ids]
+    return [
+        activite
+        for activite in candidates
+        if {item.id for item in activite.periodes_chargees} == ids
+    ]
 
 
 def _reunion_json(activite, ids_en_conflit):
     participants = []
-    for participation in activite.participations.all():
+    for participation in activite.participations_chargees:
         participants.append({
             "animateur_id": participation.animateur_id,
             "prenom": participation.animateur.prenom,
@@ -54,21 +67,71 @@ def _reunion_json(activite, ids_en_conflit):
         "intitule": activite.intitule,
         "date": activite.date.isoformat(),
         "remarque": activite.remarque,
-        "periode_ids": [periode.id for periode in activite.periodes.all()],
+        "periode_ids": [periode.id for periode in activite.periodes_chargees],
         "participants": participants,
     }
 
 
+def _conflits_reunions(animateur_ids, dates_reunions):
+    """Retourne les conflits de toutes les réunions avec une seule requête SQL."""
+
+    dates = sorted({date for date in dates_reunions if date is not None})
+    if not animateur_ids or not dates:
+        return {date: set() for date in dates}
+
+    import datetime
+    from django.utils import timezone
+
+    debut = timezone.make_aware(datetime.datetime.combine(dates[0], datetime.time.min))
+    fin = timezone.make_aware(datetime.datetime.combine(dates[-1] + datetime.timedelta(days=1), datetime.time.min))
+    affectations = Affectation.objects.filter(
+        animateur_id__in=animateur_ids,
+        debut__lt=fin,
+        fin__gt=debut,
+    ).values_list("animateur_id", "debut", "fin")
+
+    conflits = {date: set() for date in dates}
+    dates_set = set(dates)
+    for animateur_id, debut_affectation, fin_affectation in affectations:
+        premier = max(timezone.localtime(debut_affectation).date(), dates[0])
+        dernier = min(timezone.localtime(fin_affectation).date(), dates[-1] + datetime.timedelta(days=1))
+        jour = premier
+        while jour < dernier:
+            if jour in dates_set:
+                conflits[jour].add(animateur_id)
+            jour += datetime.timedelta(days=1)
+    return conflits
+
+
+def _nombre_json_local(nombre):
+    valeur = Decimal(nombre)
+    return int(valeur) if valeur == valeur.to_integral_value() else float(valeur)
+
+
 def _donnees_temps_travail(request, periodes, jours, debut, fin):
+    """Construit la page Temps de travail sans recalculer le récapitulatif complet."""
+
     animateurs = animateurs_affectes_sur_jours(jours, debut, fin)
     activites = _activites_selectionnees(periodes)
-    reunions = []
     ids_eligibles = {item["id"] for item in animateurs}
-    for activite in activites:
-        if activite.type != ActiviteTravailComplementaire.TYPE_REUNION:
-            continue
-        conflits = ids_animateurs_affectes_a_date(ids_eligibles, activite.date)
-        reunions.append(_reunion_json(activite, conflits))
+    dates_affectees = {
+        item["id"]: set(item["dates_affectees"])
+        for item in animateurs
+    }
+
+    reunions_activites = [
+        item for item in activites
+        if item.type == ActiviteTravailComplementaire.TYPE_REUNION
+    ]
+    conflits_par_date = _conflits_reunions(
+        ids_eligibles,
+        [item.date for item in reunions_activites],
+    )
+    reunions = [
+        _reunion_json(activite, conflits_par_date.get(activite.date, set()))
+        for activite in reunions_activites
+    ]
+
     preparation = next(
         (item for item in activites if item.type == ActiviteTravailComplementaire.TYPE_PREPARATION),
         None,
@@ -80,8 +143,51 @@ def _donnees_temps_travail(request, periodes, jours, debut, fin):
                 "nombre_jours": str(item.nombre_jours),
                 "remarque": item.remarque,
             }
-            for item in preparation.participations.all()
+            for item in preparation.participations_chargees
         }
+
+    complements = {
+        animateur_id: {"reunion": Decimal("0"), "preparation": Decimal("0")}
+        for animateur_id in ids_eligibles
+    }
+    for reunion in reunions_activites:
+        date_iso = reunion.date.isoformat() if reunion.date else None
+        for participation in reunion.participations_chargees:
+            if participation.animateur_id not in ids_eligibles:
+                continue
+            deja_affecte = date_iso in dates_affectees.get(participation.animateur_id, set())
+            if deja_affecte and not participation.autoriser_double_comptage:
+                continue
+            complements[participation.animateur_id]["reunion"] += participation.nombre_jours
+
+    if preparation:
+        for participation in preparation.participations_chargees:
+            if participation.animateur_id in ids_eligibles:
+                complements[participation.animateur_id]["preparation"] += participation.nombre_jours
+
+    synthese = []
+    for animateur in animateurs:
+        complement = complements[animateur["id"]]
+        jours_reunion = complement["reunion"]
+        jours_preparation = complement["preparation"]
+        jours_complementaires = jours_reunion + jours_preparation
+        if not jours_complementaires:
+            continue
+        jours_affectation = Decimal(len(animateur["dates_affectees"]))
+        synthese.append({
+            "animateur_id": animateur["id"],
+            "prenom": animateur["prenom"],
+            "nom": animateur["nom"],
+            "jours_reunion": _nombre_json_local(jours_reunion),
+            "jours_preparation": _nombre_json_local(jours_preparation),
+            "jours_complementaires": _nombre_json_local(jours_complementaires),
+            "jours_total_recapitulatif": _nombre_json_local(jours_affectation + jours_complementaires),
+        })
+
+    total_jours_complementaires = sum(
+        (Decimal(str(item["jours_complementaires"])) for item in synthese),
+        Decimal("0"),
+    )
     return {
         "periodes": [{
             "id": periode.id,
@@ -92,6 +198,8 @@ def _donnees_temps_travail(request, periodes, jours, debut, fin):
         "animateurs": animateurs,
         "reunions": reunions,
         "preparation": attributions,
+        "synthese": synthese,
+        "total_jours_complementaires": _nombre_json_local(total_jours_complementaires),
     }
 
 

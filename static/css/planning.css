@@ -103,7 +103,6 @@ body.planning-mode-effectifs .planning-floating-lane,
 #layout[data-planning-mode="effectifs"] .planning-floating-lane {
   display: none;
 }
-body.planning-mode-temps-travail .planning-page-header .app-page-week{display:none}
 
 /* Barre d'outils animateurs ------------------------------------------------ */
 .planning-animateurs-toolbar {
@@ -769,45 +768,6 @@ body.planning-centre-sort-active .planning-row-dropzone {
 .auto-evenement-periode, .auto-centre-total-readonly { color: var(--color-text-muted); font-size: .68rem; }
 .evenement-calendar-header[data-week-assignment-target]{cursor:pointer;transition:background-color .16s ease,box-shadow .16s ease}
 .evenement-calendar-header[data-week-assignment-target]:hover,.evenement-calendar-header.is-week-drag-over{background:color-mix(in srgb,var(--centre-color) 13%,var(--color-surface));box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--centre-color) 55%,transparent)}
-
-/* Temps de travail complémentaire ---------------------------------------- */
-.worktime-panel{display:grid;align-content:start;gap:14px;height:calc(100dvh - 132px);min-height:0;padding:0 14px 28px;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;box-sizing:border-box}
-.worktime-toolbar,.worktime-section-heading{display:flex;align-items:center;justify-content:space-between;gap:18px}
-.worktime-toolbar{padding:14px 16px}
-.worktime-toolbar h2,.worktime-section-heading h2{margin:0;font-size:1rem}
-.worktime-toolbar p,.worktime-section-heading p{margin:3px 0 0;color:var(--color-text-muted);font-size:.76rem}
-.worktime-period-picker{width:min(480px,48vw)}
-.worktime-content{display:grid;gap:14px}
-.worktime-card{padding:16px}
-.worktime-meetings-list{display:grid;gap:8px;margin-top:13px}
-.worktime-meeting-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 12px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface-sunken)}
-.worktime-meeting-row strong,.worktime-meeting-row small{display:block}
-.worktime-meeting-row small{margin-top:2px;color:var(--color-text-muted)}
-.worktime-meeting-actions{display:flex;gap:6px}
-.worktime-table-wrap{margin-top:13px;overflow:auto}
-.worktime-table{width:100%;border-collapse:collapse}
-.worktime-table th,.worktime-table td{padding:9px 10px;border-bottom:1px solid var(--color-border);text-align:left}
-.worktime-table th{background:var(--color-surface-sunken);color:var(--color-text-muted);font-size:.75rem}
-.worktime-table input[type=number]{width:110px;text-align:right}
-.worktime-table input[type=text]{width:100%;min-width:220px}
-.worktime-preparation-form{display:grid;grid-template-columns:minmax(230px,1.2fr) 150px minmax(230px,1fr) auto;align-items:end;gap:10px;margin-top:14px;padding:12px;border:1px solid var(--color-border);border-radius:12px;background:var(--color-surface-sunken)}
-.worktime-preparation-animator{position:relative}
-.worktime-preparation-suggestions{position:absolute;z-index:20;top:calc(100% + 4px);left:0;right:0;max-height:220px;overflow-y:auto;padding:5px;border:1px solid var(--color-border);border-radius:11px;background:var(--color-surface);box-shadow:0 8px 22px rgba(43,55,72,.12)}
-.worktime-preparation-suggestion{display:block;width:100%;padding:8px 10px;border:0;border-radius:8px;background:transparent;text-align:left;cursor:pointer}
-.worktime-preparation-suggestion:hover,.worktime-preparation-suggestion:focus{background:var(--color-primary-soft,#eef4ff)}
-.worktime-preparation-form-actions,.worktime-preparation-actions{display:flex;gap:6px;white-space:nowrap}
-.worktime-preparation-form .form-error{grid-column:1/-1;margin:0}
-.worktime-meeting-modal{width:min(720px,calc(100vw - 32px))}
-.worktime-meeting-fields{display:grid;grid-template-columns:1fr 180px;gap:10px}
-.worktime-meeting-note{grid-column:1/-1}
-.worktime-date-info{margin:10px 0 0;padding:8px 10px;border-radius:9px;background:#eef4ff;color:#36577f;font-size:.74rem}
-.worktime-participants-heading{display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px}
-.worktime-participants{display:grid;gap:6px;max-height:310px;overflow:auto}
-.worktime-participant{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,auto);align-items:center;gap:12px;padding:8px 10px;border:1px solid var(--color-border);border-radius:10px}
-.worktime-participant-main,.worktime-participant-override{display:flex;align-items:center;gap:8px}
-.worktime-participant-override{color:var(--color-danger,#b42318);font-size:.72rem}
-.worktime-participant:not(.has-conflict) .worktime-participant-override{visibility:hidden}
-.auto-centre-total { font-size: .72rem; font-weight: 800; }
 
 /* Import Excel ------------------------------------------------------------- */
 .effectifs-excel-modal { max-width: 1040px; }
