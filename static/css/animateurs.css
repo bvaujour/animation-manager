@@ -451,12 +451,7 @@ body.page-employes .employees-list .salarie-directory-item.active .employee-list
     body.page-employes .employee-detail-panels{overflow:visible}
 }
 
-@media (max-width:430px){
-    body.page-employes .employees-list{grid-template-columns:minmax(0,1fr)}
-    body.page-employes .employees-sidebar{max-height:270px}
-    body.page-employes .employees-list{max-height:195px}
-    .employee-list-meta small + small{display:block}
-}
+
 
 /* La liste de la page Salariés réutilise strictement le composant du Planning. */
 body.page-employes .employees-list .salarie-directory-item,

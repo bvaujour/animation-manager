@@ -249,8 +249,7 @@
 .team-ratio-field small{display:block;margin-top:5px;color:var(--color-text-muted);font-size:.72rem;line-height:1.25}
 .team-row-editing .event-opening-settings,.team-row-editing .event-staffing-settings,.team-create-form .event-opening-settings,.team-create-form .event-staffing-settings{margin-top:12px;padding:14px;border:1px solid color-mix(in srgb,var(--lieu-color,var(--color-primary)) 24%,var(--color-border));border-radius:12px;background:color-mix(in srgb,#ffffff 96%,var(--lieu-color,var(--color-primary)))}
 .team-row-editing .edit-actions,.team-create-form .edit-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--color-border)}
-@container (max-width:620px){.team-form-grid{grid-template-columns:1fr}
-}
+
 
 .gestion-page.gestion-page-compact{width:100%;max-width:none;min-width:0;height:100%;margin:0;padding:14px 18px 24px;overflow:hidden;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:12px}
 .gestion-page-header{display:flex;align-items:center;min-height:38px;margin:0}

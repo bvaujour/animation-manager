@@ -25,7 +25,7 @@
 .material-status--validee { color: #2f6245; background: #edf6f0; border-color: #bad5c4; }
 .material-request-side form { margin: 0; }
 .material-request-side .btn { white-space: nowrap; }
-@media (max-width: 799.98px) {
+@media (max-width: 799px) {
   .material-form { grid-template-columns: minmax(0, 1fr) 86px; }
   .material-field--wide { grid-column: 1 / -1; }
   .material-field:nth-of-type(3) { grid-column: 1 / -1; }
@@ -51,7 +51,7 @@
 .material-dashboard-list {
   margin-top: 2px;
 }
-@media (max-width: 799.98px) {
+@media (max-width: 799px) {
   .material-form--dashboard {
     grid-template-columns: minmax(0, 1fr) 82px;
   }
