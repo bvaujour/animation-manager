@@ -1,11 +1,11 @@
 """Création, synchronisation et validation des comptes de connexion."""
 
 import secrets
+import unicodedata
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.utils.text import slugify
 
 from animateurs.models import Animateur
 
@@ -20,12 +20,28 @@ def valider_mot_de_passe(mot_de_passe, *, utilisateur=None):
 
 
 def nom_utilisateur_disponible(prenom, nom):
+    """Construit l'identifiant ``initiale du prénom + nom``.
+
+    Exemple : Bruno Vaujour devient ``bvaujour``. Les accents, espaces,
+    apostrophes et traits d'union sont retirés. En cas de doublon, un numéro
+    est ajouté sans séparateur : ``bvaujour2``, ``bvaujour3``, etc.
+    """
     user_model = get_user_model()
-    base = (slugify(f"{prenom}.{nom}") or "utilisateur")[:140]
+
+    prenom_ascii = unicodedata.normalize("NFKD", (prenom or "").strip())
+    prenom_ascii = prenom_ascii.encode("ascii", "ignore").decode("ascii")
+    nom_ascii = unicodedata.normalize("NFKD", (nom or "").strip())
+    nom_ascii = nom_ascii.encode("ascii", "ignore").decode("ascii")
+
+    initiale = next((caractere.lower() for caractere in prenom_ascii if caractere.isalnum()), "")
+    nom_compact = "".join(caractere.lower() for caractere in nom_ascii if caractere.isalnum())
+    base = f"{initiale}{nom_compact}" or "utilisateur"
+    base = base[:150]
+
     candidat = base
     numero = 2
-    while user_model.objects.filter(username=candidat).exists():
-        suffixe = f".{numero}"
+    while user_model.objects.filter(username__iexact=candidat).exists():
+        suffixe = str(numero)
         candidat = f"{base[:150 - len(suffixe)]}{suffixe}"
         numero += 1
     return candidat

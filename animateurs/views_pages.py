@@ -3,6 +3,8 @@
 import datetime
 
 from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -87,13 +89,64 @@ def mon_planning(request):
 
 
 def mon_profil(request):
-    """Fiche personnelle en lecture seule de l'animateur connecté."""
+    """Consultation et mise à jour des coordonnées du compte animateur."""
     if est_direction(request.user):
         return redirect("employes")
+
+    animateur = getattr(request.user, "profil_animateur", None)
+    message = ""
+    erreur = ""
+    action = ""
+
+    if request.method == "POST" and animateur is not None:
+        action = request.POST.get("action", "coordonnees")
+
+        if action == "coordonnees":
+            telephone = request.POST.get("telephone", "").strip()
+            email = request.POST.get("email", "").strip().lower()
+
+            if email:
+                try:
+                    validate_email(email)
+                except ValidationError:
+                    erreur = "L’adresse e-mail saisie n’est pas valide."
+
+            if not erreur:
+                animateur.telephone = telephone
+                animateur.email = email
+                animateur.save(update_fields=["telephone", "email"])
+
+                request.user.email = email
+                request.user.save(update_fields=["email"])
+                message = "Tes coordonnées ont bien été mises à jour."
+
+        elif action == "mot_de_passe":
+            mot_de_passe = request.POST.get("mot_de_passe", "")
+            confirmation = request.POST.get("confirmation", "")
+
+            if mot_de_passe != confirmation:
+                erreur = "Les deux mots de passe ne correspondent pas."
+            else:
+                erreur = valider_mot_de_passe(mot_de_passe, utilisateur=request.user)
+
+            if not erreur:
+                request.user.set_password(mot_de_passe)
+                request.user.save(update_fields=["password"])
+                animateur.doit_changer_mot_de_passe = False
+                animateur.save(update_fields=["doit_changer_mot_de_passe"])
+                update_session_auth_hash(request, request.user)
+                message = "Ton mot de passe a bien été modifié."
+
     return render(
         request,
         "mon_profil.html",
-        {"active_page": "mon_profil", "animateur": getattr(request.user, "profil_animateur", None)},
+        {
+            "active_page": "mon_profil",
+            "animateur": animateur,
+            "message": message,
+            "erreur": erreur,
+            "action": action,
+        },
     )
 
 

@@ -337,3 +337,119 @@ body.app-body:not(.login-body) {
     font-size: .51rem;
   }
 }
+
+/* ========================================================================== 
+   Navigation compacte finale — rail PC et barre basse mobile
+   La place réservée au contenu correspond exactement à la navigation.
+   ========================================================================== */
+:root {
+  --app-rail-width: 42px;
+  --app-mobile-nav-height: 48px;
+}
+
+@media (min-width: 801px) {
+  body.app-body:not(.login-body) {
+    padding-left: var(--app-rail-width) !important;
+  }
+
+  body.app-body:not(.login-body) > .app-rail {
+    width: var(--app-rail-width) !important;
+    padding: 4px !important;
+    overflow: hidden !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-links {
+    gap: 3px !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-link {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    flex: 0 0 34px !important;
+    padding: 0 !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-account {
+    gap: 2px !important;
+    padding-top: 3px !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-avatar {
+    width: 28px !important;
+    height: 28px !important;
+  }
+}
+
+@media (max-width: 800px) {
+  body.app-body:not(.login-body) {
+    padding-bottom: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  body.app-body:not(.login-body) > .app-rail {
+    height: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
+    grid-template-columns: minmax(0, 1fr) 38px !important;
+    align-items: start !important;
+    padding: 2px 3px env(safe-area-inset-bottom, 0px) !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-links {
+    height: 44px !important;
+    gap: 1px !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-link {
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    flex: 0 0 44px !important;
+    display: grid !important;
+    place-items: center !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+  }
+
+  /* Les libellés restent disponibles via aria-label/title, sans augmenter la barre. */
+  body.app-body:not(.login-body) .app-rail-links .app-rail-link::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-link .material-symbols-outlined {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 23px !important;
+    line-height: 24px !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-account {
+    width: 38px !important;
+    height: 44px !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-logout-form,
+  body.app-body:not(.login-body) .app-rail-logout {
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    flex-basis: 36px !important;
+  }
+
+  /* Tout élément flottant reste au-dessus de la barre basse compacte. */
+  body.app-body:not(.login-body) .btn-fab,
+  body.app-body:not(.login-body) .toast,
+  body.app-body:not(.login-body) .dashboard-loading {
+    bottom: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom, 0px) + 8px) !important;
+  }
+}
+
+@media (max-width: 390px) {
+  body.app-body:not(.login-body) .app-rail-link {
+    width: 42px !important;
+    min-width: 42px !important;
+    flex-basis: 42px !important;
+  }
+}

@@ -7,7 +7,7 @@
 {% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
-<link rel="stylesheet" href="{% static 'css/planning.css' %}?v={{ asset_version }}-panel-3">
+<link rel="stylesheet" href="{% static 'css/planning.css' %}?v={{ asset_version }}-mobile-staff-bottom-1">
 {% endblock %}
 {% block content %}
 {% include "partials/_page_header.html" with title="Planning" header_class="planning-page-header planning-page-header-compact" container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
@@ -259,7 +259,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/planning/utils.js' %}?v={{ asset_version }}"></script>
-<script src="{% static 'js/planning.js' %}?v={{ asset_version }}-panel-3"></script>
+<script src="{% static 'js/planning.js' %}?v={{ asset_version }}-mobile-staff-bottom-1"></script>
 <script src="{% static 'js/effectifs-excel.js' %}?v={{ asset_version }}"></script>
 <script src="{% static 'js/temps-travail.js' %}?v={{ asset_version }}"></script>
 {% endblock %}

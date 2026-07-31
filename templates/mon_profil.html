@@ -1,10 +1,79 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Mon profil{% endblock %}
-{% block page_styles %}<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v={{ asset_version }}"><link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">{% endblock %}
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
+{% endblock %}
 {% block content %}
-<main id="main-content" class="page-shell page-shell--medium employee-detail-page">
+<main id="main-content" class="page-shell page-shell--medium employee-detail-page profile-self-service-page">
     {% include "partials/_page_header.html" with title="Mon profil" picker_mode="none" %}
-    {% if animateur %}<section class="ui-card fiche-section fiche-card employee-profile-card"><div class="employee-profile-avatar" aria-hidden="true">{{ animateur.prenom|first }}{{ animateur.nom|first }}</div><div><p class="employee-card-label">Identité</p><h2>{{ animateur.prenom }} {{ animateur.nom }}</h2><p>{{ animateur.email|default:"E-mail non renseigné" }}</p><p>{{ animateur.telephone|default:"Téléphone non renseigné" }}</p>{% if animateur.date_naissance %}<p>Né(e) le {{ animateur.date_naissance|date:"d/m/Y" }}</p>{% endif %}<p>{{ animateur.adresse|default:"Adresse non renseignée"|linebreaksbr }}</p></div></section>{% else %}<section class="ui-card fiche-card"><p class="empty-note">Profil introuvable. Contacte la direction.</p></section>{% endif %}
+
+    {% if animateur %}
+        {% if message %}<div class="ui-alert ui-alert--success" role="status">{{ message }}</div>{% endif %}
+        {% if erreur %}<div class="ui-alert ui-alert--danger" role="alert">{{ erreur }}</div>{% endif %}
+
+        <section class="ui-card fiche-section fiche-card employee-profile-card profile-identity-card">
+            <div class="employee-profile-avatar" aria-hidden="true">{{ animateur.prenom|first }}{{ animateur.nom|first }}</div>
+            <div>
+                <p class="employee-card-label">Identité</p>
+                <h2>{{ animateur.prenom }} {{ animateur.nom }}</h2>
+                <p><strong>Identifiant :</strong> {{ request.user.username }}</p>
+                {% if animateur.date_naissance %}<p>Né(e) le {{ animateur.date_naissance|date:"d/m/Y" }}</p>{% endif %}
+                {% if animateur.adresse %}<p>{{ animateur.adresse|linebreaksbr }}</p>{% endif %}
+            </div>
+        </section>
+
+        <section class="ui-card fiche-section fiche-card">
+            <div class="section-heading-compact">
+                <div>
+                    <p class="employee-card-label">Coordonnées</p>
+                    <h2>Mes coordonnées</h2>
+                </div>
+            </div>
+            <form method="post" class="profile-edit-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="coordonnees">
+                <label class="field-group">
+                    <span>Téléphone</span>
+                    <input type="tel" name="telephone" value="{{ animateur.telephone }}" autocomplete="tel" inputmode="tel">
+                </label>
+                <label class="field-group">
+                    <span>Adresse e-mail</span>
+                    <input type="email" name="email" value="{{ animateur.email }}" autocomplete="email">
+                </label>
+                <div class="profile-form-actions">
+                    <button type="submit" class="btn btn-primary">Enregistrer mes coordonnées</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="ui-card fiche-section fiche-card">
+            <div class="section-heading-compact">
+                <div>
+                    <p class="employee-card-label">Sécurité</p>
+                    <h2>Changer mon mot de passe</h2>
+                </div>
+            </div>
+            <form method="post" class="profile-edit-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="mot_de_passe">
+                <label class="field-group">
+                    <span>Nouveau mot de passe</span>
+                    <input type="password" name="mot_de_passe" minlength="5" required autocomplete="new-password">
+                    <small>5 caractères minimum.</small>
+                </label>
+                <label class="field-group">
+                    <span>Confirmer le mot de passe</span>
+                    <input type="password" name="confirmation" minlength="5" required autocomplete="new-password">
+                </label>
+                <div class="profile-form-actions">
+                    <button type="submit" class="btn btn-primary">Changer mon mot de passe</button>
+                </div>
+            </form>
+        </section>
+    {% else %}
+        <section class="ui-card fiche-card"><p class="empty-note">Profil introuvable. Contacte la direction.</p></section>
+    {% endif %}
 </main>
 {% endblock %}
