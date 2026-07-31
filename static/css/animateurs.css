@@ -122,9 +122,28 @@
 .availability-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;padding:0 16px 16px}
 .availability-day{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--border-color,#dbe2ea);border-radius:10px}
 .availability-day:has(input:checked){font-weight:700;background:#f0f7ff}
+.availability-week-card{scroll-margin-top:6px;overflow:hidden}
+.availability-week-card>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;background:var(--color-surface-sunken)}
+.availability-week-card>header>div{min-width:0;display:grid;gap:2px}
+.availability-week-card>header strong{font-size:.92rem}
+.availability-week-card>header span{color:var(--color-text-muted);font-size:.72rem}
+.availability-week-card>header b{flex:0 0 auto;padding:4px 8px;border-radius:999px;background:color-mix(in srgb,var(--color-primary) 13%,white);color:var(--color-primary-dark);font-size:.67rem}
+.availability-week-card.is-current{border-color:var(--color-primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--color-primary) 12%,transparent)}
+.availability-day{cursor:pointer;transition:border-color .15s ease,background-color .15s ease}
+.availability-day input{width:20px;height:20px;flex:0 0 20px;accent-color:var(--color-primary)}
 @media(max-width:640px){.availability-self-page{padding:16px}
 .availability-period summary{flex-direction:column}
 .availability-days{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:800px){
+body.animator-space-body .availability-self-page{padding:4px 6px 18px !important}
+body.animator-space-body .fiche-card{padding:12px}
+body.animator-space-body .availability-period{margin:7px 0}
+body.animator-space-body .availability-week-card>header{align-items:flex-start;padding:11px}
+body.animator-space-body .availability-days{gap:6px;padding:0 8px 10px}
+body.animator-space-body .availability-day{min-height:48px;padding:9px}
+body.animator-space-body .fiche-actions{position:sticky;bottom:calc(var(--animator-mobile-nav-height) + env(safe-area-inset-bottom, 0px));z-index:20;padding:8px 0;background:var(--color-bg)}
+body.animator-space-body .fiche-actions .btn{width:100%;justify-content:center}
 }
 .access-grid{align-items:start}
 .access-create-option,.access-account-state{grid-column:1 / -1;padding:16px;border:1px solid var(--color-border,#dbe2ea);border-radius:12px;background:#f8fafc}

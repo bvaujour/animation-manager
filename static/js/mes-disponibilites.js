@@ -5,25 +5,46 @@ document.addEventListener("DOMContentLoaded", async () => {
     const status = document.getElementById("disponibilites-status");
     const save = document.getElementById("enregistrer-disponibilites");
 
-    function render(data) {
-        const periodes = data.periodes || [];
+    function dateLocaleIso() {
+        const maintenant = new Date();
+        maintenant.setMinutes(maintenant.getMinutes() - maintenant.getTimezoneOffset());
+        return maintenant.toISOString().slice(0, 10);
+    }
+
+    function render(data, placerSurSemaineCourante = false) {
+        const periodes = [...(data.periodes || [])].sort((a, b) => a.debut.localeCompare(b.debut));
         if (!periodes.length) {
             root.innerHTML = '<p class="empty-note">Aucune période n’est encore ouverte.</p>';
             save.disabled = true;
             return;
         }
-        root.innerHTML = periodes.map((periode, index) => `<details class="availability-period" ${index === 0 ? "open" : ""}>
-            <summary><strong>${escapeHtml(periode.nom)}</strong><span>${escapeHtml(periode.annee_scolaire)} · zone ${escapeHtml(periode.zone)}</span></summary>
+        const aujourdHui = dateLocaleIso();
+        let periodeCible = periodes.find((periode) => periode.debut <= aujourdHui && periode.fin >= aujourdHui);
+        periodeCible ||= periodes.find((periode) => periode.debut > aujourdHui) || periodes[periodes.length - 1];
+
+        root.innerHTML = periodes.map((periode) => {
+            const estCourante = periode === periodeCible && periode.debut <= aujourdHui && periode.fin >= aujourdHui;
+            return `<article class="availability-period availability-week-card${estCourante ? " is-current" : ""}" data-period-id="${escapeHtml(periode.id)}">
+            <header><div><strong>${escapeHtml(periode.nom)}</strong><span>${escapeHtml(periode.annee_scolaire)} · zone ${escapeHtml(periode.zone)}</span></div>${estCourante ? '<b>Semaine en cours</b>' : ""}</header>
             <div class="availability-days">${periode.jours.map((jour) => {
                 const date = new Date(`${jour.date}T12:00:00`);
                 const label = new Intl.DateTimeFormat("fr-FR", {weekday:"short", day:"numeric", month:"short"}).format(date);
                 return `<label class="availability-day"><input type="checkbox" value="${jour.date}" ${jour.disponible ? "checked" : ""}><span>${escapeHtml(label)}</span></label>`;
             }).join("")}</div>
-        </details>`).join("");
+        </article>`;
+        }).join("");
+
+        if (placerSurSemaineCourante && periodeCible) {
+            requestAnimationFrame(() => {
+                [...root.querySelectorAll("[data-period-id]")]
+                    .find((carte) => carte.dataset.periodId === periodeCible.id)
+                    ?.scrollIntoView({block: "start"});
+            });
+        }
     }
 
     async function load() {
-        render(await apiFetch(`/api/animateurs/${animateurId}/disponibilites/`));
+        render(await apiFetch(`/api/animateurs/${animateurId}/disponibilites/`), true);
     }
 
     save.addEventListener("click", async () => {

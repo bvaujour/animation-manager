@@ -24,6 +24,24 @@ class DisponibilitesParPeriodesApiTests(ConnexionTestCase):
         self.assertEqual(len(periode["jours"]), 5)
         self.assertFalse(periode["selectionnee"])
 
+    def test_get_trie_les_periodes_chronologiquement(self):
+        PeriodeScolaire.objects.create(
+            nom="Printemps — Semaine 1",
+            annee_scolaire="2025-2026",
+            zone="A",
+            debut=datetime.date(2026, 4, 6),
+            fin=datetime.date(2026, 4, 10),
+            ordre=99,
+        )
+
+        response = self.client.get(f"/api/animateurs/{self.animateur.id}/disponibilites/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [periode["debut"] for periode in response.json()["periodes"]],
+            ["2026-04-06", "2026-07-06"],
+        )
+
     def test_put_enregistre_uniquement_les_jours_coches(self):
         response = self.client.put(
             f"/api/animateurs/{self.animateur.id}/disponibilites/",

@@ -693,6 +693,9 @@ body.app-body .app-page-header--week-only .app-page-title{white-space:normal !im
 @media (max-width: 800px) {
   body.animator-space-body {
     --animator-mobile-nav-height: 68px;
+    width: 100%;
+    min-width: 0;
+    margin: 0 !important;
     padding-left: 0 !important;
     padding-bottom: calc(var(--animator-mobile-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
     overflow-x: hidden;
@@ -789,7 +792,13 @@ body.app-body .app-page-header--week-only .app-page-title{white-space:normal !im
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
-    padding: 10px 10px 22px !important;
+    /* Une seule gouttière mobile : les pages métier ne doivent pas la cumuler. */
+    padding: 4px 6px 18px !important;
+  }
+
+  body.animator-space-body > main:not(.page-shell) {
+    max-width: 100% !important;
+    margin-inline: 0 !important;
   }
 
   body.animator-space-body .app-page-header,
@@ -801,9 +810,9 @@ body.app-body .app-page-header--week-only .app-page-title{white-space:normal !im
     align-items: stretch !important;
     flex-direction: column !important;
     gap: 9px !important;
-    margin: 0 0 10px !important;
-    padding: 12px !important;
-    border-radius: 14px !important;
+    margin: 0 0 6px !important;
+    padding: 9px 10px !important;
+    border-radius: 12px !important;
   }
 
   body.animator-space-body .app-page-header h1,
@@ -854,6 +863,31 @@ body.app-body .app-page-header--week-only .app-page-title{white-space:normal !im
     grid-template-columns: 1fr !important;
   }
 
+  body.animator-space-body .ui-card,
+  body.animator-space-body .document-card,
+  body.animator-space-body .employee-profile-card,
+  body.animator-space-body .availability-period {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  body.animator-space-body .employee-profile-card {
+    align-items: flex-start;
+    padding: 13px !important;
+  }
+
+  body.animator-space-body .employee-profile-card > div:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  body.animator-space-body .documents-grid {
+    width: 100%;
+    margin: 0 !important;
+    padding: 6px !important;
+    gap: 7px !important;
+  }
+
   body.animator-space-body .table-wrap,
   body.animator-space-body .table-scroll,
   body.animator-space-body .recap-table-wrap {
@@ -866,5 +900,5 @@ body.app-body .app-page-header--week-only .app-page-title{white-space:normal !im
   body.animator-space-body .app-rail-links .app-rail-link::after { font-size: .52rem; }
   body.animator-space-body .app-rail-link .material-symbols-outlined { font-size: 21px !important; }
   body.animator-space-body > .page-shell,
-  body.animator-space-body > main.page-shell { padding-inline: 8px !important; }
+  body.animator-space-body > main.page-shell { padding-inline: 4px !important; }
 }

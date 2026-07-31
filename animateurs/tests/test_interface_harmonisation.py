@@ -334,7 +334,9 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
 
     def test_les_pages_principales_utilisent_le_shell_et_les_cartes_communes(self):
         attentes = {
-            "templates/accueil.html": ["page-shell", "ui-card"],
+            # L'accueil possède deux compositions dédiées (direction et animateur),
+            # donc ses cartes ne passent volontairement pas par la classe ui-card.
+            "templates/accueil.html": ["page-shell", "dashboard-card", "animator-panel"],
             "templates/administration.html": ["page-shell", "ui-card"],
             "templates/documents_partages.html": ["page-shell", "partials/_page_header.html", "ui-grid"],
             "templates/employes.html": [
@@ -352,6 +354,17 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             contenu = (Path(settings.BASE_DIR) / fichier).read_text()
             for classe in classes:
                 self.assertIn(classe, contenu, fichier)
+
+    def test_les_disponibilites_sont_une_liste_chronologique_centree_sur_la_semaine_courante(self):
+        template = (Path(settings.BASE_DIR) / "templates/mes_disponibilites.html").read_text()
+        script = (Path(settings.BASE_DIR) / "static/js/mes-disponibilites.js").read_text()
+
+        self.assertIn('picker_mode="none"', template)
+        self.assertIn('<article class="availability-period availability-week-card', script)
+        self.assertNotIn('<details class="availability-period"', script)
+        self.assertIn("sort((a, b) => a.debut.localeCompare(b.debut))", script)
+        self.assertIn("periode.debut <= aujourdHui && periode.fin >= aujourdHui", script)
+        self.assertIn('scrollIntoView({block: "start"})', script)
 
     def test_le_script_email_definit_l_affichage_de_configuration(self):
         contenu = (Path(settings.BASE_DIR) / "static/js/emails.js").read_text()

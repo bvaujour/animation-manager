@@ -15,6 +15,14 @@
 .employee-badges{display:flex;flex-wrap:wrap;gap:7px}.employee-badges span{padding:6px 10px;border:1px solid color-mix(in srgb,var(--badge-color) 35%,white);border-radius:999px;background:color-mix(in srgb,var(--badge-color) 12%,white);color:color-mix(in srgb,var(--badge-color) 72%,#263044);font-size:.74rem;font-weight:750}
 .employee-stays{display:grid;gap:6px}.employee-stays>div{display:grid;gap:2px;padding:7px 9px;border-radius:10px;background:#fff7e8}.employee-stays strong{font-size:.78rem}.employee-stays span{color:var(--color-text-muted);font-size:.68rem}
 @media(max-width:900px){.employee-overview{grid-template-columns:1fr}.employee-overview>article{padding:14px}}
+@media(max-width:800px){
+body.animator-space-body .home-page{padding:4px 6px 18px !important}
+body.animator-space-body .employee-overview{gap:7px;margin-bottom:7px}
+body.animator-space-body .employee-overview>article{padding:12px}
+body.animator-space-body .home-section{margin-bottom:7px;padding:7px}
+body.animator-space-body .home-calendar-card{max-width:100%}
+body.animator-space-body .home-calendar-collapse-inner{padding:3px}
+}
 .home-header,.home-section{max-width:1280px;margin:0 auto 12px}
 .home-header{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:14px;box-shadow:var(--shadow-sm)}
 .home-header h1{margin-bottom:4px;font-size:clamp(1.35rem,3vw,1.9rem)}

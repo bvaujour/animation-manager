@@ -466,7 +466,7 @@ body.animator-dashboard-body{
 .animator-dashboard--simplified .animator-week-navigation{margin-bottom:10px}
 .animator-dashboard--simplified .animator-week-info{margin-bottom:10px}
 @media(max-width:700px){
- body.animator-space-body .animator-dashboard--simplified{padding-top:8px}
+ body.animator-space-body .animator-dashboard--simplified{padding:4px 6px 18px}
  .animator-mobile-header{position:static;min-height:44px;margin-bottom:5px}
  .animator-mobile-header h1{font-size:1rem}
  .animator-mobile-profile{width:36px;height:36px}
