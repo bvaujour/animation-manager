@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}{% if utilisateur_est_direction %}Tableau de bord{% else %}Mon tableau de bord{% endif %}{% endblock %}
+{% block title %}Tableau de bord{% endblock %}
 {% block body_class %}{% if utilisateur_est_direction %}dashboard-body{% else %}animator-dashboard-body{% endif %}{% endblock %}
 {% block page_styles %}
 {% if utilisateur_est_direction %}
@@ -91,7 +91,7 @@
 {% else %}
 <main id="main-content" class="animator-dashboard animator-dashboard--simplified">
     <header class="animator-mobile-header">
-        <h1>Mon planning</h1>
+        <h1>Tableau de bord</h1>
         <a class="animator-mobile-profile" href="{% url 'mon_profil' %}" aria-label="Ouvrir mon profil">
             <span>{{ animateur.prenom|first }}{{ animateur.nom|first }}</span>
         </a>

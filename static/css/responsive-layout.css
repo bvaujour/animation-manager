@@ -1,0 +1,339 @@
+/*
+ * Layout global et unique d'Animation Manager.
+ * Cette feuille est chargée après tous les CSS de page afin que chaque écran
+ * respecte les mêmes règles de navigation et d'espacement.
+ */
+
+:root {
+  --app-rail-width: 48px;
+  --app-mobile-nav-height: 68px;
+  --app-mobile-gutter: 6px;
+  --app-desktop-top-gap: 6px;
+}
+
+html,
+body.app-body {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+body.app-body:not(.login-body) {
+  padding-top: 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   Ordinateur et tablette large : rail fixe à gauche
+   -------------------------------------------------------------------------- */
+@media (min-width: 801px) {
+  body.app-body:not(.login-body) {
+    padding-left: var(--app-rail-width) !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  body.app-body:not(.login-body) > .app-rail {
+    position: fixed !important;
+    inset: 0 auto 0 0 !important;
+    width: var(--app-rail-width) !important;
+    height: 100dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: visible !important;
+  }
+
+  body.app-body:not(.login-body) > .page-shell,
+  body.app-body:not(.login-body) > main.page-shell {
+    width: min(100%, var(--app-content-max, 1560px)) !important;
+    max-width: var(--app-content-max, 1560px) !important;
+    margin-inline: auto !important;
+    padding-top: var(--app-desktop-top-gap) !important;
+  }
+
+  body.app-body:not(.login-body) > .page-shell--fluid,
+  body.app-body:not(.login-body) > main.page-shell--fluid,
+  body.dashboard-body > .page-shell.dashboard-page {
+    width: 100% !important;
+    max-width: none !important;
+    margin-inline: 0 !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Téléphone : la navigation de TOUS les comptes passe en bas
+   -------------------------------------------------------------------------- */
+@media (max-width: 800px) {
+  :root {
+    --app-rail-width: 0px;
+  }
+
+  body.app-body:not(.login-body) {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 0 calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
+    overflow-x: hidden !important;
+  }
+
+  body.app-body:not(.login-body) > .app-rail {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    z-index: 1600 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 42px !important;
+    align-items: start !important;
+    padding: 4px 5px env(safe-area-inset-bottom, 0px) !important;
+    border: 0 !important;
+    border-top: 1px solid var(--color-border) !important;
+    border-right: 0 !important;
+    background: rgba(255, 255, 255, .98) !important;
+    box-shadow: 0 -7px 24px rgba(20, 29, 59, .13) !important;
+    backdrop-filter: blur(14px);
+    transform: none !important;
+    overflow: hidden !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-links {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 60px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    gap: 1px !important;
+    padding: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.app-body:not(.login-body) .app-rail-links::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.app-body:not(.login-body) .app-rail-link {
+    width: 62px !important;
+    min-width: 62px !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    flex: 0 0 62px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    padding: 4px 2px !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #6d7690 !important;
+    transform: none !important;
+    scroll-snap-align: start;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body.app-body:not(.login-body) .app-rail-links .app-rail-link::after {
+    content: attr(aria-label);
+    display: block !important;
+    width: 100%;
+    overflow: hidden;
+    color: currentColor;
+    font-size: .54rem;
+    font-weight: 750;
+    line-height: 1.05;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.app-body:not(.login-body) .app-rail-link .material-symbols-outlined {
+    width: auto !important;
+    height: 23px !important;
+    font-size: 22px !important;
+    line-height: 23px !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-link.active {
+    color: var(--color-primary-dark) !important;
+    background: color-mix(in srgb, var(--color-primary) 11%, white) !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-account {
+    width: 42px !important;
+    height: 60px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-left: 1px solid var(--color-border) !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-avatar {
+    display: none !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-logout-form {
+    width: 40px !important;
+    margin: 0 !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-logout {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 56px !important;
+    min-height: 56px !important;
+    flex-basis: 40px !important;
+    color: #8b6070 !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-logout::after {
+    display: none !important;
+  }
+
+  /* Une seule gouttière mobile, identique sur toutes les pages. */
+  body.app-body:not(.login-body) > .page-shell,
+  body.app-body:not(.login-body) > main.page-shell,
+  body.dashboard-body > .page-shell.dashboard-page {
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 2px var(--app-mobile-gutter) 14px !important;
+    overflow: visible !important;
+  }
+
+  body.app-body:not(.login-body) > main:not(.page-shell) {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding-inline: var(--app-mobile-gutter) !important;
+  }
+
+  /* En-têtes cohérents et compacts. */
+  body.app-body:not(.login-body) .app-page-header,
+  body.app-body:not(.login-body) .page-header,
+  body.app-body:not(.login-body) .dashboard-header,
+  body.app-body:not(.login-body) .employees-page-header,
+  body.app-body:not(.login-body) .sorties-header,
+  body.app-body:not(.login-body) .sortie-detail-header,
+  body.app-body:not(.login-body) .recap-header,
+  body.app-body:not(.login-body) .administration-header,
+  body.app-body:not(.login-body) .documents-heading {
+    min-height: 0 !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 7px !important;
+    margin: 0 0 7px !important;
+    padding-top: 5px !important;
+  }
+
+  body.app-body:not(.login-body) h1 {
+    font-size: clamp(1.08rem, 5.2vw, 1.35rem) !important;
+    line-height: 1.15 !important;
+  }
+
+  /* Onglets et commandes restent utilisables au doigt. */
+  body.app-body:not(.login-body) .tabs,
+  body.app-body:not(.login-body) .app-page-tabs,
+  body.app-body:not(.login-body) .app-page-tabs-row,
+  body.app-body:not(.login-body) .admin-tabs,
+  body.app-body:not(.login-body) .documents-tabs,
+  body.app-body:not(.login-body) .recap-tabs {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.app-body:not(.login-body) .tabs::-webkit-scrollbar,
+  body.app-body:not(.login-body) .app-page-tabs::-webkit-scrollbar,
+  body.app-body:not(.login-body) .app-page-tabs-row::-webkit-scrollbar,
+  body.app-body:not(.login-body) .admin-tabs::-webkit-scrollbar,
+  body.app-body:not(.login-body) .documents-tabs::-webkit-scrollbar,
+  body.app-body:not(.login-body) .recap-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.app-body:not(.login-body) button,
+  body.app-body:not(.login-body) .btn,
+  body.app-body:not(.login-body) input,
+  body.app-body:not(.login-body) select {
+    min-height: 42px;
+  }
+
+  body.app-body:not(.login-body) input,
+  body.app-body:not(.login-body) select,
+  body.app-body:not(.login-body) textarea {
+    max-width: 100%;
+    font-size: 16px !important;
+  }
+
+  /* Les grilles standards s'empilent, sans écraser les tableaux métier. */
+  body.app-body:not(.login-body) .form-grid,
+  body.app-body:not(.login-body) .form-row,
+  body.app-body:not(.login-body) .documents-grid,
+  body.app-body:not(.login-body) .sortie-blocks,
+  body.app-body:not(.login-body) .sorties-cards,
+  body.app-body:not(.login-body) .dashboard-kpis,
+  body.app-body:not(.login-body) .dashboard-grid,
+  body.app-body:not(.login-body) .superuser-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body.app-body:not(.login-body) .table-wrap,
+  body.app-body:not(.login-body) .table-scroll,
+  body.app-body:not(.login-body) .recap-table-wrap,
+  body.app-body:not(.login-body) .planning-table-wrap {
+    max-width: 100%;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.app-body:not(.login-body) .modal-backdrop {
+    padding: 6px !important;
+  }
+
+  body.app-body:not(.login-body) .modal-box,
+  body.app-body:not(.login-body) dialog {
+    max-width: calc(100vw - 12px) !important;
+    max-height: calc(100dvh - 12px) !important;
+  }
+
+  /* Les éléments flottants ne doivent pas être cachés par la barre basse. */
+  body.app-body:not(.login-body) .btn-fab {
+    right: 12px !important;
+    bottom: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom, 0px) + 10px) !important;
+  }
+
+  body.app-body:not(.login-body) .toast,
+  body.app-body:not(.login-body) .dashboard-loading {
+    bottom: calc(var(--app-mobile-nav-height) + env(safe-area-inset-bottom, 0px) + 10px) !important;
+  }
+}
+
+@media (max-width: 390px) {
+  :root {
+    --app-mobile-gutter: 4px;
+  }
+
+  body.app-body:not(.login-body) .app-rail-link {
+    width: 58px !important;
+    min-width: 58px !important;
+    flex-basis: 58px !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-links .app-rail-link::after {
+    font-size: .51rem;
+  }
+}
