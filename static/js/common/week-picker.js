@@ -52,14 +52,6 @@
         return `${year}-${month}-${day}`;
     }
 
-    function formatDateFr(value) {
-        if (!value) return "";
-        const date = typeof parseLocalDate === "function"
-            ? parseLocalDate(value)
-            : new Date(`${value}T12:00:00`);
-        return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("fr-FR");
-    }
-
     function periodLabel(period) {
         if (typeof libellePeriodeAvecDates === "function") return libellePeriodeAvecDates(period);
         return period?.libelle || period?.nom || period?.semaine || "Semaine";

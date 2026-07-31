@@ -33,7 +33,7 @@ class AuthenticationRequiredTests(TestCase):
         Animateur.objects.create(prenom="Alice", nom="Unique", utilisateur=user)
         self.client.force_login(user)
 
-        for route in ("mon_planning", "mon_profil", "documents", "mes_disponibilites"):
+        for route in ("mon_profil", "documents", "mes_disponibilites"):
             with self.subTest(route=route):
                 response = self.client.get(reverse(route))
                 self.assertEqual(response.status_code, 200)

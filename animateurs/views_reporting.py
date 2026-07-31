@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import logging
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
@@ -9,8 +10,11 @@ from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from .access import est_direction
 from .models import Animateur, Document, PeriodeScolaire, PrimeJournalierePeriode
 from .services.dates import parse_to_aware_datetime
+
+logger = logging.getLogger(__name__)
 from .services.documents import valider_periode_document
 from .services.recapitulatif import generer_recapitulatif, generer_recapitulatif_excel, generer_recapitulatif_paie_pdf
 from .services.serializers import document_to_dict
@@ -357,23 +361,30 @@ def api_documents(request):
 
     if request.method == "GET":
         documents_qs = Document.objects.prefetch_related("periodes").all().order_by("-date_ajout")
+        if not est_direction(request.user):
+            documents_qs = documents_qs.filter(publie=True)
         return JsonResponse([document_to_dict(d) for d in documents_qs], safe=False)
 
     titre = request.POST.get("titre", "").strip()
     fichier = request.FILES.get("fichier")
-    permanent = False
+    permanent = str(request.POST.get("permanent", "")).lower() in {"1", "true", "on", "yes"}
     periode_ids_bruts = request.POST.getlist("periode_ids") or request.POST.getlist("periode_ids[]")
     try:
         periode_ids = list(dict.fromkeys(int(value) for value in periode_ids_bruts))
     except (TypeError, ValueError):
         return JsonResponse({"error": "La sélection de périodes est invalide."}, status=400)
-    periodes = list(PeriodeScolaire.objects.filter(pk__in=periode_ids).order_by("debut", "ordre", "nom"))
-    if not periode_ids:
-        return JsonResponse({"error": "Sélectionne au moins une semaine."}, status=400)
-    if len(periodes) != len(periode_ids):
-        return JsonResponse({"error": "Une semaine sélectionnée est introuvable."}, status=400)
-    periode_debut = min(periode.debut for periode in periodes)
-    periode_fin = max(periode.fin for periode in periodes)
+
+    periodes = []
+    periode_debut = None
+    periode_fin = None
+    if not permanent:
+        periodes = list(PeriodeScolaire.objects.filter(pk__in=periode_ids).order_by("debut", "ordre", "nom"))
+        if not periode_ids:
+            return JsonResponse({"error": "Sélectionne au moins une semaine ou choisis Document permanent."}, status=400)
+        if len(periodes) != len(periode_ids):
+            return JsonResponse({"error": "Une semaine sélectionnée est introuvable."}, status=400)
+        periode_debut = min(periode.debut for periode in periodes)
+        periode_fin = max(periode.fin for periode in periodes)
 
     if not titre or not fichier:
         return JsonResponse({"error": "Le titre et le fichier sont obligatoires."}, status=400)
@@ -386,14 +397,30 @@ def api_documents(request):
     if erreur:
         return JsonResponse({"error": erreur}, status=400)
 
-    document = Document.objects.create(
-        titre=titre,
-        fichier=fichier,
-        permanent=False,
-        periode_debut=periode_debut,
-        periode_fin=periode_fin,
-    )
-    document.periodes.set(periodes)
+    publie = str(request.POST.get("publie", "")).lower() in {"1", "true", "on", "yes"}
+    try:
+        with transaction.atomic():
+            document = Document.objects.create(
+                titre=titre,
+                publie=publie,
+                fichier=fichier,
+                permanent=permanent,
+                periode_debut=periode_debut,
+                periode_fin=periode_fin,
+            )
+            if periodes:
+                document.periodes.set(periodes)
+    except Exception:
+        logger.exception("Échec du stockage du document %s", titre)
+        return JsonResponse(
+            {
+                "error": (
+                    "Le fichier n'a pas pu être enregistré. Vérifie la configuration "
+                    "du stockage des documents, puis réessaie."
+                )
+            },
+            status=503,
+        )
 
     return JsonResponse(document_to_dict(document), status=201)
 
@@ -419,24 +446,34 @@ def api_document_detail(request, document_id):
         return JsonResponse({"error": "JSON invalide."}, status=400)
 
     titre = str(payload.get("titre", document.titre)).strip()
+    publie = bool(payload.get("publie", document.publie))
+    permanent = bool(payload.get("permanent", document.permanent))
     try:
         periode_ids = list(dict.fromkeys(int(value) for value in payload.get("periode_ids", [])))
     except (TypeError, ValueError):
         return JsonResponse({"error": "La sélection de périodes est invalide."}, status=400)
-    periodes = list(PeriodeScolaire.objects.filter(pk__in=periode_ids).order_by("debut", "ordre", "nom"))
 
     if not titre:
         return JsonResponse({"error": "Le titre est obligatoire."}, status=400)
-    if not periode_ids:
-        return JsonResponse({"error": "Sélectionne au moins une semaine."}, status=400)
-    if len(periodes) != len(periode_ids):
-        return JsonResponse({"error": "Une semaine sélectionnée est introuvable."}, status=400)
+
+    periodes = []
+    periode_debut = None
+    periode_fin = None
+    if not permanent:
+        periodes = list(PeriodeScolaire.objects.filter(pk__in=periode_ids).order_by("debut", "ordre", "nom"))
+        if not periode_ids:
+            return JsonResponse({"error": "Sélectionne au moins une semaine ou choisis Document permanent."}, status=400)
+        if len(periodes) != len(periode_ids):
+            return JsonResponse({"error": "Une semaine sélectionnée est introuvable."}, status=400)
+        periode_debut = min(periode.debut for periode in periodes)
+        periode_fin = max(periode.fin for periode in periodes)
 
     document.titre = titre
-    document.permanent = False
-    document.periode_debut = min(periode.debut for periode in periodes)
-    document.periode_fin = max(periode.fin for periode in periodes)
-    document.save(update_fields=["titre", "permanent", "periode_debut", "periode_fin"])
+    document.publie = publie
+    document.permanent = permanent
+    document.periode_debut = periode_debut
+    document.periode_fin = periode_fin
+    document.save(update_fields=["titre", "publie", "permanent", "periode_debut", "periode_fin"])
     document.periodes.set(periodes)
 
     return JsonResponse(document_to_dict(document))

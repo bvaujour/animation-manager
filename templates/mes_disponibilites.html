@@ -9,7 +9,7 @@
     <section class="ui-card fiche-card"><p class="empty-note">Ton compte n’est pas encore rattaché à une fiche salarié. Contacte la direction.</p></section>
     {% else %}
     <section class="ui-card fiche-section fiche-card disponibilites-card" data-animateur-id="{{ animateur.id }}">
-        <div class="ui-section-heading fiche-section-heading"><div><h2>Choisis tes jours disponibles</h2></div></div>
+        <div class="ui-section-heading fiche-section-heading"><div><h2>Choisis tes semaines disponibles</h2><p>Coche une semaine entière, puis décoche seulement les jours où tu ne seras pas disponible.</p></div></div>
         <p id="disponibilites-status" class="form-error" role="status"></p>
         <div id="mes-disponibilites-root"></div>
         <div class="fiche-actions"><button id="enregistrer-disponibilites" class="btn btn-primary" type="button">Enregistrer mes disponibilités</button></div>

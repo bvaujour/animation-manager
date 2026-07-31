@@ -16,10 +16,6 @@
     let previewController = null;
     initLocationAutocomplete(form.querySelector("[data-location-autocomplete]"));
 
-    function formatDate(date, options) {
-        return parseLocalDate(date).toLocaleDateString("fr-FR", options);
-    }
-
     async function load() {
         if (!selectedPeriods.length) {
             root.innerHTML = '<p class="empty-note">Choisissez une ou plusieurs semaines.</p>';
@@ -37,7 +33,7 @@
                                             ${sortie.statut === "prete" ? "Prête" : "À compléter"}
                                         </span>
                                     </header>
-                                    <small class="sortie-card-date">${formatDate(sortie.date, { weekday: "long", day: "numeric", month: "long" })}</small>
+                                    <small class="sortie-card-date">${formatDateLocale(sortie.date, { weekday: "long", day: "numeric", month: "long" })}</small>
                                     <p>${escapeHtml(sortie.destination_details?.nom||sortie.destination)}${sortie.destination_details?.code_postal?`<br><small>${escapeHtml(sortie.destination_details.code_postal)} ${escapeHtml(sortie.destination_details.commune||"")}</small>`:""}</p>
                                     <small>${sortie.groupes.length
                                         ? sortie.groupes.map((group) => `${escapeHtml(group.centre)} — ${escapeHtml(group.groupe)}`).join(" · ")
@@ -49,7 +45,7 @@
                 : '<p class="empty-note">Aucune sortie cette semaine.</p>';
             return `
                 <section class="sorties-week">
-                    <h2>${escapeHtml(week.nom)} — du ${formatDate(week.debut, { day: "numeric", month: "long" })} au ${formatDate(week.fin, { day: "numeric", month: "long" })}</h2>
+                    <h2>${escapeHtml(week.nom)} — du ${formatDateLocale(week.debut, { day: "numeric", month: "long" })} au ${formatDateLocale(week.fin, { day: "numeric", month: "long" })}</h2>
                     ${content}
                 </section>
             `;
@@ -65,13 +61,9 @@
             .map((input) => Number(input.value));
     }
 
-    function plural(value, singular, pluralValue) {
-        return `${value} ${value > 1 ? pluralValue : singular}`;
-    }
-
     function updateSelectionCount() {
         const count = selectedGroupIds().length;
-        groupsCount.textContent = plural(count, "groupe", "groupes");
+        groupsCount.textContent = pluraliser(count, "groupe", "groupes");
         groupsRoot.querySelectorAll("[data-centre-card]").forEach((card) => {
             const toggle = card.querySelector("[data-centre-toggle]");
             const choices = [...card.querySelectorAll('input[name="groupes"]:not(:disabled)')];

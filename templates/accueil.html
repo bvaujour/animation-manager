@@ -2,11 +2,16 @@
 {% load static %}
 {% block title %}Tableau de bord{% endblock %}
 {% block body_class %}{% if utilisateur_est_direction %}dashboard-body{% else %}animator-dashboard-body{% endif %}{% endblock %}
+{% block extra_head %}{% if not utilisateur_est_direction %}<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>{% endif %}{% endblock %}
 {% block page_styles %}
 {% if utilisateur_est_direction %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}">
 {% else %}
+<link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/demandes-materiel.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v={{ asset_version }}">
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -89,113 +94,31 @@
     <div id="dashboard-loading" class="dashboard-loading" role="status" aria-live="polite">Mise à jour du tableau de bord…</div>
 </main>
 {% else %}
-<main id="main-content" class="animator-dashboard animator-dashboard--simplified">
-    <header class="animator-mobile-header">
+<main id="main-content" class="animator-dashboard animator-dashboard--simplified" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
+    <header class="animator-mobile-header animator-dashboard-header">
         <h1>Tableau de bord</h1>
+        <nav class="animator-week-navigation animator-week-navigation--header" aria-label="Navigation des semaines">
+            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+            <div>
+                <strong>{{ semaine.libelle }}</strong>
+                {% if not semaine.est_courante %}<a href="?semaine={{ semaine.courante|date:'Y-m-d' }}">Cette semaine</a>{% endif %}
+            </div>
+            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+        </nav>
         <a class="animator-mobile-profile" href="{% url 'mon_profil' %}" aria-label="Ouvrir mon profil">
             <span>{{ animateur.prenom|first }}{{ animateur.nom|first }}</span>
         </a>
     </header>
 
-    <nav class="animator-week-navigation" aria-label="Navigation des semaines">
-        <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
-        <div>
-            <strong>{{ semaine.libelle }}</strong>
-            {% if not semaine.est_courante %}<a href="?semaine={{ semaine.courante|date:'Y-m-d' }}">Revenir à cette semaine</a>{% endif %}
+    <section class="ui-card ui-section home-section home-planning-section animator-dashboard-calendar" aria-labelledby="animator-planning-title">
+        <div class="ui-section-heading section-heading">
+            <h2 id="animator-planning-title">Mon planning</h2>
         </div>
-        <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
-    </nav>
-
-    {% if semaine.est_courante %}
-    {% for jour in jours %}
-    {% if jour.est_aujourdhui %}
-    <section class="animator-today-card{% if not jour.travaille %} is-rest{% endif %}" aria-label="Mon programme aujourd’hui">
-        <header>
-            <div><strong>Aujourd’hui</strong><span>{{ jour.jour }} {{ jour.date_libelle }}</span></div>
-            {% if jour.travaille %}<span class="animator-today-work">Travaillé</span>{% endif %}
-        </header>
-        {% if jour.travaille %}
-        <div class="animator-today-main">
-            <div class="animator-today-place"><span aria-hidden="true">⌂</span><div><strong>{{ jour.centre }}</strong><small>{{ jour.groupe }}</small></div></div>
-            <div class="animator-today-details">
-                {% if jour.horaires_renseignes %}<span><b aria-hidden="true">◷</b>{{ jour.horaire }}</span>{% endif %}
-                {% if jour.effectif_renseigne %}<span><b aria-hidden="true">◉</b>{{ jour.enfants }} enfant{{ jour.enfants|pluralize }}</span>{% endif %}
-                {% if jour.collegues %}<span><b aria-hidden="true">♙</b>{{ jour.collegues_libelle }}</span>{% endif %}
-            </div>
-            {% if jour.sortie %}
-            <div class="animator-today-outing"><strong>🚌 {{ jour.sortie.nom }}</strong>{% if jour.sortie.depart or jour.sortie.retour %}<span>{% if jour.sortie.depart %}Départ {{ jour.sortie.depart }}{% endif %}{% if jour.sortie.depart and jour.sortie.retour %} · {% endif %}{% if jour.sortie.retour %}Retour {{ jour.sortie.retour }}{% endif %}</span>{% endif %}</div>
-            {% endif %}
-            {% if jour.responsabilite %}<p class="animator-today-responsibility">{{ jour.responsabilite }}</p>{% endif %}
-        </div>
+        {% if planning_publie %}
+        <div id="home-calendars" class="home-calendars calendar-sites"></div>
         {% else %}
-        <div class="animator-today-rest"><span aria-hidden="true">😴</span><div><strong>Repos aujourd’hui</strong><p>Aucune affectation prévue.</p></div></div>
+        <p class="animator-empty-state">Le planning de cette semaine n’est pas encore publié par la direction.</p>
         {% endif %}
-    </section>
-    {% endif %}
-    {% endfor %}
-    {% endif %}
-
-
-    {% if infos_semaine %}
-    <section class="animator-week-info" aria-labelledby="animator-week-info-title">
-        <span class="animator-week-info-icon" aria-hidden="true">📣</span>
-        <div>
-            <h2 id="animator-week-info-title">Informations de la semaine</h2>
-            <ul>{% for information in infos_semaine %}<li>{{ information }}</li>{% endfor %}</ul>
-        </div>
-    </section>
-    {% endif %}
-
-    <section class="animator-panel animator-planning-panel" aria-labelledby="animator-planning-title">
-        <header class="animator-panel-header">
-            <h2 id="animator-planning-title"><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span> Mon planning de la semaine</h2>
-            <span>{{ disponibilites.jours_travailles }} jour{{ disponibilites.jours_travailles|pluralize }} travaillé{{ disponibilites.jours_travailles|pluralize }}</span>
-        </header>
-
-        <div class="animator-week-grid">
-            {% for jour in jours %}
-            <article class="animator-day-card{% if jour.est_aujourdhui %} is-today{% endif %}{% if not jour.travaille %} is-rest{% endif %}"{% if jour.centre_couleur %} style="--day-accent:{{ jour.centre_couleur }}"{% endif %}>
-                <header>
-                    <strong>{{ jour.jour|upper }}</strong>
-                    <span>{{ jour.date_libelle|upper }}</span>
-                </header>
-                <div class="animator-day-status-row">
-                    {% if jour.est_aujourdhui %}<span class="animator-today-badge"><i></i>Aujourd’hui</span>{% endif %}
-                    <span class="animator-work-badge{% if not jour.travaille %} animator-work-badge--rest{% endif %}">{% if jour.travaille %}Travaillé{% else %}Repos{% endif %}</span>
-                </div>
-
-                {% if jour.travaille %}
-                <div class="animator-day-content">
-                    <div class="animator-day-place">
-                        <span class="animator-place-icon" aria-hidden="true">⌂</span>
-                        <div><strong>{{ jour.centre }}</strong><small>{{ jour.groupe }}</small></div>
-                    </div>
-                    <dl class="animator-day-facts">
-                        <div><dt>◷</dt><dd>{{ jour.horaire }}</dd></div>
-                        <div><dt>◉</dt><dd>{% if jour.effectif_renseigne %}{{ jour.enfants }} enfant{{ jour.enfants|pluralize }}{% else %}Effectif à confirmer{% endif %}</dd></div>
-                        <div><dt>♙</dt><dd>{{ jour.animateurs }} animateur{{ jour.animateurs|pluralize }}</dd></div>
-                    </dl>
-                    <div class="animator-day-highlight{% if not jour.sortie %} is-empty{% endif %}">
-                        {% if jour.sortie %}
-                        <strong>Sortie : {{ jour.sortie.nom }}</strong>
-                        {% if jour.sortie.depart or jour.sortie.retour %}<span>{% if jour.sortie.depart %}Départ {{ jour.sortie.depart }}{% endif %}{% if jour.sortie.depart and jour.sortie.retour %} · {% endif %}{% if jour.sortie.retour %}Retour {{ jour.sortie.retour }}{% endif %}</span>{% endif %}
-                        {% else %}
-                        <span>Journée au centre</span>
-                        {% endif %}
-                    </div>
-                    <p class="animator-day-team"><strong>Avec&nbsp;:</strong> {% if jour.collegues %}{{ jour.collegues_libelle }}{% else %}Équipe à confirmer{% endif %}</p>
-                    <p class="animator-day-responsibility">{% if jour.responsabilite %}<strong>{{ jour.responsabilite }}</strong>{% else %}<span>Responsabilité non renseignée</span>{% endif %}</p>
-                </div>
-                {% else %}
-                <div class="animator-rest-content">
-                    <span aria-hidden="true">⌂<i>z</i></span>
-                    <strong>Aucune affectation</strong>
-                    <p>{% if jour.disponible %}Tu es disponible ce jour-là.{% else %}Aucune disponibilité déclarée.{% endif %}</p>
-                </div>
-                {% endif %}
-            </article>
-            {% endfor %}
-        </div>
     </section>
 
     <section class="animator-dashboard-grid animator-dashboard-grid--three">
@@ -209,34 +132,35 @@
                 </div>
                 {% empty %}<p class="animator-empty-state">Aucune sortie ne te concerne cette semaine.</p>{% endfor %}
             </div>
-            <a class="animator-card-action" href="{% url 'mon_planning' %}">Voir mon planning complet</a>
         </article>
 
-        <article class="animator-panel animator-compact-card">
-            <header class="animator-panel-header"><h2><span class="material-symbols-outlined" aria-hidden="true">event_available</span> Mes disponibilités</h2></header>
-            <div class="animator-availability-summary">
-                <div><strong>{{ disponibilites.jours_disponibles }}</strong><span>jours disponibles</span></div>
-                <div><strong>{{ disponibilites.jours_travailles }}</strong><span>jours affectés</span></div>
-                <div><strong>{{ disponibilites.jours_libres }}</strong><span>disponibles sans affectation</span></div>
-            </div>
-            <div class="animator-availability-days">
-                {% for jour in jours %}<span class="{% if jour.disponible %}is-available{% endif %}{% if jour.travaille %} is-assigned{% endif %}">{{ jour.jour|slice:':3' }}</span>{% endfor %}
-            </div>
-            <a class="animator-card-action" href="{% url 'mes_disponibilites' %}">Modifier mes disponibilités</a>
+        <article class="animator-panel animator-compact-card animator-availability-card disponibilites-card" data-animateur-id="{{ animateur.id }}">
+            <header class="animator-panel-header"><h2>Mes disponibilités</h2></header>
+            <p class="animator-availability-line">
+                <strong>{{ disponibilites.jours_disponibles }}</strong> disponible{{ disponibilites.jours_disponibles|pluralize }}
+                <span>·</span>
+                <strong>{{ disponibilites.jours_travailles }}</strong> affecté{{ disponibilites.jours_travailles|pluralize }}
+                <span>·</span>
+                <strong>{{ disponibilites.jours_libres }}</strong> libre{{ disponibilites.jours_libres|pluralize }}
+            </p>
+            <details class="animator-inline-editor">
+                <summary>Modifier mes disponibilités</summary>
+                <p id="disponibilites-status" class="form-error" role="status"></p>
+                <div id="mes-disponibilites-root"></div>
+                <button id="enregistrer-disponibilites" class="btn btn-primary" type="button">Enregistrer</button>
+            </details>
         </article>
 
-        <article class="animator-panel animator-compact-card">
-            <header class="animator-panel-header"><h2><span class="material-symbols-outlined" aria-hidden="true">description</span> Documents utiles</h2></header>
+        <article class="animator-panel animator-compact-card animator-documents-card">
+            <header class="animator-panel-header"><h2>Documents</h2></header>
             <div class="animator-card-list">
                 {% for document in documents %}
                 <a class="animator-list-item animator-list-item--document" href="{{ document.fichier.url }}" target="_blank" rel="noopener">
-                    <span class="material-symbols-outlined" aria-hidden="true">description</span>
-                    <div><strong>{{ document.titre }}</strong><small>{{ document.libelle_periode }}</small></div>
+                    <div><strong>{{ document.titre }}</strong><small>{{ document.libelle_dashboard|default:document.libelle_periode }}</small></div>
                     <b aria-hidden="true">›</b>
                 </a>
                 {% empty %}<p class="animator-empty-state">Aucun document pour cette semaine.</p>{% endfor %}
             </div>
-            <a class="animator-card-action" href="{% url 'documents' %}">Ouvrir tous les documents</a>
         </article>
     </section>
 
@@ -252,7 +176,7 @@
             </div>
         </article>
         <article class="animator-panel animator-wide-card animator-profile-summary">
-            <header class="animator-panel-header"><h2><span class="material-symbols-outlined" aria-hidden="true">groups</span> Mes informations</h2></header>
+            <header class="animator-panel-header"><h2>Mes informations</h2></header>
             <div>
                 <span class="animator-profile-summary-avatar">{{ animateur.prenom|first }}{{ animateur.nom|first }}</span>
                 <p><strong>{{ animateur.prenom }} {{ animateur.nom }}</strong><small>{{ animateur.email|default:'E-mail non renseigné' }}</small><small>{{ animateur.telephone|default:'Téléphone non renseigné' }}</small></p>
@@ -261,10 +185,66 @@
         </article>
     </section>
 
+
+    <section id="materiel" class="ui-card material-dashboard-section" aria-labelledby="material-dashboard-title">
+        <div class="ui-section-heading"><h2 id="material-dashboard-title">Demandes de matériel</h2></div>
+        {% if message_materiel %}<p class="material-feedback material-feedback--success" role="status">{{ message_materiel }}</p>{% endif %}
+        {% if erreur_materiel %}<p class="material-feedback material-feedback--error" role="alert">{{ erreur_materiel }}</p>{% endif %}
+        <form method="post" class="material-form material-form--dashboard" data-material-form data-centre-api="{% url 'api_mon_centre_affectation' %}">
+            {% csrf_token %}
+            <input type="hidden" name="module" value="materiel">
+            <input type="hidden" name="action" value="creer">
+            <label class="material-field material-field--wide">
+                <span>Matériel</span>
+                <input type="text" name="materiel" maxlength="180" required placeholder="Ex. Feutres, ballons, papier…">
+            </label>
+            <label class="material-field">
+                <span>Quantité</span>
+                <input type="number" name="quantite" min="1" value="1" required>
+            </label>
+            <label class="material-field">
+                <span>Date souhaitée</span>
+                <input type="date" name="date_besoin" required data-material-date>
+            </label>
+            <label class="material-field">
+                <span>Centre</span>
+                <select name="centre_id" required data-material-centre>
+                    <option value="">Choisir…</option>
+                    {% for centre in centres_materiel %}<option value="{{ centre.id }}">{{ centre.nom }}</option>{% endfor %}
+                </select>
+            </label>
+            <button class="btn btn-primary material-submit" type="submit">Envoyer</button>
+        </form>
+
+        <div class="material-list material-dashboard-list">
+            {% for demande in demandes_materiel %}
+            <article class="material-request{% if demande.statut == 'validee' %} material-request--validated{% endif %}">
+                <div class="material-request-main">
+                    <div class="material-request-title-row"><h3>{{ demande.materiel }}</h3><span class="material-quantity">× {{ demande.quantite }}</span></div>
+                    <div class="material-meta">
+                        <span>{{ demande.centre.nom|default:'Centre non renseigné' }}</span>
+                        <span>Pour le {{ demande.date_besoin|date:'d/m/Y' }}</span>
+                        <span>Créée le {{ demande.date_creation|date:'d/m/Y à H:i' }}</span>
+                    </div>
+                </div>
+                <div class="material-request-side">
+                    <span class="material-status material-status--{{ demande.statut }}">{{ demande.get_statut_display }}</span>
+                    <form method="post" onsubmit="return confirm('Supprimer définitivement cette demande ?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="module" value="materiel">
+                        <input type="hidden" name="action" value="supprimer">
+                        <input type="hidden" name="demande_id" value="{{ demande.id }}">
+                        <button class="btn btn-danger btn-small" type="submit">Supprimer</button>
+                    </form>
+                </div>
+            </article>
+            {% empty %}<p class="animator-empty-state">Aucune demande pour le moment.</p>{% endfor %}
+        </div>
+    </section>
+
     <footer class="animator-dashboard-footer">
         <span aria-hidden="true">ⓘ</span>
         <p>Les informations affichées proviennent du planning, des sorties et des documents renseignés par la direction.</p>
-        <a href="{% url 'mon_planning' %}">Ouvrir le planning détaillé&nbsp;›</a>
     </footer>
 </main>
 {% endif %}
@@ -273,5 +253,7 @@
 {% if utilisateur_est_direction %}
 <script src="{% static 'js/dashboard.js' %}?v={{ asset_version }}"></script>
 {% else %}
+<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'js/mes-disponibilites.js' %}?v={{ asset_version }}"></script>
 {% endif %}
 {% endblock %}

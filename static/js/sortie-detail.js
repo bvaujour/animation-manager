@@ -9,7 +9,6 @@ const text=v=>escapeHtml(v||"Non renseigné"),names=v=>(v||[]).map(x=>x.nom).joi
 const parseMaybeDate=value=>value?parseLocalDate(value):null;
 const nl2br=value=>text(value).replace(/\n/g,"<br>");
 const timeValue=value=>value?String(value).slice(0,5):"";
-const plural=(count,singular,pluralForm=null)=>`${count} ${count>1?(pluralForm||singular+"s"):singular}`;
 const dedupeById=items=>Object.values((items||[]).reduce((acc,item)=>{if(item&&item.id!=null)acc[item.id]=item;return acc;},{}));
 const safeHex=value=>/^#[0-9a-f]{6}$/i.test(String(value||""))?String(value):"#64748B";
 const staffVars=person=>`--staff-color:${safeHex(person?.couleur_statut)};--staff-bg:${safeHex(person?.couleur_fond_statut||"#EEF1F5")}`;
@@ -225,7 +224,7 @@ function responsibilitySummary(item){
     return {
       key:`lieu-${item.centre.id}`,
       title:`Lieu — ${item.centre.nom}`,
-      subtitle:groups.length?`${plural(groups.length,'groupe')}`:'Aucun groupe',
+      subtitle:groups.length?`${pluraliser(groups.length,'groupe')}`:'Aucun groupe',
       enfants:sumBy(groups,'effectif'),
       animateurs:animateurs.length,
     };
@@ -395,7 +394,7 @@ function transportLine(label,value){
 function transportModeSummary(t){
   if(!t.mode_transport) return '<p class="sortie-transport-missing">Mode de transport à compléter</p>';
   const avecVehicules=["Car","Minibus"].includes(t.mode_transport)&&t.nombre_vehicules;
-  const vehicules=avecVehicules?` · ${plural(t.nombre_vehicules,t.mode_transport==="Car"?"car":"minibus",t.mode_transport==="Car"?"cars":"minibus")}`:"";
+  const vehicules=avecVehicules?` · ${pluraliser(t.nombre_vehicules,t.mode_transport==="Car"?"car":"minibus",t.mode_transport==="Car"?"cars":"minibus")}`:"";
   return `<p class="sortie-transport-mode"><strong>${escapeHtml(t.mode_transport)}</strong>${vehicules}</p>`;
 }
 function transportSourceNote(source){
@@ -494,9 +493,9 @@ function render(){
   // un groupe concerné reste utile à afficher même si son effectif vaut zéro.
   const locationCard=locationCodes.length?`<article class="sortie-summary-locations is-clickable" data-block="participants" tabindex="0" role="button"><span>Lieux concernés</span><strong>${locationCodes.map(escapeHtml).join(" · ")}</strong></article>`:"";
   const effectifRows=[
-    buckets.maternels.length?`<div><span>Maternelles</span><strong>${plural(maternalTotal.enfants,"enfant")} + ${plural(maternalTotal.animateurs,"animateur")}</strong></div>`:"",
-    buckets.elementaires.length?`<div><span>Élémentaires</span><strong>${plural(elementaryTotal.enfants,"enfant")} + ${plural(elementaryTotal.animateurs,"animateur")}</strong></div>`:"",
-    `<div class="sortie-effectifs-total"><span>Total</span><strong>${plural(totalChildren,"enfant")} + ${plural(totalAnimators,"animateur")}</strong></div>`,
+    buckets.maternels.length?`<div><span>Maternelles</span><strong>${pluraliser(maternalTotal.enfants,"enfant")} + ${pluraliser(maternalTotal.animateurs,"animateur")}</strong></div>`:"",
+    buckets.elementaires.length?`<div><span>Élémentaires</span><strong>${pluraliser(elementaryTotal.enfants,"enfant")} + ${pluraliser(elementaryTotal.animateurs,"animateur")}</strong></div>`:"",
+    `<div class="sortie-effectifs-total"><span>Total</span><strong>${pluraliser(totalChildren,"enfant")} + ${pluraliser(totalAnimators,"animateur")}</strong></div>`,
   ].join("");
   const effectifsCard=`<article class="sortie-summary-effectifs is-clickable" data-block="participants" tabindex="0" role="button"><span>Effectifs</span><div class="sortie-effectifs-lines">${effectifRows}</div></article>`;
   const transportCard=`<article class="sortie-summary-transport is-clickable" data-block="participants" tabindex="0" role="button"><span>Transport</span><strong>${escapeHtml(transportLabel)}</strong></article>`;
@@ -573,7 +572,7 @@ function render(){
                     <div class="sortie-repartition-heading">
                       <strong class="sortie-repartition-name"><span>${escapeHtml(row.group.centre_code||row.centre)}</span><i aria-hidden="true">·</i><span>${escapeHtml(row.group.groupe)}</span></strong>
                     </div>
-                    <span class="sortie-effectifs-text">${plural(row.children,"enfant")} + ${plural(row.coverageStaff.length,"animateur")}</span>
+                    <span class="sortie-effectifs-text">${pluraliser(row.children,"enfant")} + ${pluraliser(row.coverageStaff.length,"animateur")}</span>
                   </td>
                   <td data-label="Taux d’encadrement">${coverageDetails(row)}</td>
                   <td data-label="Animateurs affectés"><div class="sortie-assigned-staff">${row.staff.length?row.staff.map(person=>`<span class="sortie-staff-pill" style="${staffVars(person)}"><strong>${escapeHtml(person.nom)}</strong><small>· ${escapeHtml(staffStatusName(person))}</small></span>`).join(""):'<span class="sortie-muted">Aucun animateur affecté</span>'}</div></td>
@@ -609,7 +608,7 @@ function render(){
                 <li>${groupCountLabel(buckets.maternels)} maternels · ${maternalStats.enfants} enfants</li>
                 <li>${groupCountLabel(buckets.elementaires)} élémentaires · ${elementaryStats.enfants} enfants</li>
                 ${otherStats.groupes?`<li>${groupCountLabel(buckets.autres)} autre(s) · ${otherStats.enfants} enfants</li>`:""}
-                <li>${plural(totalAnimators,"animateur")} mobilisé${totalAnimators>1?"s":""}</li>
+                <li>${pluraliser(totalAnimators,"animateur")} mobilisé${totalAnimators>1?"s":""}</li>
               </ul>
             </article>
           </div>

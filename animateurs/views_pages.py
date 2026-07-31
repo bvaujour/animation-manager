@@ -5,7 +5,6 @@ import datetime
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -13,7 +12,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.cache import never_cache
 
 from .access import est_direction
-from .models import Centre, PeriodeScolaire
+from .models import Affectation, Centre, DemandeMateriel, PeriodeScolaire
 from .services.animateur_dashboard import generer_tableau_de_bord_animateur
 from .services.comptes import valider_mot_de_passe
 from .services.dashboard import generer_tableau_de_bord
@@ -50,42 +49,186 @@ def changer_mot_de_passe(request):
     return render(request, "registration/changer_mot_de_passe.html", {"erreur": erreur})
 
 
+def _centre_affectation_animateur(animateur, jour):
+    if animateur is None or jour is None:
+        return None
+    debut = timezone.make_aware(datetime.datetime.combine(jour, datetime.time.min))
+    fin = debut + datetime.timedelta(days=1)
+    return (
+        Affectation.objects.filter(animateur=animateur, debut__lt=fin, fin__gt=debut)
+        .select_related("centre")
+        .order_by("debut")
+        .values_list("centre_id", flat=True)
+        .first()
+    )
+
+
 def accueil(request):
     contexte = {"active_page": "accueil"}
     if not est_direction(request.user):
         animateur = getattr(request.user, "profil_animateur", None)
         contexte["animateur"] = animateur
+        message_materiel = ""
+        erreur_materiel = ""
+
+        if request.method == "POST" and request.POST.get("module") == "materiel":
+            action = request.POST.get("action", "creer")
+            if animateur is None:
+                erreur_materiel = "Ton compte n’est pas rattaché à une fiche salarié."
+            elif action == "supprimer":
+                try:
+                    demande = DemandeMateriel.objects.get(pk=request.POST.get("demande_id"), animateur=animateur)
+                except (DemandeMateriel.DoesNotExist, ValueError, TypeError):
+                    erreur_materiel = "Cette demande n’existe plus ou ne t’appartient pas."
+                else:
+                    demande.delete()
+                    message_materiel = "La demande a été supprimée."
+            elif action == "creer":
+                materiel = request.POST.get("materiel", "").strip()
+                date_besoin = parse_date(request.POST.get("date_besoin", ""))
+                try:
+                    quantite = int(request.POST.get("quantite", "1"))
+                except (TypeError, ValueError):
+                    quantite = 0
+                try:
+                    centre = Centre.objects.get(pk=int(request.POST.get("centre_id", "")))
+                except (TypeError, ValueError, Centre.DoesNotExist):
+                    centre = None
+
+                if not materiel:
+                    erreur_materiel = "Indique le matériel demandé."
+                elif quantite < 1:
+                    erreur_materiel = "La quantité doit être au moins égale à 1."
+                elif date_besoin is None:
+                    erreur_materiel = "Indique une date précise pour cette demande."
+                elif centre is None:
+                    erreur_materiel = "Choisis le centre concerné."
+                else:
+                    DemandeMateriel.objects.create(
+                        animateur=animateur,
+                        centre=centre,
+                        materiel=materiel,
+                        quantite=quantite,
+                        date_besoin=date_besoin,
+                    )
+                    message_materiel = "Ta demande de matériel a été enregistrée."
+
         if animateur is not None:
             date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
             contexte.update(generer_tableau_de_bord_animateur(animateur, date_reference))
+            contexte.update({
+                "centres_materiel": Centre.objects.all(),
+                "demandes_materiel": DemandeMateriel.objects.filter(animateur=animateur).select_related("centre"),
+                "message_materiel": message_materiel,
+                "erreur_materiel": erreur_materiel,
+            })
     return render(request, "accueil.html", contexte)
 
 
-def mon_planning(request):
-    """Planning et séjours du seul salarié associé au compte connecté."""
+@never_cache
+def api_mon_centre_affectation(request):
     if est_direction(request.user):
-        return redirect("planning")
+        return JsonResponse({"centre_id": None})
     animateur = getattr(request.user, "profil_animateur", None)
-    contexte = {"active_page": "mon_planning", "animateur": animateur}
-    if animateur is not None:
-        aujourd_hui = timezone.localdate()
-        affectations = (
-            animateur.affectations.select_related("centre", "evenement")
-            .filter(fin__date__gt=aujourd_hui)
-            .order_by("debut")
-        )
-        contexte["centres_affectes"] = Centre.objects.filter(
-            affectations__animateur=animateur
-        ).distinct().order_by("ordre", "nom")
-        # Le modèle Groupe n'ayant pas encore de catégorie, les séjours sont
-        # identifiés par leur libellé métier dans le groupe ou le lieu.
-        contexte["sejours"] = affectations.filter(
-            Q(centre__nom__icontains="séjour")
-            | Q(centre__nom__icontains="sejour")
-            | Q(evenement__nom__icontains="séjour")
-            | Q(evenement__nom__icontains="sejour")
-        )
-    return render(request, "mon_planning.html", contexte)
+    jour = parse_date(request.GET.get("date", ""))
+    return JsonResponse({"centre_id": _centre_affectation_animateur(animateur, jour)})
+
+
+
+def demandes_materiel(request):
+    """Traitement des demandes côté direction; côté animateur tout est sur le tableau de bord."""
+    direction = est_direction(request.user)
+    animateur = getattr(request.user, "profil_animateur", None)
+    if not direction:
+        return redirect("accueil")
+    message = ""
+    erreur = ""
+
+    if request.method == "POST":
+        action = request.POST.get("action", "creer")
+
+        if action == "supprimer":
+            demande_id = request.POST.get("demande_id")
+            demandes_autorisees = DemandeMateriel.objects.all()
+            if not direction:
+                if animateur is None:
+                    demandes_autorisees = DemandeMateriel.objects.none()
+                else:
+                    demandes_autorisees = demandes_autorisees.filter(animateur=animateur)
+            try:
+                demande = demandes_autorisees.get(pk=demande_id)
+            except (DemandeMateriel.DoesNotExist, ValueError, TypeError):
+                erreur = "Cette demande n’existe plus ou tu ne peux pas la supprimer."
+            else:
+                demande.delete()
+                message = "La demande de matériel a été supprimée."
+
+        elif direction and action in {"valider", "remettre_en_attente"}:
+            demande_id = request.POST.get("demande_id")
+            try:
+                demande = DemandeMateriel.objects.get(pk=demande_id)
+            except (DemandeMateriel.DoesNotExist, ValueError, TypeError):
+                erreur = "Cette demande n’existe plus."
+            else:
+                if action == "valider":
+                    demande.statut = DemandeMateriel.STATUT_VALIDEE
+                    demande.date_validation = timezone.now()
+                    demande.validee_par = request.user
+                    message = "La demande a été marquée comme validée."
+                else:
+                    demande.statut = DemandeMateriel.STATUT_EN_ATTENTE
+                    demande.date_validation = None
+                    demande.validee_par = None
+                    message = "La demande a été remise en attente."
+                demande.save(update_fields=["statut", "date_validation", "validee_par"])
+
+        elif not direction and action == "creer":
+            if animateur is None:
+                erreur = "Ton compte n’est pas rattaché à une fiche salarié."
+            else:
+                materiel = request.POST.get("materiel", "").strip()
+                date_besoin = parse_date(request.POST.get("date_besoin", ""))
+                try:
+                    quantite = int(request.POST.get("quantite", "1"))
+                except (TypeError, ValueError):
+                    quantite = 0
+
+                if not materiel:
+                    erreur = "Indique le matériel demandé."
+                elif quantite < 1:
+                    erreur = "La quantité doit être au moins égale à 1."
+                elif date_besoin is None:
+                    erreur = "Indique une date précise pour cette demande."
+                else:
+                    DemandeMateriel.objects.create(
+                        animateur=animateur,
+                        materiel=materiel,
+                        quantite=quantite,
+                        date_besoin=date_besoin,
+                    )
+                    message = "Ta demande de matériel a été enregistrée."
+        else:
+            erreur = "Action non autorisée."
+
+    if direction:
+        demandes = DemandeMateriel.objects.select_related("animateur", "centre", "validee_par").all()
+    elif animateur is not None:
+        demandes = DemandeMateriel.objects.filter(animateur=animateur).select_related("animateur", "centre", "validee_par")
+    else:
+        demandes = DemandeMateriel.objects.none()
+
+    return render(
+        request,
+        "demandes_materiel.html",
+        {
+            "active_page": "materiel",
+            "direction": direction,
+            "animateur": animateur,
+            "demandes": demandes,
+            "message": message,
+            "erreur": erreur,
+        },
+    )
 
 
 def mon_profil(request):
@@ -104,6 +247,7 @@ def mon_profil(request):
         if action == "coordonnees":
             telephone = request.POST.get("telephone", "").strip()
             email = request.POST.get("email", "").strip().lower()
+            adresse = request.POST.get("adresse", "").strip()
 
             if email:
                 try:
@@ -114,7 +258,8 @@ def mon_profil(request):
             if not erreur:
                 animateur.telephone = telephone
                 animateur.email = email
-                animateur.save(update_fields=["telephone", "email"])
+                animateur.adresse = adresse
+                animateur.save(update_fields=["telephone", "email", "adresse"])
 
                 request.user.email = email
                 request.user.save(update_fields=["email"])
@@ -203,7 +348,9 @@ def recapitulatif(request):
 
 
 def documents(request):
-    """Bibliothèque en lecture seule accessible à tous les comptes connectés."""
+    """La bibliothèque animateur est intégrée au tableau de bord."""
+    if not est_direction(request.user):
+        return redirect("accueil")
     return render(request, "documents_partages.html", {"active_page": "documents"})
 
 
@@ -211,6 +358,7 @@ def mes_disponibilites(request):
     """Espace personnel permettant à un animateur de déclarer ses jours disponibles."""
     if est_direction(request.user):
         return redirect("employes")
+    return redirect("accueil")
     animateur = getattr(request.user, "profil_animateur", None)
     return render(
         request,

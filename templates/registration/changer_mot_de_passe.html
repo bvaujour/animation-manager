@@ -10,8 +10,8 @@
         {% if erreur %}<p class="login-error">{{ erreur }}</p>{% endif %}
         <form method="post">
             {% csrf_token %}
-            <div class="field"><label for="mot_de_passe">Nouveau mot de passe</label><input id="mot_de_passe" name="mot_de_passe" type="password" minlength="5" required autofocus></div>
-            <div class="field"><label for="confirmation">Confirmation</label><input id="confirmation" name="confirmation" type="password" minlength="5" required></div>
+            <div class="field"><label for="mot_de_passe">Nouveau mot de passe</label><input id="mot_de_passe" name="mot_de_passe" type="password" minlength="{{ password_min_length }}" required autofocus></div>
+            <div class="field"><label for="confirmation">Confirmation</label><input id="confirmation" name="confirmation" type="password" minlength="{{ password_min_length }}" required></div>
             <button class="btn btn-primary" type="submit">Enregistrer mon mot de passe</button>
         </form>
     </section>

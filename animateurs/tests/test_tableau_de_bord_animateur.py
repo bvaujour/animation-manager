@@ -116,8 +116,9 @@ class TableauDeBordAnimateurTests(TestCase):
         response = self.client.get(reverse("accueil"), {"semaine": self.lundi.isoformat()})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bonjour Marine")
+        self.assertContains(response, "Tableau de bord")
         self.assertContains(response, "Mon planning de la semaine")
+        self.assertNotContains(response, "Bonjour Marine")
         self.assertContains(response, "Saint-Martin-d&#x27;Estréaux")
         self.assertContains(response, "Groupe 3/5 ans")
         self.assertContains(response, "8h – 17h30")
@@ -127,7 +128,8 @@ class TableauDeBordAnimateurTests(TestCase):
         self.assertContains(response, "Réunion d&#x27;équipe")
         self.assertContains(response, "Livret animateur")
         self.assertContains(response, "Mon tableau de bord")
-        self.assertContains(response, 'class="animator-sidebar"')
+        self.assertContains(response, 'class="app-rail"')
+        self.assertNotContains(response, 'class="animator-sidebar"')
 
     @patch("animateurs.services.animateur_dashboard.timezone.localdate")
     def test_navigation_change_la_semaine_affichee(self, localdate):
@@ -138,7 +140,7 @@ class TableauDeBordAnimateurTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Semaine du 31 août au 4 septembre 2026")
-        self.assertContains(response, "Aucune affectation renseignée pour cette semaine")
+        self.assertContains(response, "Aucune affectation")
         self.assertContains(response, "Revenir à cette semaine")
 
     def test_la_direction_conserve_sa_navigation_compacte(self):

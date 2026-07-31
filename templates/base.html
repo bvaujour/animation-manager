@@ -13,8 +13,7 @@
     {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="{% static 'css/common-ui.css' %}?v={{ asset_version }}">
     {% block page_styles %}{% endblock %}
-    <link rel="stylesheet" href="{% static 'css/responsive-layout.css' %}?v={{ asset_version }}">
-    <link rel="stylesheet" href="{% static 'css/compact-density.css' %}?v={{ asset_version }}">
+    <link rel="stylesheet" href="{% static 'css/app-layout.css' %}?v={{ asset_version }}">
 </head>
 <body class="app-body{% if request.user.is_authenticated and not utilisateur_est_direction %} animator-space-body{% endif %} {% block body_class %}{% endblock %}">
     {% csrf_token %}

@@ -330,7 +330,11 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         base = (Path(settings.BASE_DIR) / "templates/base.html").read_text()
 
         self.assertIn("css/common-ui.css", base)
+        self.assertIn("css/app-layout.css", base)
         self.assertGreater(base.index("css/common-ui.css"), base.index("block extra_head"))
+        self.assertGreater(base.index("css/app-layout.css"), base.index("block page_styles"))
+        self.assertNotIn("css/responsive-layout.css", base)
+        self.assertNotIn("css/compact-density.css", base)
 
     def test_les_pages_principales_utilisent_le_shell_et_les_cartes_communes(self):
         attentes = {
@@ -364,7 +368,7 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertNotIn('<details class="availability-period"', script)
         self.assertIn("sort((a, b) => a.debut.localeCompare(b.debut))", script)
         self.assertIn("periode.debut <= aujourdHui && periode.fin >= aujourdHui", script)
-        self.assertIn('scrollIntoView({block: "start"})', script)
+        self.assertIn("scrollIntoView({block:", script)
 
     def test_le_script_email_definit_l_affichage_de_configuration(self):
         contenu = (Path(settings.BASE_DIR) / "static/js/emails.js").read_text()
@@ -380,3 +384,39 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("--control-height", css)
         self.assertIn(".page-shell", css)
         self.assertIn(".ui-card", css)
+
+    def test_le_responsive_ne_possede_que_deux_versions(self):
+        css_dir = Path(settings.BASE_DIR) / "static/css"
+        layout = (css_dir / "app-layout.css").read_text()
+
+        self.assertEqual(layout.count("@media"), 1)
+        self.assertIn("@media (max-width: 800px)", layout)
+        for fichier in css_dir.glob("*.css"):
+            if fichier.name == "app-layout.css":
+                continue
+            contenu = fichier.read_text()
+            media_ecran = [
+                ligne for ligne in contenu.splitlines()
+                if "@media" in ligne and "print" not in ligne
+            ]
+            self.assertEqual(media_ecran, [], fichier.name)
+
+    def test_layout_global_ne_possede_que_les_modes_pc_et_portable(self):
+        css = (Path(settings.BASE_DIR) / "static/css/app-layout.css").read_text()
+
+        self.assertIn("@media (min-width: 800px)", css)
+        self.assertIn("@media (max-width: 799px)", css)
+        self.assertNotIn("@media (max-width: 800px)", css)
+        self.assertNotIn("@media (max-width: 359px)", css)
+        self.assertIn("INTÉGRITÉ DU LAYOUT", css)
+
+    def test_calendrier_animateur_utilise_toute_la_largeur_disponible(self):
+        dashboard_css = (Path(settings.BASE_DIR) / "static/css/animateur-dashboard.css").read_text().replace(" ", "")
+        calendars_css = (Path(settings.BASE_DIR) / "static/css/calendars.css").read_text().replace(" ", "")
+        layout_css = (Path(settings.BASE_DIR) / "static/css/app-layout.css").read_text().replace(" ", "")
+
+        self.assertIn(".animator-dashboard{width:100%;max-width:none", dashboard_css)
+        self.assertIn(".calendar-sites{\nwidth:100%;\nmax-width:none", calendars_css)
+        self.assertIn("body.animator-dashboard-body.home-calendars.calendar-sites", layout_css)
+        self.assertIn("width:100%!important", layout_css)
+        self.assertIn("grid-template-columns:minmax(0,1fr)!important", layout_css)

@@ -42,6 +42,10 @@
                     <span>Adresse e-mail</span>
                     <input type="email" name="email" value="{{ animateur.email }}" autocomplete="email">
                 </label>
+                <label class="field-group field-group--full">
+                    <span>Adresse postale</span>
+                    <textarea name="adresse" rows="3" autocomplete="street-address">{{ animateur.adresse }}</textarea>
+                </label>
                 <div class="profile-form-actions">
                     <button type="submit" class="btn btn-primary">Enregistrer mes coordonnées</button>
                 </div>
@@ -60,12 +64,12 @@
                 <input type="hidden" name="action" value="mot_de_passe">
                 <label class="field-group">
                     <span>Nouveau mot de passe</span>
-                    <input type="password" name="mot_de_passe" minlength="5" required autocomplete="new-password">
-                    <small>5 caractères minimum.</small>
+                    <input type="password" name="mot_de_passe" minlength="{{ password_min_length }}" required autocomplete="new-password">
+                    <small>{{ password_min_length }} caractères minimum.</small>
                 </label>
                 <label class="field-group">
                     <span>Confirmer le mot de passe</span>
-                    <input type="password" name="confirmation" minlength="5" required autocomplete="new-password">
+                    <input type="password" name="confirmation" minlength="{{ password_min_length }}" required autocomplete="new-password">
                 </label>
                 <div class="profile-form-actions">
                     <button type="submit" class="btn btn-primary">Changer mon mot de passe</button>

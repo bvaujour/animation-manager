@@ -29,7 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let conflictRequest = 0;
 
     function formatDate(value) {
-        return parseLocalDate(value).toLocaleDateString("fr-FR", {
+        return formatDateLocale(value, {
             weekday: "long", day: "numeric", month: "long", year: "numeric",
         });
     }

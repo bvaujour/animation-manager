@@ -88,8 +88,8 @@
                     <h2>Ajouter un superuser</h2>
                     <label>Nom d’utilisateur<input name="username" autocomplete="username" required></label>
                     <label>Adresse e-mail<input name="email" type="email" autocomplete="email"></label>
-                    <label>Mot de passe<input name="password" type="password" autocomplete="new-password" minlength="5" required></label>
-                    <label>Confirmation<input name="confirmation" type="password" autocomplete="new-password" minlength="5" required></label>
+                    <label>Mot de passe<input name="password" type="password" autocomplete="new-password" minlength="{{ password_min_length }}" required></label>
+                    <label>Confirmation<input name="confirmation" type="password" autocomplete="new-password" minlength="{{ password_min_length }}" required></label>
                     <button class="btn btn-primary" type="submit">Créer le superuser</button>
                 </form>
             </div>
@@ -102,8 +102,8 @@
             <form class="ui-form admin-card admin-form password-form" method="post">
                 {% csrf_token %}<input type="hidden" name="onglet" value="mot-de-passe"><input type="hidden" name="action" value="change_own_password">
                 <label>Mot de passe actuel<input name="old_password" type="password" autocomplete="current-password" required></label>
-                <label>Nouveau mot de passe<input name="new_password" type="password" autocomplete="new-password" minlength="5" required></label>
-                <label>Confirmation<input name="new_password_confirmation" type="password" autocomplete="new-password" minlength="5" required></label>
+                <label>Nouveau mot de passe<input name="new_password" type="password" autocomplete="new-password" minlength="{{ password_min_length }}" required></label>
+                <label>Confirmation<input name="new_password_confirmation" type="password" autocomplete="new-password" minlength="{{ password_min_length }}" required></label>
                 <button class="btn btn-primary" type="submit">Modifier mon mot de passe</button>
             </form>
         </section>

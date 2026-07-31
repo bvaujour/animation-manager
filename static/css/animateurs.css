@@ -1,5 +1,5 @@
 .page-evenement{height:100dvh;min-height:100dvh;overflow:hidden;background:radial-gradient(circle at 10% 0%,rgba(31,111,84,.08),transparent 30%),var(--color-bg)}
-.evenement-page{height:calc(100dvh - var(--top-nav-height));min-height:0;display:grid;grid-template-columns:minmax(270px,330px) minmax(0,1fr);gap:10px;padding:10px;overflow:hidden}
+.evenement-page{height:100dvh;min-height:0;display:grid;grid-template-columns:minmax(270px,330px) minmax(0,1fr);gap:10px;padding:10px;overflow:hidden}
 .evenement-sidebar,.evenement-detail{min-height:0;background:rgba(255,255,255,.96);border:1px solid color-mix(in srgb,var(--color-border) 86%,white);border-radius:18px;box-shadow:0 10px 32px rgba(30,42,34,.08)}
 .evenement-sidebar{height:100%;display:flex;flex-direction:column;overflow:hidden}
 .evenement-sidebar-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px;border-bottom:1px solid var(--color-border);background:linear-gradient(135deg,rgba(31,111,84,.08),rgba(232,163,61,.07))}
@@ -56,38 +56,9 @@
 .fiche-status{min-height:20px;margin:10px 2px 0;font-size:.85rem}
 .fiche-status.error{color:var(--color-danger)}
 .fiche-status.success{color:var(--color-primary)}
-@media (max-width:820px){.evenement-page{grid-template-columns:1fr;grid-template-rows:minmax(168px,31vh) minmax(0,1fr);padding:5px;gap:6px}
-.evenement-sidebar-head{padding:9px 10px}
-.evenement-sidebar-head p{display:none}
-.evenement-search{padding:6px 8px}
-.evenement-list{padding:5px}
-.evenement-list-item{padding:6px 8px}
-.evenement-detail{padding:10px}
-.fiche-head{top:-10px;margin:-10px -10px 10px;padding:10px}
-}
-@media (max-width:620px){.fiche-head{align-items:flex-start;flex-direction:column}
-.fiche-actions{width:100%;justify-content:flex-start}
-.fiche-grid{grid-template-columns:1fr}
-.fiche-grid .field-wide{grid-column:auto}
-.evenement-centres .centre-hierarchy-head,.evenement-centres .centre-hierarchy-row{grid-template-columns:minmax(100px,1fr) 76px 84px;gap:4px}
-.evenement-centres .centre-hierarchy-head,.evenement-centres .centre-hierarchy-row{padding-inline:8px}
-.evenement-centres .centre-hierarchy-head{font-size:.66rem}
-.dispo-editor{grid-template-columns:1fr 1fr}
-.dispo-editor button{grid-column:1 / -1;justify-content:center}
-.dispo-row{grid-template-columns:1fr 1fr}
-.dispo-row button{width:100%;justify-content:center}
-}
-@media (max-width:420px){.evenement-page{grid-template-rows:minmax(145px,27vh) minmax(0,1fr)}
-.evenement-sidebar-head h1{font-size:1.05rem}
-.evenement-sidebar-head .btn{padding:6px 9px;font-size:.76rem}
-.fiche-card{padding:11px;border-radius:13px}
-.evenement-centres .centre-hierarchy-head{display:none}
-.evenement-centres .centre-hierarchy-row{grid-template-columns:minmax(0,1fr) 38px 38px;padding-block:8px}
-.evenement-centres .centre-hierarchy-choice::before{content:attr(title);position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-.dispo-editor{grid-template-columns:1fr}
-.dispo-editor button{grid-column:auto}
-.dispo-row{grid-template-columns:1fr}
-}
+
+
+
 .evenement-preferee-field{margin-top:18px;max-width:560px;padding:16px;border:1px solid var(--color-border,#dbe3ea);border-radius:12px;background:rgba(248,250,252,0.75)}
 .evenement-preferee-field select{width:100%}
 .evenement-preferee-field .form-hint{margin:7px 0 0;font-size:0.82rem}
@@ -131,20 +102,8 @@
 .availability-week-card.is-current{border-color:var(--color-primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--color-primary) 12%,transparent)}
 .availability-day{cursor:pointer;transition:border-color .15s ease,background-color .15s ease}
 .availability-day input{width:20px;height:20px;flex:0 0 20px;accent-color:var(--color-primary)}
-@media(max-width:640px){.availability-self-page{padding:16px}
-.availability-period summary{flex-direction:column}
-.availability-days{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
-@media(max-width:800px){
-body.animator-space-body .availability-self-page{padding:4px 6px 18px !important}
-body.animator-space-body .fiche-card{padding:12px}
-body.animator-space-body .availability-period{margin:7px 0}
-body.animator-space-body .availability-week-card>header{align-items:flex-start;padding:11px}
-body.animator-space-body .availability-days{gap:6px;padding:0 8px 10px}
-body.animator-space-body .availability-day{min-height:48px;padding:9px}
-body.animator-space-body .fiche-actions{position:sticky;bottom:calc(var(--animator-mobile-nav-height) + env(safe-area-inset-bottom, 0px));z-index:20;padding:8px 0;background:var(--color-bg)}
-body.animator-space-body .fiche-actions .btn{width:100%;justify-content:center}
-}
+
+
 .access-grid{align-items:start}
 .access-create-option,.access-account-state{grid-column:1 / -1;padding:16px;border:1px solid var(--color-border,#dbe2ea);border-radius:12px;background:#f8fafc}
 .access-create-option{display:flex;gap:12px;align-items:flex-start;cursor:pointer}
@@ -157,9 +116,8 @@ body.animator-space-body .fiche-actions .btn{width:100%;justify-content:center}
 .temporary-credentials{margin-top:14px;padding:14px 16px;border:1px solid #86efac;border-radius:12px;background:#f0fdf4}
 .temporary-credentials p{margin:8px 0}
 .temporary-credentials code{user-select:all;font-size:.95rem}
-@media (max-width:640px){.access-actions>*{width:100%}
-}
-body.page-employes:not(.login-body):not(.page-planning)>.employees-workspace{width:calc(100% - 16px);height:calc(100dvh - var(--top-nav-height));min-height:0;display:grid;grid-template-columns:minmax(245px,292px) minmax(0,1fr);gap:8px;margin:0 auto;padding:8px 0;overflow:hidden}
+
+body.page-employes:not(.login-body):not(.page-planning)>.employees-workspace{width:calc(100% - 16px);height:100dvh;min-height:0;display:grid;grid-template-columns:minmax(245px,292px) minmax(0,1fr);gap:8px;margin:0 auto;padding:8px 0;overflow:hidden}
 .employees-workspace .employees-sidebar,.employees-workspace .employee-editor{min-width:0;min-height:0;height:100%;margin:0;border-radius:12px}
 .employees-sidebar{display:flex;flex-direction:column;padding:0 !important;overflow:hidden}
 .employees-sidebar-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-bottom:1px solid var(--color-border);background:color-mix(in srgb,var(--color-primary) 5%,white)}
@@ -225,25 +183,9 @@ body.page-employes .employees-list .salarie-directory-item .evenement-list-color
 .employee-editor .dispo-items{margin-top:0;gap:5px}
 .employee-editor .period-year-accordion>summary,.employee-editor .dispo-periode summary{min-height:34px;padding:6px 8px}
 .employee-editor .dispo-jours{grid-template-columns:repeat(auto-fit,minmax(112px,1fr))}
-@media (max-width:1080px){body.page-employes:not(.login-body):not(.page-planning)>.employees-workspace{grid-template-columns:minmax(220px,260px) minmax(0,1fr)}
-.employee-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
-@media (max-width:760px){body.page-employes:not(.login-body):not(.page-planning)>.employees-workspace{grid-template-columns:1fr;grid-template-rows:minmax(150px,28vh) minmax(0,1fr);gap:5px;width:calc(100% - 8px);padding:4px 0}
-.employees-sidebar-head{padding:6px 8px}
-.employees-sidebar-head p{display:none}
-.employees-sidebar-toolbar{padding:5px}
-.employees-list{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
-.employee-editor .employee-editor-head{min-height:52px;padding:6px 8px}
-.employee-editor .fiche-title h2{font-size:.98rem}
-.employee-title-meta>span:first-child{display:none}
-}
-@media (max-width:560px){.employee-editor .employee-editor-head{align-items:center;flex-direction:row}
-.employee-editor .fiche-actions .btn,.employee-editor .fiche-actions .btn-danger{padding-inline:7px}
-.employee-profile-grid,.employee-editor .access-grid,.employee-group-preference{grid-template-columns:1fr}
-.employee-profile-grid .employee-span-2,.employee-group-preference .form-hint{grid-column:auto}
-.employee-group-preference label,.employee-group-preference select{grid-row:auto}
-.employee-color-picker{flex-wrap:wrap}
-}
+
+
+
 .communication-card{max-width:900px}
 .communication-grid{display:grid;gap:8px}
 .communication-message-field textarea{min-height:130px;resize:vertical}
@@ -314,18 +256,213 @@ body.page-employes .employees-list .salarie-directory-item .evenement-list-color
     display: flex;
     justify-content: flex-end;
 }
-@media (max-width: 767px) {
-    .profile-self-service-page {
-        gap: 4px;
+
+
+/* Disponibilités personnelles : sélection d'abord par semaine, détail à la demande. */
+.availability-self-page #mes-disponibilites-root{display:grid;gap:6px}
+.availability-week-card--selectable{overflow:hidden;border:1px solid var(--color-border);border-radius:7px;background:var(--color-surface)}
+.availability-week-summary{display:flex;align-items:center;gap:8px;min-height:38px;padding:6px 8px;cursor:pointer}
+.availability-week-summary>input{width:18px;height:18px;flex:0 0 18px;margin:0;accent-color:var(--color-primary)}
+.availability-week-summary>span{display:flex;min-width:0;flex:1;align-items:center;justify-content:space-between;gap:8px}
+.availability-week-summary strong{overflow:hidden;font-size:.72rem;text-overflow:ellipsis;white-space:nowrap}
+.availability-week-summary small{flex:0 0 auto;padding:2px 5px;border-radius:999px;color:var(--color-primary-dark);background:color-mix(in srgb,var(--color-primary) 10%,white);font-size:.5rem;font-weight:800}
+.availability-week-card--selectable.is-selected{border-color:color-mix(in srgb,var(--color-primary) 48%,var(--color-border))}
+.availability-week-card--selectable .availability-days{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;padding:4px 6px 7px;border-top:1px solid var(--color-border);background:var(--color-surface-sunken)}
+.availability-week-card--selectable .availability-day{min-width:0;min-height:34px;justify-content:center;gap:3px;padding:4px 3px;border-radius:5px;background:var(--color-surface)}
+.availability-week-card--selectable .availability-day input{width:15px;height:15px;flex-basis:15px;margin:0}
+.availability-week-card--selectable .availability-day span{overflow:hidden;font-size:.5rem;text-overflow:ellipsis;white-space:nowrap}
+
+/* Répertoire salariés — composant compact, lisible et stable. */
+body.page-employes:not(.login-body):not(.page-planning) > .employees-workspace{
+    grid-template-columns:310px minmax(0,1fr);
+    grid-template-rows:auto minmax(0,1fr);
+    gap:7px;
+}
+body.page-employes .employees-page-header{
+    grid-column:1 / -1;
+    grid-row:1;
+}
+body.page-employes .employees-sidebar{
+    grid-column:1;
+    grid-row:2;
+    border-radius:6px;
+}
+body.page-employes .employee-editor{
+    grid-column:2;
+    grid-row:2;
+    border-radius:6px;
+}
+body.page-employes .employees-sidebar-head{
+    align-items:center;
+    min-height:44px;
+    padding:6px 7px;
+    background:var(--color-surface);
+}
+body.page-employes .employees-sidebar-head h2{
+    margin:0;
+    font-size:.88rem;
+    line-height:1.15;
+}
+body.page-employes .employees-sidebar-head p{
+    margin:1px 0 0;
+    font-size:.64rem;
+}
+body.page-employes .employees-sidebar-head .btn{
+    min-height:30px;
+    padding:5px 7px;
+    font-size:.7rem;
+    white-space:nowrap;
+}
+body.page-employes .employees-sidebar-toolbar{
+    padding:5px;
+}
+body.page-employes .employees-list{
+    gap:2px;
+    padding:4px;
+}
+body.page-employes .employees-list .salarie-directory-item{
+    position:relative;
+    width:100%;
+    min-height:43px;
+    display:grid;
+    grid-template-columns:29px minmax(0,1fr) 3px;
+    align-items:center;
+    gap:7px;
+    padding:5px 6px;
+    border:1px solid transparent!important;
+    border-radius:4px!important;
+    background:transparent!important;
+    box-shadow:none!important;
+    text-align:left;
+}
+body.page-employes .employees-list .salarie-directory-item:hover{
+    border-color:var(--color-border)!important;
+    background:var(--color-surface-sunken)!important;
+}
+body.page-employes .employees-list .salarie-directory-item.active{
+    border-color:color-mix(in srgb,var(--anim-color) 55%,var(--color-border))!important;
+    background:color-mix(in srgb,var(--anim-color) 8%,var(--color-surface))!important;
+    box-shadow:none!important;
+}
+.employee-list-avatar{
+    width:29px;
+    height:29px;
+    display:grid;
+    place-items:center;
+    border:1px solid color-mix(in srgb,var(--anim-color) 55%,var(--color-border));
+    border-radius:50%;
+    background:color-mix(in srgb,var(--anim-color) 10%,var(--color-surface));
+    color:var(--color-text);
+    font-size:.65rem;
+    font-weight:700;
+    line-height:1;
+}
+body.page-employes .employees-list .salarie-directory-main{
+    min-width:0;
+    display:grid;
+    gap:2px;
+}
+body.page-employes .employees-list .salarie-directory-main strong{
+    overflow:hidden;
+    font-size:.77rem;
+    font-weight:650;
+    line-height:1.15;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+.employee-list-meta{
+    min-width:0;
+    display:flex;
+    align-items:center;
+    gap:5px;
+    overflow:hidden;
+}
+.employee-list-meta small{
+    min-width:0;
+    overflow:hidden;
+    color:var(--color-text-muted);
+    font-size:.59rem!important;
+    line-height:1.15!important;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+.employee-list-meta small + small::before{
+    content:"·";
+    margin-right:5px;
+}
+.employee-list-indicator{
+    width:3px;
+    height:24px;
+    border-radius:3px;
+    background:var(--anim-color);
+    opacity:.72;
+}
+body.page-employes .employees-list .salarie-directory-item.active .employee-list-indicator{
+    opacity:1;
+}
+
+@media (max-width:799px){
+    body.page-employes:not(.login-body):not(.page-planning) > .employees-workspace{
+        width:100%;
+        height:auto;
+        min-height:0;
+        display:grid;
+        grid-template-columns:minmax(0,1fr);
+        grid-template-rows:auto auto auto;
+        gap:5px;
+        padding:3px 4px calc(var(--app-mobile-nav-height,48px) + 7px);
+        overflow:visible;
     }
-    .profile-edit-form {
-        grid-template-columns: 1fr;
-        gap: 6px;
+    body.page-employes .employees-page-header{grid-column:1;grid-row:1}
+    body.page-employes .employees-sidebar{
+        grid-column:1;
+        grid-row:2;
+        max-height:245px;
+        min-height:0;
     }
-    .profile-form-actions {
-        grid-column: auto;
+    body.page-employes .employee-editor{
+        grid-column:1;
+        grid-row:3;
+        height:auto;
+        min-height:420px;
+        overflow:visible!important;
     }
-    .profile-form-actions .btn {
-        width: 100%;
+    body.page-employes .employees-sidebar-head{
+        min-height:40px;
+        padding:5px 6px;
     }
+    body.page-employes .employees-list{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:3px;
+        max-height:170px;
+        overflow-y:auto;
+    }
+    body.page-employes .employees-list .salarie-directory-item{
+        min-height:40px;
+        grid-template-columns:25px minmax(0,1fr) 3px;
+        gap:5px;
+        padding:4px 5px;
+    }
+    .employee-list-avatar{width:25px;height:25px;font-size:.58rem}
+    .employee-list-meta{display:block}
+    .employee-list-meta small{display:block;font-size:.55rem!important}
+    .employee-list-meta small + small{display:none}
+    .employee-list-indicator{height:21px}
+    body.page-employes .employee-detail-panels{overflow:visible}
+}
+
+@media (max-width:430px){
+    body.page-employes .employees-list{grid-template-columns:minmax(0,1fr)}
+    body.page-employes .employees-sidebar{max-height:270px}
+    body.page-employes .employees-list{max-height:195px}
+    .employee-list-meta small + small{display:block}
+}
+
+/* La liste de la page Salariés réutilise strictement le composant du Planning. */
+body.page-employes .employees-list .salarie-directory-item,
+body.page-employes .employees-list .employee-list-avatar,
+body.page-employes .employees-list .employee-list-indicator,
+body.page-employes .employees-list .salarie-directory-main,
+body.page-employes .employees-list .employee-list-meta {
+  all: revert;
 }

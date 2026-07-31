@@ -58,21 +58,8 @@
 #emails .documents-page{padding:0;min-height:0}
 #emails .documents-tabs{margin:0 0 .5rem}
 #emails .email-selection-card,#emails .email-compose-card{padding:.65rem}
-@media (max-width:900px){.export-form{grid-template-columns:1fr}
-.export-actions{grid-column:1 / -1}
-.superuser-layout{grid-template-columns:1fr}
-}
-@media (max-width:640px){.administration-page{padding-top:.3rem !important}
-.admin-tabs{margin-bottom:.4rem}
-.administration-section{padding:.6rem}
-.export-form{grid-template-columns:1fr}
-.export-actions{grid-column:auto}
-.export-actions .btn{flex:1 1 140px}
-.export-weeks-heading{align-items:flex-start;flex-wrap:wrap}
-.export-weeks-heading .btn{margin-left:0}
-.export-weeks-list{grid-template-columns:minmax(0,1fr)}
-.superuser-row{align-items:flex-start}
-}
+
+
 .page-shell.administration-page{--page-gutter:8px;--page-bottom-space:10px;width:calc(100% - 16px);max-width:none;padding-top:.3rem !important}
 .administration-page .admin-tabs{margin-bottom:.35rem}
 .administration-page .administration-section,.admin-tab-panel #emails{padding:.45rem;border-radius:.65rem}
@@ -104,13 +91,8 @@
 #emails .email-templates-layout{grid-template-columns:260px minmax(0,1fr);gap:.55rem}
 #emails .email-templates-list-card,#emails .email-template-editor{padding:.55rem;box-shadow:none}
 #emails .email-template-editor textarea{min-height:300px}
-@media (max-width:980px){#emails .email-form,#emails .email-templates-layout{grid-template-columns:240px minmax(0,1fr)}
-}
-@media (max-width:760px){.page-shell.administration-page{width:calc(100% - 10px);--page-gutter:5px}
-#emails .email-form,#emails .email-templates-layout{grid-template-columns:1fr}
-#emails .email-checkbox-list{min-height:0;max-height:230px}
-#emails .email-compose-card textarea{min-height:240px;height:auto}
-}
+
+
 #emails .email-form{grid-template-columns:minmax(290px,330px) minmax(0,1fr);gap:.7rem}
 #emails .email-recipient-tools{margin-bottom:.6rem}
 #emails .email-recipient-group-title{margin:.6rem 0 .3rem;padding-top:.5rem;border-top:1px solid var(--color-border,#e2e8f0);font-size:.76rem}
@@ -124,10 +106,6 @@
 #emails .email-compose-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem}
 #emails .email-compose-settings .field{min-width:0}
 #emails .email-compose-card h3{margin-bottom:.6rem;padding-bottom:.45rem;border-bottom:1px solid var(--color-border,#e2e8f0)}
-@media (max-width:980px){#emails .email-form,#emails .email-templates-layout{grid-template-columns:minmax(275px,310px) minmax(0,1fr)}
-#emails .email-compose-settings{grid-template-columns:1fr;gap:0}
-}
-@media (max-width:760px){#emails .email-contact-form{grid-template-columns:1fr}
-#emails .email-contact-form .form-error,#emails .email-contact-form .selection-actions{grid-column:auto}
-}
+
+
 #emails .field-label{display:block;margin-bottom:.28rem;font-size:.78rem;font-weight:600}

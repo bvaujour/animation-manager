@@ -113,8 +113,26 @@ function formatDateLocal(date) {
 // donc afficher la veille avec toLocaleDateString() selon le fuseau).
 // À utiliser pour tout affichage de date à l'utilisateur.
 function parseLocalDate(dateStr) {
-	const [annee, mois, jour] = dateStr.split("-").map(Number);
+	const [annee, mois, jour] = String(dateStr || "").split("-").map(Number);
 	return new Date(annee, mois - 1, jour);
+}
+
+// Helpers d'affichage partagés : évite de réimplémenter le formatage français
+// dans chaque écran métier.
+function formatDateLocale(dateStr, options = {}) {
+	return parseLocalDate(dateStr).toLocaleDateString("fr-FR", options);
+}
+
+function formatDateFr(dateStr) {
+	if (!dateStr) return "";
+	const date = parseLocalDate(dateStr);
+	return Number.isNaN(date.getTime())
+		? String(dateStr)
+		: date.toLocaleDateString("fr-FR");
+}
+
+function pluraliser(valeur, singulier, pluriel = `${singulier}s`) {
+	return `${valeur} ${Number(valeur) > 1 ? pluriel : singulier}`;
 }
 
 
@@ -295,4 +313,63 @@ function anneePeriodesADeplier(periodes) {
     return groupes.some((groupe) => groupe.annee === courante)
         ? courante
         : (groupes[0]?.annee || "");
+}
+
+// --- En-tête de page fixe -------------------------------------------------
+// Le CSS fixe le véritable en-tête au viewport. Sa hauteur varie selon la
+// page (titre seul, navigation de semaine, actions, format téléphone), donc
+// elle est mesurée ici plutôt que codée en dur. Le body réserve exactement
+// cette hauteur afin que le premier bloc de contenu ne soit jamais recouvert.
+function initFixedPageHeader() {
+	const header = document.querySelector(
+		".app-page-header, .animator-mobile-header, .sortie-detail-header"
+	);
+	if (!header || document.body.classList.contains("login-body")) return;
+
+	// Les onglets principaux restent sous l’en-tête. Ils ne défilent ni
+	// horizontalement ni avec le contenu de la page. Les onglets internes
+	// (par exemple dans une fiche salarié) restent gérés par leur composant.
+	const pageTabs = document.querySelector(".app-page-tabs");
+	if (pageTabs) {
+		const tabCount = pageTabs.querySelectorAll(":scope > button").length;
+		pageTabs.dataset.tabCount = String(tabCount);
+		pageTabs.style.setProperty("--page-tab-count", String(Math.max(1, tabCount)));
+	}
+
+	const updateFixedStackHeight = () => {
+		const headerHeight = Math.ceil(header.getBoundingClientRect().height);
+		const tabsHeight = pageTabs && !pageTabs.hidden
+			? Math.ceil(pageTabs.getBoundingClientRect().height)
+			: 0;
+
+		if (headerHeight > 0) {
+			document.body.style.setProperty("--app-fixed-header-height", `${headerHeight}px`);
+		}
+		document.body.style.setProperty("--app-fixed-tabs-height", `${Math.max(0, tabsHeight)}px`);
+		document.body.style.setProperty(
+			"--app-fixed-stack-height",
+			`${Math.max(0, headerHeight) + Math.max(0, tabsHeight)}px`
+		);
+	};
+
+	// Première mesure dans le flux, puis seconde mesure avec les éléments fixés :
+	// leur largeur finale peut provoquer un retour à la ligne sur téléphone.
+	updateFixedStackHeight();
+	document.body.classList.add("has-fixed-page-header");
+	if (pageTabs) document.body.classList.add("has-fixed-page-tabs");
+	requestAnimationFrame(updateFixedStackHeight);
+
+	if (typeof ResizeObserver !== "undefined") {
+		const observer = new ResizeObserver(updateFixedStackHeight);
+		observer.observe(header);
+		if (pageTabs) observer.observe(pageTabs);
+	} else {
+		window.addEventListener("resize", updateFixedStackHeight, { passive: true });
+	}
+}
+
+if (document.readyState === "loading") {
+	document.addEventListener("DOMContentLoaded", initFixedPageHeader, { once: true });
+} else {
+	initFixedPageHeader();
 }

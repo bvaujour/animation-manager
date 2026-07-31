@@ -18,11 +18,7 @@
 .loading-note,.empty-state{padding:28px;text-align:center;color:var(--color-text-muted)}
 .empty-state strong,.empty-state span{display:block}
 .empty-state strong{margin-bottom:5px;color:var(--color-text)}
-@media (max-width:720px){.recap-page{padding:18px 12px 35px}
-.periode-card .week-picker,.periode-card .btn,.periode-affichee{width:100%;max-width:none}
-.periode-affichee{margin-left:0}
-.recap-table th,.recap-table td{padding:12px 10px}
-}
+
 .recap-tabs{margin-bottom:14px}
 .recap-tab-panel[hidden]{display:none}
 .recap-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
@@ -43,10 +39,7 @@
 .recap-place-table .day-cell--empty{color:var(--color-text-muted);font-weight:400}
 .recap-place-table .total-cell{position:sticky;right:0;z-index:2;min-width:65px;background:var(--color-surface-sunken);text-align:center;font-weight:800;font-variant-numeric:tabular-nums}
 .recap-place-table thead .total-cell{z-index:4}
-@media (max-width:720px){.recap-section-heading{display:block}
-.recap-legend{justify-content:flex-start;max-width:none;margin-top:12px}
-.recap-place-table .employee-cell{min-width:150px;max-width:170px}
-}
+
 .recap-centres-table{width:100%;table-layout:fixed}
 .recap-centres-table .employee-col{width:clamp(140px,15vw,165px)}
 .recap-centres-table .centre-col{width:clamp(55px,6vw,70px)}
@@ -88,13 +81,3 @@
 .payroll-prime-detail{display:block;margin-top:4px;color:var(--color-text-muted);font-size:.72rem;line-height:1.4}
 .payroll-row-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
 .btn-small{padding:6px 9px;font-size:.75rem}
-@media (max-width:720px){.recap-centres-table{width:max-content;min-width:var(--recap-min-width)}
-.recap-centres-table .employee-col,.recap-centres-table .employee-cell{width:150px}
-.recap-centres-table .centre-col,.recap-centres-table .centre-heading{width:58px}
-.recap-centres-table .compact-col{width:58px}
-.recap-centres-table .rate-col{width:82px}
-.recap-centres-table .pay-col{width:94px}
-.payroll-table{width:720px}
-.payroll-table th:first-child,.payroll-table .payroll-employee{position:sticky;left:0;z-index:2;width:160px;background:var(--color-surface)}
-.payroll-table thead th:first-child{z-index:4;background:var(--color-surface-sunken)}
-}

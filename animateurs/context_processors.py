@@ -12,10 +12,11 @@ def droits_application(request):
         # les documents de semaine restent accessibles depuis le tableau de bord
         # et la bibliothèque complète.
         documents_permanents = list(
-            Document.objects.filter(permanent=True).order_by("titre")[:6]
+            Document.objects.filter(permanent=True, publie=True).order_by("titre")[:6]
         )
     return {
         "utilisateur_est_direction": utilisateur_direction,
         "documents_permanents_nav": documents_permanents,
         "asset_version": settings.ASSET_VERSION,
+        "password_min_length": settings.PASSWORD_MIN_LENGTH,
     }

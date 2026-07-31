@@ -2,25 +2,28 @@
 <aside class="app-rail" aria-label="Navigation principale">
     <nav class="app-rail-links">
         <a href="{% url 'accueil' %}" class="app-rail-link{% if active == 'accueil' %} active{% endif %}" aria-label="Tableau de bord" title="Tableau de bord"{% if active == 'accueil' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">space_dashboard</span>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3V3Zm10 0h8v5h-8V3ZM3 13h8v8H3v-8Zm10-3h8v11h-8V10Z"/></svg>
         </a>
         <a href="{% url 'planning' %}" class="app-rail-link{% if active == 'planning' %} active{% endif %}" aria-label="Planning" title="Planning"{% if active == 'planning' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V2Zm12 8H5v10h14V10ZM5 8h14V6H5v2Z"/></svg>
         </a>
         <a href="{% url 'sorties' %}" class="app-rail-link{% if active == 'sorties' %} active{% endif %}" aria-label="Sorties" title="Sorties"{% if active == 'sorties' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">confirmation_number</span>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a3 3 0 0 0 0 6v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a3 3 0 0 0 0-6V5Zm7 1v2h2V6h-2Zm0 4v2h2v-2h-2Zm0 4v2h2v-2h-2Zm0 4v2h2v-2h-2Z"/></svg>
         </a>
         <a href="{% url 'employes' %}" class="app-rail-link{% if active == 'employes' %} active{% endif %}" aria-label="Salariés" title="Salariés"{% if active == 'employes' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">groups</span>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20v-2c0-3.3 3.1-5 7-5s7 1.7 7 5v2H2Zm15.2 0c.5-.7.8-1.5.8-2.4 0-1.5-.7-2.8-1.8-3.8 3.2.2 5.8 1.6 5.8 4.2v2h-4.8Z"/></svg>
         </a>
         <a href="{% url 'gestion' %}" class="app-rail-link{% if active == 'gestion' %} active{% endif %}" aria-label="Gestion" title="Gestion"{% if active == 'gestion' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">category</span>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 7 10h10L12 2ZM5 13a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm11 0h6v8h-6v-8Z"/></svg>
+        </a>
+        <a href="{% url 'demandes_materiel' %}" class="app-rail-link{% if active == 'materiel' %} active{% endif %}" aria-label="Demandes de matériel" title="Demandes de matériel"{% if active == 'materiel' %} aria-current="page"{% endif %}>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm2 2v10h12V7H6Zm2 2h8v2H8V9Zm0 4h5v2H8v-2Z"/></svg>
         </a>
         <a href="{% url 'administration' %}" class="app-rail-link{% if active == 'administration' %} active{% endif %}" aria-label="Administration" title="Administration"{% if active == 'administration' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">admin_panel_settings</span>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5.1 3.4 9.8 8 11 4.6-1.2 8-5.9 8-11V5l-8-3Zm0 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 11.7c-1.8-.7-3.3-2-4.3-3.7.9-1.2 2.5-2 4.3-2s3.4.8 4.3 2c-1 1.7-2.5 3-4.3 3.7Z"/></svg>
         </a>
         <a href="{% url 'recapitulatif' %}" class="app-rail-link{% if active == 'recapitulatif' %} active{% endif %}" aria-label="Récapitulatif" title="Récapitulatif"{% if active == 'recapitulatif' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">analytics</span>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16v2H2V3h2v16Zm3-2H5v-5h2v5Zm4 0H9V7h2v10Zm4 0h-2v-3h2v3Zm4 0h-2V5h2v12Z"/></svg>
         </a>
     </nav>
 
@@ -30,7 +33,7 @@
         <form method="post" action="{% url 'logout' %}" class="app-rail-logout-form">
             {% csrf_token %}
             <button type="submit" class="app-rail-link app-rail-logout" aria-label="Déconnexion" title="Déconnexion">
-                <span class="material-symbols-outlined" aria-hidden="true">logout</span>
+                <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3Zm4.6 4.6L13.2 9l2 2H8v2h7.2l-2 2 1.4 1.4L19 12l-4.4-4.4Z"/></svg>
             </button>
         </form>
     </div>
@@ -39,29 +42,18 @@
 {% elif request.user.is_authenticated %}
 <aside class="app-rail" aria-label="Navigation de l’espace animateur">
     <nav class="app-rail-links">
-        <a href="{% url 'accueil' %}" class="app-rail-link{% if active == 'accueil' %} active{% endif %}" aria-label="Mon tableau de bord" title="Mon tableau de bord"{% if active == 'accueil' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">space_dashboard</span>
+        <a href="{% url 'accueil' %}" class="app-rail-link{% if active == 'accueil' %} active{% endif %}" aria-label="Tableau de bord" title="Tableau de bord"{% if active == 'accueil' %} aria-current="page"{% endif %}>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3V3Zm10 0h8v5h-8V3ZM3 13h8v8H3v-8Zm10-3h8v11h-8V10Z"/></svg>
         </a>
-        <a href="{% url 'mon_planning' %}" class="app-rail-link{% if active == 'mon_planning' %} active{% endif %}" aria-label="Mon planning" title="Mon planning"{% if active == 'mon_planning' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
-        </a>
-        <a href="{% url 'mes_disponibilites' %}" class="app-rail-link{% if active == 'disponibilites' %} active{% endif %}" aria-label="Mes disponibilités" title="Mes disponibilités"{% if active == 'disponibilites' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">event_available</span>
-        </a>
-        <a href="{% url 'mon_profil' %}" class="app-rail-link{% if active == 'mon_profil' %} active{% endif %}" aria-label="Mes informations" title="Mes informations"{% if active == 'mon_profil' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">groups</span>
-        </a>
-        <a href="{% url 'documents' %}" class="app-rail-link{% if active == 'documents' %} active{% endif %}" aria-label="Documents" title="Documents"{% if active == 'documents' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">description</span>
+        <a href="{% url 'mon_profil' %}" class="app-rail-link{% if active == 'mon_profil' %} active{% endif %}" aria-label="Mon profil" title="Mon profil"{% if active == 'mon_profil' %} aria-current="page"{% endif %}>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm-9 9v-2c0-3.3 4-5 9-5s9 1.7 9 5v2H3Z"/></svg>
         </a>
     </nav>
-
     <div class="app-rail-account">
-        <span class="app-rail-avatar" aria-label="{% firstof request.user.get_full_name request.user.username %}" title="{% firstof request.user.get_full_name request.user.username %}">{% firstof request.user.first_name|first request.user.username|first "U" %}</span>
         <form method="post" action="{% url 'logout' %}" class="app-rail-logout-form">
             {% csrf_token %}
             <button type="submit" class="app-rail-link app-rail-logout" aria-label="Déconnexion" title="Déconnexion">
-                <span class="material-symbols-outlined" aria-hidden="true">logout</span>
+                <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3Zm4.6 4.6L13.2 9l2 2H8v2h7.2l-2 2 1.4 1.4L19 12l-4.4-4.4Z"/></svg>
             </button>
         </form>
     </div>

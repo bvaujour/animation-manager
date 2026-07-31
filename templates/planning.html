@@ -8,6 +8,7 @@
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/planning.css' %}?v={{ asset_version }}-mobile-staff-bottom-1">
+<link rel="stylesheet" href="{% static 'css/staff-list.css' %}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
 {% include "partials/_page_header.html" with title="Planning" header_class="planning-page-header planning-page-header-compact" container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
@@ -48,6 +49,7 @@
                 <span aria-hidden="true">⇧</span> Import Excel
             </button>
             <div id="planning-actions" class="planning-control-block toolbar-actions planning-top-actions">
+                <button id="btn-publication-planning" class="btn btn-secondary" type="button" aria-pressed="false">Planning non publié</button>
                 <button id="btn-planning-export" class="btn btn-secondary" type="button" data-administration-url="{% url 'administration' %}">Export</button>
                 <button id="btn-auto-semaine" class="btn btn-primary" type="button">Remplir auto</button>
                 <button id="btn-vider-semaine" class="btn btn-danger-solid" type="button">Vider la semaine</button>

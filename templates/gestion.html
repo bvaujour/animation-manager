@@ -40,11 +40,12 @@
             <form id="form-upload" class="ui-form upload-form">
                 <div class="field"><label for="doc-titre">Titre</label><input type="text" id="doc-titre" name="titre" placeholder="ex : Contrat type animateur" required></div>
                 <div class="field"><label for="doc-fichier">Fichier</label><input type="file" id="doc-fichier" name="fichier" required></div>
-                <div class="field document-period-picker-field">
+                <label class="form-check document-permanent-toggle"><input class="form-check-input" type="checkbox" id="doc-permanent" name="permanent"><span class="form-check-label">Document permanent</span></label>
+                <div class="field document-period-picker-field" id="doc-period-picker-field">
                     <span class="field-label" id="doc-semaines-title">Semaines concernées</span>
                     {% include "partials/_week_picker.html" with picker_id="doc-semaines-picker" picker_class="document-weeks-picker" toggle_id="doc-semaines-toggle" label_id="doc-semaines-label" menu_id="doc-semaines-menu" tree_id="doc-semaines-tree" clear_id="doc-semaines-effacer" mode="multiple" placeholder="Choisir des semaines" title_id="doc-semaines-title" %}
-                    
                 </div>
+                <label class="form-check"><input class="form-check-input" type="checkbox" id="doc-publie" name="publie"><span class="form-check-label">Publier immédiatement pour les animateurs</span></label>
                 <p class="form-error" id="doc-error"></p>
                 <button class="btn btn-primary" type="submit">Ajouter le document</button>
             </form>

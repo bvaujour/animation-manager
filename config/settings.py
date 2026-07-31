@@ -72,15 +72,45 @@ AWS_S3_CUSTOM_DOMAIN = os.getenv(
 )
 AWS_LOCATION = os.getenv("SUPABASE_S3_LOCATION", "")
 
-# Stockage des documents uploadés : S3 (Supabase) si les clés sont
-# configurées, sinon stockage local dans MEDIA_ROOT pour pouvoir
-# travailler sans compte Supabase.
-# Une suite de tests doit rester hermétique : elle ne doit jamais écrire dans
-# le stockage Supabase réel, même si le poste charge les clés du fichier .env.
-if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and "test" not in sys.argv:
+# Stockage des documents uploadés.
+#
+# Ce choix est indépendant de DEBUG : un serveur Django lancé en local peut
+# parfaitement envoyer les fichiers vers Supabase.
+#
+# Valeurs possibles :
+# - auto  : utilise Supabase S3 lorsque les deux clés sont renseignées, sinon local ;
+# - s3    : impose Supabase S3 et refuse de démarrer si la configuration manque ;
+# - local : impose le dossier MEDIA_ROOT.
+#
+# Les tests utilisent toujours un stockage local isolé afin de ne jamais écrire
+# dans le bucket Supabase pendant la suite de tests.
+FILE_STORAGE_BACKEND = os.getenv("FILE_STORAGE_BACKEND", "auto").strip().lower()
+
+if "test" in sys.argv:
+    FILE_STORAGE_BACKEND = "local"
+
+if FILE_STORAGE_BACKEND not in {"auto", "local", "s3"}:
+    raise ValueError("FILE_STORAGE_BACKEND doit valoir 'auto', 'local' ou 's3'.")
+
+_s3_is_configured = bool(AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY)
+if FILE_STORAGE_BACKEND == "auto":
+    FILE_STORAGE_BACKEND = "s3" if _s3_is_configured else "local"
+
+if FILE_STORAGE_BACKEND == "s3":
+    if not _s3_is_configured:
+        raise ValueError(
+            "Le stockage Supabase S3 est activé, mais SUPABASE_S3_ACCESS_KEY "
+            "ou SUPABASE_S3_SECRET_KEY est absent."
+        )
     _default_storage = {"BACKEND": "storages.backends.s3.S3Storage"}
 else:
     _default_storage = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
+
+# Réglages compatibles avec l'API S3 de Supabase.
+AWS_DEFAULT_ACL = None
+AWS_S3_FILE_OVERWRITE = False
+AWS_S3_SIGNATURE_VERSION = "s3v4"
+AWS_S3_VERIFY = True
 
 STORAGES = {
     "default": _default_storage,
@@ -93,7 +123,7 @@ STORAGES = {
     },
 }
 
-# Utilisé uniquement par le stockage local ci-dessus (ignoré avec S3).
+# Utilisé uniquement avec FILE_STORAGE_BACKEND=local.
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -187,10 +217,12 @@ ROUTING_TIMEOUT_SECONDS = int(os.getenv("ROUTING_TIMEOUT_SECONDS", "8"))
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
+PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", "5"))
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-        "OPTIONS": {"min_length": 5},
+        "OPTIONS": {"min_length": PASSWORD_MIN_LENGTH},
     },
 ]
 
@@ -222,7 +254,7 @@ STATICFILES_DIRS = [
 
 # Version unique des ressources statiques pour invalider le cache navigateur.
 # En production, WhiteNoise ajoute aussi des empreintes de contenu.
-ASSET_VERSION = os.getenv("ASSET_VERSION", "20260731-espace-animateurs-mobile-1").strip()
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20260731-clean-1").strip()
 
 
 # Envoi d'e-mails aux salariés. En local, sans serveur SMTP configuré,

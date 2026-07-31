@@ -4,6 +4,7 @@
 {% block body_class %}page-employes{% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/staff-list.css' %}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--fluid employees-workspace" data-animateur-page>
@@ -19,7 +20,7 @@
 
         {% include "partials/_staff_filter.html" with toolbar_class="employees-sidebar-toolbar" search_id="evenement-search" search_name="recherche_salarie" details_id="salaries-filter" count_id="salaries-filter-count" qualifications_id="salaries-filter-qualifications" availability_id="salaries-filter-disponibilite" assignment_id="salaries-filter-affectation" centres_id="salaries-filter-centres" reset_id="salaries-filter-reset" %}
 
-        <div id="evenement-list" class="employees-list" role="listbox" aria-label="Salariés"></div>
+        <div id="evenement-list" class="employees-list staff-list" role="listbox" aria-label="Salariés"></div>
     </aside>
 
     <section class="ui-card employee-editor evenement-detail" id="evenement-detail" aria-live="polite">

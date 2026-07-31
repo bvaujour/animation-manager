@@ -1,27 +1,27 @@
-:root{--dashboard-ink:#111a3a;--dashboard-muted:#63708b;--dashboard-line:#e3e7f2;--dashboard-bg:#fbfbff;--dashboard-purple:#6650c8;--dashboard-sidebar:244px}
+:root{--dashboard-ink:#111a3a;--dashboard-muted:#63708b;--dashboard-line:#e3e7f2;--dashboard-bg:#fbfbff;--dashboard-purple:#6650c8;}
 body.dashboard-body{background:radial-gradient(circle at 25% 0%,rgba(111,86,207,.055),transparent 24rem),var(--dashboard-bg);color:var(--dashboard-ink)}
 body.dashboard-body h1,body.dashboard-body h2,body.dashboard-body h3,body.dashboard-body h4{color:var(--dashboard-ink)}
-body.dashboard-body>.top-nav{display:none}
-body.dashboard-body>.nav-overlay{display:none !important}
-body.dashboard-body>.nav-drawer{display:flex !important;width:var(--dashboard-sidebar);transform:none !important;box-shadow:1px 0 0 var(--dashboard-line);border-right:0;background:linear-gradient(180deg,#faf9ff 0%,#fff 58%,#fbfbff 100%)}
-body.dashboard-body .nav-drawer-header{min-height:92px;padding:20px 20px 15px;border-bottom:0}
-body.dashboard-body .nav-drawer .brand{align-items:center;gap:11px;color:var(--dashboard-ink);font-size:1rem;line-height:1.1;white-space:normal}
-body.dashboard-body .nav-drawer .brand .brand-mark{width:38px;height:38px;border-radius:12px;background:linear-gradient(145deg,#7761d9,#5c45bd);box-shadow:0 8px 18px rgba(100,77,196,.22);font-size:.76rem}
-body.dashboard-body .nav-close-button{display:none}
-body.dashboard-body .nav-drawer-links{gap:7px;padding:8px 15px 16px}
-body.dashboard-body .nav-drawer-links a,body.dashboard-body .nav-logout-button{min-height:46px;display:flex;align-items:center;gap:12px;padding:10px 13px;border-radius:11px;color:#56617d;font-size:.88rem;font-weight:600}
-body.dashboard-body .nav-drawer-links a:hover,body.dashboard-body .nav-logout-button:hover{color:#3f2da7;background:#f0edff}
-body.dashboard-body .nav-drawer-links a.active{color:#4933b2;background:linear-gradient(90deg,#eeeaff,#f5f2ff);box-shadow:inset 0 0 0 1px rgba(103,81,198,.07)}
-body.dashboard-body .nav-link-icon{width:21px;height:21px;display:inline-grid;place-items:center;flex:0 0 21px;color:currentColor}
-body.dashboard-body .nav-link-icon svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-body.dashboard-body .nav-user-card{margin-top:auto;display:flex;align-items:center;gap:10px;padding:13px 9px 8px;border-top:1px solid var(--dashboard-line)}
-body.dashboard-body .nav-user-avatar{width:36px;height:36px;display:grid;place-items:center;border-radius:50%;color:#5742bd;background:#eeebff;border:1px solid #ddd7ff;font-size:.8rem;font-weight:800}
-body.dashboard-body .nav-user-copy{min-width:0;display:grid;line-height:1.2}
-body.dashboard-body .nav-user-copy strong{overflow:hidden;color:var(--dashboard-ink);font-size:.78rem;text-overflow:ellipsis;white-space:nowrap}
-body.dashboard-body .nav-user-copy small{margin-top:2px;color:var(--dashboard-muted);font-size:.68rem}
-body.dashboard-body .nav-logout-form{margin-top:0;padding-top:0}
-body.dashboard-body .nav-logout-button{min-height:38px;padding-block:7px;color:#7a849b;font-size:.75rem}
-body.dashboard-body>.page-shell.dashboard-page{width:calc(100% - var(--dashboard-sidebar)) !important;height:100dvh !important;margin:0 0 0 var(--dashboard-sidebar) !important;padding:24px 28px 36px !important;overflow-y:auto;background:transparent;scrollbar-gutter:stable}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 .dashboard-page{position:relative;max-width:none}
 .dashboard-header{display:flex;align-items:flex-start;justify-content:space-between;gap:22px;margin-bottom:22px}
 .dashboard-header h1{margin:0;font-size:clamp(1.45rem,2vw,2rem);line-height:1.12;letter-spacing:-.035em}
@@ -117,38 +117,3 @@ body.dashboard-body>.page-shell.dashboard-page{width:calc(100% - var(--dashboard
 .dashboard-loading{position:fixed;right:24px;bottom:20px;z-index:80;padding:9px 13px;border-radius:999px;color:#fff;background:rgba(30,35,60,.9);box-shadow:0 8px 24px rgba(22,27,48,.18);font-size:.7rem;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .16s ease,transform .16s ease}
 .dashboard-loading.is-visible{opacity:1;transform:translateY(0)}
 .dashboard-page.is-loading .dashboard-kpi,.dashboard-page.is-loading .dashboard-card{opacity:.72}
-@media (max-width:1280px){.dashboard-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
-.dashboard-main-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-.dashboard-centres-card,.dashboard-actions-card{grid-column:span 1}
-.dashboard-alerts-card,.dashboard-week-card{grid-column:span 2}
-}
-@media (max-width:1020px){body.dashboard-body>.top-nav{display:flex}
-body.dashboard-body>.nav-drawer[hidden]{display:none !important}
-body.dashboard-body>.nav-drawer:not([hidden]){display:flex !important;width:min(320px,88vw);transform:translateX(-105%) !important;box-shadow:var(--shadow-lg)}
-body.dashboard-body>.nav-drawer.open{transform:translateX(0) !important}
-body.dashboard-body .nav-close-button{display:inline-block}
-body.dashboard-body>.nav-overlay.open{display:block !important}
-body.dashboard-body>.page-shell.dashboard-page{width:100% !important;height:calc(100dvh - var(--top-nav-height)) !important;margin-left:0 !important;padding:18px 18px 30px !important}
-.dashboard-header{align-items:center}
-}
-@media (max-width:760px){.dashboard-header{display:grid}
-.dashboard-week-filter{width:100%;min-width:0}
-.dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-.dashboard-main-grid{grid-template-columns:1fr}
-.dashboard-centres-card,.dashboard-alerts-card,.dashboard-actions-card,.dashboard-week-card{grid-column:1}
-.dashboard-alert-list{grid-template-columns:1fr}
-.dashboard-week-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
-@media (max-width:480px){body.dashboard-body>.page-shell.dashboard-page{padding:14px 10px 26px !important}
-.dashboard-kpis{grid-template-columns:1fr}
-.dashboard-kpi{min-height:102px}
-#dashboard-period-nav.week-navigation{align-items:stretch;flex-direction:column}
-#dashboard-period-nav .week-picker__select{min-width:0;width:100%}
-#dashboard-period-nav .week-navigation-controls{width:100%;justify-content:space-between}
-#dashboard-period-nav .week-navigation-today{flex:1}
-.dashboard-actions-grid{grid-template-columns:1fr 1fr}
-.dashboard-week-grid{grid-template-columns:1fr}
-}
-@media (min-width:1100px){body.dashboard-body{--dashboard-sidebar:var(--app-sidebar-width)}
-body.dashboard-body>.nav-drawer,body.dashboard-body>.page-shell.dashboard-page{transition:width .2s ease,margin-left .2s ease}
-}

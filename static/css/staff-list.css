@@ -1,0 +1,137 @@
+/* Liste d'animateurs partagée : Planning et page Salariés. */
+.staff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1px 2px 8px;
+  scrollbar-width: thin;
+}
+
+.staff-list .empty-note {
+  margin: 0;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.animateur.staff-list-item {
+  --animateur-color: #718096;
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--animateur-color) 34%, var(--color-border));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--animateur-color) 19%, white);
+  color: #243244;
+  text-align: left;
+  user-select: none;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .1s ease;
+}
+
+.animateur.staff-list-item:hover {
+  border-color: color-mix(in srgb, var(--animateur-color) 60%, var(--color-border));
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--animateur-color) 16%, transparent);
+}
+
+.animateur.staff-list-item.selected,
+.animateur.staff-list-item.active {
+  border-color: var(--animateur-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--animateur-color) 20%, transparent);
+}
+
+.animateur.staff-list-item.dimmed { opacity: .45; }
+
+.anim-content,
+.anim-name-row,
+.anim-details,
+.anim-name { min-width: 0; }
+
+.anim-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.anim-name-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.anim-name {
+  overflow: hidden;
+  font-size: .79rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anim-details {
+  overflow: hidden;
+  color: color-mix(in srgb, #243244 76%, var(--animateur-color));
+  font-size: .64rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anim-qualification-icons {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.anim-qualification-icon {
+  width: 27px;
+  height: 27px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--animateur-color) 38%, white);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .78);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* La page Salariés utilise les mêmes cartes mais elles restent de simples boutons. */
+body.page-employes .animateur.staff-list-item {
+  cursor: pointer;
+}
+
+body.page-planning .animateur.staff-list-item {
+  cursor: grab;
+}
+
+body.page-planning .animateur.staff-list-item:active {
+  cursor: grabbing;
+  transform: translateY(1px);
+}
+
+@media (max-width: 799px) {
+  body.page-employes .employees-list.staff-list {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 2px 7px;
+    scroll-snap-type: x proximity;
+  }
+
+  body.page-employes .employees-list .animateur.staff-list-item {
+    flex: 0 0 142px;
+    width: 142px;
+    scroll-snap-align: start;
+  }
+}

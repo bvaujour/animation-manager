@@ -33,8 +33,11 @@ document.addEventListener("DOMContentLoaded", () =>
     const calendars = [];
     let chargementCalendriers = 0;
     const today = new Date();
+    const pageInitialDate = document.querySelector("[data-calendar-date]")?.dataset.calendarDate;
     const persistedWeek = WeekPicker.getPersistedDate();
-    let currentDate = persistedWeek ? parseLocalDate(persistedWeek) : new Date(today);
+    let currentDate = pageInitialDate
+        ? parseLocalDate(pageInitialDate)
+        : (persistedWeek ? parseLocalDate(persistedWeek) : new Date(today));
 
     function message(container, texte)
     {
@@ -172,12 +175,6 @@ document.addEventListener("DOMContentLoaded", () =>
             && !(groupe.dates_feriees_fermees || []).includes(iso);
     }
 
-    function joursCachesFullCalendar(groupe)
-    {
-        const ouverts = new Set((groupe.jours_ouverts || [0, 1, 2, 3, 4, 5]).map(Number));
-        return [0, 1, 2, 3, 4, 5, 6].filter((jourJs) => !ouverts.has((jourJs + 6) % 7));
-    }
-
     function groupeChevauchePlage(groupe, debutStr, finExclusiveStr)
     {
         return groupe.permanent || (groupe.periodes || []).some((periode) => periode.debut < finExclusiveStr && (periode.fin_ouverture || periode.fin) >= debutStr);
@@ -271,7 +268,7 @@ document.addEventListener("DOMContentLoaded", () =>
             initialDate: currentDate,
             locale: "fr",
             firstDay: 1,
-            hiddenDays: joursCachesFullCalendar(evenement),
+            hiddenDays: PlanningData.hiddenDays(evenement),
             height: "auto",
             fixedWeekCount: false,
             dayMaxEvents: false,
@@ -301,6 +298,7 @@ document.addEventListener("DOMContentLoaded", () =>
                                 backgroundColor: "#fff2c7",
                                 borderColor: "#e4bd55",
                                 textColor: "#725510",
+                                classNames: ["calendar-effectif-event"],
                                 extendedProps: { type_affichage: "effectif_enfants" },
                             }));
                         successCallback([...nombresEnfants, ...affectations]);
@@ -315,6 +313,12 @@ document.addEventListener("DOMContentLoaded", () =>
             datesSet: (info) => {
                 mettreAJourVisibilite(info);
                 mettreAJourPeriodeVisible();
+                PlanningData.applySortieMarkers(
+                    info.view.calendar,
+                    evenement.id,
+                    info.startStr,
+                    info.endStr
+                );
             },
         });
 
@@ -327,6 +331,7 @@ document.addEventListener("DOMContentLoaded", () =>
 
     async function chargerCalendriers()
     {
+        if (!calendarsContainer) return;
         const numeroChargement = ++chargementCalendriers;
         try
         {
@@ -503,6 +508,27 @@ document.addEventListener("DOMContentLoaded", () =>
     btnPrevWeek?.addEventListener("click", () => changerPeriode(-1));
     btnCurrentWeek?.addEventListener("click", retourPeriodeActuelle);
     btnNextWeek?.addEventListener("click", () => changerPeriode(1));
+
+    const materialForm = document.querySelector("[data-material-form]");
+    const materialDate = materialForm?.querySelector("[data-material-date]");
+    const materialCentre = materialForm?.querySelector("[data-material-centre]");
+
+    materialDate?.addEventListener("change", async () =>
+    {
+        if (!materialDate.value || !materialCentre) return;
+        try
+        {
+            const url = `${materialForm.dataset.centreApi}?date=${encodeURIComponent(materialDate.value)}`;
+            const response = await fetch(url, {headers: {"X-Requested-With": "XMLHttpRequest"}});
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data.centre_id)
+            {
+                materialCentre.value = String(data.centre_id);
+            }
+        }
+        catch (_) {}
+    });
 
     chargerCalendriers();
     chargerDocuments();

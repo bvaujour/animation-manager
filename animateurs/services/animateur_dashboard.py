@@ -20,6 +20,7 @@ from animateurs.models import (
     Animateur,
     Disponibilite,
     Document,
+    PublicationPlanning,
     EffectifEnfantsJour,
     HoraireAffectationJour,
     ParticipationTravailComplementaire,
@@ -86,6 +87,23 @@ def _libelle_date(jour: datetime.date) -> str:
     return f"{jour.day} {MOIS_FR[jour.month]}"
 
 
+def _est_sejour(affectation: Affectation) -> bool:
+    """Détermine si une affectation correspond à un séjour.
+
+    Le modèle ne possède pas encore de catégorie dédiée : on conserve donc la
+    même règle métier que le calendrier personnel du tableau de bord, en regardant les libellés du
+    lieu, de l'événement et du groupe.
+    """
+
+    libelles = [
+        getattr(affectation.centre, "nom", ""),
+        getattr(affectation.evenement, "nom", ""),
+        getattr(getattr(affectation.evenement, "groupe", None), "nom", ""),
+    ]
+    texte = " ".join(libelles).casefold()
+    return "séjour" in texte or "sejour" in texte
+
+
 def _libelle_semaine(lundi: datetime.date, vendredi: datetime.date) -> str:
     if lundi.month == vendredi.month:
         return f"Semaine du {lundi.day} au {vendredi.day} {MOIS_FR[vendredi.month]} {vendredi.year}"
@@ -96,18 +114,33 @@ def _libelle_semaine(lundi: datetime.date, vendredi: datetime.date) -> str:
 
 
 def _documents_semaine(lundi: datetime.date, vendredi: datetime.date):
-    """Documents permanents ou applicables à la semaine affichée."""
+    """Documents publiés utiles à la semaine, avec un libellé court pour le tableau de bord."""
 
-    return list(
+    documents = list(
         Document.objects.filter(
             Q(permanent=True)
             | Q(periodes__debut__lte=vendredi, periodes__fin__gte=lundi)
-            | Q(periode_debut__lte=vendredi, periode_fin__gte=lundi)
+            | Q(periode_debut__lte=vendredi, periode_fin__gte=lundi),
+            publie=True,
         )
         .distinct()
         .prefetch_related("periodes")
         .order_by("-permanent", "titre")[:8]
     )
+    for document in documents:
+        if document.permanent:
+            document.libelle_dashboard = "Permanent"
+            continue
+        periodes = list(document.periodes.all())
+        if len(periodes) == 1:
+            libelle = periodes[0].libelle_avec_annee
+            libelle = libelle.replace(" — Semaine ", " · S")
+            document.libelle_dashboard = libelle
+        elif len(periodes) > 1:
+            document.libelle_dashboard = f"{len(periodes)} semaines"
+        else:
+            document.libelle_dashboard = document.libelle_periode
+    return documents
 
 
 def _sorties_concernees(
@@ -254,17 +287,20 @@ def generer_tableau_de_bord_animateur(
     vendredi = lundi + datetime.timedelta(days=4)
     debut_dt = _borne_jour(lundi)
     fin_dt = _borne_jour(vendredi + datetime.timedelta(days=1))
+    planning_publie = PublicationPlanning.objects.filter(semaine_debut=lundi, publie=True).exists()
 
     horaires_prefetch = Prefetch(
         "horaires_journaliers",
         queryset=HoraireAffectationJour.objects.filter(date__range=(lundi, vendredi)).order_by("date"),
     )
-    affectations = list(
-        Affectation.objects.filter(animateur=animateur, debut__lt=fin_dt, fin__gt=debut_dt)
-        .select_related("centre", "evenement", "evenement__groupe")
-        .prefetch_related(horaires_prefetch)
-        .order_by("debut", "id")
-    )
+    affectations = []
+    if planning_publie:
+        affectations = list(
+            Affectation.objects.filter(animateur=animateur, debut__lt=fin_dt, fin__gt=debut_dt)
+            .select_related("centre", "evenement", "evenement__groupe")
+            .prefetch_related(horaires_prefetch)
+            .order_by("debut", "id")
+        )
 
     affectation_par_jour: dict[datetime.date, Affectation] = {}
     evenements_par_jour: dict[datetime.date, set[int]] = defaultdict(set)
@@ -353,6 +389,8 @@ def generer_tableau_de_bord_animateur(
                 "centre_code": affectation.centre.code,
                 "centre_couleur": affectation.centre.couleur,
                 "groupe": affectation.evenement.nom,
+                "est_sejour": _est_sejour(affectation),
+                "type_affectation": "Séjour" if _est_sejour(affectation) else "Affectation",
                 "horaire": _format_plage(
                     horaire.heure_arrivee if horaire else None,
                     horaire.heure_depart if horaire else None,
@@ -361,6 +399,8 @@ def generer_tableau_de_bord_animateur(
                 "enfants": effectif.nombre if effectif else None,
                 "effectif_renseigne": effectif is not None,
                 "animateurs": len(equipe),
+                "animateurs_prenoms": [item.prenom for item in equipe],
+                "animateurs_libelle": ", ".join(item.prenom for item in equipe),
                 "collegues": [item.prenom for item in collegues],
                 "collegues_libelle": ", ".join(item.prenom for item in collegues),
                 "sorties": sorties_jour,
@@ -410,6 +450,7 @@ def generer_tableau_de_bord_animateur(
 
     return {
         "animateur": animateur,
+        "planning_publie": planning_publie,
         "aujourdhui": contexte_aujourdhui,
         "semaine": {
             "debut": lundi,

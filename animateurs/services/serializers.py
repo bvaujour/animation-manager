@@ -11,6 +11,37 @@ from animateurs.services.status_colors import (
 )
 
 
+def _centre_preference_to_dict(preference):
+    """Sérialise un centre issu d'une relation de préférence animateur."""
+    centre = preference.centre
+    return {
+        "id": preference.centre_id,
+        "nom": centre.nom,
+        "code": centre.code,
+        "couleur": centre.couleur,
+    }
+
+
+def _qualifications_payload(qualifications):
+    """Retourne les champs communs aux sérialisations complète et Planning."""
+    return {
+        "qualification_ids": sorted(
+            {
+                identifiant
+                for qualification in qualifications
+                for identifiant in (qualification.id, qualification.statut_id)
+                if identifiant
+            }
+        ),
+        "qualifications": [qualification.nom for qualification in qualifications],
+        "qualification_icones": [
+            {"id": qualification.id, "nom": qualification.nom, "icone": qualification.icone}
+            for qualification in qualifications
+            if not qualification.est_statut and qualification.icone
+        ],
+    }
+
+
 def affectation_to_event(affectation):
     qualifications = list(affectation.animateur.qualifications.all())
     statut = statut_payload(qualifications)
@@ -95,16 +126,8 @@ def animateur_to_dict(animateur):
     prefere_relations = [pref for pref in preferences if pref.est_prefere and not pref.est_interdit]
     interdites_relations = [pref for pref in preferences if pref.est_interdit]
 
-    def centre_dict(pref):
-        return {
-            "id": pref.centre_id,
-            "nom": pref.centre.nom,
-            "code": pref.centre.code,
-            "couleur": pref.centre.couleur,
-        }
-
-    centres_preferes = [centre_dict(pref) for pref in prefere_relations]
-    centres_interdits = [centre_dict(pref) for pref in interdites_relations]
+    centres_preferes = [_centre_preference_to_dict(pref) for pref in prefere_relations]
+    centres_interdits = [_centre_preference_to_dict(pref) for pref in interdites_relations]
     centre_prefere = centres_preferes[0] if centres_preferes else None
     # Les champs singulier/secondaires sont conservés pour les anciennes
     # interfaces. La nouvelle interface utilise directement
@@ -139,13 +162,7 @@ def animateur_to_dict(animateur):
         **statut,
         # Les catégories sont ajoutées aux identifiants effectifs pour que les
         # filtres puissent trouver tous les diplômes d'une même famille.
-        "qualification_ids": sorted({identifiant for q in qualifications for identifiant in (q.id, q.statut_id) if identifiant}),
-        "qualifications": [q.nom for q in qualifications],
-        "qualification_icones": [
-            {"id": q.id, "nom": q.nom, "icone": q.icone}
-            for q in qualifications
-            if not q.est_statut and q.icone
-        ],
+        **_qualifications_payload(qualifications),
         "centre_prefere": centre_prefere,
         "centres_secondaires": centres_secondaires,
         "centres_preferes": centres_preferes,
@@ -202,16 +219,8 @@ def animateur_planning_to_dict(animateur):
     prefere_relations = [pref for pref in preferences if pref.est_prefere and not pref.est_interdit]
     interdites_relations = [pref for pref in preferences if pref.est_interdit]
 
-    def centre_dict(pref):
-        return {
-            "id": pref.centre_id,
-            "nom": pref.centre.nom,
-            "code": pref.centre.code,
-            "couleur": pref.centre.couleur,
-        }
-
-    centres_preferes = [centre_dict(pref) for pref in prefere_relations]
-    centres_interdits = [centre_dict(pref) for pref in interdites_relations]
+    centres_preferes = [_centre_preference_to_dict(pref) for pref in prefere_relations]
+    centres_interdits = [_centre_preference_to_dict(pref) for pref in interdites_relations]
     centre_prefere = centres_preferes[0] if centres_preferes else None
 
     return {
@@ -222,15 +231,7 @@ def animateur_planning_to_dict(animateur):
         "email": animateur.email,
         "couleur": statut["couleur_statut"],
         **statut,
-        "qualification_ids": sorted(
-            {identifiant for q in qualifications for identifiant in (q.id, q.statut_id) if identifiant}
-        ),
-        "qualifications": [q.nom for q in qualifications],
-        "qualification_icones": [
-            {"id": q.id, "nom": q.nom, "icone": q.icone}
-            for q in qualifications
-            if not q.est_statut and q.icone
-        ],
+        **_qualifications_payload(qualifications),
         "centre_prefere": centre_prefere,
         "centres_preferes": centres_preferes,
         "centres_interdits": centres_interdits,
@@ -362,6 +363,7 @@ def document_to_dict(document):
         "titre": document.titre,
         "url": document.fichier.url,
         "date_ajout": document.date_ajout.isoformat(),
+        "publie": document.publie,
         "permanent": document.permanent,
         "periode_debut": document.periode_debut.isoformat() if document.periode_debut else None,
         "periode_fin": document.periode_fin.isoformat() if document.periode_fin else None,
@@ -375,7 +377,7 @@ def document_to_dict(document):
                 "debut": periode.debut.isoformat(),
                 "fin": periode.fin.isoformat(),
                 "annee_scolaire": periode.annee_scolaire,
-                "vacances": periode.vacances,
+                "vacances": periode.categorie_vacances,
             }
             for periode in periodes
         ],

@@ -1016,6 +1016,77 @@ class HoraireAffectationJour(models.Model):
         ]
 
 
+class PublicationPlanning(models.Model):
+    """État de publication d’une semaine de planning pour les animateurs."""
+
+    semaine_debut = models.DateField(unique=True, db_index=True)
+    publie = models.BooleanField(default=False, db_index=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-semaine_debut"]
+
+    def clean(self):
+        super().clean()
+        if self.semaine_debut and self.semaine_debut.weekday() != 0:
+            raise ValidationError({"semaine_debut": "La date doit être un lundi."})
+
+    def __str__(self):
+        statut = "publié" if self.publie else "non publié"
+        return f"Planning du {self.semaine_debut:%d/%m/%Y} — {statut}"
+
+
+class DemandeMateriel(models.Model):
+    """Demande de matériel créée par un animateur et traitée par la direction."""
+
+    STATUT_EN_ATTENTE = "en_attente"
+    STATUT_VALIDEE = "validee"
+    STATUT_CHOICES = [
+        (STATUT_EN_ATTENTE, "En attente"),
+        (STATUT_VALIDEE, "Validée"),
+    ]
+
+    animateur = models.ForeignKey(
+        Animateur,
+        on_delete=models.CASCADE,
+        related_name="demandes_materiel",
+    )
+    centre = models.ForeignKey(
+        Centre,
+        on_delete=models.PROTECT,
+        related_name="demandes_materiel",
+        null=True,
+        blank=True,
+    )
+    materiel = models.CharField(max_length=180)
+    quantite = models.PositiveIntegerField(default=1)
+    date_besoin = models.DateField(verbose_name="date souhaitée")
+    statut = models.CharField(
+        max_length=20,
+        choices=STATUT_CHOICES,
+        default=STATUT_EN_ATTENTE,
+        db_index=True,
+    )
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_validation = models.DateTimeField(null=True, blank=True)
+    validee_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="demandes_materiel_validees",
+    )
+
+    class Meta:
+        ordering = ("statut", "date_besoin", "-date_creation")
+        verbose_name = "demande de matériel"
+        verbose_name_plural = "demandes de matériel"
+
+    def __str__(self):
+        centre = f" — {self.centre}" if self.centre_id else ""
+        return f"{self.materiel} × {self.quantite} — {self.animateur}{centre}"
+
+
 class Document(models.Model):
     """Un document administratif consultable depuis l'application.
 
@@ -1037,6 +1108,12 @@ class Document(models.Model):
         related_name="documents",
         blank=True,
         help_text="Semaines auxquelles ce document est rattaché.",
+    )
+    publie = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="publié pour les animateurs",
+        help_text="Seuls les documents publiés sont visibles dans l’espace animateur.",
     )
     date_ajout = models.DateTimeField(auto_now_add=True)
 

@@ -1,5 +1,5 @@
 body.animator-dashboard-body{--dashboard-blue:#0b5df0;--dashboard-ink:#07164e;--dashboard-muted:#66718f;--dashboard-line:#dce4f6;--dashboard-soft:#f7f9ff;--dashboard-orange:#ff6b1a}
-.animator-dashboard{width:min(100%,1540px);margin:0 auto;padding:17px 18px 30px}
+.animator-dashboard{width:100%;max-width:none;margin:0;padding:17px 18px 30px}
 .animator-dashboard a{text-decoration:none}
 
 .animator-dashboard-header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:10px;padding:0 10px}
@@ -128,51 +128,10 @@ body.animator-dashboard-body{--dashboard-blue:#0b5df0;--dashboard-ink:#07164e;--
 .animator-dashboard-footer p{margin:0}
 .animator-dashboard-footer a{color:#075ae2;font-weight:850;white-space:nowrap}
 
-@media(max-width:1280px){
-  .animator-week-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .animator-day-card{min-height:380px}
-  .animator-dashboard-grid--three{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .animator-dashboard-grid--three>.animator-compact-card:last-child{grid-column:1/-1}
-}
-@media(max-width:980px){
-  .animator-dashboard{padding:15px 13px 26px}
-  .animator-today-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .animator-today-item{border-top:1px solid #e2e8f6}
-  .animator-today-item:first-child,.animator-today-item:nth-child(2){border-top:0}
-  .animator-today-item:nth-child(odd){border-left:0}
-  .animator-today-item:last-child{grid-column:1/-1}
-  .animator-week-info{grid-template-columns:46px minmax(0,1fr)}
-  .animator-week-info>a{grid-column:2;justify-self:start}
-  .animator-week-info ul{grid-template-columns:1fr}
-  .animator-week-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .animator-dashboard-grid--two{grid-template-columns:1fr}
-}
-@media(max-width:700px){
-  .animator-dashboard-header{align-items:flex-start;padding-inline:2px}
-  .animator-dashboard-header p{display:none}
-  .animator-profile-chip>span:nth-child(2),.animator-profile-chip>b{display:none}
-  .animator-today-strip{grid-template-columns:1fr}
-  .animator-today-item,.animator-today-item:nth-child(2){border-top:1px solid #e2e8f6;border-left:0}
-  .animator-today-item:first-child{border-top:0}
-  .animator-today-item:last-child{grid-column:auto}
-  .animator-week-info{grid-template-columns:39px minmax(0,1fr);padding:12px}
-  .animator-week-info-icon{font-size:1.75rem}
-  .animator-week-grid,.animator-dashboard-grid--three{grid-template-columns:1fr}
-  .animator-dashboard-grid--three>.animator-compact-card:last-child{grid-column:auto}
-  .animator-day-card{min-height:365px}
-  .animator-dashboard-footer{grid-template-columns:18px minmax(0,1fr)}
-  .animator-dashboard-footer a{grid-column:2;justify-self:start}
-}
-@media(max-width:430px){
-  .animator-dashboard{padding:12px 9px 22px}
-  .animator-dashboard-header h1{font-size:1.25rem}
-  .animator-week-navigation{grid-template-columns:36px minmax(0,1fr) 36px;gap:5px}
-  .animator-week-navigation strong{font-size:.78rem}
-  .animator-week-info>a{font-size:.6rem}
-  .animator-profile-summary>div{grid-template-columns:42px minmax(0,1fr)}
-  .animator-profile-summary-avatar{width:42px;height:42px}
-  .animator-profile-summary a{grid-column:2;justify-self:start}
-}
+
+
+
+
 
 /* Harmonisation avec l'espace habituel d'Animation Manager */
 body.animator-dashboard-body{
@@ -184,7 +143,7 @@ body.animator-dashboard-body{
   --dashboard-orange:var(--color-accent-dark);
   background:var(--color-bg);
 }
-.animator-dashboard{width:min(100%,1440px);padding:20px 24px 34px}
+.animator-dashboard{width:100%;max-width:none;margin:0;padding:20px 24px 34px}
 .animator-dashboard-header h1,
 .animator-week-navigation strong,
 .animator-panel-header h2,
@@ -220,223 +179,12 @@ body.animator-dashboard-body{
 .animator-profile-avatar,.animator-profile-summary-avatar{background:var(--color-primary)}
 .animator-dashboard .btn-primary{background:var(--color-primary)}
 .animator-dashboard .btn-primary:hover{background:var(--color-primary-dark)}
-@media(max-width:760px){.animator-dashboard{padding:14px 12px 26px}}
+
 
 /* Tableau de bord animateur — composition réellement pensée pour téléphone */
-@media (max-width: 700px) {
-  body.animator-space-body .animator-dashboard {
-    width: 100%;
-    margin: 0;
-    padding: 10px 10px 22px;
-  }
 
-  .animator-dashboard-header {
-    position: sticky;
-    top: 0;
-    z-index: 20;
-    align-items: center;
-    min-height: 52px;
-    margin: -10px -10px 10px;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--color-border);
-    background: rgba(247,248,252,.94);
-    backdrop-filter: blur(12px);
-  }
-  .animator-dashboard-header h1 { font-size: 1.16rem; }
-  .animator-profile-chip { min-width: 42px; min-height: 42px; padding: 3px; }
-  .animator-profile-avatar { width: 36px; height: 36px; }
 
-  .animator-today-strip {
-    grid-template-columns: repeat(2, minmax(0,1fr));
-    gap: 0;
-    overflow: hidden;
-    border-radius: 14px;
-  }
-  .animator-today-item,
-  .animator-today-item:nth-child(2) {
-    min-height: 67px;
-    padding: 9px 10px;
-    border-top: 1px solid var(--color-border);
-    border-left: 1px solid var(--color-border);
-  }
-  .animator-today-item:nth-child(-n+2) { border-top: 0; }
-  .animator-today-item:nth-child(odd) { border-left: 0; }
-  .animator-today-item:last-child { grid-column: 1 / -1; }
-  .animator-today-item small { font-size: .55rem; }
-  .animator-today-item strong {
-    font-size: .68rem;
-    white-space: normal;
-    line-height: 1.25;
-  }
 
-  .animator-week-navigation {
-    position: sticky;
-    top: 52px;
-    z-index: 19;
-    width: 100%;
-    margin: 0 0 10px;
-    padding: 7px 4px;
-    background: rgba(247,248,252,.94);
-    backdrop-filter: blur(12px);
-  }
-  .animator-week-navigation > a { width: 42px; height: 42px; }
-  .animator-week-navigation strong { font-size: .82rem; }
-
-  .animator-week-info {
-    grid-template-columns: 34px minmax(0,1fr);
-    gap: 8px;
-    padding: 12px;
-    border-radius: 14px;
-  }
-  .animator-week-info ul {
-    max-height: 112px;
-    overflow: auto;
-    gap: 7px;
-    padding-left: 16px;
-    font-size: .72rem;
-    line-height: 1.35;
-  }
-  .animator-week-info > a {
-    grid-column: 1 / -1;
-    width: 100%;
-    min-height: 42px;
-    display: grid;
-    place-items: center;
-    justify-self: stretch;
-    font-size: .7rem;
-  }
-
-  .animator-planning-panel { padding: 11px 0 12px; overflow: hidden; }
-  .animator-planning-panel > .animator-panel-header { padding-inline: 12px; }
-  .animator-panel-header { align-items: flex-start; }
-  .animator-panel-header h2 { font-size: .86rem; }
-  .animator-panel-header > span { padding-top: 2px; text-align: right; }
-
-  .animator-week-grid {
-    display: flex;
-    gap: 10px;
-    width: 100%;
-    padding: 2px 12px 10px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    scroll-padding-inline: 12px;
-    overscroll-behavior-inline: contain;
-    scrollbar-width: thin;
-  }
-  .animator-day-card {
-    flex: 0 0 calc(100vw - 54px);
-    width: calc(100vw - 54px);
-    max-width: 390px;
-    min-height: 0;
-    scroll-snap-align: center;
-    scroll-snap-stop: always;
-    border-radius: 14px;
-  }
-  .animator-day-card.is-today { order: -1; }
-  .animator-day-card > header {
-    grid-template-columns: auto 1fr;
-    align-items: center;
-    justify-items: start;
-    gap: 7px;
-    min-height: 50px;
-    padding: 10px 12px;
-  }
-  .animator-day-card > header span { margin: 0; }
-  .animator-day-status-row { justify-content: flex-start; padding-inline: 12px; }
-  .animator-day-content {
-    grid-template-rows: auto auto auto auto auto;
-    gap: 10px;
-    padding: 8px 13px 14px;
-  }
-  .animator-day-place { min-height: 50px; }
-  .animator-place-icon { width: 34px; height: 34px; font-size: 1.65rem; }
-  .animator-day-place strong { font-size: .82rem; white-space: normal; }
-  .animator-day-place small { font-size: .7rem; white-space: normal; }
-  .animator-day-facts {
-    grid-template-rows: none;
-    grid-template-columns: repeat(3,minmax(0,1fr));
-    gap: 6px;
-  }
-  .animator-day-facts > div {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    gap: 3px;
-    min-height: 63px;
-    padding: 8px 4px;
-    border-radius: 10px;
-    background: var(--color-surface-sunken);
-    text-align: center;
-  }
-  .animator-day-facts dt { font-size: 1.08rem; }
-  .animator-day-facts dd {
-    font-size: .66rem;
-    line-height: 1.2;
-    white-space: normal;
-  }
-  .animator-day-highlight { min-height: 52px; font-size: .7rem; }
-  .animator-day-team,
-  .animator-day-responsibility { font-size: .7rem; line-height: 1.45; }
-  .animator-rest-content { min-height: 255px; }
-
-  .animator-dashboard-grid,
-  .animator-dashboard-grid--two,
-  .animator-dashboard-grid--three {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .animator-compact-card,
-  .animator-wide-card {
-    min-height: 0;
-    padding: 12px;
-    border-radius: 14px;
-  }
-  .animator-card-list { max-height: none; overflow: visible; }
-  .animator-list-item { min-height: 56px; padding: 9px; }
-  .animator-list-item strong { font-size: .72rem; white-space: normal; }
-  .animator-list-item small { font-size: .63rem; white-space: normal; }
-  .animator-card-action { min-height: 44px; margin-top: 10px; font-size: .7rem; }
-
-  .animator-availability-summary > div { min-height: 72px; }
-  .animator-availability-days span { height: 42px; }
-
-  .animator-profile-summary > div {
-    grid-template-columns: 46px minmax(0,1fr);
-    gap: 10px;
-  }
-  .animator-profile-summary a {
-    grid-column: 1 / -1;
-    min-height: 42px;
-    display: grid;
-    place-items: center;
-    justify-self: stretch;
-  }
-
-  .animator-dashboard-footer {
-    grid-template-columns: 20px minmax(0,1fr);
-    gap: 8px;
-    padding: 12px;
-    line-height: 1.4;
-  }
-  .animator-dashboard-footer a {
-    grid-column: 1 / -1;
-    min-height: 40px;
-    display: grid;
-    place-items: center;
-    justify-self: stretch;
-    border-top: 1px solid var(--color-border);
-  }
-}
-
-@media (max-width: 390px) {
-  .animator-day-card {
-    flex-basis: calc(100vw - 40px);
-    width: calc(100vw - 40px);
-  }
-  .animator-day-facts dd { font-size: .61rem; }
-  .animator-today-item { padding-inline: 8px; }
-}
 
 /* Accueil animateur simplifié : priorité au programme utile */
 .animator-dashboard--simplified{padding-top:12px}
@@ -465,18 +213,131 @@ body.animator-dashboard-body{
 .animator-today-rest>span{font-size:1.7rem}.animator-today-rest div{display:grid;gap:2px}.animator-today-rest strong{font-size:.88rem;color:var(--color-text)}.animator-today-rest p{margin:0;color:var(--color-text-muted);font-size:.7rem}
 .animator-dashboard--simplified .animator-week-navigation{margin-bottom:10px}
 .animator-dashboard--simplified .animator-week-info{margin-bottom:10px}
-@media(max-width:700px){
- body.animator-space-body .animator-dashboard--simplified{padding:4px 6px 18px}
- .animator-mobile-header{position:static;min-height:44px;margin-bottom:5px}
- .animator-mobile-header h1{font-size:1rem}
- .animator-mobile-profile{width:36px;height:36px}
- .animator-dashboard--simplified .animator-week-navigation{position:static;padding:4px 0;background:transparent;backdrop-filter:none}
- .animator-dashboard--simplified .animator-week-navigation>a{width:40px;height:40px}
- .animator-today-card{margin-bottom:9px}
- .animator-today-card>header{padding:9px 11px}
- .animator-today-main{gap:9px;padding:11px}
- .animator-today-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
- .animator-today-details span{min-width:0;white-space:normal}
- .animator-dashboard--simplified .animator-week-info{grid-template-columns:30px minmax(0,1fr);padding:10px 11px}
- .animator-dashboard--simplified .animator-week-info>a{display:none}
+
+
+/* Planning hebdomadaire animateur : cinq cartes compactes, toujours dans l'ordre. */
+.animator-planning-panel--compact{gap:8px;padding:9px}
+.animator-planning-compact-header{min-height:28px;padding:0 1px 5px}
+.animator-planning-compact-header h2{font-size:.72rem}
+.animator-planning-compact-header>span{font-size:.56rem}
+.animator-week-grid--compact{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;overflow:visible;padding:0}
+.animator-day-card--compact{min-width:0;min-height:118px;border-radius:7px;overflow:hidden}
+.animator-day-card--compact>header{display:flex;align-items:center;justify-content:space-between;gap:2px;min-height:27px;padding:4px 5px;border-top:3px solid var(--day-accent)}
+.animator-day-card--compact>header strong{font-size:.58rem;letter-spacing:.02em}
+.animator-day-card--compact>header span{font-size:.65rem;font-weight:900}
+.animator-day-compact-content{display:flex;min-width:0;min-height:86px;flex-direction:column;align-items:flex-start;gap:3px;padding:5px}
+.animator-day-compact-content>.animator-assignment-kind{max-width:100%;padding:2px 4px;border-radius:999px;color:var(--color-primary-dark);background:color-mix(in srgb,var(--color-primary) 10%,white);font-size:.46rem;font-weight:850;line-height:1;white-space:nowrap}
+.animator-day-compact-content>.animator-assignment-kind.is-stay{color:#7a3e00;background:#fff0d9}
+.animator-day-compact-content>strong,.animator-day-compact-content>small{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.animator-day-compact-content>strong{font-size:.59rem;line-height:1.15}
+.animator-day-compact-content>small{color:var(--color-text-muted);font-size:.49rem}
+.animator-day-compact-content>b{margin-top:auto;color:var(--color-primary-dark);font-size:.68rem;line-height:1}
+.animator-day-compact-content>b span{font-size:.45rem;font-weight:750}
+.animator-day-compact-rest{display:grid;min-height:86px;place-items:center;padding:4px;color:var(--color-text-muted);font-size:.52rem;font-weight:750}
+.animator-planning-detail-action{min-height:28px;margin-top:1px;font-size:.59rem}
+
+
+
+
+
+/* Cartes du planning animateur : en-tête minimal et informations métier utiles. */
+.animator-day-card--compact{min-height:106px}
+.animator-day-card--compact>header{
+  min-height:16px;
+  justify-content:center;
+  padding:1px 2px;
+  border-top-width:2px;
+  line-height:1;
 }
+.animator-day-card--compact>header strong{
+  overflow:hidden;
+  width:100%;
+  font-size:.49rem;
+  line-height:1;
+  text-align:center;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.animator-day-compact-content{
+  min-height:86px;
+  gap:3px;
+  padding:4px;
+}
+.animator-day-group{
+  display:-webkit-box !important;
+  overflow:hidden;
+  font-size:.57rem !important;
+  line-height:1.12 !important;
+  white-space:normal !important;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+}
+.animator-day-count{
+  color:var(--color-primary-dark);
+  font-size:.5rem;
+  font-weight:850;
+  line-height:1.1;
+}
+.animator-day-team{
+  display:-webkit-box !important;
+  overflow:hidden !important;
+  margin-top:auto;
+  color:var(--color-text-muted);
+  font-size:.46rem !important;
+  line-height:1.15;
+  white-space:normal !important;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+}
+.animator-day-compact-rest{min-height:86px}
+
+
+
+
+
+
+/* Mini planning : groupe + effectif sur une ligne, équipe ligne par ligne. */
+.animator-day-compact-content>.animator-assignment-kind{display:none!important}
+.animator-day-group-line{display:flex;min-width:0;width:100%;align-items:baseline;justify-content:space-between;gap:2px}
+.animator-day-group-line .animator-day-group{min-width:0;flex:1}
+.animator-day-group-line .animator-day-count{flex:0 0 auto;color:var(--color-primary-dark);font-weight:900}
+.animator-day-team{display:flex!important;min-width:0;width:100%;flex:1;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:0;overflow:hidden!important;margin-top:1px!important;white-space:normal!important;-webkit-line-clamp:unset!important}
+.animator-day-team span{display:block;overflow:hidden;width:100%;line-height:1.15;text-overflow:ellipsis;white-space:nowrap}
+
+/* Dashboard animateur : le bloc hebdomadaire réutilise désormais exactement le calendrier de Mon planning. */
+.animator-dashboard-calendar {
+    margin: 0;
+}
+
+.animator-dashboard-calendar .section-heading {
+    margin-bottom: .35rem;
+}
+
+.animator-dashboard-calendar .section-heading h2 {
+    margin: 0;
+}
+
+/* Blocs animateur : informations courtes, sans pictogrammes dépendants d'une police externe. */
+.animator-availability-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin:2px 0 9px;color:var(--color-text-muted);font-size:.66rem}
+.animator-availability-line strong{color:var(--color-text);font-size:.76rem}
+.animator-availability-line span{color:var(--color-border-strong)}
+.animator-availability-card .animator-availability-days{margin:0}
+.animator-documents-card .animator-list-item--document{grid-template-columns:minmax(0,1fr) 12px;padding:7px 8px}
+.animator-documents-card .animator-list-item--document>div{gap:1px}
+.animator-documents-card .animator-list-item--document strong{white-space:normal;line-height:1.2}
+.animator-documents-card .animator-list-item--document small{white-space:normal;line-height:1.2}
+
+.animator-inline-editor {
+  margin-top: 6px;
+  border-top: 1px solid var(--site-line);
+  padding-top: 6px;
+}
+.animator-inline-editor > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: .82rem;
+  color: var(--site-primary);
+}
+.animator-inline-editor[open] > summary { margin-bottom: 7px; }
+.animator-inline-editor #mes-disponibilites-root { display: grid; gap: 5px; }
+.animator-inline-editor #enregistrer-disponibilites { width: 100%; margin-top: 7px; }

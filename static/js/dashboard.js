@@ -217,13 +217,16 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         centresRoot.innerHTML = centres.map((centre) => {
             const state = classeEtat(centre.etat);
-            const details = centre.jours_ouverts
-                ? `${centre.moyenne_enfants_groupe_jour} enfants en moyenne / groupe / jour · ${centre.journees_necessaires} poste${centre.journees_necessaires > 1 ? "s" : ""} requis`
-                : "Aucune ouverture sur cette semaine";
+            const metrics = centre.jours_ouverts
+                ? `<span><b>${escapeHtml(centre.moyenne_enfants_groupe_jour)}</b> enfants / groupe / jour</span><span><b>${escapeHtml(centre.journees_necessaires)}</b> poste${centre.journees_necessaires > 1 ? "s" : ""} requis</span>`
+                : `<span class="dashboard-centre-closed">Aucune ouverture cette semaine</span>`;
             return `
                 <a class="dashboard-centre-row" style="--centre-color:${escapeHtml(centre.couleur)}" href="${urlPlanning(debut, centre.effectifs_non_renseignes ? "effectifs" : "affectations", centre.id)}">
                     <span class="dashboard-centre-logo">${escapeHtml(centre.code || centre.nom.slice(0, 2).toUpperCase())}</span>
-                    <span class="dashboard-centre-copy"><strong>${escapeHtml(centre.nom)}</strong><small>${escapeHtml(details)}</small></span>
+                    <span class="dashboard-centre-copy">
+                        <strong>${escapeHtml(centre.nom)}</strong>
+                        <span class="dashboard-centre-metrics">${metrics}</span>
+                    </span>
                     <span class="dashboard-status dashboard-status--${state}">${escapeHtml(centre.etat_libelle)}</span>
                     <span class="dashboard-row-chevron" aria-hidden="true">›</span>
                 </a>`;

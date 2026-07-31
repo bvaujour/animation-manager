@@ -102,11 +102,6 @@ document.addEventListener("DOMContentLoaded", () => {
             .sort((a, b) => String(a.debut).localeCompare(String(b.debut)));
     }
 
-    function formatDateFr(iso) {
-        const [annee, mois, jour] = String(iso || "").split("-");
-        return annee && mois && jour ? `${jour}/${mois}/${annee}` : String(iso || "");
-    }
-
     function afficherConfiguration() {
         const statut = donnees.configuration || {};
         configuration.className = `email-configuration ${!statut.operationnel ? "error" : statut.mode_test ? "test" : "success"}`;

@@ -7,6 +7,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const titleInput = document.getElementById("doc-titre");
     const fileInput = document.getElementById("doc-fichier");
     const errorElement = document.getElementById("doc-error");
+    const permanentInput = document.getElementById("doc-permanent");
+    const periodPickerField = document.getElementById("doc-period-picker-field");
     const mainPickerRoot = document.getElementById("doc-semaines-picker");
     const mainPicker = WeekPicker.get(mainPickerRoot);
     let periods = mainPicker?.periods || [];
@@ -28,14 +30,24 @@ document.addEventListener("DOMContentLoaded", () => {
         return clone;
     }
 
+    function setPickerVisibility({ permanent, field = periodPickerField, picker = mainPicker } = {}) {
+        if (field) field.hidden = Boolean(permanent);
+        if (permanent) picker?.clear();
+    }
+
     function documentCard(documentItem) {
         const extension = DocumentUtils.extension(documentItem.url);
         const card = document.createElement("article");
         card.className = "document-card";
         card.innerHTML = `
             <div class="document-file-type" aria-hidden="true">${escapeHtml(extension ? extension.toUpperCase() : "FIC")}</div>
-            <h3 class="document-title truncate" title="${escapeHtml(documentItem.titre)}">${escapeHtml(documentItem.titre)}</h3>
-            <p class="document-period-label">${escapeHtml(documentItem.libelle_periode || "")}</p>
+            <div class="document-card-main">
+                <h3 class="document-title" title="${escapeHtml(documentItem.titre)}">${escapeHtml(documentItem.titre)}</h3>
+                <div class="document-card-meta">
+                    <span class="document-period-badge ${documentItem.permanent ? "permanent" : "dated"}">${escapeHtml(documentItem.permanent ? "Permanent" : (documentItem.libelle_periode || ""))}</span>
+                    <span class="document-publication-status ${documentItem.publie ? "is-published" : "is-draft"}">${documentItem.publie ? "Publié" : "Non publié"}</span>
+                </div>
+            </div>
             <div class="document-actions">
                 <a href="${escapeHtml(documentItem.url)}" target="_blank" rel="noopener" class="btn btn-ghost">Ouvrir</a>
                 <button class="btn btn-ghost document-edit" type="button">Modifier</button>
@@ -48,8 +60,14 @@ document.addEventListener("DOMContentLoaded", () => {
             editor.className = "document-inline-editor";
             editor.innerHTML = `
                 <label>Titre<input type="text" name="titre" value="${escapeHtml(documentItem.titre)}" required></label>
-                <span class="field-label">Semaines concernées</span>
-                <div class="document-inline-picker-slot"></div>
+                <div class="document-editor-options">
+                    <label class="form-check"><input class="form-check-input" type="checkbox" name="permanent" ${documentItem.permanent ? "checked" : ""}><span class="form-check-label">Document permanent</span></label>
+                    <label class="form-check"><input class="form-check-input" type="checkbox" name="publie" ${documentItem.publie ? "checked" : ""}><span class="form-check-label">Visible par les animateurs</span></label>
+                </div>
+                <div class="document-editor-periods">
+                    <span class="field-label">Semaines concernées</span>
+                    <div class="document-inline-picker-slot"></div>
+                </div>
                 <p class="form-error"></p>
                 <div class="editor-actions">
                     <button class="btn btn-primary" type="submit">Enregistrer</button>
@@ -63,20 +81,30 @@ document.addEventListener("DOMContentLoaded", () => {
                 periods,
                 selectedIds: documentItem.periode_ids || [],
             });
+            const editorPermanent = editor.elements.permanent;
+            const editorPeriods = editor.querySelector(".document-editor-periods");
+            const updateEditorMode = () => setPickerVisibility({ permanent: editorPermanent.checked, field: editorPeriods, picker: editorPicker });
+            editorPermanent.addEventListener("change", updateEditorMode);
+            updateEditorMode();
             editor.querySelector(".editor-cancel").addEventListener("click", () => editor.remove());
             editor.addEventListener("submit", async (event) => {
                 event.preventDefault();
                 const ids = selectedIds(editorPicker);
                 const inlineError = editor.querySelector(".form-error");
                 inlineError.textContent = "";
-                if (!ids.length) {
-                    inlineError.textContent = "Sélectionne au moins une semaine.";
+                if (!editorPermanent.checked && !ids.length) {
+                    inlineError.textContent = "Sélectionne au moins une semaine ou choisis Document permanent.";
                     return;
                 }
                 try {
                     await apiFetch(`/api/documents/${documentItem.id}/`, {
                         method: "PATCH",
-                        body: JSON.stringify({ titre: editor.elements.titre.value.trim(), periode_ids: ids }),
+                        body: JSON.stringify({
+                            titre: editor.elements.titre.value.trim(),
+                            permanent: editorPermanent.checked,
+                            periode_ids: editorPermanent.checked ? [] : ids,
+                            publie: editor.elements.publie.checked,
+                        }),
                     });
                     afficherToast("Document modifié.");
                     await loadDocuments();
@@ -107,8 +135,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         const groups = new Map();
         documents.forEach((documentItem) => {
-            const key = (documentItem.periode_ids || []).join(",") || "sans-periode";
-            if (!groups.has(key)) groups.set(key, { title: documentItem.libelle_periode || "Sans période", documents: [] });
+            const key = documentItem.permanent ? "permanent" : ((documentItem.periode_ids || []).join(",") || "sans-periode");
+            if (!groups.has(key)) groups.set(key, { title: documentItem.permanent ? "Documents permanents" : (documentItem.libelle_periode || "Sans période"), documents: [] });
             groups.get(key).documents.push(documentItem);
         });
         groups.forEach((group) => {
@@ -138,25 +166,31 @@ document.addEventListener("DOMContentLoaded", () => {
             errorElement.textContent = "Choisis un fichier.";
             return;
         }
-        if (!ids.length) {
-            errorElement.textContent = "Sélectionne au moins une semaine.";
+        if (!permanentInput.checked && !ids.length) {
+            errorElement.textContent = "Sélectionne au moins une semaine ou choisis Document permanent.";
             return;
         }
 
         const data = new FormData();
         data.append("titre", titleInput.value.trim());
         data.append("fichier", file);
-        ids.forEach((id) => data.append("periode_ids", String(id)));
+        data.append("permanent", permanentInput.checked ? "true" : "false");
+        data.append("publie", document.getElementById("doc-publie")?.checked ? "true" : "false");
+        if (!permanentInput.checked) ids.forEach((id) => data.append("periode_ids", String(id)));
         try {
             await apiFetch("/api/documents/", { method: "POST", body: data });
             form.reset();
             mainPicker?.clear();
+            setPickerVisibility({ permanent: false });
             afficherToast("Document ajouté.");
             await loadDocuments();
         } catch (error) {
             errorElement.textContent = erreurMessage(error, "Impossible d’ajouter ce document.");
         }
     });
+
+    permanentInput?.addEventListener("change", () => setPickerVisibility({ permanent: permanentInput.checked }));
+    setPickerVisibility({ permanent: permanentInput?.checked });
 
     mainPickerRoot?.addEventListener("week-picker:ready", (event) => {
         periods = event.detail.periods || [];

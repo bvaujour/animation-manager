@@ -20,6 +20,7 @@ from .models import (
     ContactEmailExterne,
     DateExclueEvenement,
     Disponibilite,
+    DemandeMateriel,
     Document,
     Evenement,
     Groupe,
@@ -88,6 +89,14 @@ class ModeleEmailAdmin(admin.ModelAdmin):
     list_filter = ("actif",)
     search_fields = ("nom", "objet", "message")
     ordering = ("ordre", "nom")
+
+
+@admin.register(DemandeMateriel)
+class DemandeMaterielAdmin(admin.ModelAdmin):
+    list_display = ("materiel", "quantite", "animateur", "centre", "date_besoin", "statut", "date_creation")
+    list_filter = ("statut", "centre", "date_besoin")
+    search_fields = ("materiel", "animateur__prenom", "animateur__nom")
+    date_hierarchy = "date_creation"
 
 
 @admin.register(Document)

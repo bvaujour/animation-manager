@@ -1,0 +1,2137 @@
+/* ========================================================================== 
+   Animation Manager — système visuel sobre
+   Cette feuille est chargée en dernier et constitue la source de vérité pour
+   l'apparence commune, le rail PC et la barre mobile.
+   ========================================================================== */
+
+:root {
+  --site-rail-size: 46px;
+  --site-mobile-nav-size: 48px;
+  --site-desktop-gutter: 10px;
+  --site-mobile-gutter: 5px;
+  --site-page-gap: 8px;
+  --site-card-gap: 7px;
+  --site-card-padding: 10px;
+  --site-card-radius: 5px;
+  --site-control-height: 32px;
+  --site-nav-bg: #263844;
+  --site-nav-hover: #344b59;
+  --site-nav-active-bg: #f5f6f7;
+  --site-nav-active-fg: #263844;
+  --site-nav-fg: #e2e7ea;
+  --site-nav-border: #1c2d36;
+  --site-line: #d6dbe0;
+  --site-line-strong: #c3c9cf;
+  --site-soft: #f7f8f9;
+  --site-soft-strong: #eef1f3;
+  --site-ink: #20262d;
+  --site-muted: #66717d;
+  --site-primary: #344c5a;
+  --site-primary-hover: #273b47;
+  --site-success: #3f7457;
+  --site-warning: #8a682e;
+  --site-danger: #a63d40;
+}
+
+/* --------------------------------------------------------------------------
+   Base générale
+   -------------------------------------------------------------------------- */
+
+html,
+body {
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+  background: var(--color-bg) !important;
+  color: var(--site-ink) !important;
+  font-family: Arial, Helvetica, sans-serif !important;
+  overflow-x: hidden;
+}
+
+body.app-body:not(.login-body) {
+  padding-top: 0 !important;
+}
+
+body.app-body :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--site-ink);
+  font-family: Arial, Helvetica, sans-serif !important;
+  font-weight: 700;
+  letter-spacing: 0 !important;
+}
+
+body.app-body :is(p, small, span, label, input, select, textarea, button, a) {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body.app-body a {
+  text-underline-offset: 2px;
+}
+
+body.app-body :focus-visible {
+  outline: 2px solid #537181 !important;
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Navigation : même couleur et même identité en position latérale ou basse
+   -------------------------------------------------------------------------- */
+
+body.login-body > .app-rail {
+  display: none !important;
+}
+
+.app-rail {
+  position: fixed;
+  z-index: 1600;
+  margin: 0;
+  background: var(--site-nav-bg) !important;
+  color: var(--site-nav-fg);
+  box-shadow: none !important;
+}
+
+.app-rail-links,
+.app-rail-account {
+  min-width: 0;
+}
+
+.app-rail-link {
+  display: grid !important;
+  place-items: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+  background: transparent !important;
+  color: var(--site-nav-fg) !important;
+  box-shadow: none !important;
+  text-decoration: none !important;
+  transform: none !important;
+  transition: background-color .12s ease, color .12s ease;
+}
+
+.app-rail-link:hover {
+  background: var(--site-nav-hover) !important;
+  color: #fff !important;
+}
+
+.app-rail-link.active {
+  background: var(--site-nav-active-bg) !important;
+  color: var(--site-nav-active-fg) !important;
+}
+
+.app-rail-link .material-symbols-outlined {
+  width: 22px !important;
+  height: 22px !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 21px !important;
+  line-height: 22px !important;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 20;
+}
+
+.app-rail-link.active .material-symbols-outlined {
+  font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 20;
+}
+
+
+.app-rail-icon {
+  width: 21px !important;
+  height: 21px !important;
+  display: block !important;
+  flex: 0 0 21px !important;
+  fill: currentColor !important;
+  stroke: none !important;
+  pointer-events: none;
+}
+
+.app-rail-link.active .app-rail-icon {
+  fill: currentColor !important;
+}
+
+.app-rail-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #617681;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  font-size: .65rem;
+  font-weight: 700;
+}
+
+.app-rail-logout-form {
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Conteneurs de page
+   -------------------------------------------------------------------------- */
+
+body.app-body:not(.login-body) > :is(.page-shell, main.page-shell),
+body.dashboard-body > .dashboard-page,
+body.animator-dashboard-body > .animator-dashboard {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+}
+
+body.app-body :is(
+  .app-main,
+  .page-content,
+  .dashboard-main,
+  .planning-main,
+  .admin-main,
+  .gestion-main,
+  .recap-main,
+  .sorties-main,
+  .dashboard-main-grid,
+  .animator-dashboard-grid
+) {
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+   En-têtes de page
+   -------------------------------------------------------------------------- */
+
+body.app-body .app-page-header,
+body.app-body :is(
+  .page-header,
+  .dashboard-header,
+  .administration-header,
+  .recap-header,
+  .documents-heading,
+  .sorties-header,
+  .employees-page-header,
+  .employee-detail-header,
+  .planning-page-header
+) {
+  min-height: 42px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  margin: 0 0 var(--site-page-gap) !important;
+  padding: 5px 2px 7px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--site-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.app-body .app-page-title,
+body.app-body .app-page-header h1,
+body.app-body :is(.page-header, .dashboard-header, .administration-header, .recap-header, .documents-heading, .sorties-header, .employees-page-header, .employee-detail-header, .planning-page-header) h1 {
+  min-width: 0;
+  margin: 0 !important;
+  color: var(--site-ink) !important;
+  font-size: 1.12rem !important;
+  font-weight: 700 !important;
+  line-height: 1.15 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+
+body.app-body :is(.page-intro, .dashboard-header p, .app-page-header p, .ui-section-heading p, .section-heading p) {
+  margin: 2px 0 0 !important;
+  color: var(--site-muted) !important;
+  font-size: .76rem !important;
+  line-height: 1.3 !important;
+}
+
+body.app-body .eyebrow {
+  margin: 0 0 2px !important;
+  color: var(--site-muted) !important;
+  font-size: .65rem !important;
+  font-weight: 700 !important;
+  letter-spacing: .04em !important;
+  text-transform: uppercase;
+}
+
+body.app-body .app-page-week {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+body.app-body .app-page-header--week-only {
+  display: flex !important;
+}
+
+body.app-body .app-page-header--week-only::after {
+  display: none !important;
+  content: none !important;
+}
+
+body.app-body .app-page-header--week-only .app-page-week {
+  width: min(560px, 65%);
+  max-width: none;
+  justify-self: auto;
+}
+
+/* --------------------------------------------------------------------------
+   Cartes et sections
+   -------------------------------------------------------------------------- */
+
+body.app-body :is(
+  .ui-card,
+  .app-card,
+  .dashboard-card,
+  .dashboard-kpi,
+  .animator-panel,
+  .animator-compact-card,
+  .animator-wide-card,
+  .panel,
+  .section-card,
+  .form-card,
+  .admin-card,
+  .administration-section,
+  .recap-card,
+  .fiche-card,
+  .fiche-section,
+  .document-card,
+  .employee-centres-card,
+  .entity-card,
+  .sortie-card,
+  .sortie-block,
+  .worktime-card,
+  .export-card,
+  .periode-card,
+  .period-preview-card,
+  .period-year-card,
+  .availability-period,
+  .email-selection-card
+) {
+  min-width: 0;
+  height: auto !important;
+  min-height: 0 !important;
+  margin-top: 0;
+  border: 1px solid var(--site-line) !important;
+  border-radius: var(--site-card-radius) !important;
+  background: var(--color-surface) !important;
+  box-shadow: none !important;
+}
+
+body.app-body :is(
+  .ui-card,
+  .app-card,
+  .dashboard-card,
+  .animator-panel,
+  .animator-compact-card,
+  .animator-wide-card,
+  .panel,
+  .section-card,
+  .form-card,
+  .admin-card,
+  .administration-section,
+  .recap-card,
+  .fiche-card,
+  .fiche-section,
+  .document-card,
+  .employee-centres-card,
+  .entity-card,
+  .sortie-card,
+  .sortie-block,
+  .worktime-card,
+  .export-card,
+  .periode-card,
+  .email-selection-card
+) {
+  padding: var(--site-card-padding) !important;
+}
+
+body.app-body :is(
+  .ui-section-heading,
+  .section-heading,
+  .section-header,
+  .dashboard-card-header,
+  .animator-panel-header,
+  .administration-section-heading,
+  .fiche-section-heading,
+  .gestion-section-heading,
+  .sortie-section-heading,
+  .worktime-section-heading,
+  .card-header
+) {
+  min-height: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 7px !important;
+  margin: 0 0 7px !important;
+  padding: 0 0 6px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--site-line) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.app-body :is(
+  .ui-section-heading,
+  .section-heading,
+  .section-header,
+  .dashboard-card-header,
+  .animator-panel-header,
+  .administration-section-heading,
+  .fiche-section-heading,
+  .gestion-section-heading,
+  .sortie-section-heading,
+  .worktime-section-heading,
+  .card-header
+) :is(h2, h3, h4) {
+  margin: 0 !important;
+  color: var(--site-ink) !important;
+  font-size: .88rem !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+body.app-body :is(.dashboard-card-icon, .dashboard-kpi-icon, .effectifs-excel-card-icon) {
+  color: var(--site-primary) !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+body.app-body :is(.ui-section, .home-section, .administration-section, .recap-card, .fiche-card) {
+  margin-bottom: var(--site-card-gap) !important;
+}
+
+body.app-body :is(
+  .dashboard-main-grid,
+  .dashboard-kpis,
+  .animator-dashboard-grid,
+  .ui-grid,
+  .documents-grid,
+  .document-group-grid,
+  .sorties-cards,
+  .sortie-blocks,
+  .centres-cards,
+  .lieux-cards,
+  .groupes-grid,
+  .admin-grid,
+  .superuser-layout,
+  .employee-detail-grid,
+  .salaries-directory-list,
+  .qualification-equivalence-grid,
+  .home-calendars,
+  .calendar-sites
+) {
+  gap: var(--site-card-gap) !important;
+  align-items: start !important;
+}
+
+/* --------------------------------------------------------------------------
+   Boutons, champs, badges et onglets
+   -------------------------------------------------------------------------- */
+
+body.app-body :is(.btn, button.btn),
+body.app-body button:not(.app-rail-link):not(.modal-close):not([class*="toggle"]),
+body.app-body :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-height: var(--site-control-height) !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+  font-size: .78rem !important;
+}
+
+body.app-body :is(.btn, button.btn),
+body.app-body button:not(.app-rail-link):not(.modal-close):not([class*="toggle"]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 9px !important;
+  border: 1px solid transparent;
+  font-weight: 700;
+  line-height: 1.1;
+  text-decoration: none;
+  transform: none !important;
+}
+
+body.app-body :is(.btn-primary, .btn-accent) {
+  border-color: var(--site-primary) !important;
+  background: var(--site-primary) !important;
+  color: #fff !important;
+}
+
+body.app-body :is(.btn-primary, .btn-accent):hover {
+  border-color: var(--site-primary-hover) !important;
+  background: var(--site-primary-hover) !important;
+}
+
+body.app-body :is(.btn-secondary, .btn-ghost, .btn-link) {
+  border-color: var(--site-line-strong) !important;
+  background: #fff !important;
+  color: var(--site-ink) !important;
+}
+
+body.app-body :is(.btn-secondary, .btn-ghost, .btn-link):hover {
+  background: var(--site-soft) !important;
+}
+
+body.app-body :is(.btn-danger, .btn-danger-ghost) {
+  border-color: #d9b5b6 !important;
+  background: #fff !important;
+  color: var(--site-danger) !important;
+}
+
+body.app-body .btn-danger-solid {
+  border-color: var(--site-danger) !important;
+  background: var(--site-danger) !important;
+  color: #fff !important;
+}
+
+body.app-body :is(.btn-small, .btn.btn-small) {
+  min-height: 27px !important;
+  padding: 3px 7px !important;
+  font-size: .7rem !important;
+}
+
+body.app-body :is(.field, .field-group, .compact-field) {
+  gap: 3px !important;
+  margin-bottom: 7px !important;
+}
+
+body.app-body :is(.field label, .field-group > span, .ui-form label, .admin-form label, .export-form label, .compact-field label) {
+  color: var(--site-muted) !important;
+  font-size: .72rem !important;
+  font-weight: 700 !important;
+}
+
+body.app-body :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  width: 100%;
+  max-width: 100%;
+  padding: 5px 7px !important;
+  border: 1px solid var(--site-line-strong) !important;
+  background: #fff !important;
+  color: var(--site-ink) !important;
+}
+
+body.app-body :is(input, select, textarea):focus {
+  border-color: #718995 !important;
+  outline: 2px solid rgba(79, 107, 120, .16) !important;
+}
+
+body.app-body textarea {
+  min-height: 78px !important;
+  resize: vertical;
+}
+
+body.app-body :is(
+  .badge,
+  .status-badge,
+  .place-badge,
+  .document-period-badge,
+  .periods-independent-badge,
+  .local-badge,
+  .employee-badges span,
+  .animator-today-badge,
+  .animator-work-badge,
+  .sortie-ratio-real-badge,
+  [class*="badge"]:not(.qualification-icon-badge)
+) {
+  min-height: 0 !important;
+  padding: 2px 5px !important;
+  border: 1px solid var(--site-line-strong) !important;
+  border-radius: 3px !important;
+  background: var(--site-soft) !important;
+  color: var(--site-muted) !important;
+  box-shadow: none !important;
+  font-size: .64rem !important;
+  font-weight: 700 !important;
+  line-height: 1.15 !important;
+  white-space: nowrap;
+}
+
+body.app-body :is(.tabs, .app-page-tabs, .app-page-tabs-row, .admin-tabs, .documents-tabs, .recap-tabs, .planning-tabs) {
+  min-height: 33px !important;
+  display: flex !important;
+  align-items: end !important;
+  gap: 0 !important;
+  margin: 0 0 var(--site-page-gap) !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--site-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+body.app-body :is(.tabs, .app-page-tabs, .app-page-tabs-row, .admin-tabs, .documents-tabs, .recap-tabs, .planning-tabs)::-webkit-scrollbar {
+  display: none;
+}
+
+body.app-body :is(.tab-btn, .planning-tab) {
+  min-height: 32px !important;
+  height: 32px !important;
+  flex: 0 0 auto;
+  margin: 0 0 -1px !important;
+  padding: 5px 9px !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--site-muted) !important;
+  box-shadow: none !important;
+  font-size: .72rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap;
+}
+
+body.app-body :is(.tab-btn, .planning-tab):hover {
+  color: var(--site-ink) !important;
+  background: transparent !important;
+}
+
+body.app-body :is(.tab-btn, .planning-tab).active {
+  border-bottom-color: var(--site-primary) !important;
+  background: transparent !important;
+  color: var(--site-primary) !important;
+  box-shadow: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Tables, listes et accordéons
+   -------------------------------------------------------------------------- */
+
+body.app-body :is(.table-wrap, .recap-table-wrap, .worktime-table-wrap, .period-table-wrap) {
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: #fff;
+  box-shadow: none !important;
+  overflow: auto;
+}
+
+body.app-body :is(table, .data-table, .period-table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .75rem !important;
+}
+
+body.app-body :is(table, .data-table, .period-table) :is(th, td) {
+  padding: 5px 7px !important;
+  border-bottom: 1px solid var(--site-line) !important;
+  vertical-align: top;
+}
+
+body.app-body :is(table, .data-table, .period-table) th {
+  background: var(--site-soft) !important;
+  color: var(--site-muted) !important;
+  font-size: .67rem !important;
+  font-weight: 700 !important;
+  letter-spacing: .02em !important;
+  text-transform: uppercase;
+}
+
+body.app-body :is(.entity-row, .team-row, .superuser-row, .period-saved-row, .animator-list-item) {
+  min-height: 0 !important;
+  padding: 6px 7px !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+body.app-body :is(details, .period-year-accordion, .group-period-fieldset) {
+  border-color: var(--site-line) !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+body.app-body details > summary {
+  min-height: 34px !important;
+  padding: 6px 8px !important;
+  background: var(--site-soft) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Modales et messages
+   -------------------------------------------------------------------------- */
+
+body.app-body .modal-backdrop {
+  background: rgba(22, 31, 37, .48) !important;
+}
+
+body.app-body :is(.modal-box, dialog, .sortie-dialog, .planning-effectifs-modal) {
+  border: 1px solid var(--site-line-strong) !important;
+  border-radius: 5px !important;
+  background: #fff !important;
+  box-shadow: 0 10px 30px rgba(22, 31, 37, .18) !important;
+}
+
+body.app-body :is(.modal-header, .modal-body, .modal-footer, .modal-actions) {
+  padding: 9px 11px !important;
+}
+
+body.app-body :is(.ui-alert, .admin-message, .form-error:not(:empty)) {
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+
+body.app-body .ui-alert {
+  padding: 7px 9px !important;
+  border: 1px solid var(--site-line);
+  background: var(--site-soft);
+  font-size: .76rem;
+}
+
+body.app-body .ui-alert--success {
+  border-color: #b8cdbf;
+  background: #f4f7f5;
+  color: #315c45;
+}
+
+body.app-body .ui-alert--danger {
+  border-color: #d9b5b6;
+  background: #faf4f4;
+  color: #842f32;
+}
+
+/* --------------------------------------------------------------------------
+   Tableau de bord direction
+   -------------------------------------------------------------------------- */
+
+body.dashboard-body {
+  background: var(--color-bg) !important;
+}
+
+body.dashboard-body .dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--site-card-gap) !important;
+  margin: 0 0 var(--site-card-gap) !important;
+}
+
+body.dashboard-body .dashboard-kpi {
+  display: grid !important;
+  grid-template-columns: 28px minmax(0, 1fr) !important;
+  grid-template-rows: auto auto !important;
+  align-items: center !important;
+  gap: 2px 7px !important;
+  padding: 8px !important;
+}
+
+body.dashboard-body .dashboard-kpi-icon {
+  width: 27px !important;
+  height: 27px !important;
+  grid-row: 1 / span 2;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+}
+
+body.dashboard-body .dashboard-kpi-icon svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+body.dashboard-body .dashboard-kpi > div {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 5px !important;
+}
+
+body.dashboard-body .dashboard-kpi strong {
+  color: var(--site-ink) !important;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+body.dashboard-body .dashboard-kpi span:not(.dashboard-kpi-icon),
+body.dashboard-body .dashboard-kpi small {
+  margin: 0 !important;
+  color: var(--site-muted) !important;
+  font-size: .64rem !important;
+  line-height: 1.2 !important;
+}
+
+body.dashboard-body .dashboard-kpi small {
+  grid-column: 2;
+}
+
+body.dashboard-body .dashboard-main-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, .8fr) minmax(0, 1.7fr);
+  gap: var(--site-card-gap) !important;
+  align-items: start !important;
+}
+
+body.dashboard-body .dashboard-centres-card {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+body.dashboard-body .dashboard-actions-card {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+body.dashboard-body .dashboard-alerts-card,
+body.dashboard-body .dashboard-week-card {
+  grid-column: 1 / -1;
+}
+
+body.dashboard-body .dashboard-drag-handle {
+  width: 22px !important;
+  height: 22px !important;
+  top: 5px !important;
+  right: 5px !important;
+  border: 0 !important;
+  border-radius: 2px !important;
+  background: transparent !important;
+  color: #8a949d !important;
+  opacity: .65 !important;
+}
+
+body.dashboard-body :is(.dashboard-centres-list, .dashboard-alert-list, .dashboard-actions-grid, .dashboard-week-grid) {
+  padding: 7px !important;
+  gap: 6px !important;
+}
+
+body.dashboard-body .dashboard-centres-list {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+body.dashboard-body .dashboard-centre-row {
+  display: grid !important;
+  grid-template-columns: 30px minmax(0, 1fr) auto 12px !important;
+  align-items: center !important;
+  gap: 6px !important;
+  min-height: 0 !important;
+  padding: 6px !important;
+  border: 1px solid var(--site-line) !important;
+  border-left: 3px solid var(--centre-color, var(--site-primary)) !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+  color: var(--site-ink) !important;
+  box-shadow: none !important;
+  text-decoration: none !important;
+  transform: none !important;
+}
+
+body.dashboard-body .dashboard-centre-row:hover {
+  background: var(--site-soft) !important;
+  border-color: var(--site-line-strong) !important;
+  border-left-color: var(--centre-color, var(--site-primary)) !important;
+}
+
+body.dashboard-body .dashboard-centre-logo {
+  width: 28px !important;
+  height: 28px !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: var(--site-soft) !important;
+  color: var(--site-ink) !important;
+  font-size: .62rem !important;
+}
+
+body.dashboard-body .dashboard-centre-copy {
+  display: grid !important;
+  gap: 2px !important;
+}
+
+body.dashboard-body .dashboard-centre-copy > strong {
+  color: var(--site-ink) !important;
+  font-size: .75rem !important;
+  line-height: 1.15 !important;
+}
+
+body.dashboard-body .dashboard-centre-metrics {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 2px 8px !important;
+  color: var(--site-muted) !important;
+  font-size: .62rem !important;
+  line-height: 1.2 !important;
+}
+
+body.dashboard-body .dashboard-centre-metrics span {
+  display: inline !important;
+}
+
+body.dashboard-body .dashboard-centre-metrics b {
+  color: var(--site-ink);
+}
+
+body.dashboard-body .dashboard-status {
+  min-height: 0 !important;
+  padding: 2px 5px !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  font-size: .59rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap;
+}
+
+body.dashboard-body .dashboard-status--ok { background: #f4f7f5 !important; color: #315c45 !important; border-color: #b8cdbf !important; }
+body.dashboard-body .dashboard-status--info { background: #f3f6f8 !important; color: #3f6071 !important; border-color: #b9c9d1 !important; }
+body.dashboard-body .dashboard-status--vigilance { background: #faf8f2 !important; color: #72551f !important; border-color: #d9c89f !important; }
+body.dashboard-body .dashboard-status--danger { background: #faf4f4 !important; color: #842f32 !important; border-color: #d9b5b6 !important; }
+body.dashboard-body .dashboard-status--vide { background: var(--site-soft) !important; color: var(--site-muted) !important; }
+
+body.dashboard-body .dashboard-actions-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+body.dashboard-body .dashboard-action {
+  min-height: 47px !important;
+  display: grid !important;
+  grid-template-columns: 22px minmax(0, 1fr) !important;
+  place-items: center start !important;
+  gap: 5px !important;
+  padding: 6px 7px !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+  color: var(--site-ink) !important;
+  text-align: left !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+body.dashboard-body .dashboard-action:hover {
+  background: var(--site-soft) !important;
+  border-color: var(--site-line-strong) !important;
+}
+
+body.dashboard-body .dashboard-action strong {
+  color: var(--site-primary) !important;
+  font-size: 1rem !important;
+}
+
+body.dashboard-body .dashboard-action span {
+  font-size: .67rem !important;
+  line-height: 1.2 !important;
+}
+
+body.dashboard-body .dashboard-alert-list {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+body.dashboard-body .dashboard-alert-row {
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-columns: 22px minmax(0, 1fr) auto !important;
+  gap: 6px !important;
+  padding: 6px !important;
+  border: 1px solid var(--site-line) !important;
+  border-left: 3px solid var(--alert-color, var(--site-warning)) !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+}
+
+body.dashboard-body .dashboard-alert-symbol {
+  width: 20px !important;
+  height: 20px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  font-size: .72rem !important;
+}
+
+body.dashboard-body .dashboard-alert-copy {
+  gap: 1px !important;
+}
+
+body.dashboard-body .dashboard-alert-copy strong {
+  color: var(--site-ink) !important;
+  font-size: .68rem !important;
+}
+
+body.dashboard-body .dashboard-alert-copy small {
+  color: var(--site-muted) !important;
+  font-size: .6rem !important;
+}
+
+body.dashboard-body .dashboard-alert-action {
+  padding: 3px 6px !important;
+  border: 1px solid var(--site-line-strong) !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+  color: var(--site-ink) !important;
+  font-size: .6rem !important;
+}
+
+body.dashboard-body .dashboard-card-footer-link {
+  min-height: 29px !important;
+  margin: 0 7px 7px !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: var(--site-soft) !important;
+  color: var(--site-primary) !important;
+  font-size: .64rem !important;
+  box-shadow: none !important;
+}
+
+body.dashboard-body .dashboard-week-grid {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
+
+body.dashboard-body .dashboard-week-day {
+  min-height: 0 !important;
+  gap: 4px !important;
+  padding: 6px !important;
+  border: 1px solid var(--site-line) !important;
+  border-top: 2px solid var(--day-color, var(--site-primary)) !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Tableau de bord animateur et calendriers
+   -------------------------------------------------------------------------- */
+
+body.animator-dashboard-body .animator-dashboard {
+  padding-top: 0;
+}
+
+body.animator-dashboard-body .animator-mobile-header {
+  min-height: 42px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin: 0 0 var(--site-page-gap) !important;
+  padding: 5px 2px 7px !important;
+  border-bottom: 1px solid var(--site-line) !important;
+  background: transparent !important;
+}
+
+body.animator-dashboard-body .animator-mobile-header h1 {
+  margin: 0 !important;
+  font-size: 1.12rem !important;
+}
+
+body.animator-dashboard-body .animator-mobile-profile {
+  width: 30px !important;
+  height: 30px !important;
+  border: 1px solid var(--site-line-strong) !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  color: var(--site-primary) !important;
+  box-shadow: none !important;
+}
+
+body.animator-dashboard-body .animator-week-navigation {
+  min-height: 36px !important;
+  display: grid !important;
+  grid-template-columns: 30px minmax(0, 1fr) 30px !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin: 0 0 var(--site-page-gap) !important;
+  padding: 3px !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+body.animator-dashboard-body .animator-week-navigation > a {
+  width: 28px !important;
+  height: 28px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: var(--site-soft) !important;
+  color: var(--site-ink) !important;
+  text-decoration: none !important;
+}
+
+body.animator-dashboard-body .animator-week-navigation > div {
+  text-align: center;
+}
+
+body.animator-dashboard-body .animator-week-navigation strong {
+  font-size: .75rem !important;
+}
+
+body.animator-dashboard-body .animator-week-navigation div a {
+  display: block;
+  margin-top: 1px;
+  color: var(--site-muted) !important;
+  font-size: .6rem !important;
+}
+
+body.animator-dashboard-body .home-planning-section,
+body.animator-dashboard-body .animator-dashboard-calendar,
+body.animator-dashboard-body :is(.home-calendars, .calendar-sites, .calendar-site-card, .calendar-group-card, .shared-calendar) {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin-inline: 0 !important;
+}
+
+body.animator-dashboard-body .animator-dashboard-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+
+body.animator-dashboard-body .animator-dashboard-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+body.animator-dashboard-body .animator-panel-header span:first-child {
+  color: var(--site-primary) !important;
+}
+
+body.animator-dashboard-body .animator-list-item {
+  display: grid !important;
+  grid-template-columns: 32px minmax(0, 1fr) !important;
+  gap: 6px !important;
+}
+
+body.animator-dashboard-body .animator-list-date {
+  border-right: 1px solid var(--site-line);
+  color: var(--site-muted) !important;
+}
+
+/* FullCalendar : structure plate, sans ombres ni grands arrondis. */
+body.app-body .fc {
+  width: 100% !important;
+  max-width: none !important;
+  color: var(--site-ink) !important;
+  font-size: .72rem !important;
+}
+
+body.app-body .fc :is(.fc-scrollgrid, .fc-theme-standard td, .fc-theme-standard th) {
+  border-color: var(--site-line) !important;
+}
+
+body.app-body .fc .fc-scrollgrid {
+  border-radius: 3px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+body.app-body .fc .fc-col-header-cell {
+  background: var(--site-soft) !important;
+}
+
+body.app-body .fc .fc-col-header-cell-cushion,
+body.app-body .fc .fc-daygrid-day-number {
+  padding: 3px 4px !important;
+  color: var(--site-muted) !important;
+  font-size: .65rem !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+}
+
+body.app-body .fc .fc-daygrid-day-frame {
+  min-height: 54px !important;
+}
+
+body.app-body .fc .fc-event {
+  margin: 1px 2px !important;
+  padding: 1px 3px !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+  font-size: .62rem !important;
+}
+
+body.app-body .fc .fc-day-today:not(.has-calendar-sortie) {
+  background: #f1f4f5 !important;
+}
+
+body.app-body .calendar-sortie-marker {
+  min-width: 17px !important;
+  height: 17px !important;
+  padding: 0 3px !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Documents
+   -------------------------------------------------------------------------- */
+
+body.app-body :is(.documents-grid, .document-group-grid) {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+}
+
+body.app-body .document-card {
+  display: grid !important;
+  grid-template-columns: 28px minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 5px 7px !important;
+  padding: 8px !important;
+}
+
+body.app-body .document-card :is(.document-icon, .document-card-icon, .document-file-type) {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: var(--site-soft) !important;
+  color: var(--site-primary) !important;
+}
+
+body.app-body .document-card :is(h3, h4, .document-title) {
+  margin: 0 !important;
+  font-size: .77rem !important;
+  line-height: 1.2 !important;
+}
+
+body.app-body .document-card :is(p, small, .document-meta) {
+  color: var(--site-muted) !important;
+  font-size: .65rem !important;
+  line-height: 1.25 !important;
+}
+
+body.app-body .document-card :is(.document-actions, .document-card-actions) {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  flex-wrap: wrap !important;
+  gap: 4px !important;
+  margin: 1px 0 0 !important;
+  padding-top: 5px !important;
+  border-top: 1px solid var(--site-line) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Gestion, salariés, sorties et administration
+   -------------------------------------------------------------------------- */
+
+body.app-body .lieu-card {
+  overflow: hidden;
+  border-color: var(--site-line) !important;
+}
+
+body.app-body .lieu-card-header {
+  padding: 8px 9px !important;
+  border-bottom: 1px solid var(--site-line) !important;
+  background: #fff !important;
+  color: var(--site-ink) !important;
+  box-shadow: none !important;
+}
+
+body.app-body .lieu-card-header :is(h3, h4, strong, span, p, small, label) {
+  color: inherit !important;
+}
+
+body.app-body .lieu-card-header::before,
+body.app-body .lieu-card-header::after {
+  display: none !important;
+}
+
+body.app-body .lieu-teams-block {
+  padding: 8px !important;
+  background: var(--site-soft) !important;
+}
+
+body.app-body .lieu-card .team-row {
+  border-left: 3px solid var(--lieu-color, var(--site-primary)) !important;
+  background: #fff !important;
+}
+
+body.app-body :is(.salarie-directory-item, .employee-card, .employee-profile-card) {
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+body.app-body .employee-profile-avatar {
+  border: 1px solid var(--site-line-strong) !important;
+  background: var(--site-soft) !important;
+  color: var(--site-primary) !important;
+  box-shadow: none !important;
+}
+
+body.app-body :is(.sortie-card, .sortie-block) {
+  background: #fff !important;
+}
+
+body.app-body .sortie-status,
+body.app-body [class*="sortie-status--"] {
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Login
+   -------------------------------------------------------------------------- */
+
+body.login-body {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 16px;
+  background: #eef1f2 !important;
+}
+
+body.login-body .login-page {
+  width: 100%;
+  max-width: 380px;
+}
+
+body.login-body .login-card {
+  padding: 22px !important;
+  border: 1px solid var(--site-line-strong) !important;
+  border-radius: 5px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+body.login-body .brand-mark {
+  border-radius: 3px !important;
+  background: var(--site-primary) !important;
+  color: #fff !important;
+}
+
+body.login-body .login-intro {
+  color: var(--site-muted) !important;
+}
+
+/* ========================================================================== 
+   LAYOUT PC — à partir de 800 px
+   ========================================================================== */
+
+@media (min-width: 800px) {
+  body.app-body:not(.login-body) {
+    padding: 0 0 0 var(--site-rail-size) !important;
+  }
+
+  body.app-body:not(.login-body) > .app-rail {
+    inset: 0 auto 0 0 !important;
+    width: var(--site-rail-size) !important;
+    height: 100dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    padding: 5px !important;
+    border: 0 !important;
+    border-right: 1px solid var(--site-nav-border) !important;
+    overflow: hidden !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-links {
+    width: 100% !important;
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 3px !important;
+    overflow: hidden !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-link {
+    width: 35px !important;
+    min-width: 35px !important;
+    height: 35px !important;
+    min-height: 35px !important;
+    flex: 0 0 35px !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-account {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 3px !important;
+    padding-top: 5px !important;
+    border-top: 1px solid #50636e !important;
+  }
+
+  body.app-body:not(.login-body) > :is(.page-shell, main.page-shell),
+  body.dashboard-body > .dashboard-page,
+  body.animator-dashboard-body > .animator-dashboard {
+    padding: 6px var(--site-desktop-gutter) 14px !important;
+  }
+
+  body.page-planning > :is(.planning-page-header, .planning-tabs, #layout, #worktime-panel) {
+    width: calc(100% - (var(--site-desktop-gutter) * 2)) !important;
+    max-width: none !important;
+    margin-left: var(--site-desktop-gutter) !important;
+    margin-right: var(--site-desktop-gutter) !important;
+  }
+
+  body.page-planning > .planning-page-header {
+    margin-top: 6px !important;
+  }
+
+  body.page-planning #layout.planning-workspace {
+    display: grid !important;
+    grid-template-columns: 184px minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    grid-template-areas: "staff calendars" !important;
+    gap: 7px !important;
+  }
+
+  body.page-planning #layout.animateurs-panel-collapsed {
+    grid-template-columns: 48px minmax(0, 1fr) !important;
+  }
+
+  body.page-planning #animateurs-panel { grid-area: staff; }
+  body.page-planning #calendars-section { grid-area: calendars; }
+
+  body.page-planning :is(#calendars-section, #calendars-container) {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+}
+
+/* ========================================================================== 
+   LAYOUT PORTABLE — sous 800 px
+   ========================================================================== */
+
+@media (max-width: 799px) {
+  :root {
+    --site-card-padding: 7px;
+    --site-card-gap: 5px;
+    --site-page-gap: 5px;
+  }
+
+  body.app-body:not(.login-body) {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 0 calc(var(--site-mobile-nav-size) + env(safe-area-inset-bottom, 0px)) !important;
+    overflow-x: hidden !important;
+  }
+
+  body.app-body:not(.login-body) > .app-rail {
+    inset: auto 0 0 0 !important;
+    width: 100% !important;
+    height: calc(var(--site-mobile-nav-size) + env(safe-area-inset-bottom, 0px)) !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 38px !important;
+    align-items: start !important;
+    padding: 2px 3px env(safe-area-inset-bottom, 0px) !important;
+    border: 0 !important;
+    border-top: 1px solid var(--site-nav-border) !important;
+    background: var(--site-nav-bg) !important;
+    overflow: hidden !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-links {
+    width: 100% !important;
+    height: 44px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    gap: 1px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.app-body:not(.login-body) .app-rail-links::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.app-body:not(.login-body) .app-rail-link {
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    flex: 0 0 44px !important;
+  }
+
+  body.app-body:not(.login-body) .app-rail-account {
+    width: 38px !important;
+    height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    border-left: 1px solid #50636e !important;
+  }
+
+  body.app-body:not(.login-body) 
+.app-rail-icon {
+  width: 21px !important;
+  height: 21px !important;
+  display: block !important;
+  flex: 0 0 21px !important;
+  fill: currentColor !important;
+  stroke: none !important;
+  pointer-events: none;
+}
+
+.app-rail-link.active .app-rail-icon {
+  fill: currentColor !important;
+}
+
+.app-rail-avatar {
+    display: none !important;
+  }
+
+  body.app-body:not(.login-body) :is(.app-rail-logout-form, .app-rail-logout) {
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+
+  body.app-body:not(.login-body) > :is(.page-shell, main.page-shell),
+  body.dashboard-body > .dashboard-page,
+  body.animator-dashboard-body > .animator-dashboard {
+    padding: 3px var(--site-mobile-gutter) 8px !important;
+  }
+
+  body.app-body :is(
+    .app-page-header,
+    .page-header,
+    .dashboard-header,
+    .administration-header,
+    .recap-header,
+    .documents-heading,
+    .sorties-header,
+    .employees-page-header,
+    .employee-detail-header,
+    .planning-page-header
+  ) {
+    min-height: 36px !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 4px !important;
+    padding: 4px 1px 5px !important;
+  }
+
+  body.app-body .app-page-header--week-only .app-page-week,
+  body.app-body .app-page-week {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  body.app-body h1 {
+    font-size: 1rem !important;
+  }
+
+  body.app-body :is(input, select, textarea) {
+    font-size: 16px !important;
+  }
+
+  body.app-body :is(
+    .dashboard-main-grid,
+    .animator-dashboard-grid,
+    .animator-dashboard-grid--two,
+    .animator-dashboard-grid--three,
+    .ui-grid,
+    .documents-grid,
+    .document-group-grid,
+    .sorties-cards,
+    .sortie-blocks,
+    .centres-cards,
+    .lieux-cards,
+    .groupes-grid,
+    .admin-grid,
+    .superuser-layout,
+    .employee-detail-grid,
+    .salaries-directory-list,
+    .qualification-equivalence-grid
+  ) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body.dashboard-body .dashboard-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  body.dashboard-body .dashboard-main-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body.dashboard-body :is(.dashboard-centres-card, .dashboard-actions-card, .dashboard-alerts-card, .dashboard-week-card) {
+    grid-column: 1 !important;
+    grid-row: auto !important;
+  }
+
+  body.dashboard-body :is(.dashboard-centres-list, .dashboard-alert-list) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body.dashboard-body .dashboard-centre-row {
+    grid-template-columns: 28px minmax(0, 1fr) 12px !important;
+  }
+
+  body.dashboard-body .dashboard-status {
+    grid-column: 2 !important;
+    justify-self: start !important;
+  }
+
+  body.dashboard-body .dashboard-row-chevron {
+    grid-column: 3 !important;
+    grid-row: 1 / span 2 !important;
+  }
+
+  body.dashboard-body .dashboard-week-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  body.dashboard-body .dashboard-week-day {
+    padding: 4px !important;
+  }
+
+  body.dashboard-body .dashboard-week-day :is(span, small, strong) {
+    font-size: .55rem !important;
+    overflow-wrap: anywhere;
+  }
+
+  body.animator-dashboard-body .animator-dashboard-grid--two,
+  body.animator-dashboard-body .animator-dashboard-grid--three {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body.animator-dashboard-body .home-planning-section,
+  body.animator-dashboard-body .animator-dashboard-calendar {
+    padding-inline: 4px !important;
+  }
+
+  body.app-body .fc .fc-daygrid-day-frame {
+    min-height: 46px !important;
+  }
+
+  body.app-body .fc .fc-col-header-cell-cushion,
+  body.app-body .fc .fc-daygrid-day-number {
+    padding: 2px !important;
+    font-size: .57rem !important;
+  }
+
+  body.app-body .fc .fc-event {
+    margin-inline: 1px !important;
+    padding-inline: 2px !important;
+    font-size: .54rem !important;
+  }
+
+  body.page-planning > :is(.planning-page-header, .planning-tabs, #layout, #worktime-panel) {
+    width: calc(100% - (var(--site-mobile-gutter) * 2)) !important;
+    max-width: none !important;
+    margin-left: var(--site-mobile-gutter) !important;
+    margin-right: var(--site-mobile-gutter) !important;
+  }
+
+  body.page-planning > .planning-page-header {
+    margin-top: 3px !important;
+  }
+
+  body.page-planning #layout.planning-workspace,
+  body.page-planning #layout.planning-workspace.animateurs-panel-collapsed {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) auto !important;
+    grid-template-areas: "calendars" "staff" !important;
+    gap: 5px !important;
+    padding: 0 !important;
+  }
+
+  body.page-planning #calendars-section {
+    grid-area: calendars;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  body.page-planning #animateurs-panel {
+    grid-area: staff;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  body.page-planning #calendars-container {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 3px !important;
+  }
+
+  body.page-planning #animateurs-panel .animateurs-list,
+  body.page-planning #animateurs-panel #animateurs-list {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 4px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.app-body :is(.btn-fab, .toast, .dashboard-loading) {
+    bottom: calc(var(--site-mobile-nav-size) + env(safe-area-inset-bottom, 0px) + 6px) !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Neutralisation des anciens effets décoratifs encore définis dans les pages
+   -------------------------------------------------------------------------- */
+
+body.app-body :is(
+  .animator-profile-avatar,
+  .animator-profile-summary-avatar,
+  .animator-today-strip,
+  .animator-week-info,
+  .animator-day-card,
+  .animator-day-card > header,
+  .animator-list-date,
+  .evenement-sidebar-head,
+  .employees-sidebar-head,
+  .employee-editor-head,
+  .centre-card-header,
+  .salaries-directory-head,
+  .diplomes-library,
+  .home-planning-section,
+  .periode-card,
+  .sortie-dialog > header,
+  [class*="sortie-summary-"],
+  .sortie-responsables-grid article,
+  .sortie-transport-grid article,
+  .sortie-staff-card,
+  .employee-dashboard-action
+) {
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+body.app-body :is(
+  .employees-sidebar-head,
+  .employee-editor-head,
+  .centre-card-header,
+  .salaries-directory-head,
+  .diplomes-library
+) {
+  border-color: var(--site-line) !important;
+  background-color: #fff !important;
+}
+
+body.app-body :is(
+  .animator-profile-avatar,
+  .animator-profile-summary-avatar,
+  .animator-list-date
+) {
+  background: var(--site-primary) !important;
+  color: #fff !important;
+}
+
+body.app-body :is(
+  .animator-today-strip,
+  .animator-week-info,
+  .animator-day-card,
+  .employee-dashboard-action,
+  [class*="sortie-summary-"],
+  .sortie-responsables-grid article,
+  .sortie-transport-grid article,
+  .sortie-staff-card
+) {
+  border-color: var(--site-line) !important;
+  border-radius: var(--site-card-radius) !important;
+  background-color: #fff !important;
+}
+
+body.app-body .dashboard-card-icon,
+body.app-body .dashboard-action > strong {
+  display: none !important;
+}
+
+body.dashboard-body .dashboard-action {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+/* Sélecteurs de semaine. */
+body.app-body :is(.week-picker, .week-navigation) {
+  min-width: 0;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin: 0 !important;
+  padding: 2px !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+body.app-body .week-picker__select {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+body.app-body .week-picker__toggle {
+  width: 100%;
+  min-width: 0;
+  min-height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 5px !important;
+  padding: 3px 6px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--site-ink) !important;
+  text-align: left;
+}
+
+body.app-body .week-picker__label,
+body.app-body .week-navigation-label {
+  min-width: 0;
+  color: var(--site-ink) !important;
+  font-size: .72rem !important;
+  font-weight: 700 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.app-body .week-picker__chevron {
+  color: var(--site-muted) !important;
+}
+
+body.app-body .week-navigation-controls {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+
+body.app-body :is(.week-navigation-button, .week-navigation-today) {
+  min-height: 27px !important;
+  height: 27px !important;
+  padding: 2px 6px !important;
+}
+
+body.app-body .week-navigation-button {
+  min-width: 27px !important;
+}
+
+body.app-body .week-picker__menu {
+  z-index: 1800;
+  margin-top: 3px;
+  padding: 7px !important;
+  border: 1px solid var(--site-line-strong) !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  box-shadow: 0 6px 18px rgba(22, 31, 37, .14) !important;
+}
+
+body.app-body .week-picker__heading {
+  padding-bottom: 5px !important;
+  border-bottom: 1px solid var(--site-line) !important;
+}
+
+/* Cases à cocher : géométrie simple, sans pastille décorative. */
+body.app-body :is(.checkbox-chip, .form-check, .group-period-option, .group-weekday-option span) {
+  border-radius: 3px !important;
+  box-shadow: none !important;
+}
+
+body.app-body .checkbox-chip {
+  padding: 4px 7px !important;
+  border: 1px solid var(--site-line) !important;
+  background: #fff !important;
+  font-size: .72rem !important;
+}
+
+/* En-têtes et sous-blocs des sorties : tout reste dans le même langage visuel. */
+body.app-body .sorties-page :is(
+  .sortie-summary-card,
+  .sortie-responsables-grid article,
+  .sortie-transport-grid article,
+  .sortie-staff-card,
+  .sortie-create-section,
+  .sortie-preview-section
+) {
+  border: 1px solid var(--site-line) !important;
+  border-radius: 4px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+body.app-body .sorties-page :is(
+  .sortie-summary-card,
+  .sortie-responsables-grid article,
+  .sortie-transport-grid article,
+  .sortie-staff-card
+) {
+  padding: 8px !important;
+}
+
+/* Le bouton flottant reste utile mais n'est plus une grosse pastille décorative. */
+body.app-body .btn-fab {
+  width: 42px !important;
+  height: 42px !important;
+  border: 1px solid var(--site-primary-hover) !important;
+  border-radius: 4px !important;
+  background: var(--site-primary) !important;
+  box-shadow: 0 3px 10px rgba(22, 31, 37, .16) !important;
+  font-size: 1.15rem !important;
+}
+
+/* Les cartes du tableau de bord ont des sous-zones internes : pas de double padding. */
+body.dashboard-body .dashboard-card {
+  padding: 0 !important;
+}
+
+body.dashboard-body .dashboard-card-header {
+  margin: 0 !important;
+  padding: 7px !important;
+  border-bottom: 1px solid var(--site-line) !important;
+}
+
+body.login-body .login-page {
+  min-height: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+}
+
+/* ========================================================================== */
+/* En-têtes de page fixes — règle globale unique                              */
+/* ========================================================================== */
+/*
+ * Tous les véritables en-têtes sont sortis du flux et fixés au viewport.
+ * ui.js mesure leur hauteur réelle et réserve exactement la même hauteur sur
+ * le body : aucun contenu ne passe dessous, même quand l'en-tête comporte un
+ * sélecteur de période ou plusieurs actions.
+ */
+body.app-body.has-fixed-page-header :is(
+  .app-page-header,
+  .animator-mobile-header,
+  .sortie-detail-header
+) {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  z-index: 1720 !important;
+  isolation: isolate;
+  box-sizing: border-box;
+  width: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 6px var(--site-desktop-gutter) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--site-line, var(--color-border)) !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+body.app-body.has-fixed-page-header:not(.login-body) {
+  box-sizing: border-box;
+  padding-top: var(--app-fixed-header-height, 0px) !important;
+  scroll-padding-top: calc(var(--app-fixed-header-height, 0px) + 6px);
+}
+
+body.animator-space-body .animator-mobile-header h1,
+body.animator-dashboard-body .animator-mobile-header h1 {
+  color: var(--site-ink, var(--color-text)) !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+/* La sélection de semaine fait désormais partie du véritable en-tête. */
+body.animator-dashboard-body .animator-dashboard-header {
+  display: grid !important;
+  grid-template-columns: auto minmax(260px, 460px) 32px !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+body.animator-dashboard-body .animator-dashboard-header h1 {
+  white-space: nowrap !important;
+}
+
+body.animator-dashboard-body .animator-week-navigation--header {
+  width: 100% !important;
+  min-height: 32px !important;
+  margin: 0 !important;
+  padding: 2px !important;
+  border: 1px solid var(--site-line) !important;
+  border-radius: 3px !important;
+  background: var(--site-soft) !important;
+}
+
+body.animator-dashboard-body .animator-week-navigation--header > a {
+  width: 27px !important;
+  min-width: 27px !important;
+  height: 27px !important;
+  min-height: 27px !important;
+}
+
+body.animator-dashboard-body .animator-week-navigation--header strong {
+  font-size: .72rem !important;
+}
+
+body.animator-dashboard-body .animator-week-navigation--header div > a {
+  font-size: .58rem !important;
+}
+
+/* Les pages à hauteur verrouillée tiennent compte de l'en-tête réellement mesuré. */
+body.page-employes.has-fixed-page-header > .employees-workspace {
+  height: calc(100dvh - var(--app-fixed-header-height, 0px)) !important;
+  min-height: 0 !important;
+}
+
+body.page-planning.has-fixed-page-header #layout.planning-workspace,
+body.page-planning.has-fixed-page-header #worktime-panel {
+  height: calc(100dvh - var(--app-fixed-header-height, 0px) - 45px) !important;
+}
+
+@media (min-width: 800px) {
+  body.app-body.has-fixed-page-header :is(
+    .app-page-header,
+    .animator-mobile-header,
+    .sortie-detail-header
+  ) {
+    left: var(--site-rail-size) !important;
+  }
+}
+
+@media (max-width: 799px) {
+  body.app-body.has-fixed-page-header :is(
+    .app-page-header,
+    .animator-mobile-header,
+    .sortie-detail-header
+  ) {
+    left: 0 !important;
+    padding: 4px var(--site-mobile-gutter) !important;
+  }
+
+  body.animator-dashboard-body .animator-dashboard-header {
+    grid-template-columns: minmax(0, 1fr) 32px !important;
+    grid-template-rows: 32px auto !important;
+    gap: 3px 7px !important;
+  }
+
+  body.animator-dashboard-body .animator-dashboard-header h1 {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  body.animator-dashboard-body .animator-dashboard-header .animator-mobile-profile {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  body.animator-dashboard-body .animator-week-navigation--header {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  body.page-planning.has-fixed-page-header #layout.planning-workspace,
+  body.page-planning.has-fixed-page-header #worktime-panel {
+    height: calc(100dvh - var(--app-fixed-header-height, 0px) - var(--site-mobile-nav-size) - 40px) !important;
+  }
+}
+
+/* ========================================================================== */
+/* Onglets de page persistants et sans défilement horizontal                  */
+/* ========================================================================== */
+/* L’en-tête et les onglets forment une seule pile fixe. Les contenus réservent
+   exactement sa hauteur mesurée par ui.js. */
+body.app-body.has-fixed-page-tabs:not(.login-body) {
+  padding-top: var(--app-fixed-stack-height, var(--app-fixed-header-height, 0px)) !important;
+  scroll-padding-top: calc(var(--app-fixed-stack-height, 0px) + 6px) !important;
+}
+
+body.app-body.has-fixed-page-tabs .app-page-tabs {
+  position: fixed !important;
+  top: var(--app-fixed-header-height, 0px) !important;
+  right: var(--site-desktop-gutter) !important;
+  left: calc(var(--site-rail-size) + var(--site-desktop-gutter)) !important;
+  z-index: 1715 !important;
+  box-sizing: border-box !important;
+  width: auto !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(var(--page-tab-count, 1), minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 2px !important;
+  margin: 0 !important;
+  padding: 3px 0 4px !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--site-line) !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+body.app-body.has-fixed-page-tabs .app-page-tabs > :is(button, .tab-btn, .planning-tab) {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 30px !important;
+  margin: 0 !important;
+  padding: 4px 6px !important;
+  justify-content: center !important;
+  white-space: normal !important;
+  text-align: center !important;
+  line-height: 1.15 !important;
+  overflow-wrap: anywhere;
+}
+
+/* Les onglets internes utilisent eux aussi l’espace disponible au lieu de
+   créer une zone défilable. Ils restent dans leur panneau. */
+body.app-body :is(.tabs:not(.app-page-tabs), .employee-detail-tabs) {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)) !important;
+  gap: 2px !important;
+  overflow: visible !important;
+  scrollbar-width: none !important;
+}
+body.app-body :is(.tabs:not(.app-page-tabs), .employee-detail-tabs) > button {
+  width: 100% !important;
+  min-width: 0 !important;
+  white-space: normal !important;
+  text-align: center !important;
+  line-height: 1.15 !important;
+}
+
+body.page-planning.has-fixed-page-tabs #layout.planning-workspace,
+body.page-planning.has-fixed-page-tabs #worktime-panel {
+  height: calc(100dvh - var(--app-fixed-stack-height, 0px) - 8px) !important;
+}
+
+@media (max-width: 799px) {
+  body.app-body.has-fixed-page-tabs .app-page-tabs {
+    right: var(--site-mobile-gutter) !important;
+    left: var(--site-mobile-gutter) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    padding-block: 2px 3px !important;
+  }
+
+  body.app-body.has-fixed-page-tabs .app-page-tabs[data-tab-count="2"],
+  body.app-body.has-fixed-page-tabs .app-page-tabs[data-tab-count="3"] {
+    grid-template-columns: repeat(var(--page-tab-count), minmax(0, 1fr)) !important;
+  }
+
+  body.app-body.has-fixed-page-tabs .app-page-tabs > :is(button, .tab-btn, .planning-tab) {
+    min-height: 28px !important;
+    padding: 3px 4px !important;
+    font-size: .66rem !important;
+  }
+
+  body.app-body.has-fixed-page-tabs .app-page-tabs .planning-tab-icon {
+    display: none !important;
+  }
+
+  body.app-body :is(.tabs:not(.app-page-tabs), .employee-detail-tabs) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  body.page-planning.has-fixed-page-tabs #layout.planning-workspace,
+  body.page-planning.has-fixed-page-tabs #worktime-panel {
+    height: calc(100dvh - var(--app-fixed-stack-height, 0px) - var(--site-mobile-nav-size) - 6px) !important;
+  }
+}

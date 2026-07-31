@@ -1,5 +1,7 @@
 /* Shared calendar cards used by the dashboard and the Planning page. */
 .calendar-sites{
+  width:100%;
+  max-width:none;
   min-width:0;
   gap:9px;
 }
@@ -172,15 +174,81 @@ button.calendar-site-header{cursor:pointer}
 
 .home-calendars.calendar-sites{
   display:grid;
+  width:100%;
+  max-width:none;
   grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr));
   align-items:start;
 }
 
 .home-calendar-collapse-inner{padding:0}
 
-@media (max-width:760px){
-  .calendar-site-header{min-height:38px;padding:5px 7px}
-  .calendar-group-list{padding:5px}
-  .home-calendars.calendar-sites{grid-template-columns:minmax(0,1fr)}
-  .shared-calendar .fc-daygrid-day-frame{min-height:54px}
+
+
+/* Repère commun : une sortie concerne ce groupe à cette date.
+   Toute la case est colorée pour être identifiable immédiatement. */
+.fc .fc-daygrid-day.has-calendar-sortie{
+  background:#fff0bf !important;
+  box-shadow:inset 0 0 0 2px rgba(217,119,6,.58);
+}
+
+/* FullCalendar utilise plusieurs couches internes : elles doivent rester
+   transparentes afin que la couleur couvre réellement toute la journée. */
+.fc .fc-daygrid-day.has-calendar-sortie .fc-daygrid-day-frame,
+.fc .fc-daygrid-day.has-calendar-sortie .fc-daygrid-day-bg,
+.fc .fc-daygrid-day.has-calendar-sortie .fc-daygrid-day-events,
+.fc .fc-daygrid-day.has-calendar-sortie .fc-daygrid-day-bottom{
+  background:transparent !important;
+}
+
+/* La sortie reste prioritaire visuellement même lorsque la date est aujourd'hui. */
+.fc .fc-daygrid-day.fc-day-today.has-calendar-sortie{
+  background:#ffe6a3 !important;
+  box-shadow:inset 0 0 0 2px #d97706;
+}
+
+.fc .fc-daygrid-day-top{
+  position:relative;
+}
+
+.calendar-sortie-marker{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:18px;
+  height:18px;
+  margin:1px 2px 0 1px;
+  padding:0 3px;
+  border:1px solid #d97706;
+  border-radius:999px;
+  background:#fff7df;
+  color:#92400e;
+  font-size:.65rem;
+  font-weight:800;
+  line-height:1;
+  white-space:nowrap;
+  cursor:help;
+}
+
+/* Effectif enfants : composant identique dans tous les calendriers. */
+body.app-body .shared-calendar .fc-event.calendar-effectif-event {
+  margin: 0 1px !important;
+  padding: 0 2px !important;
+  border: 1px solid #e4bd55 !important;
+  border-radius: 4px !important;
+  background: #fff2c7 !important;
+  color: #725510 !important;
+  box-shadow: none !important;
+  cursor: default !important;
+  font-size: .62rem !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  white-space: normal !important;
+}
+body.app-body .shared-calendar .fc-event.calendar-effectif-event .fc-event-main,
+body.app-body .shared-calendar .fc-event.calendar-effectif-event .fc-event-title {
+  color: #725510 !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
 }

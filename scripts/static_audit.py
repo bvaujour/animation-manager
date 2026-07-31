@@ -50,9 +50,9 @@ def check_generated_artifacts() -> None:
                 fail(f"Artefact Python encore présent : {relative(path)}")
 
 
-def check_template_references() -> tuple[int, int]:
+def check_template_references() -> tuple[int, set[str]]:
     template_count = 0
-    static_references = 0
+    static_references: set[str] = set()
     template_ref_pattern = re.compile(r"{%\s*(?:extends|include)\s+[\"']([^\"']+)[\"']")
     static_ref_pattern = re.compile(r"{%\s*static\s+[\"']([^\"']+)[\"']")
     hardcoded_version_pattern = re.compile(r"\?v=(?!{{\s*asset_version\s*}})")
@@ -64,7 +64,7 @@ def check_template_references() -> tuple[int, int]:
             if not (TEMPLATES / reference).is_file():
                 fail(f"Template manquant référencé par {relative(path)} : {reference}")
         for reference in static_ref_pattern.findall(text):
-            static_references += 1
+            static_references.add(reference)
             if not (STATIC / reference).is_file():
                 fail(f"Fichier statique manquant référencé par {relative(path)} : {reference}")
         if hardcoded_version_pattern.search(text):
@@ -79,6 +79,47 @@ def check_template_references() -> tuple[int, int]:
 
     return template_count, static_references
 
+
+def check_orphan_static_files(static_references: set[str]) -> int:
+    """Refuse les feuilles et scripts qui ne sont chargés par aucun template."""
+    checked = 0
+    for directory in (STATIC / "css", STATIC / "js"):
+        if not directory.exists():
+            continue
+        for path in directory.rglob("*"):
+            if not path.is_file() or path.suffix not in {".css", ".js"}:
+                continue
+            checked += 1
+            reference = path.relative_to(STATIC).as_posix()
+            if reference not in static_references:
+                fail(f"Fichier statique orphelin : {reference}")
+    return checked
+
+
+
+def check_css_architecture() -> int:
+    """Vérifie que navigation et en-têtes restent dans la feuille globale."""
+    legacy_tokens = (
+        ".top-nav",
+        ".nav-drawer",
+        ".nav-overlay",
+        ".nav-collapse-button",
+        "--app-sidebar-width",
+        "--app-topbar-height",
+    )
+    layout_tokens = (".app-rail", ".app-page-header", "--app-rail-width")
+    count = 0
+    for path in (STATIC / "css").glob("*.css"):
+        count += 1
+        text = path.read_text(encoding="utf-8")
+        for token in legacy_tokens:
+            if token in text:
+                fail(f"Ancienne règle de navigation encore présente dans {relative(path)} : {token}")
+        if path.name != "app-layout.css":
+            for token in layout_tokens:
+                if token in text:
+                    fail(f"Layout global redéfini hors de app-layout.css dans {relative(path)} : {token}")
+    return count
 
 def imported_names(module: ast.Module, module_name: str) -> set[str]:
     names: set[str] = set()
@@ -144,6 +185,8 @@ def main() -> int:
     python_files = check_python_syntax()
     check_generated_artifacts()
     templates, static_references = check_template_references()
+    static_files = check_orphan_static_files(static_references)
+    css_files = check_css_architecture()
     route_views = check_views_facade()
     migrations = check_migrations()
     sqlite_status = check_sqlite()
@@ -156,7 +199,9 @@ def main() -> int:
 
     print("Audit statique : OK")
     print(f"- {python_files} fichiers Python analysés")
-    print(f"- {templates} templates et {static_references} références statiques contrôlés")
+    print(f"- {templates} templates et {len(static_references)} références statiques contrôlés")
+    print(f"- {static_files} feuilles CSS et scripts JS vérifiés comme utilisés")
+    print(f"- {css_files} feuilles CSS contrôlées pour la centralisation du layout")
     print(f"- {route_views} vues de façade comparées aux routes")
     print(f"- {migrations} migrations numérotées, sans doublon")
     print(f"- intégrité SQLite : {sqlite_status}")

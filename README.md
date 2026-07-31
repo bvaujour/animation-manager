@@ -38,8 +38,9 @@ make verify    # tous les contrôles disponibles
 ```
 
 `scripts/static_audit.py` ne dépend d'aucun paquet externe. Il contrôle la
-syntaxe Python, les références de templates et de fichiers statiques, la façade
-des vues, les migrations et, lorsqu'elle existe, l'intégrité de SQLite.
+syntaxe Python, les références de templates et de fichiers statiques, les CSS
+et JavaScript orphelins, la façade des vues, les migrations et, lorsqu'elle
+existe, l'intégrité de SQLite.
 
 ## Déploiement Render
 
@@ -103,24 +104,27 @@ la réponse technique du fournisseur.
 - `animateurs/views_catalogue.py` : centres, groupes, qualifications et périodes ;
 - `animateurs/views_reporting.py` : documents et récapitulatif ;
 - `animateurs/views_communications.py`, `views_effectifs.py` et `views_sorties.py` : domaines déjà séparés ;
-- `static/js/` : interfaces clientes ;
+- `static/css/common-base.css` : palette et composants élémentaires ;
+- `static/css/common-ui.css` : composants partagés ;
+- `static/css/app-layout.css` : layout PC/mobile, navigation, en-têtes et densité ;
+- `static/js/ui.js` et `static/js/common/` : helpers clients partagés ;
+- `static/js/` : scripts propres aux pages ;
 - `scripts/` : installation et contrôles reproductibles ;
+- `docs/ARCHITECTURE.md` : règles de centralisation du projet ;
 - `animateurs/tests/` : tests correspondant au modèle actuel. Les tests HTTP
   héritent de `animateurs/tests/base.py` (`ConnexionTestCase`), qui connecte
   automatiquement un compte maître pour traverser l'authentification obligatoire.
 
 ## Comptes animateurs et droits d'accès
 
-Chaque salarié peut être relié à un compte Django depuis sa fiche dans l'administration Django (`Animateurs > Animateurs > compte de connexion`).
+Chaque salarié peut recevoir un compte depuis l'onglet **Accès** de sa fiche dans la rubrique **Salariés**.
 
 - Un compte de direction doit être **superutilisateur**. Il conserve l'accès à toutes les pages et fonctions.
-- Un compte animateur est un compte ordinaire relié à une fiche salarié. Il accède uniquement à l'accueil en lecture seule, aux documents partagés et à la saisie de ses propres disponibilités.
+- Un compte animateur est un compte ordinaire relié à une fiche salarié. Il accède à son tableau de bord, son planning, ses disponibilités, ses documents et son profil.
+- L'identifiant est créé automatiquement avec la première lettre du prénom suivie du nom : Bruno Vaujour devient `bvaujour`. En cas de doublon, un numéro est ajouté (`bvaujour2`, etc.).
+- Depuis **Mon profil**, l'animateur peut modifier son téléphone, son adresse e-mail et son mot de passe.
+- La seule règle de mot de passe est la longueur minimale définie par `PASSWORD_MIN_LENGTH` (5 caractères par défaut).
 - La page de connexion est `/connexion/`.
-
-Pour créer un accès animateur :
-1. créer l'utilisateur dans `Administration Django > Utilisateurs` ;
-2. ne pas lui attribuer le statut superutilisateur ;
-3. rattacher ce compte à la fiche du salarié via le champ « compte de connexion ».
 
 ## Compte maître indépendant
 
@@ -203,14 +207,14 @@ affectations enregistrées dans le planning.
 
 Toutes les pages utilisent désormais le même langage visuel que le tableau de bord :
 
-- barre latérale persistante sur ordinateur et menu coulissant sur petit écran ;
+- rail d'icônes compact sur ordinateur et barre d'icônes fixe en bas sur téléphone ;
 - palette pastel violette, cartes blanches, bordures légères et ombres discrètes ;
 - titres, onglets, boutons, formulaires et tableaux harmonisés ;
 - en-têtes explicites pour Planning, Salariés, Gestion, Récapitulatif et Administration ;
 - espaces de travail adaptés à leur usage : Planning dense, Salariés en maître/détail, Gestion en cartes par lieu et Administration organisée par outils ;
 - mise en page responsive conservant l'accès à toutes les fonctions sur tablette et mobile.
 
-Les fondations et composants communs se trouvent dans `static/css/common-base.css` et `static/css/common-ui.css`. Les pages ne chargent ensuite que leur feuille spécialisée. Les en-têtes de pages et la navigation de semaine sont rendus par les partials communs de `templates/partials/`, et toutes les ressources statiques utilisent la même variable `ASSET_VERSION`.
+La palette et les composants se trouvent dans `static/css/common-base.css` et `static/css/common-ui.css`. Chaque page charge ensuite uniquement sa feuille spécialisée, puis `static/css/app-layout.css` applique le layout commun en dernier. Les en-têtes et la navigation de semaine sont rendus par les partials de `templates/partials/`, et toutes les ressources statiques utilisent la même variable `ASSET_VERSION`.
 
 ## Disposition modulable des centres dans le Planning
 
@@ -226,9 +230,9 @@ Le menu de direction est regroupé par usage :
 - **Communication** : E-mails ;
 - **Paramètres** : Administration.
 
-Sur ordinateur, le menu ouvert réserve sa propre largeur et ne recouvre plus les pages. Il peut être replié en rail compact. Sur mobile, il reste disponible sous forme de tiroir. Les accès **Documents** et **E-mails** disposent de liens directs.
+Sur ordinateur, le rail de 42 px réserve exactement sa largeur et ne recouvre aucune page. Sous 801 px, la même navigation passe en barre basse de 48 px ; le contenu réserve sa hauteur et reste entièrement utilisable. Les accès **Documents** et **E-mails** disposent de liens directs.
 
 
 ## Audit technique
 
-Le rapport `AUDIT_NETTOYAGE.md` décrit le nettoyage du dépôt, les vérifications exécutées et les limites de la revue.
+Le rapport `docs/CLEANUP_REPORT.md` décrit le nettoyage, les centralisations, les vérifications exécutées et les limites de la revue. Les règles d'architecture sont dans `docs/ARCHITECTURE.md`.

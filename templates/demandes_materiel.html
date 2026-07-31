@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Demandes de matériel{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/demandes-materiel.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main id="main-content" class="page-shell page-shell--wide material-page">
+    {% include "partials/_page_header.html" with title="Demandes de matériel" header_class="material-header" picker_mode="none" %}
+
+    {% if message %}<p class="material-feedback material-feedback--success" role="status">{{ message }}</p>{% endif %}
+    {% if erreur %}<p class="material-feedback material-feedback--error" role="alert">{{ erreur }}</p>{% endif %}
+
+    {% if not direction %}
+    <section class="ui-card material-form-card">
+        <div class="ui-section-heading"><div><h2>Nouvelle demande</h2></div></div>
+        {% if animateur %}
+        <form method="post" class="material-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="creer">
+            <label class="material-field material-field--wide">
+                <span>Matériel demandé</span>
+                <input type="text" name="materiel" maxlength="180" required placeholder="Ex. Feutres, ballons, papier…">
+            </label>
+            <label class="material-field">
+                <span>Quantité</span>
+                <input type="number" name="quantite" min="1" value="1" required>
+            </label>
+            <label class="material-field">
+                <span>Date souhaitée</span>
+                <input type="date" name="date_besoin" required>
+            </label>
+            <button class="btn btn-primary material-submit" type="submit">Envoyer la demande</button>
+        </form>
+        {% else %}
+        <p class="empty-note">Ton compte n’est pas encore rattaché à une fiche salarié.</p>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    <section class="ui-card material-list-card">
+        <div class="ui-section-heading material-list-heading">
+            <div><h2>{% if direction %}Demandes reçues{% else %}Mes demandes{% endif %}</h2></div>
+            {% if direction %}<span class="material-count">{{ demandes|length }}</span>{% endif %}
+        </div>
+
+        {% if demandes %}
+        <div class="material-list">
+            {% for demande in demandes %}
+            <article class="material-request{% if demande.statut == 'validee' %} material-request--validated{% endif %}">
+                <div class="material-request-main">
+                    <div class="material-request-title-row">
+                        <h3>{{ demande.materiel }}</h3>
+                        <span class="material-quantity">× {{ demande.quantite }}</span>
+                    </div>
+                    {% if direction %}<p class="material-person">{{ demande.animateur.prenom }} {{ demande.animateur.nom }}</p>{% endif %}
+                    <div class="material-meta">
+                        <span><strong>Centre</strong> {{ demande.centre.nom|default:"Non renseigné" }}</span>
+                        <span><strong>Pour le</strong> {{ demande.date_besoin|date:"d/m/Y" }}</span>
+                        <span><strong>Créée le</strong> {{ demande.date_creation|date:"d/m/Y à H:i" }}</span>
+                    </div>
+                </div>
+                <div class="material-request-side">
+                    <span class="material-status material-status--{{ demande.statut }}">{{ demande.get_statut_display }}</span>
+                    {% if direction %}
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="demande_id" value="{{ demande.id }}">
+                        {% if demande.statut == 'en_attente' %}
+                        <input type="hidden" name="action" value="valider">
+                        <button class="btn btn-primary btn-small" type="submit">Marquer comme validée</button>
+                        {% else %}
+                        <input type="hidden" name="action" value="remettre_en_attente">
+                        <button class="btn btn-secondary btn-small" type="submit">Remettre en attente</button>
+                        {% endif %}
+                    </form>
+                    {% endif %}
+                    <form method="post" onsubmit="return confirm('Supprimer définitivement cette demande ?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="supprimer">
+                        <input type="hidden" name="demande_id" value="{{ demande.id }}">
+                        <button class="btn btn-danger btn-small" type="submit">Supprimer</button>
+                    </form>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-note">Aucune demande de matériel pour le moment.</p>
+        {% endif %}
+    </section>
+</main>
+{% endblock %}

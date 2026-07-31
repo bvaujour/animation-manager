@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .access import est_direction
-from .models import Affectation, Animateur, Centre, Evenement, HoraireAffectationJour, Qualification
+from .models import Affectation, Animateur, Centre, Evenement, HoraireAffectationJour, PublicationPlanning, Qualification
 from .services.affectations import (
     creer_affectation,
     creer_ou_deplacer_affectation_flottante,
@@ -27,6 +27,31 @@ from .services.serializers import affectation_to_event
 # ---------------------------------------------------------------------------
 
 
+def _lundi_semaine(date):
+    return date - datetime.timedelta(days=date.weekday())
+
+
+@require_http_methods(["GET", "POST"])
+def api_publication_planning(request):
+    """Consulte ou modifie la publication de la semaine affichée."""
+    valeur = request.GET.get("date") if request.method == "GET" else None
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "JSON invalide."}, status=400)
+        valeur = payload.get("date")
+    date_reference = parse_date(str(valeur or ""))
+    if date_reference is None:
+        return JsonResponse({"error": "Date invalide."}, status=400)
+    lundi = _lundi_semaine(date_reference)
+    publication, _ = PublicationPlanning.objects.get_or_create(semaine_debut=lundi)
+    if request.method == "POST":
+        publication.publie = bool(payload.get("publie"))
+        publication.save(update_fields=["publie", "date_modification"])
+    return JsonResponse({"semaine_debut": lundi.isoformat(), "publie": publication.publie})
+
+
 def api_planning(request):
     """Renvoie les affectations au format FullCalendar.
 
@@ -40,6 +65,18 @@ def api_planning(request):
     evenement_id = request.GET.get("evenement_id")
     start = request.GET.get("start")
     end = request.GET.get("end")
+
+    if not est_direction(request.user):
+        date_reference = None
+        try:
+            if start:
+                date_reference = parse_to_aware_datetime(start).date()
+        except ValueError:
+            return JsonResponse({"error": "Paramètre start invalide."}, status=400)
+        if date_reference is not None:
+            lundi = _lundi_semaine(date_reference)
+            if not PublicationPlanning.objects.filter(semaine_debut=lundi, publie=True).exists():
+                return JsonResponse([], safe=False)
 
     qualifications_statuts = Qualification.objects.select_related("statut").only(
         "id", "nom", "icone", "est_statut", "statut_id",

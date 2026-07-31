@@ -5,25 +5,13 @@
 .employee-dashboard-action{--action-color:#3978c3;--action-bg:#eef7ff;min-height:145px;display:grid;grid-template-columns:58px minmax(0,1fr) auto;align-items:center;gap:18px;padding:25px;border:1px solid color-mix(in srgb,var(--action-color) 23%,white);border-radius:20px;background:linear-gradient(140deg,#fff,var(--action-bg));box-shadow:0 8px 24px rgba(35,43,73,.06);color:inherit;text-decoration:none;transition:transform .16s ease,box-shadow .16s ease}
 .employee-dashboard-action:hover{transform:translateY(-3px);box-shadow:0 13px 30px rgba(35,43,73,.1)}.employee-dashboard-action>.material-symbols-outlined{width:58px;height:58px;display:grid;place-items:center;border-radius:17px;background:color-mix(in srgb,var(--action-color) 13%,white);color:var(--action-color);font-size:30px}.employee-dashboard-action div{display:grid;gap:6px}.employee-dashboard-action strong{color:var(--color-text);font-size:1.05rem}.employee-dashboard-action small{color:var(--color-text-muted);font-size:.78rem}.employee-dashboard-action b{color:var(--action-color);font-size:1.75rem;font-weight:400}
 .employee-dashboard-action--purple{--action-color:#7154c5;--action-bg:#f4f0ff}.employee-dashboard-action--green{--action-color:#29845b;--action-bg:#edf9f2}.employee-dashboard-action--orange{--action-color:#bd6a24;--action-bg:#fff4e8}
-@media(max-width:760px){.employee-dashboard-page{padding:24px 14px}.employee-dashboard-actions{grid-template-columns:1fr}.employee-dashboard-action{min-height:112px;padding:18px}}
-.employee-overview{max-width:1280px;display:grid;grid-template-columns:1.15fr 1fr 1.15fr;gap:12px;margin:0 auto 12px}
-.employee-overview>article{min-width:0;padding:18px;border-radius:18px;box-shadow:var(--shadow-sm)}
+
 .employee-profile-card{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#f1edff,#fff)}
 .employee-profile-avatar{width:52px;height:52px;flex:0 0 52px;display:grid;place-items:center;border-radius:16px;background:#dcd3ff;color:#4c3a9e;font-weight:850}
 .employee-card-label{margin:0 0 6px;color:var(--color-text-muted);font-size:.7rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
 .employee-profile-card h2{margin:0 0 4px;font-size:1.1rem}.employee-profile-card div>p:last-child{margin:0;color:var(--color-text-muted);font-size:.78rem}
-.employee-badges{display:flex;flex-wrap:wrap;gap:7px}.employee-badges span{padding:6px 10px;border:1px solid color-mix(in srgb,var(--badge-color) 35%,white);border-radius:999px;background:color-mix(in srgb,var(--badge-color) 12%,white);color:color-mix(in srgb,var(--badge-color) 72%,#263044);font-size:.74rem;font-weight:750}
-.employee-stays{display:grid;gap:6px}.employee-stays>div{display:grid;gap:2px;padding:7px 9px;border-radius:10px;background:#fff7e8}.employee-stays strong{font-size:.78rem}.employee-stays span{color:var(--color-text-muted);font-size:.68rem}
-@media(max-width:900px){.employee-overview{grid-template-columns:1fr}.employee-overview>article{padding:14px}}
-@media(max-width:800px){
-body.animator-space-body .home-page{padding:4px 6px 18px !important}
-body.animator-space-body .employee-overview{gap:7px;margin-bottom:7px}
-body.animator-space-body .employee-overview>article{padding:12px}
-body.animator-space-body .home-section{margin-bottom:7px;padding:7px}
-body.animator-space-body .home-calendar-card{max-width:100%}
-body.animator-space-body .home-calendar-collapse-inner{padding:3px}
-}
-.home-header,.home-section{max-width:1280px;margin:0 auto 12px}
+
+.home-header,.home-section{width:100%;max-width:none;margin:0 0 12px}
 .home-header{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:14px;box-shadow:var(--shadow-sm)}
 .home-header h1{margin-bottom:4px;font-size:clamp(1.35rem,3vw,1.9rem)}
 .home-header p{margin:0;color:var(--color-text-muted)}
@@ -57,24 +45,7 @@ body.animator-space-body .home-calendar-collapse-inner{padding:3px}
 .home-document-info h3{margin:0 0 2px;font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-document-info span{color:var(--color-text-muted);font-size:0.74rem}
 .empty-note{margin:0;color:var(--color-text-muted);font-size:0.9rem}
-@media (max-width:900px){.home-page{padding:6px}
-.home-header,.home-section{margin-bottom:8px}
-.home-header{padding:10px}
-.home-header h1{font-size:1.25rem}
-.home-calendar-heading{flex-direction:column;align-items:stretch;gap:8px}
-.home-calendar-tools{width:100%;display:grid;grid-template-columns:1fr;gap:6px}
-.home-view-toggle,.home-week-controls{justify-content:stretch;display:grid}
-.home-view-toggle{grid-template-columns:1fr 1fr}
-.home-week-controls{grid-template-columns:1fr 1fr 1fr}
-.home-view-toggle .btn,.home-week-controls .btn{padding:7px 5px;font-size:0.7rem}
-.home-calendars{grid-template-columns:repeat(3,minmax(215px,1fr))}
-.home-calendar-card{padding:5px}
-.home-calendar-card h3{font-size:0.76rem;padding:4px 6px}
-.home-calendar .fc{font-size:0.62rem}
-.home-calendar .fc-daygrid-day-frame{min-height:58px}
-.home-calendar .fc-event{font-size:0.58rem}
-.home-document-card{padding:8px}
-}
+
 .home-documents{display:flex;flex-direction:column;gap:16px}
 .home-document-group>h3{margin:0 0 8px;font-size:0.9rem}
 .home-document-group-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
@@ -85,9 +56,7 @@ body.animator-space-body .home-calendar-collapse-inner{padding:3px}
 .home-document-icon{width:29px;height:29px;flex:none;border-radius:8px;font-size:0.58rem}
 .home-document-title{min-width:0;margin:0;font-size:0.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-document-card .btn{min-height:29px;padding:4px 7px;font-size:0.72rem}
-@media (max-width:600px){.home-document-card{grid-template-columns:30px minmax(0,1fr) auto;gap:5px}
-.home-document-card .btn{padding-inline:6px}
-}
+
 .home-calendars{display:flex;flex-direction:column;gap:10px;overflow:visible;padding-bottom:0}
 .home-calendar-card{min-width:0;padding:0;overflow:hidden;background:var(--color-surface-sunken)}
 .home-calendar-toggle{width:100%;min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 11px;border:0;border-radius:0;background:var(--centre-color,var(--color-primary));color:#fff;font:700 0.9rem/1.15 var(--font-display);text-align:left;cursor:pointer}
@@ -99,10 +68,7 @@ body.animator-space-body .home-calendar-collapse-inner{padding:3px}
 .home-calendar-card.collapsed .home-calendar-collapse{grid-template-rows:0fr}
 .home-calendar-collapse-inner{min-height:0;overflow:hidden;padding:7px;transition:padding 0.22s ease}
 .home-calendar-card.collapsed .home-calendar-collapse-inner{padding-top:0;padding-bottom:0}
-@media (max-width:900px){.home-calendars{grid-template-columns:none}
-.home-calendar-toggle{min-height:34px;padding:7px 9px;font-size:0.82rem}
-.home-calendar-collapse-inner{padding:5px}
-}
+
 .home-calendar-toggle-title{flex:1 1 auto}
 .home-calendar-toggle-meta{flex:0 0 auto;margin-left:auto;padding:3px 7px;border:1px solid rgba(255,255,255,0.38);border-radius:999px;background:rgba(255,255,255,0.14);color:#fff;font-size:0.68rem;font-weight:700;white-space:nowrap}
 .home-event-calendars{display:flex;flex-direction:column;gap:8px;min-width:0}
@@ -113,14 +79,8 @@ body.animator-space-body .home-calendar-collapse-inner{padding:3px}
 .home-event-calendar-header span{flex:0 0 auto;color:var(--color-text-muted);font-size:0.68rem;font-weight:700;white-space:nowrap}
 .home-calendar .fc-daygrid-day.home-evenement-hors-periode,.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-frame,.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-bg,.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-events{background:#000 !important}
 .home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-number,.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-top,.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-events,.home-calendar .fc-daygrid-day.home-evenement-hors-periode .fc-daygrid-day-bottom{visibility:hidden !important}
-@media (max-width:640px){.home-calendar-toggle-meta{display:none}
-.home-event-calendar-card{padding:4px}
-}
+
 .home-calendar-tools{align-items:center}
 .home-week-indicator{display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:6px 10px;margin-bottom:10px;padding:9px 12px;border:1px solid color-mix(in srgb,var(--color-primary) 28%,var(--color-border));border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-primary) 8%,var(--color-surface));text-align:center}
 .home-week-indicator .week-indicator-kicker{color:var(--color-text-muted);font-size:0.72rem;font-weight:800;letter-spacing:0.06em;text-transform:uppercase}
 #home-visible-period{color:var(--color-primary-dark);font-size:0.95rem;line-height:1.25}
-@media (max-width:900px){.home-calendar-tools,.home-week-controls{display:grid;width:100%}
-.home-week-indicator{padding:7px 9px}
-#home-visible-period{width:100%;font-size:0.82rem}
-}

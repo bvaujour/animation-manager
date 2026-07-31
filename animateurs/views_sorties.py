@@ -496,6 +496,36 @@ def api_sorties_apercu(request):
         return JsonResponse({"error": str(exc) or "Données invalides."}, status=400)
 
 
+
+@require_http_methods(["GET"])
+def api_sorties_calendrier(request):
+    """Repères de sorties pour les calendriers partagés.
+
+    Cette réponse volontairement compacte est accessible à tous les comptes
+    connectés. Elle ne contient que le nom, la date et les groupes concernés.
+    """
+    debut = parse_date(str(request.GET.get("start", ""))[:10])
+    fin = parse_date(str(request.GET.get("end", ""))[:10])
+    if not debut or not fin or fin <= debut:
+        return JsonResponse({"error": "Plage de dates invalide."}, status=400)
+
+    sorties = (
+        Sortie.objects.filter(date__gte=debut, date__lt=fin)
+        .prefetch_related("participations")
+        .order_by("date", "nom", "id")
+    )
+    return JsonResponse({
+        "sorties": [
+            {
+                "id": sortie.id,
+                "date": sortie.date.isoformat(),
+                "nom": sortie.nom,
+                "groupe_ids": [participation.evenement_id for participation in sortie.participations.all()],
+            }
+            for sortie in sorties
+        ]
+    })
+
 @require_http_methods(["GET", "POST"])
 def api_sorties(request):
     if request.method == "POST":

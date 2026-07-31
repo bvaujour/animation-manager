@@ -47,6 +47,7 @@ document.addEventListener("DOMContentLoaded", function ()
 	const rechercheAnimateursInput = document.getElementById("animateurs-search-input");
 	const toolbarLabel = document.getElementById("toolbar-label");
 	const boutonImportEffectifsExcel = document.getElementById("btn-effectifs-excel");
+	const boutonPublicationPlanning = document.getElementById("btn-publication-planning");
 	const modalEffectifsEnfants = document.getElementById("modal-effectifs-enfants");
 	const formulaireEffectifsEnfants = document.getElementById("effectifs-enfants-form");
 	const champsEffectifsEnfants = document.getElementById("effectifs-enfants-fields");
@@ -741,15 +742,6 @@ function libelleDate(dateStr)
 			jour = addDays(jour, 1);
 		}
 		return false;
-	}
-
-	function joursCachesFullCalendar(groupe)
-	{
-		const ouverts = new Set((groupe.jours_ouverts || [0, 1, 2, 3, 4, 5]).map(Number));
-		return [0, 1, 2, 3, 4, 5, 6].filter((jourJs) => {
-			const jourPython = (jourJs + 6) % 7;
-			return !ouverts.has(jourPython);
-		});
 	}
 
 	function intervalleDansPeriodeEvenement(evenement, debutStr, finExclusiveStr)
@@ -1520,6 +1512,18 @@ function libelleDate(dateStr)
 
 	function afficherEffectifsEnfantsDansCalendrier(calendar)
 	{
+		// Dans l’onglet Affectations, l’effectif est un véritable événement
+		// FullCalendar, construit exactement comme dans le tableau de bord
+		// animateur. Il reste ainsi toujours en première position au-dessus
+		// des animateurs, sans composant visuel spécifique à cette page.
+		if (estModeAffectations())
+		{
+			calendar.el.querySelectorAll(
+				".planning-effectif-enfants-zone, .planning-uncovered-children, .planning-children-count"
+			).forEach((element) => element.remove());
+			return;
+		}
+
 		const valeurs = calendar.evenementPlanning.effectifsEnfants || {};
 		const cellules = Array.from(calendar.el.querySelectorAll(".fc-daygrid-day"));
 		cellules.forEach((cellule) =>
@@ -1547,18 +1551,6 @@ function libelleDate(dateStr)
 				: "";
 			const details = `${valeur.nombre} enfant${valeur.nombre > 1 ? "s" : ""} — taux 1/${valeur.enfantsParAnimateur} — ${animateursAffectes} animateur${animateursAffectes > 1 ? "s" : ""} fixe${animateursAffectes > 1 ? "s" : ""}${flottantsLabel} — ${enfantsNonCouverts} enfant${enfantsNonCouverts > 1 ? "s" : ""} non couvert${enfantsNonCouverts > 1 ? "s" : ""}`;
 
-			if (estModeAffectations())
-			{
-				const indicateur = document.createElement("span");
-				indicateur.className = `planning-uncovered-children planning-uncovered-children--${etat}`;
-				indicateur.innerHTML = `${iconeEffectif("nonCouverts")}<strong>${enfantsNonCouverts}</strong>`;
-				indicateur.title = `Enfants non couverts : ${enfantsNonCouverts}. ${details}`;
-				indicateur.setAttribute("aria-label", `Enfants non couverts : ${enfantsNonCouverts}. ${details}`);
-				const evenementsJour = cadre.querySelector(".fc-daygrid-day-events");
-				if (evenementsJour) evenementsJour.insertAdjacentElement("afterend", indicateur);
-				else cadre.appendChild(indicateur);
-				return;
-			}
 
 			const zone = document.createElement("div");
 			zone.className = "planning-effectif-enfants-zone";
@@ -2057,7 +2049,7 @@ function libelleDate(dateStr)
 			contentHeight: "auto",
 			locale: "fr",
 			firstDay: 1,
-			hiddenDays: joursCachesFullCalendar(evenement),
+			hiddenDays: PlanningData.hiddenDays(evenement),
 			editable: estModeAffectations(),
 			droppable: estModeAffectations(),
 			// La sélection de plage est réservée aux affectations. Dans l'onglet
@@ -2085,6 +2077,10 @@ function libelleDate(dateStr)
 
 			eventOrder: function (eventA, eventB)
 			{
+				const effectifA = eventA.extendedProps?.type_affichage === "effectif_enfants";
+				const effectifB = eventB.extendedProps?.type_affichage === "effectif_enfants";
+				if (effectifA !== effectifB) return effectifA ? -1 : 1;
+
 				const animateurA = Number(eventA.extendedProps?.animateur_id || eventA.extendedProps?.animateurId || 0);
 				const animateurB = Number(eventB.extendedProps?.animateur_id || eventB.extendedProps?.animateurId || 0);
 				if (animateurA !== animateurB) return animateurA - animateurB;
@@ -2093,6 +2089,7 @@ function libelleDate(dateStr)
 			eventOrderStrict: true,
 			eventClassNames: function (arg)
 			{
+				if (arg.event.extendedProps?.type_affichage === "effectif_enfants") return ["calendar-effectif-event"];
 				return eventEstFlottant(arg.event) ? ["is-floating-assignment"] : [];
 			},
 			expandRows: false,
@@ -2102,11 +2099,40 @@ function libelleDate(dateStr)
 
 			events: function (fetchInfo, successCallback, failureCallback)
 			{
-				PlanningData.fetchWeekEvents(fetchInfo.startStr, fetchInfo.endStr)
-					.then((events) => successCallback((events || []).filter(
-						(item) => Number(item.extendedProps?.evenement_id || item.extendedProps?.groupe_id)
-							=== Number(evenement.id)
-					)))
+				Promise.all([
+					PlanningData.fetchWeekEvents(fetchInfo.startStr, fetchInfo.endStr),
+					estModeAffectations()
+						? PlanningData.fetchWeekEffectifs(fetchInfo.startStr, fetchInfo.endStr)
+						: Promise.resolve([]),
+				])
+					.then(([events, effectifs]) =>
+					{
+						const affectations = (events || []).filter(
+							(item) => Number(item.extendedProps?.evenement_id || item.extendedProps?.groupe_id)
+								=== Number(evenement.id)
+						);
+
+						// Même événement, mêmes couleurs et même ordre que dans le
+						// calendrier du tableau de bord animateur.
+						const nombresEnfants = (effectifs || [])
+							.filter((item) => Number(item.groupe_id) === Number(evenement.id))
+							.map((item) => ({
+								id: `effectif-${evenement.id}-${item.date}`,
+								title: `${item.nombre} enfant${Number(item.nombre) > 1 ? "s" : ""}`,
+								start: item.date,
+								allDay: true,
+								backgroundColor: "#fff2c7",
+								borderColor: "#e4bd55",
+								textColor: "#725510",
+								classNames: ["calendar-effectif-event"],
+								editable: false,
+								startEditable: false,
+								durationEditable: false,
+								extendedProps: { type_affichage: "effectif_enfants" },
+							}));
+
+						successCallback([...nombresEnfants, ...affectations]);
+					})
 					.catch(failureCallback);
 			},
 
@@ -2122,6 +2148,12 @@ function libelleDate(dateStr)
 				mettreAJourLibelleSemaine(info);
 				mettreAJourVisibiliteCalendriers(info);
 				chargerEffectifsEnfants(info.view.calendar, info);
+				PlanningData.applySortieMarkers(
+					info.view.calendar,
+					evenement.id,
+					info.startStr,
+					info.endStr
+				);
 				if (animateurActif)
 				{
 					afficherDisponibilites(animateurActif, animateurActif.disponibilites || []);
@@ -2222,6 +2254,7 @@ function libelleDate(dateStr)
 			{
 				if (!estModeAffectations()) return;
 				if (info.event.display === "background") return;
+				if (info.event.extendedProps?.type_affichage === "effectif_enfants") return;
 				ouvrirSaisieHorairesAffectation(info, calendar);
 			},
 		});
@@ -2580,6 +2613,7 @@ function libelleDate(dateStr)
 		toolbarLabel.textContent = periode
 			? libellePeriodeAvecDates(periode)
 			: "Aucune période ouverte";
+		actualiserPublicationPlanning();
 	}
 
 	function allerDateTous(dateStr, { rafraichirAnimateurs = true, persister = true } = {})
@@ -2613,6 +2647,47 @@ function libelleDate(dateStr)
 		const prochaine = periodes.find((periode) => periode.debut > aujourdHui);
 		const cible = courante?.debut || prochaine?.debut || periodes.at(-1)?.debut;
 		if (cible) allerDateTous(cible);
+	});
+
+	async function actualiserPublicationPlanning()
+	{
+		if (!boutonPublicationPlanning) return;
+		const dateAffichee = datePeriodeCourante
+			|| (calendars[0] ? formatDateLocal(calendars[0].getDate()) : formatDateLocal(new Date()));
+		try
+		{
+			const etat = await apiFetch(`/api/planning/publication/?date=${encodeURIComponent(dateAffichee)}`);
+			boutonPublicationPlanning.dataset.publie = etat.publie ? "true" : "false";
+			boutonPublicationPlanning.setAttribute("aria-pressed", etat.publie ? "true" : "false");
+			boutonPublicationPlanning.textContent = etat.publie ? "Planning publié" : "Planning non publié";
+			boutonPublicationPlanning.classList.toggle("btn-success", etat.publie);
+		}
+		catch (error)
+		{
+			boutonPublicationPlanning.textContent = "Publication indisponible";
+		}
+	}
+
+	boutonPublicationPlanning?.addEventListener("click", async () =>
+	{
+		const dateAffichee = datePeriodeCourante
+			|| (calendars[0] ? formatDateLocal(calendars[0].getDate()) : formatDateLocal(new Date()));
+		const publier = boutonPublicationPlanning.dataset.publie !== "true";
+		boutonPublicationPlanning.disabled = true;
+		try
+		{
+			await apiFetch("/api/planning/publication/", {
+				method: "POST",
+				body: JSON.stringify({ date: dateAffichee, publie: publier }),
+			});
+			afficherToast(publier ? "Planning publié pour les animateurs." : "Planning masqué pour les animateurs.");
+			await actualiserPublicationPlanning();
+		}
+		catch (error)
+		{
+			afficherToast(erreurMessage(error, "Modification impossible."), true);
+		}
+		finally { boutonPublicationPlanning.disabled = false; }
 	});
 
 	document.getElementById("btn-planning-export")?.addEventListener("click", (event) => {
@@ -2695,7 +2770,7 @@ function libelleDate(dateStr)
 	function creerChipAnimateur(animateur)
 	{
 		const div = document.createElement("div");
-		div.classList.add("animateur");
+		div.classList.add("animateur", "staff-list-item");
 		div.dataset.animateurId = animateur.id;
 
 		const couleurStatut = animateur.couleur_statut || "#718096";

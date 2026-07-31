@@ -29,8 +29,21 @@ document.addEventListener("DOMContentLoaded", () => {
     let activeDetailTab = "fiche";
 
     function fullName(a) { return `${a.prenom || ""} ${a.nom || ""}`.trim(); }
+    function initials(a) {
+        const first = String(a.prenom || "").trim().charAt(0);
+        const last = String(a.nom || "").trim().charAt(0);
+        return `${first}${last}`.toLocaleUpperCase("fr") || "?";
+    }
     function centreCodes(a) {
         return (a.centres_autorises || []).map((c) => c.code).join(" · ");
+    }
+    function qualificationLabel(a) {
+        const ids = new Set((a.qualification_ids || []).map(Number));
+        const names = qualifications
+            .filter((qualification) => ids.has(Number(qualification.id)))
+            .map((qualification) => qualification.nom)
+            .filter(Boolean);
+        return names[0] || "Qualification non renseignée";
     }
 
     function setStatus(message = "", error = false) {
@@ -84,19 +97,69 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        const symbolesIcones = {
+            diplome: "🎓",
+            secours: "✚",
+            baignade: "🛟",
+            conduite: "🚐",
+            sport: "⚽",
+            direction: "★",
+            repas: "🍴",
+        };
+
         filtered.forEach((a) => {
             const button = document.createElement("button");
             button.type = "button";
-            button.className = `salarie-directory-item ${Number(a.id) === Number(selectedId) ? "active" : ""}`;
-            button.style.setProperty("--anim-color", a.couleur || "#94a3b8");
+            button.className = `animateur staff-list-item ${Number(a.id) === Number(selectedId) ? "selected" : ""}`;
+            const couleurStatut = a.couleur_statut || a.couleur || "#718096";
+            button.style.setProperty("--animateur-color", couleurStatut);
+            button.dataset.animateurId = a.id;
             button.setAttribute("role", "option");
             button.setAttribute("aria-selected", Number(a.id) === Number(selectedId) ? "true" : "false");
-            button.innerHTML = `
-                <span class="evenement-list-color"></span>
-                <span class="salarie-directory-main">
-                    <strong>${escapeHtml(fullName(a))}</strong>
-                    <small>${escapeHtml(centreCodes(a) || "Aucun lieu renseigné")}</small>
-                </span>`;
+
+            const contenu = document.createElement("span");
+            contenu.className = "anim-content";
+
+            const ligneNom = document.createElement("span");
+            ligneNom.className = "anim-name-row";
+
+            const iconesUniques = new Map();
+            (a.qualification_icones || []).forEach((qualification) => {
+                if (qualification?.icone && symbolesIcones[qualification.icone] && !iconesUniques.has(qualification.icone)) {
+                    iconesUniques.set(qualification.icone, qualification.nom || "Qualification");
+                }
+            });
+            if (iconesUniques.size) {
+                const icones = document.createElement("span");
+                icones.className = "anim-qualification-icons";
+                [...iconesUniques.entries()].slice(0, 3).forEach(([icone, libelle]) => {
+                    const badge = document.createElement("span");
+                    badge.className = "anim-qualification-icon";
+                    badge.textContent = symbolesIcones[icone];
+                    badge.title = libelle;
+                    badge.setAttribute("aria-label", libelle);
+                    icones.appendChild(badge);
+                });
+                ligneNom.appendChild(icones);
+            }
+
+            const nom = document.createElement("span");
+            nom.className = "anim-name";
+            nom.textContent = fullName(a);
+            ligneNom.appendChild(nom);
+            contenu.appendChild(ligneNom);
+
+            const details = document.createElement("span");
+            details.className = "anim-details";
+            const statutNom = a.statut_principal?.nom || qualificationLabel(a) || "Sans statut";
+            const centre = a.centre_prefere?.code || centreCodes(a) || "";
+            details.textContent = [statutNom, centre].filter(Boolean).join(" · ");
+            contenu.appendChild(details);
+            button.appendChild(contenu);
+
+            const infos = [a.telephone || null, a.email || null].filter(Boolean).join(" · ");
+            if (infos) button.title = infos;
+
             button.addEventListener("click", () => selectAnimateur(a.id));
             listEl.appendChild(button);
         });
