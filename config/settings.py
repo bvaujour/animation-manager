@@ -229,7 +229,7 @@ STATICFILES_DIRS = [
 
 # Version unique des ressources statiques pour invalider le cache navigateur.
 # En production, WhiteNoise ajoute aussi des empreintes de contenu.
-ASSET_VERSION = os.getenv("ASSET_VERSION", "20260730-espace-animateurs-1").strip()
+ASSET_VERSION = os.getenv("ASSET_VERSION", "20260731-espace-animateurs-mobile-1").strip()
 
 
 # Envoi d'e-mails aux salariés. En local, sans serveur SMTP configuré,

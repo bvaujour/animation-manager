@@ -685,3 +685,186 @@ body.app-body .app-page-header--week-only .app-page-title{white-space:normal !im
  * aucune colonne fantôme n'est réservée à une poignée inexistante.
  */
 /* L'onglet Effectifs reste en pleine largeur, indépendamment des règles ci-dessus. */
+
+
+/* ========================================================================== 
+   Espace animateur — expérience mobile-first
+   ========================================================================== */
+@media (max-width: 800px) {
+  body.animator-space-body {
+    --animator-mobile-nav-height: 68px;
+    padding-left: 0 !important;
+    padding-bottom: calc(var(--animator-mobile-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
+    overflow-x: hidden;
+  }
+
+  body.animator-space-body > .app-rail {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    z-index: 1500 !important;
+    width: 100% !important;
+    height: calc(var(--animator-mobile-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    padding: 5px 6px env(safe-area-inset-bottom, 0px) !important;
+    border: 0 !important;
+    border-top: 1px solid var(--color-border) !important;
+    background: rgba(255,255,255,.97) !important;
+    box-shadow: 0 -8px 28px rgba(20,29,59,.12) !important;
+    backdrop-filter: blur(14px);
+  }
+
+  body.animator-space-body .app-rail-links {
+    min-width: 0;
+    height: 62px;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 1px !important;
+    overflow: visible !important;
+  }
+
+  body.animator-space-body .app-rail-link {
+    width: auto !important;
+    min-width: 0;
+    height: 58px !important;
+    min-height: 58px;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 2px !important;
+    border-radius: 11px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #6d7690 !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body.animator-space-body .app-rail-links .app-rail-link::after {
+    content: attr(aria-label);
+    width: 100%;
+    overflow: hidden;
+    color: currentColor;
+    font-size: .57rem;
+    font-weight: 750;
+    line-height: 1.05;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.animator-space-body .app-rail-link .material-symbols-outlined {
+    width: auto !important;
+    font-size: 23px !important;
+  }
+
+  body.animator-space-body .app-rail-link.active {
+    color: var(--color-primary-dark) !important;
+    background: color-mix(in srgb, var(--color-primary) 11%, white) !important;
+  }
+
+  body.animator-space-body .app-rail-account {
+    width: 40px !important;
+    height: 62px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  body.animator-space-body .app-rail-avatar { display: none !important; }
+  body.animator-space-body .app-rail-logout-form { width: 38px; }
+  body.animator-space-body .app-rail-logout {
+    width: 38px !important;
+    height: 54px !important;
+    color: #8b6070 !important;
+  }
+
+  body.animator-space-body > .page-shell,
+  body.animator-space-body > main.page-shell {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 10px 10px 22px !important;
+  }
+
+  body.animator-space-body .app-page-header,
+  body.animator-space-body .page-header,
+  body.animator-space-body .dashboard-header,
+  body.animator-space-body .employees-page-header {
+    position: relative;
+    min-height: 0 !important;
+    align-items: stretch !important;
+    flex-direction: column !important;
+    gap: 9px !important;
+    margin: 0 0 10px !important;
+    padding: 12px !important;
+    border-radius: 14px !important;
+  }
+
+  body.animator-space-body .app-page-header h1,
+  body.animator-space-body .page-header h1,
+  body.animator-space-body .dashboard-header h1,
+  body.animator-space-body .employees-page-header h1 {
+    font-size: 1.18rem !important;
+    line-height: 1.18 !important;
+  }
+
+  body.animator-space-body .app-page-tabs,
+  body.animator-space-body .tabs {
+    width: calc(100% + 4px) !important;
+    margin-inline: -2px !important;
+    padding-bottom: 3px !important;
+    scroll-snap-type: x proximity;
+  }
+
+  body.animator-space-body .app-page-tabs > *,
+  body.animator-space-body .tabs > * { scroll-snap-align: start; }
+
+  body.animator-space-body .ui-card,
+  body.animator-space-body .dashboard-card,
+  body.animator-space-body .admin-card,
+  body.animator-space-body .employee-detail-card,
+  body.animator-space-body .documents-card {
+    border-radius: 14px !important;
+    box-shadow: var(--shadow-sm) !important;
+  }
+
+  body.animator-space-body .btn,
+  body.animator-space-body button:not(.app-rail-link),
+  body.animator-space-body input,
+  body.animator-space-body select {
+    min-height: 44px;
+  }
+
+  body.animator-space-body input,
+  body.animator-space-body select,
+  body.animator-space-body textarea {
+    font-size: 16px !important; /* évite le zoom automatique d'iOS */
+  }
+
+  body.animator-space-body .form-grid,
+  body.animator-space-body .form-row,
+  body.animator-space-body .employee-detail-grid,
+  body.animator-space-body .documents-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.animator-space-body .table-wrap,
+  body.animator-space-body .table-scroll,
+  body.animator-space-body .recap-table-wrap {
+    margin-inline: -4px;
+    padding-inline: 4px;
+  }
+}
+
+@media (max-width: 390px) {
+  body.animator-space-body .app-rail-links .app-rail-link::after { font-size: .52rem; }
+  body.animator-space-body .app-rail-link .material-symbols-outlined { font-size: 21px !important; }
+  body.animator-space-body > .page-shell,
+  body.animator-space-body > main.page-shell { padding-inline: 8px !important; }
+}

@@ -398,13 +398,6 @@ def generer_tableau_de_bord_animateur(
     if jours_sans_horaires:
         libelles = ", ".join(item["jour"].lower() for item in jours_sans_horaires)
         infos.append(f"Horaires encore à confirmer : {libelles}")
-    if not infos:
-        jours_travailles = sum(1 for item in jours if item["travaille"])
-        if jours_travailles:
-            infos.append(f"{jours_travailles} journée{'s' if jours_travailles > 1 else ''} de travail prévue cette semaine")
-        else:
-            infos.append("Aucune affectation renseignée pour cette semaine")
-
     contexte_aujourdhui = None
     if lundi <= aujourd_hui <= vendredi:
         contexte_aujourdhui = _contexte_jour(

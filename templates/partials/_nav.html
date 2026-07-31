@@ -37,75 +37,33 @@
     {% endif %}
 </aside>
 {% elif request.user.is_authenticated %}
-<button class="animator-menu-toggle" type="button" aria-label="Ouvrir le menu" aria-controls="animator-sidebar" aria-expanded="false">
-    <span class="material-symbols-outlined" aria-hidden="true">menu</span>
-</button>
-<div class="animator-sidebar-backdrop" data-animator-sidebar-close hidden></div>
-<aside id="animator-sidebar" class="animator-sidebar" aria-label="Espace animateur">
-    <div class="animator-sidebar-header">
-        <a class="animator-brand" href="{% url 'accueil' %}" aria-label="Animation Manager — accueil">
-        <span class="animator-brand-mark" aria-hidden="true">
-            <i></i><i></i><i></i>
-        </span>
-            <span class="animator-brand-text"><strong>ANIMATION</strong><small>MANAGER</small></span>
+<aside class="app-rail" aria-label="Navigation de l’espace animateur">
+    <nav class="app-rail-links">
+        <a href="{% url 'accueil' %}" class="app-rail-link{% if active == 'accueil' %} active{% endif %}" aria-label="Mon tableau de bord" title="Mon tableau de bord"{% if active == 'accueil' %} aria-current="page"{% endif %}>
+            <span class="material-symbols-outlined" aria-hidden="true">space_dashboard</span>
         </a>
-        <button class="animator-sidebar-collapse" type="button" aria-label="Replier le menu" title="Replier le menu">
-            <span class="material-symbols-outlined" aria-hidden="true">menu_open</span>
-        </button>
-    </div>
-
-    <nav class="animator-nav" aria-label="Navigation animateur">
-        <a href="{% url 'accueil' %}" class="animator-nav-link{% if active == 'accueil' %} active{% endif %}"{% if active == 'accueil' %} aria-current="page"{% endif %}>
-            <span class="material-symbols-outlined" aria-hidden="true">home</span>
-            <span>Mon tableau de bord</span>
-        </a>
-        <a href="{% url 'mon_planning' %}" class="animator-nav-link{% if active == 'mon_planning' %} active{% endif %}"{% if active == 'mon_planning' %} aria-current="page"{% endif %}>
+        <a href="{% url 'mon_planning' %}" class="app-rail-link{% if active == 'mon_planning' %} active{% endif %}" aria-label="Mon planning" title="Mon planning"{% if active == 'mon_planning' %} aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
-            <span>Mon planning</span>
         </a>
-        <a href="{% url 'mes_disponibilites' %}" class="animator-nav-link{% if active == 'disponibilites' %} active{% endif %}"{% if active == 'disponibilites' %} aria-current="page"{% endif %}>
+        <a href="{% url 'mes_disponibilites' %}" class="app-rail-link{% if active == 'disponibilites' %} active{% endif %}" aria-label="Mes disponibilités" title="Mes disponibilités"{% if active == 'disponibilites' %} aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">event_available</span>
-            <span>Mes disponibilités</span>
         </a>
-        <a href="{% url 'mon_profil' %}" class="animator-nav-link{% if active == 'mon_profil' %} active{% endif %}"{% if active == 'mon_profil' %} aria-current="page"{% endif %}>
+        <a href="{% url 'mon_profil' %}" class="app-rail-link{% if active == 'mon_profil' %} active{% endif %}" aria-label="Mes informations" title="Mes informations"{% if active == 'mon_profil' %} aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">groups</span>
-            <span>Mes informations</span>
         </a>
-        <a href="{% url 'documents' %}" class="animator-nav-link{% if active == 'documents' %} active{% endif %}"{% if active == 'documents' %} aria-current="page"{% endif %}>
+        <a href="{% url 'documents' %}" class="app-rail-link{% if active == 'documents' %} active{% endif %}" aria-label="Documents" title="Documents"{% if active == 'documents' %} aria-current="page"{% endif %}>
             <span class="material-symbols-outlined" aria-hidden="true">description</span>
-            <span>Documents</span>
         </a>
     </nav>
 
-    {% if documents_permanents_nav %}
-    <section class="animator-sidebar-documents" aria-labelledby="animator-permanent-documents-title">
-        <h2 id="animator-permanent-documents-title">Documents permanents</h2>
-        <div>
-            {% for document in documents_permanents_nav %}
-            <a href="{{ document.fichier.url }}" target="_blank" rel="noopener">
-                <span class="material-symbols-outlined" aria-hidden="true">description</span>
-                <span>{{ document.titre }}</span>
-            </a>
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
-    <div class="animator-sidebar-footer">
-        <div class="animator-sidebar-motto" aria-hidden="true">
-            <span>✦</span>
-            <p>Ensemble, faisons de super vacances&nbsp;!</p>
-        </div>
-        <div class="animator-account">
-            <span class="animator-account-avatar">{% firstof request.user.first_name|first request.user.username|first "U" %}</span>
-            <span class="animator-account-name">{% firstof request.user.get_full_name request.user.username %}</span>
-            <form method="post" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit" aria-label="Déconnexion" title="Déconnexion">
-                    <span class="material-symbols-outlined" aria-hidden="true">logout</span>
-                </button>
-            </form>
-        </div>
+    <div class="app-rail-account">
+        <span class="app-rail-avatar" aria-label="{% firstof request.user.get_full_name request.user.username %}" title="{% firstof request.user.get_full_name request.user.username %}">{% firstof request.user.first_name|first request.user.username|first "U" %}</span>
+        <form method="post" action="{% url 'logout' %}" class="app-rail-logout-form">
+            {% csrf_token %}
+            <button type="submit" class="app-rail-link app-rail-logout" aria-label="Déconnexion" title="Déconnexion">
+                <span class="material-symbols-outlined" aria-hidden="true">logout</span>
+            </button>
+        </form>
     </div>
 </aside>
 {% endif %}
