@@ -1376,9 +1376,6 @@ body.login-body .login-intro {
     gap: 7px !important;
   }
 
-  body.page-planning #layout.animateurs-panel-collapsed {
-    grid-template-columns: 48px minmax(0, 1fr) !important;
-  }
 
   body.page-planning #animateurs-panel { grid-area: staff; }
   body.page-planning #calendars-section { grid-area: calendars; }
@@ -1625,8 +1622,7 @@ body.login-body .login-intro {
     margin-top: 3px !important;
   }
 
-  body.page-planning #layout.planning-workspace,
-  body.page-planning #layout.planning-workspace.animateurs-panel-collapsed {
+  body.page-planning #layout.planning-workspace {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) !important;
     grid-template-rows: minmax(0, 1fr) auto !important;
@@ -2221,7 +2217,6 @@ body.page-planning.has-fixed-page-tabs #worktime-panel {
   /* Grilles et formulaires : une colonne, dans l'ordre naturel du DOM. */
   body.app-body :is(
     .dashboard-kpis,
-    .dashboard-actions-grid,
     .dashboard-alert-list,
     .dashboard-centres-list,
     .dashboard-main-grid,
@@ -2400,10 +2395,13 @@ body.page-planning.has-fixed-page-tabs #worktime-panel {
 
   /* Tableau de bord direction : une information par ligne. */
   body.dashboard-body .dashboard-kpis,
-  body.dashboard-body .dashboard-actions-grid,
   body.dashboard-body .dashboard-centres-list,
   body.dashboard-body .dashboard-alert-list {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body.dashboard-body .dashboard-actions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   body.dashboard-body .dashboard-kpi {
@@ -2863,3 +2861,18 @@ body.page-planning.has-fixed-page-tabs #worktime-panel {
     min-width: 36px !important;
   }
 }
+
+/* Les actions rapides restent en deux colonnes sur téléphone : elles sont
+   assez courtes pour tenir sans écrasement et évitent une carte inutilement haute. */
+@media (max-width: 799px) {
+  body.dashboard-body .dashboard-actions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+  }
+
+  body.dashboard-body .dashboard-action {
+    min-height: 46px !important;
+    padding: 6px !important;
+  }
+}
+

@@ -28,7 +28,6 @@ document.addEventListener("DOMContentLoaded", function ()
 	const menuAjouterCentre = document.getElementById("planning-add-centre-menu");
 	const compteurCentresMasques = document.getElementById("planning-hidden-centres-count");
 	const layoutPlanning = document.getElementById("layout");
-	const boutonPanneauAnimateurs = document.getElementById("animateurs-panel-toggle");
 	const panneauTempsTravail = document.getElementById("worktime-panel");
 	const ongletsPlanning = Array.from(document.querySelectorAll("[data-planning-mode]"));
 	const planningQuery = new URLSearchParams(window.location.search);
@@ -76,36 +75,6 @@ document.addEventListener("DOMContentLoaded", function ()
 	// centres reçus de l'API. On s'en sert pour synchroniser la
 	// navigation (précédent/suivant/aujourd’hui) sur tous les calendriers.
 	const calendars = [];
-	let panneauAnimateursReduit = false;
-	try { panneauAnimateursReduit = localStorage.getItem("planning-animateurs-panel-collapsed") === "true"; }
-	catch (error) { /* Le panneau reste utilisable si le stockage est bloqué. */ }
-
-	function appliquerEtatPanneauAnimateurs()
-	{
-		layoutPlanning.classList.toggle("animateurs-panel-collapsed", panneauAnimateursReduit);
-		if (boutonPanneauAnimateurs)
-		{
-			boutonPanneauAnimateurs.setAttribute("aria-expanded", String(!panneauAnimateursReduit));
-			boutonPanneauAnimateurs.title = panneauAnimateursReduit
-				? "Afficher la liste des animateurs" : "Réduire la liste des animateurs";
-			boutonPanneauAnimateurs.setAttribute("aria-label", boutonPanneauAnimateurs.title);
-			const icone = boutonPanneauAnimateurs.querySelector(".animateurs-panel-toggle-icon");
-			if (icone) icone.textContent = panneauAnimateursReduit ? "›" : "‹";
-		}
-		window.requestAnimationFrame(() => calendars.forEach((calendar) => calendar.updateSize()));
-	}
-
-	if (boutonPanneauAnimateurs)
-	{
-		boutonPanneauAnimateurs.addEventListener("click", () =>
-		{
-			panneauAnimateursReduit = !panneauAnimateursReduit;
-			try { localStorage.setItem("planning-animateurs-panel-collapsed", String(panneauAnimateursReduit)); }
-			catch (error) { /* Sans stockage, le repli fonctionne pour la session courante. */ }
-			appliquerEtatPanneauAnimateurs();
-		});
-	}
-	appliquerEtatPanneauAnimateurs();
 	// Date de la période ciblée par la barre de navigation. Le tableau de
 	// bord peut ouvrir directement le Planning sur une date précise.
 	const dateDemandee = /^\d{4}-\d{2}-\d{2}$/.test(planningQuery.get("date") || "")

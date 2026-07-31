@@ -83,32 +83,6 @@ body.page-planning .planning-page-header {
   padding: 8px;
 }
 
-#layout[data-planning-mode="affectations"].animateurs-panel-collapsed { grid-template-columns: 48px minmax(0, 1fr); }
-.animateurs-panel-toggle {
-  position: relative;
-  z-index: 2;
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
-  display: grid;
-  place-items: center;
-  align-items: center;
-  padding: 0;
-  border: 1px solid #d9e0ea;
-  border-radius: 50%;
-  background: #fff;
-  color: #667189;
-  box-shadow: 0 2px 7px rgba(42, 55, 82, .12);
-  cursor: pointer;
-  transition: background-color .15s ease, color .15s ease, transform .15s ease;
-}
-.animateurs-panel-toggle:hover { background: var(--pastel-purple); color: var(--color-primary-dark); transform: translateX(-1px); }
-.animateurs-panel-toggle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.animateurs-panel-toggle-icon { font-size: 24px; font-weight: 400; line-height: 1; transform: translateY(-1px); }
-#layout.animateurs-panel-collapsed #animateurs-panel { padding: 6px; }
-#layout.animateurs-panel-collapsed .planning-animateurs-toolbar,
-#layout.animateurs-panel-collapsed #animateurs-list { display: none; }
 
 #calendars-section {
   display: flex;
@@ -123,8 +97,6 @@ body.planning-mode-effectifs #layout,
 
 body.planning-mode-effectifs #animateurs-panel,
 #layout[data-planning-mode="effectifs"] #animateurs-panel,
-body.planning-mode-effectifs .animateurs-panel-toggle,
-#layout[data-planning-mode="effectifs"] .animateurs-panel-toggle,
 body.planning-mode-effectifs #planning-actions,
 #layout[data-planning-mode="effectifs"] #planning-actions,
 body.planning-mode-effectifs .planning-floating-lane,
