@@ -152,7 +152,7 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--color-primary)}
 .modal-header{background:linear-gradient(180deg,#fff,#fbfbfe)}
 .table-wrap,.recap-table-wrap{border-color:#e4e7f0;border-radius:12px;background:#fff}
 .table-wrap th th,.recap-table thead th{background:#f5f6fa;color:#68728b}
-@media (min-width:1100px){body:not(.login-body){padding-left:var(--app-sidebar-width)}
+@media (min-width:1100px){body:not(.login-body){padding-left:0}
 body:not(.login-body)>.top-nav,body:not(.login-body)>.nav-overlay{display:none !important}
 body:not(.login-body)>.nav-drawer,body:not(.login-body)>.nav-drawer[hidden]{display:flex !important;width:var(--app-sidebar-width);transform:none !important;border-right:1px solid #e7e6ef;box-shadow:4px 0 22px rgba(31,42,85,.035)}
 body:not(.login-body) .nav-close-button{display:none}
@@ -267,7 +267,7 @@ body:not(.login-body).nav-collapsed .nav-drawer-links a,body:not(.login-body).na
 body:not(.login-body).nav-collapsed .nav-user-card{border-top:1px solid var(--color-border)}
 body:not(.login-body).nav-collapsed .nav-collapse-button{color:var(--color-primary-dark);background:var(--pastel-purple)}}
 html{height:100%}
-@media (min-width:1100px){body:not(.login-body){--app-sidebar-rail-width:76px;padding-left:var(--app-sidebar-rail-width) !important}
+@media (min-width:1100px){body:not(.login-body){--app-sidebar-rail-width:76px}
 body:not(.login-body)>.nav-drawer,body:not(.login-body)>.nav-drawer[hidden]{width:var(--app-sidebar-width) !important;z-index:1200;transition:width .2s ease,box-shadow .2s ease !important}
 body:not(.login-body):not(.nav-collapsed)>.nav-drawer{box-shadow:12px 0 30px rgba(31,42,85,.14) !important}
 body:not(.login-body).nav-collapsed>.nav-drawer,body:not(.login-body).nav-collapsed>.nav-drawer[hidden]{width:var(--app-sidebar-rail-width) !important;box-shadow:4px 0 18px rgba(31,42,85,.05) !important}
@@ -294,8 +294,7 @@ button,input,select,textarea{max-width:100%}
 table{max-width:100%}
 .tabs{width:100%;max-width:100%;display:flex;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;overscroll-behavior-inline:contain}
 .tabs .tab-btn{flex:0 0 auto;white-space:nowrap}
-@media (min-width:1100px){body.app-body:not(.login-body){padding-left:var(--app-sidebar-width) !important}
-body.app-body:not(.login-body).nav-collapsed{padding-left:var(--app-sidebar-rail-width) !important}
+@media (min-width:1100px){
 body.app-body:not(.login-body)>.top-nav,body.app-body:not(.login-body)>.nav-overlay{display:none !important}
 body.app-body:not(.login-body)>.nav-drawer,body.app-body:not(.login-body)>.nav-drawer[hidden]{position:fixed !important;inset:0 auto 0 0 !important;z-index:1200 !important;width:var(--app-sidebar-width) !important;max-width:var(--app-sidebar-width) !important;display:flex !important;transform:none !important;overflow:hidden !important;box-shadow:4px 0 22px rgba(31,42,85,.055) !important;transition:width .2s ease,box-shadow .2s ease !important}
 body.app-body:not(.login-body).nav-collapsed>.nav-drawer,body.app-body:not(.login-body).nav-collapsed>.nav-drawer[hidden]{width:var(--app-sidebar-rail-width) !important;max-width:var(--app-sidebar-rail-width) !important}
@@ -568,7 +567,7 @@ body.app-body .app-page-tabs-row .tab-btn{min-height:30px !important;
  * centré indépendamment de la longueur du titre.
  */
 :root{--app-rail-width:48px;}
-body.app-body:not(.login-body){padding-left:var(--app-rail-width) !important;}
+body.app-body:not(.login-body){padding-left:0 !important;}
 body.login-body>.app-rail{display:none !important;}
 .app-rail{position:fixed;
   inset:0 auto 0 0;
@@ -901,4 +900,56 @@ body.app-body .app-page-header--week-only .app-page-title{white-space:normal !im
   body.animator-space-body .app-rail-link .material-symbols-outlined { font-size: 21px !important; }
   body.animator-space-body > .page-shell,
   body.animator-space-body > main.page-shell { padding-inline: 4px !important; }
+}
+
+/* ========================================================================== 
+   Layout final de navigation
+   - PC / tablette large : rail fixe à gauche et contenu décalé de sa largeur.
+   - Espace animateur sur téléphone : rail transformé en barre basse et aucun
+     décalage horizontal.
+   Cette section est volontairement placée en fin de fichier pour neutraliser
+   les anciens correctifs contradictoires.
+   ========================================================================== */
+
+/* Layout avec navigation latérale : le contenu ne doit jamais passer dessous. */
+@media (min-width: 801px) {
+  body.app-body:not(.login-body) {
+    padding-left: var(--app-rail-width) !important;
+    padding-bottom: 0 !important;
+  }
+
+  body.app-body:not(.login-body) > .app-rail {
+    position: fixed !important;
+    inset: 0 auto 0 0 !important;
+    width: var(--app-rail-width) !important;
+    height: 100dvh !important;
+  }
+
+  body.app-body:not(.login-body) > .page-shell,
+  body.app-body:not(.login-body) > main.page-shell {
+    max-width: min(var(--app-content-max), 100%) !important;
+    margin-inline: auto !important;
+  }
+}
+
+/* Téléphone animateur : la navigation est en bas, donc aucune réserve à gauche. */
+@media (max-width: 800px) {
+  body.animator-space-body.app-body:not(.login-body) {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: calc(var(--animator-mobile-nav-height, 68px) + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  body.animator-space-body.app-body:not(.login-body) > .app-rail {
+    inset: auto 0 0 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  body.animator-space-body.app-body:not(.login-body) > .page-shell,
+  body.animator-space-body.app-body:not(.login-body) > main.page-shell {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
 }
