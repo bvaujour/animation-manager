@@ -377,6 +377,166 @@ class Contrat(models.Model):
         return f"{self.get_type_contrat_display()} — {self.animateur} — {self.date_debut:%d/%m/%Y}"
 
 
+class ParametresStructure(models.Model):
+    """Configuration générale d'une structure, accessible via un service central."""
+
+    cle = models.SlugField(max_length=50, unique=True, default="principale", editable=False)
+    nom_structure = models.CharField(max_length=200, blank=True)
+    adresse = models.TextField(blank=True)
+    code_postal = models.CharField(max_length=10, blank=True)
+    ville = models.CharField(max_length=120, blank=True)
+    telephone = models.CharField(max_length=30, blank=True)
+    email = models.EmailField(blank=True)
+    taux_indemnite_cp_cee = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("10.00"),
+        validators=[MinValueValidator(Decimal("0.00")), MaxValueValidator(Decimal("100.00"))],
+        verbose_name="taux indemnité congés payés CEE",
+    )
+    prime_journaliere_maximale = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=Decimal("7.00"),
+        validators=[MinValueValidator(Decimal("0.00")), MaxValueValidator(Decimal("10000.00"))],
+        verbose_name="prime journalière maximale",
+    )
+    adapter_taux_cee_changement_statut = models.BooleanField(
+        default=True,
+        verbose_name="adapter automatiquement le taux CEE au changement de statut",
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "paramètres de structure"
+        verbose_name_plural = "paramètres de structure"
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.nom_structure or "Structure principale"
+
+
+class BaremeCEE(models.Model):
+    """Montant journalier CEE d'un statut à compter d'une date donnée."""
+
+    structure = models.ForeignKey(ParametresStructure, on_delete=models.CASCADE, related_name="baremes_cee")
+    statut = models.ForeignKey(
+        Qualification,
+        on_delete=models.PROTECT,
+        related_name="baremes_cee",
+        limit_choices_to={"est_statut": True},
+    )
+    montant_journalier = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.00"))],
+    )
+    date_effet = models.DateField()
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("statut__nom", "-date_effet", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("structure", "statut", "date_effet"),
+                name="unique_bareme_cee_structure_statut_date",
+            )
+        ]
+
+    def clean(self):
+        if self.statut_id and not self.statut.est_statut:
+            raise ValidationError({"statut": "Le barème CEE doit être lié à un statut animateur."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
+class TypePrime(models.Model):
+    """Prime configurable, indépendante de ses futures attributions en Paie."""
+
+    MODE_JOUR = "jour"
+    MODE_SEMAINE = "semaine"
+    MODE_MOIS = "mois"
+    MODE_FORFAIT = "forfait"
+    MODE_CHOICES = (
+        (MODE_JOUR, "Par jour"),
+        (MODE_SEMAINE, "Par semaine"),
+        (MODE_MOIS, "Par mois"),
+        (MODE_FORFAIT, "Forfait"),
+    )
+    MONTANT_FIXE = "fixe"
+    MONTANT_VARIABLE_PLAFONNE = "variable_plafonne"
+    TYPE_MONTANT_CHOICES = (
+        (MONTANT_FIXE, "Fixe"),
+        (MONTANT_VARIABLE_PLAFONNE, "Variable plafonné"),
+    )
+
+    structure = models.ForeignKey(ParametresStructure, on_delete=models.CASCADE, related_name="types_primes")
+    nom = models.CharField(max_length=150)
+    description = models.TextField(blank=True)
+    active = models.BooleanField(default=False)
+    mode_calcul = models.CharField(max_length=20, choices=MODE_CHOICES, default=MODE_JOUR)
+    type_montant = models.CharField(max_length=24, choices=TYPE_MONTANT_CHOICES, default=MONTANT_FIXE)
+    montant_fixe = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    montant_maximum = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    contrats_eligibles = models.JSONField(default=list, blank=True)
+    tous_statuts = models.BooleanField(default=True)
+    statuts_eligibles = models.ManyToManyField(
+        Qualification,
+        blank=True,
+        related_name="types_primes_eligibles",
+        limit_choices_to={"est_statut": True},
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("nom", "id")
+        constraints = [
+            models.UniqueConstraint(fields=("structure", "nom"), name="unique_type_prime_structure_nom")
+        ]
+
+    def clean(self):
+        erreurs = {}
+        contrats_valides = {valeur for valeur, _ in Contrat.TYPE_CHOICES}
+        contrats = list(dict.fromkeys(self.contrats_eligibles or []))
+        if any(item not in contrats_valides for item in contrats):
+            erreurs["contrats_eligibles"] = "Un type de contrat éligible est invalide."
+        self.contrats_eligibles = contrats
+        if self.montant_fixe is not None and self.montant_fixe < 0:
+            erreurs["montant_fixe"] = "Le montant fixe ne peut pas être négatif."
+        if self.montant_maximum is not None and self.montant_maximum < 0:
+            erreurs["montant_maximum"] = "Le plafond ne peut pas être négatif."
+        if self.type_montant == self.MONTANT_FIXE:
+            if self.active and self.montant_fixe is None:
+                erreurs["montant_fixe"] = "Le montant fixe est obligatoire pour une prime active."
+            if self.montant_maximum is not None:
+                erreurs["montant_maximum"] = "Le plafond doit rester vide pour une prime fixe."
+        elif self.type_montant == self.MONTANT_VARIABLE_PLAFONNE:
+            if self.active and self.montant_maximum is None:
+                erreurs["montant_maximum"] = "Le plafond est obligatoire pour une prime active."
+            if self.montant_fixe is not None:
+                erreurs["montant_fixe"] = "Le montant fixe doit rester vide pour une prime variable."
+        if self.active and not contrats:
+            erreurs["contrats_eligibles"] = "Choisis au moins un type de contrat éligible pour une prime active."
+        if erreurs:
+            raise ValidationError(erreurs)
+
+    def save(self, *args, **kwargs):
+        self.nom = self.nom.strip()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.nom
+
+
 class TypeAccueil(models.Model):
     """Référentiel commun des contextes d'activité de l'application."""
 

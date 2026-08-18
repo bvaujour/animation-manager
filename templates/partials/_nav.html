@@ -19,6 +19,11 @@
         <a href="{% url 'gestion' %}" class="app-rail-link{% if active == 'gestion' %} active{% endif %}" aria-label="Gestion" title="Gestion"{% if active == 'gestion' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 7 10h10L12 2ZM5 13a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm11 0h6v8h-6v-8Z"/></svg>
         </a>
+        {% if request.user.is_superuser %}
+        <a href="{% url 'parametres' %}" class="app-rail-link{% if active == 'parametres' %} active{% endif %}" aria-label="Paramètres" title="Paramètres"{% if active == 'parametres' %} aria-current="page"{% endif %}>
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2.1-1.6-2-3.4-2.5 1a8 8 0 0 0-1.7-1L15 3.3h-4L10.7 6A8 8 0 0 0 9 7L6.5 6l-2 3.4L6.6 11a7.8 7.8 0 0 0 0 2l-2.1 1.6 2 3.4L9 17a8 8 0 0 0 1.7 1l.3 2.7h4l.3-2.7a8 8 0 0 0 1.7-1l2.5 1 2-3.4L19.4 13ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
+        </a>
+        {% endif %}
         <a href="{% url 'demandes_materiel' %}" class="app-rail-link{% if active == 'materiel' %} active{% endif %}" aria-label="Demandes de matériel" title="Demandes de matériel"{% if active == 'materiel' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm2 2v10h12V7H6Zm2 2h8v2H8V9Zm0 4h5v2H8v-2Z"/></svg>
         </a>

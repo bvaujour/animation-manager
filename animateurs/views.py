@@ -60,6 +60,14 @@ from .views_staff import api_animateur_detail, api_animateurs, api_disponibilite
 from .views_worktime import api_conflits_reunion, api_preparation_travail, api_reunion_detail, api_reunions, api_temps_travail
 from .views_formations import api_formation_cloture, api_formation_detail, api_formations, formations
 from .views_contrats import api_contrat_detail, api_contrats
+from .views_parametres import (
+    api_baremes_cee,
+    api_parametres,
+    api_parametres_paie,
+    api_type_prime_detail,
+    api_types_primes,
+    parametres,
+)
 
 __all__ = [
     "accueil",
@@ -98,6 +106,11 @@ __all__ = [
     "api_publication_planning",
     "api_planning_auto",
     "api_planning_plage",
+    "api_parametres",
+    "api_parametres_paie",
+    "api_baremes_cee",
+    "api_types_primes",
+    "api_type_prime_detail",
     "api_qualification_detail",
     "api_qualifications",
     "api_preparation_travail",
@@ -125,6 +138,7 @@ __all__ = [
     "mes_disponibilites",
     "mon_profil",
     "planning",
+    "parametres",
     "recapitulatif",
     "temps_travail",
 ]

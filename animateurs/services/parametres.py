@@ -1,0 +1,44 @@
+"""Accès unique aux paramètres de la structure courante."""
+
+from animateurs.models import ParametresStructure
+from animateurs.services.contrats import contrat_pour_date
+from animateurs.services.status_colors import statut_principal_des_qualifications
+
+
+CLE_STRUCTURE_COURANTE = "principale"
+
+
+def get_parametres_structure():
+    """Retourne une configuration persistée avec ses valeurs par défaut."""
+    parametres, _ = ParametresStructure.objects.get_or_create(cle=CLE_STRUCTURE_COURANTE)
+    return parametres
+
+
+def taux_cee_pour_date(statut, date, structure=None):
+    """Retourne le dernier taux du statut entré en vigueur à ``date``."""
+    structure = structure or get_parametres_structure()
+    bareme = (
+        structure.baremes_cee.filter(statut=statut, date_effet__lte=date)
+        .order_by("-date_effet", "-id")
+        .first()
+    )
+    return bareme.montant_journalier if bareme else None
+
+
+def prime_est_eligible(type_prime, animateur=None, contrat=None, statut=None, date=None):
+    """Évalue l'éligibilité sans coupler le référentiel au moteur de Paie."""
+    if not type_prime.active:
+        return False
+    if contrat is None and animateur is not None and date is not None:
+        contrat = contrat_pour_date(animateur, date)
+    type_contrat = getattr(contrat, "type_contrat", contrat)
+    if type_contrat not in (type_prime.contrats_eligibles or []):
+        return False
+    if type_prime.tous_statuts:
+        return True
+    if statut is None and animateur is not None:
+        # Repli sur le statut courant uniquement. Un appel historique devra
+        # fournir explicitement le statut applicable à la date concernée.
+        statut = statut_principal_des_qualifications(animateur.qualifications.all())
+    statut_id = getattr(statut, "pk", statut)
+    return bool(statut_id and type_prime.statuts_eligibles.filter(pk=statut_id).exists())

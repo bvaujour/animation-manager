@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Paramètres{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/parametres.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main id="main-content" class="page-shell page-shell--wide settings-page" data-settings-root data-api-url="{% url 'api_parametres' %}" data-payroll-url="{% url 'api_parametres_paie' %}" data-rates-url="{% url 'api_baremes_cee' %}" data-primes-url="{% url 'api_types_primes' %}">
+    {% include "partials/_page_header.html" with title="Paramètres" picker_mode="none" header_class="settings-header" %}
+    <div id="settings-form" class="settings-form">
+        <div class="tabs app-page-tabs app-page-tabs-row settings-tabs" role="tablist" aria-label="Rubriques des paramètres">
+            <button class="tab-btn active" data-tab="structure" type="button" role="tab">Structure</button>
+            <button class="tab-btn" data-tab="paie" type="button" role="tab">Paie</button>
+            <button class="tab-btn" data-tab="rh" type="button" role="tab">Planning &amp; RH</button>
+            <button class="tab-btn" data-tab="encadrement" type="button" role="tab">Encadrement &amp; qualifications</button>
+        </div>
+
+        <section class="tab-panel ui-card settings-card" data-panel="structure">
+            <h2>Structure</h2>
+            <div class="settings-grid">
+                <div class="field settings-span-2"><label for="settings-name">Nom de la structure</label><input id="settings-name" name="nom_structure" maxlength="200"></div>
+                <div class="field settings-span-2"><label for="settings-address">Adresse</label><textarea id="settings-address" name="adresse" rows="2"></textarea></div>
+                <div class="field"><label for="settings-postcode">Code postal</label><input id="settings-postcode" name="code_postal" maxlength="10"></div>
+                <div class="field"><label for="settings-city">Ville</label><input id="settings-city" name="ville" maxlength="120"></div>
+                <div class="field"><label for="settings-phone">Téléphone</label><input id="settings-phone" name="telephone" type="tel" maxlength="30"></div>
+                <div class="field"><label for="settings-email">E-mail</label><input id="settings-email" name="email" type="email"></div>
+            </div>
+        </section>
+
+        <section class="tab-panel ui-card settings-card" data-panel="paie" hidden>
+            <h2>Paie</h2>
+            <div class="settings-payroll-layout">
+                <section class="settings-payroll-section settings-rates-section">
+                    <div class="settings-section-head"><div><h3>Rémunération CEE</h3><p>Barème journalier historisé par statut.</p></div><label class="settings-switch"><input name="adapter_taux_cee_changement_statut" type="checkbox"><span>Adapter automatiquement au changement de statut</span></label></div>
+                    <div id="settings-cee-rates" class="settings-rate-list"><p class="settings-note">Chargement des statuts…</p></div>
+                </section>
+                <section class="settings-payroll-section">
+                    <div class="settings-section-head"><div><h3>Congés payés CEE</h3></div></div>
+                    <div class="field settings-small-field"><label for="settings-cp-rate">Taux indemnité de congés payés</label><div class="settings-number"><input id="settings-cp-rate" name="taux_indemnite_cp_cee" type="number" min="0" max="100" step="0.01" required><span>%</span></div></div>
+                </section>
+                <section class="settings-payroll-section settings-primes-section">
+                    <div class="settings-section-head"><div><h3>Primes</h3><p>Référentiel configurable pour les futurs calculs.</p></div><button class="btn btn-ghost btn-small" id="settings-prime-add" type="button">+ Ajouter une prime</button></div>
+                    <div id="settings-primes-list" class="settings-primes-list"></div>
+                    <form id="settings-prime-form" class="settings-prime-form" hidden>
+                        <input type="hidden" name="id">
+                        <div class="field"><label>Nom</label><input name="nom" maxlength="150" required></div>
+                        <div class="field settings-span-2"><label>Description</label><textarea name="description" rows="2"></textarea></div>
+                        <label class="settings-switch"><input name="active" type="checkbox"><span>Prime active</span></label>
+                        <div class="field"><label>Mode de calcul</label><select name="mode_calcul"></select></div>
+                        <div class="field"><label>Type de montant</label><select name="type_montant"></select></div>
+                        <div class="field" data-prime-fixed><label>Montant fixe</label><div class="settings-number"><input name="montant_fixe" type="number" min="0" step="0.01"><span>€</span></div></div>
+                        <div class="field" data-prime-cap hidden><label>Montant maximum</label><div class="settings-number"><input name="montant_maximum" type="number" min="0" step="0.01"><span>€</span></div></div>
+                        <fieldset class="settings-prime-options"><legend>Contrats éligibles</legend><div data-prime-contracts></div></fieldset>
+                        <fieldset class="settings-prime-options"><legend>Statuts éligibles</legend><label><input name="tous_statuts" type="checkbox" checked> Tous les statuts</label><div data-prime-statuses hidden></div></fieldset>
+                        <div class="settings-prime-form-actions"><button class="btn btn-primary btn-small" type="submit">Enregistrer la prime</button><button class="btn btn-ghost btn-small" data-prime-cancel type="button">Annuler</button></div>
+                    </form>
+                </section>
+            </div>
+            <p class="settings-note">Ces référentiels ne sont pas encore utilisés par la Paie actuelle.</p>
+        </section>
+
+        <section class="tab-panel ui-card settings-card settings-empty" data-panel="rh" hidden><h2>Planning &amp; RH</h2><p>Aucun paramètre spécifique configuré pour le moment.</p></section>
+        <section class="tab-panel ui-card settings-card settings-empty" data-panel="encadrement" hidden><h2>Encadrement &amp; qualifications</h2><p>Aucun paramètre spécifique configuré pour le moment.</p></section>
+
+        <div class="settings-actions"><span id="settings-status" role="status" aria-live="polite"></span><button class="btn btn-primary" id="settings-save" type="button">Enregistrer</button></div>
+    </div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/parametres.js' %}?v={{ asset_version }}"></script>{% endblock %}
