@@ -11,7 +11,17 @@ from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .access import est_direction
-from .models import Affectation, Animateur, Centre, Evenement, Formation, HoraireAffectationJour, PublicationPlanning, Qualification
+from .models import (
+    Affectation,
+    Animateur,
+    Centre,
+    Evenement,
+    Formation,
+    HistoriqueStatutAnimateur,
+    HoraireAffectationJour,
+    PublicationPlanning,
+    Qualification,
+)
 from .services.affectations import (
     creer_affectation,
     creer_ou_deplacer_affectation_flottante,
@@ -127,6 +137,22 @@ def api_planning(request):
             affectations = affectations.filter(debut__lt=fin, fin__gt=debut)
         except ValueError:
             return JsonResponse({"error": "Paramètres start/end invalides."}, status=400)
+
+    date_fin_statuts = None
+    if end:
+        try:
+            date_fin_statuts = parse_to_aware_datetime(end).date() - datetime.timedelta(days=1)
+        except ValueError:
+            pass
+    affectations = affectations.prefetch_related(
+        Prefetch(
+            "animateur__historique_statuts",
+            queryset=HistoriqueStatutAnimateur.objects.select_related("statut")
+            .filter(**({"date_effet__lte": date_fin_statuts} if date_fin_statuts else {}))
+            .order_by("-date_effet", "-id"),
+            to_attr="_historique_statuts_dates",
+        )
+    )
 
     events = [affectation_to_event(a) for a in affectations]
 

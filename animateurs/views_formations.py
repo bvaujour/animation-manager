@@ -14,6 +14,7 @@ from .models import (
     Animateur,
     Document,
     Formation,
+    HistoriqueStatutAnimateur,
     ParticipationFormation,
     Qualification,
     normaliser_cle_unique,
@@ -97,7 +98,7 @@ def _catalogues():
         ],
         "qualifications": [
             {"id": item.id, "nom": item.nom}
-            for item in Qualification.objects.filter(est_statut=False).order_by("nom", "id")
+            for item in Qualification.objects.order_by("nom", "id")
         ],
         "documents": [
             _document_dict(item)
@@ -147,7 +148,7 @@ def _valider_payload(data, formation=None):
     qualification = None
     if qualification_id:
         try:
-            qualification = Qualification.objects.get(pk=int(qualification_id), est_statut=False)
+            qualification = Qualification.objects.get(pk=int(qualification_id))
         except (Qualification.DoesNotExist, TypeError, ValueError):
             raise ValidationError("La qualification sélectionnée est invalide.")
 
@@ -193,11 +194,27 @@ def _qualification_libre(formation):
 
 
 def _attribuer_qualifications_presentes(formation, qualification_libre):
-    qualification_ids = {formation.qualification_id, getattr(qualification_libre, "id", None)} - {None}
+    qualifications = {
+        item.id: item
+        for item in (formation.qualification, qualification_libre)
+        if item is not None
+    }
     for participation in formation.participations.filter(
         presence=ParticipationFormation.PRESENCE_PRESENT
     ).select_related("animateur"):
-        participation.animateur.qualifications.add(*qualification_ids)
+        for qualification in qualifications.values():
+            if qualification.est_statut:
+                HistoriqueStatutAnimateur.objects.get_or_create(
+                    animateur=participation.animateur,
+                    date_effet=formation.date_fin,
+                    defaults={
+                        "statut": qualification,
+                        "origine": HistoriqueStatutAnimateur.ORIGINE_FORMATION,
+                        "commentaire": f"Formation — {formation.intitule}",
+                    },
+                )
+            else:
+                participation.animateur.qualifications.add(qualification)
 
 
 def _enregistrer(formation, valeurs):

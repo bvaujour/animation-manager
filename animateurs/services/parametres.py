@@ -2,7 +2,7 @@
 
 from animateurs.models import ParametresStructure
 from animateurs.services.contrats import contrat_pour_date
-from animateurs.services.status_colors import statut_principal_des_qualifications
+from animateurs.services.statuts import statut_actuel, statut_pour_date
 
 
 CLE_STRUCTURE_COURANTE = "principale"
@@ -37,8 +37,6 @@ def prime_est_eligible(type_prime, animateur=None, contrat=None, statut=None, da
     if type_prime.tous_statuts:
         return True
     if statut is None and animateur is not None:
-        # Repli sur le statut courant uniquement. Un appel historique devra
-        # fournir explicitement le statut applicable à la date concernée.
-        statut = statut_principal_des_qualifications(animateur.qualifications.all())
+        statut = statut_pour_date(animateur, date) if date is not None else statut_actuel(animateur)
     statut_id = getattr(statut, "pk", statut)
     return bool(statut_id and type_prime.statuts_eligibles.filter(pk=statut_id).exists())

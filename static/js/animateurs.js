@@ -23,6 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let selectedAffectation = "";
 
     let qualifications = [];
+    let statuts = [];
     let centres = [];
     let selectedId = null;
     let previousSelectedId = null;
@@ -295,6 +296,23 @@ document.addEventListener("DOMContentLoaded", () => {
             </form>`;
     }
 
+    function historiqueStatutsHtml(a) {
+        const historique = a.historique_statuts || [];
+        return `<div class="employee-status-history-current"><span>Statut actuel</span><strong>${escapeHtml(a.statut_principal?.nom || "Non renseigné")}</strong></div>
+            <div class="employee-status-history-list">${historique.length ? historique.map((entree) => `
+                <article class="employee-status-history-row">
+                    <div><strong>${formatDateContrat(entree.date_effet)} — ${escapeHtml(entree.statut_nom)}</strong><small>${escapeHtml(entree.origine_libelle)}${entree.date_effet_incertaine ? " · date technique de reprise" : ""}</small></div>
+                    <div class="employee-contract-actions"><button class="btn btn-ghost btn-small" data-status-history-edit="${entree.id}" type="button">Modifier</button><button class="btn-danger btn-small" data-status-history-delete="${entree.id}" type="button">Supprimer</button></div>
+                </article>`).join("") : '<p class="empty-note">Aucun historique daté.</p>'}</div>
+            <form id="employee-status-history-form" class="employee-status-history-form" hidden>
+                <input name="id" type="hidden">
+                <div class="field"><label>Statut</label><select name="statut_id" required>${statuts.map((statut) => `<option value="${statut.id}">${escapeHtml(statut.nom)}</option>`).join("")}</select></div>
+                <div class="field"><label>Date d’effet</label><input name="date_effet" type="date" required></div>
+                <div class="field"><label>Commentaire</label><input name="commentaire" maxlength="240"></div>
+                <div class="employee-contract-form-actions"><button class="btn btn-primary btn-small" type="submit">Enregistrer</button><button class="btn btn-ghost btn-small" data-status-history-cancel type="button">Annuler</button></div>
+            </form>`;
+    }
+
     function renderFiche(a, isNew = false) {
         const title = isNew ? "Nouveau salarié" : fullName(a);
         if (isNew) activeDetailTab = "fiche";
@@ -351,6 +369,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     ${isNew ? "" : `<section class="fiche-section fiche-card employee-compact-card employee-contracts-card">
                         <div class="fiche-section-head"><h3>Contrats</h3><button class="btn btn-ghost btn-small" type="button" data-contract-add>+ Ajouter un contrat</button></div>
                         <div class="employee-contract-list">${contratsHtml(a)}</div>
+                    </section>`}
+
+                    ${isNew ? "" : `<section class="fiche-section fiche-card employee-compact-card employee-status-history-card">
+                        <div class="fiche-section-head"><h3>Historique du statut</h3><button class="btn btn-ghost btn-small" data-status-history-add type="button">+ Ajouter un changement</button></div>
+                        ${historiqueStatutsHtml(a)}
                     </section>`}
 
                     <section class="fiche-section fiche-card employee-compact-card">
@@ -470,6 +493,7 @@ document.addEventListener("DOMContentLoaded", () => {
         detailEl.querySelector("#fiche-save").addEventListener("click", () => saveFiche(a, isNew));
 
         if (!isNew) {
+            initialiserHistoriqueStatuts(a);
             initialiserContrats(a);
             initialiserEmailAnimateur(a);
             detailEl.querySelector("#fiche-create-access-now")?.addEventListener("click", () => actionCompte(a, { create_access: true }));
@@ -492,6 +516,54 @@ document.addEventListener("DOMContentLoaded", () => {
             detailEl.querySelector("#fiche-delete").addEventListener("click", () => deleteAnimateur(a));
             renderDisponibilites(a.id);
         }
+    }
+
+    function initialiserHistoriqueStatuts(a) {
+        const form = detailEl.querySelector("#employee-status-history-form");
+        if (!form) return;
+        const ouvrir = (entree = null) => {
+            form.hidden = false;
+            form.elements.id.value = entree?.id || "";
+            form.elements.statut_id.value = entree?.statut_id || statuts[0]?.id || "";
+            form.elements.date_effet.value = entree?.date_effet || "";
+            form.elements.commentaire.value = entree?.commentaire || "";
+            form.elements.statut_id.focus();
+        };
+        const rafraichir = async (message) => {
+            await loadAnimateurs();
+            const actualise = animateurs.find((item) => Number(item.id) === Number(a.id));
+            await chargerHistoriqueStatuts(actualise);
+            renderFiche(actualise);
+            setStatus(message);
+        };
+        detailEl.querySelector("[data-status-history-add]")?.addEventListener("click", () => ouvrir());
+        detailEl.querySelectorAll("[data-status-history-edit]").forEach((button) => button.addEventListener("click", () => {
+            ouvrir((a.historique_statuts || []).find((item) => Number(item.id) === Number(button.dataset.statusHistoryEdit)));
+        }));
+        detailEl.querySelectorAll("[data-status-history-delete]").forEach((button) => button.addEventListener("click", async () => {
+            const entree = (a.historique_statuts || []).find((item) => Number(item.id) === Number(button.dataset.statusHistoryDelete));
+            if (!entree || !confirm(`Supprimer le changement « ${entree.statut_nom} » du ${formatDateContrat(entree.date_effet)} ? Cette suppression pourra modifier les futurs calculs de paie.`)) return;
+            try {
+                await apiFetch(`/api/animateurs/${a.id}/historique-statuts/${entree.id}/`, { method: "DELETE" });
+                await rafraichir("Changement de statut supprimé.");
+            } catch (error) { setStatus(erreurMessage(error, "Suppression impossible."), true); }
+        }));
+        form.querySelector("[data-status-history-cancel]").addEventListener("click", () => { form.hidden = true; });
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const id = Number(form.elements.id.value) || null;
+            try {
+                await apiFetch(`/api/animateurs/${a.id}/historique-statuts/${id ? `${id}/` : ""}`, {
+                    method: id ? "PATCH" : "POST",
+                    body: JSON.stringify({
+                        statut_id: Number(form.elements.statut_id.value),
+                        date_effet: form.elements.date_effet.value,
+                        commentaire: form.elements.commentaire.value.trim(),
+                    }),
+                });
+                await rafraichir(id ? "Changement de statut modifié." : "Changement de statut ajouté.");
+            } catch (error) { setStatus(erreurMessage(error, "Enregistrement impossible."), true); }
+        });
     }
 
     function initialiserContrats(a) {
@@ -519,6 +591,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const rafraichir = async (message) => {
             await loadAnimateurs();
             const actualise = animateurs.find((item) => Number(item.id) === Number(a.id));
+            await chargerHistoriqueStatuts(actualise);
             renderFiche(actualise);
             setStatus(message);
         };
@@ -898,13 +971,25 @@ document.addEventListener("DOMContentLoaded", () => {
         window.history.replaceState({}, "", url);
     }
 
-    function selectAnimateur(id) {
+    async function chargerHistoriqueStatuts(a) {
+        if (!a?.id) return;
+        a.historique_statuts = await apiFetch(`/api/animateurs/${a.id}/historique-statuts/`);
+        const aujourdHui = new Date();
+        aujourdHui.setMinutes(aujourdHui.getMinutes() - aujourdHui.getTimezoneOffset());
+        const dateLocale = aujourdHui.toISOString().slice(0, 10);
+        const courant = a.historique_statuts.find((item) => item.date_effet <= dateLocale);
+        if (courant) a.statut_principal = { id: courant.statut_id, nom: courant.statut_nom };
+    }
+
+    async function selectAnimateur(id) {
         const a = animateurs.find((item) => Number(item.id) === Number(id));
         if (!a) return;
         selectedId = a.id;
         previousSelectedId = a.id;
         activeDetailTab = "fiche";
         mettreAJourUrl(a.id);
+        renderList();
+        await chargerHistoriqueStatuts(a);
         renderList();
         renderFiche(a);
     }
@@ -925,6 +1010,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     evenements: await apiFetch(`/api/centres/${centre.id}/groupes/`),
                 })))),
             ]);
+            statuts = qualificationsChargees.filter((qualification) => qualification.est_statut);
             qualifications = qualificationsChargees.filter((qualification) => !qualification.est_statut);
             centres = centresCharges;
             renderDirectoryFilters();
@@ -946,6 +1032,8 @@ document.addEventListener("DOMContentLoaded", () => {
             selectedId = employee.id;
             previousSelectedId = employee.id;
             mettreAJourUrl(employee.id);
+            renderList();
+            await chargerHistoriqueStatuts(employee);
             renderList();
             renderFiche(employee);
         } catch (err) {

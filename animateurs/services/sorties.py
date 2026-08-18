@@ -3,6 +3,7 @@ import math
 from collections import defaultdict
 
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from animateurs.models import (
@@ -10,12 +11,14 @@ from animateurs.models import (
     Animateur,
     Centre,
     EffectifEnfantsJour,
+    HistoriqueStatutAnimateur,
     Sortie,
     SortieEtapeTransport,
 )
 from animateurs.services.categories_groupes import categorie_age_groupe
 from animateurs.services.flottants import est_groupe_flottants
 from animateurs.services.status_colors import statut_payload
+from animateurs.services.statuts import statut_pour_date
 
 
 def _bornes_jour(jour):
@@ -23,10 +26,14 @@ def _bornes_jour(jour):
     return debut, debut + datetime.timedelta(days=1)
 
 
-def _animateur_dict(animateur, **complements):
+def _animateur_dict(animateur, *, date=None, **complements):
     """Payload commun d'un salarié, avec la couleur de son statut."""
 
-    statut = statut_payload(list(animateur.qualifications.all()))
+    qualifications = list(animateur.qualifications.all())
+    statut = statut_payload(
+        qualifications,
+        statut_resolu=statut_pour_date(animateur, date) if date is not None else None,
+    )
     resultat = {
         "id": animateur.id,
         "nom": str(animateur),
@@ -62,7 +69,16 @@ def animateurs_eligibles_responsabilites(sortie: Sortie):
     affectations_jour = list(
         Affectation.objects.filter(debut__lt=fin, fin__gt=debut)
         .select_related("animateur", "centre", "evenement")
-        .prefetch_related("animateur__qualifications")
+        .prefetch_related(
+            "animateur__qualifications",
+            Prefetch(
+                "animateur__historique_statuts",
+                queryset=HistoriqueStatutAnimateur.objects.select_related("statut")
+                .filter(date_effet__lte=sortie.date)
+                .order_by("-date_effet", "-id"),
+                to_attr="_historique_statuts_dates",
+            ),
+        )
         .order_by("animateur__nom", "animateur__prenom", "id")
     )
     ids_affectes_jour = {item.animateur_id for item in affectations_jour}
@@ -85,7 +101,16 @@ def animateurs_eligibles_responsabilites(sortie: Sortie):
             disponibilites__fin__gte=sortie.date,
         )
         .exclude(pk__in=ids_affectes_jour)
-        .prefetch_related("qualifications")
+        .prefetch_related(
+            "qualifications",
+            Prefetch(
+                "historique_statuts",
+                queryset=HistoriqueStatutAnimateur.objects.select_related("statut")
+                .filter(date_effet__lte=sortie.date)
+                .order_by("-date_effet", "-id"),
+                to_attr="_historique_statuts_dates",
+            ),
+        )
         .distinct()
         .order_by("nom", "prenom", "id")
     )
@@ -98,6 +123,7 @@ def animateurs_eligibles_responsabilites(sortie: Sortie):
         resultat.append(
             _animateur_dict(
                 animateur,
+                date=sortie.date,
                 eligibilite="affecte",
                 eligibilite_libelle="Affecté à la sortie",
                 situation=" · ".join(details),
@@ -108,6 +134,7 @@ def animateurs_eligibles_responsabilites(sortie: Sortie):
         resultat.append(
             _animateur_dict(
                 animateur,
+                date=sortie.date,
                 eligibilite="disponible",
                 eligibilite_libelle="Disponible et non affecté",
                 situation="Disponible — non affecté ce jour",
@@ -144,7 +171,16 @@ def calculer_participants_sortie(jour, evenements, activites=None):
     affectations = list(
         Affectation.objects.filter(centre_id__in=ids_centres, debut__lt=fin, fin__gt=debut)
         .select_related("animateur", "evenement", "evenement__groupe", "centre")
-        .prefetch_related("animateur__qualifications")
+        .prefetch_related(
+            "animateur__qualifications",
+            Prefetch(
+                "animateur__historique_statuts",
+                queryset=HistoriqueStatutAnimateur.objects.select_related("statut")
+                .filter(date_effet__lte=jour)
+                .order_by("-date_effet", "-id"),
+                to_attr="_historique_statuts_dates",
+            ),
+        )
         .order_by("animateur__nom", "animateur__prenom", "id")
     )
 
@@ -196,7 +232,7 @@ def calculer_participants_sortie(jour, evenements, activites=None):
             "ratio_reel": round(ratio_reel, 2) if ratio_reel is not None else None,
             "animateurs_requis": math.ceil(nombre / ratio) if nombre else 0,
             "animateurs": [
-                _animateur_dict(item.animateur)
+                _animateur_dict(item.animateur, date=jour)
                 for item in affectations_groupe
             ],
             "activite_horaire": str(activites.get(evenement.id, "") or ""),
@@ -227,7 +263,7 @@ def calculer_participants_sortie(jour, evenements, activites=None):
                 item["restant"] -= couverts
                 if couverts:
                     item["ligne"]["marge_couverture"] += couverts
-                    item["ligne"]["flottants_mobilises"].append(_animateur_dict(animateur))
+                    item["ligne"]["flottants_mobilises"].append(_animateur_dict(animateur, date=jour))
                 capacite -= couverts
                 if capacite <= 0:
                     break
@@ -267,7 +303,7 @@ def calculer_participants_sortie(jour, evenements, activites=None):
             {
                 "centre_id": centre_id,
                 "centre": centres[centre_id].nom,
-                "animateurs": [_animateur_dict(item) for item in animateurs],
+                "animateurs": [_animateur_dict(item, date=jour) for item in animateurs],
             }
         )
     flottants_par_centre.sort(key=lambda item: (centres[item["centre_id"]].ordre, item["centre"]))
@@ -300,7 +336,7 @@ def calculer_participants_sortie(jour, evenements, activites=None):
         "groupes": lignes,
         "flottants_par_centre": flottants_par_centre,
         "animateurs_concernes": [
-            _animateur_dict(item)
+            _animateur_dict(item, date=jour)
             for item in sorted(animateurs_utilises.values(), key=lambda animateur: (animateur.nom, animateur.prenom))
         ],
         "vigilances": vigilances,
@@ -417,12 +453,12 @@ def invalider_estimations_transport(sortie):
         sortie.save(update_fields=champs)
 
 
-def _responsabilite_dict(responsabilite):
+def _responsabilite_dict(responsabilite, date):
     resultat = {
         "id": responsabilite.id,
         "type": responsabilite.type,
         "type_libelle": responsabilite.get_type_display(),
-        "animateur": _animateur_dict(responsabilite.animateur),
+        "animateur": _animateur_dict(responsabilite.animateur, date=date),
         "centre": None,
         "groupe": None,
         "affectation_creee": bool(responsabilite.affectation_creee_id),
@@ -442,11 +478,11 @@ def _responsabilite_dict(responsabilite):
     return resultat
 
 
-def _renfort_dict(renfort):
+def _renfort_dict(renfort, date):
     affectation = renfort.affectation
     return {
         "id": renfort.id,
-        "animateur": _animateur_dict(affectation.animateur),
+        "animateur": _animateur_dict(affectation.animateur, date=date),
         "centre": {"id": affectation.centre_id, "nom": affectation.centre.nom},
         "groupe": {"id": affectation.evenement_id, "nom": affectation.evenement.nom},
     }
@@ -464,12 +500,30 @@ def donnees_sortie(sortie: Sortie):
     responsabilites = list(
         sortie.responsabilites.select_related(
             "animateur", "centre", "evenement", "evenement__centre"
-        ).prefetch_related("animateur__qualifications").order_by("ordre", "type", "centre__ordre", "evenement__ordre", "id")
+        ).prefetch_related(
+            "animateur__qualifications",
+            Prefetch(
+                "animateur__historique_statuts",
+                queryset=HistoriqueStatutAnimateur.objects.select_related("statut")
+                .filter(date_effet__lte=sortie.date)
+                .order_by("-date_effet", "-id"),
+                to_attr="_historique_statuts_dates",
+            ),
+        ).order_by("ordre", "type", "centre__ordre", "evenement__ordre", "id")
     )
     renforts = list(
         sortie.renforts.select_related(
             "affectation__animateur", "affectation__centre", "affectation__evenement"
-        ).prefetch_related("affectation__animateur__qualifications")
+        ).prefetch_related(
+            "affectation__animateur__qualifications",
+            Prefetch(
+                "affectation__animateur__historique_statuts",
+                queryset=HistoriqueStatutAnimateur.objects.select_related("statut")
+                .filter(date_effet__lte=sortie.date)
+                .order_by("-date_effet", "-id"),
+                to_attr="_historique_statuts_dates",
+            ),
+        )
     )
     etapes_transport = list(
         sortie.etapes_transport.select_related("centre").order_by("sens", "ordre", "id")
@@ -522,7 +576,9 @@ def donnees_sortie(sortie: Sortie):
         item["id"]: item for item in participants["animateurs_concernes"]
     }
     for responsabilite in responsabilites:
-        animateurs_adultes[responsabilite.animateur_id] = _animateur_dict(responsabilite.animateur)
+        animateurs_adultes[responsabilite.animateur_id] = _animateur_dict(
+            responsabilite.animateur, date=sortie.date
+        )
 
     return {
         "id": sortie.id,
@@ -560,8 +616,8 @@ def donnees_sortie(sortie: Sortie):
         "groupes": participants["groupes"],
         "flottants_par_centre": participants["flottants_par_centre"],
         "animateurs_concernes": list(animateurs_adultes.values()),
-        "responsabilites": [_responsabilite_dict(item) for item in responsabilites],
-        "renforts": [_renfort_dict(item) for item in renforts],
+        "responsabilites": [_responsabilite_dict(item, sortie.date) for item in responsabilites],
+        "renforts": [_renfort_dict(item, sortie.date) for item in renforts],
         "transport": {
             "mode_transport": sortie.mode_transport,
             "nombre_vehicules": sortie.nombre_vehicules,

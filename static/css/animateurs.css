@@ -232,6 +232,12 @@ body.page-employes .employees-list .salarie-directory-item .evenement-list-color
 .employee-contract-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:7px;margin-top:7px;padding:8px;border:1px dashed color-mix(in srgb,var(--color-primary) 45%,var(--color-border));border-radius:9px;background:var(--color-surface)}
 .employee-contract-form[hidden],.employee-contract-form [hidden]{display:none!important}
 .employee-contract-form-actions{grid-column:1/-1;justify-content:flex-end}
+.employee-status-history-current{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--color-primary) 35%,var(--color-border));border-radius:8px;background:color-mix(in srgb,var(--color-primary) 5%,white)}
+.employee-status-history-current span{color:var(--color-text-muted);font-size:.68rem}.employee-status-history-current strong{font-size:.82rem}
+.employee-status-history-list{display:grid;gap:5px}.employee-status-history-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 8px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface-sunken)}
+.employee-status-history-row>div:first-child{display:grid;gap:1px}.employee-status-history-row strong{font-size:.75rem}.employee-status-history-row small{color:var(--color-text-muted);font-size:.64rem}
+.employee-status-history-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:7px;margin-top:7px;padding:8px;border:1px dashed color-mix(in srgb,var(--color-primary) 45%,var(--color-border));border-radius:9px;background:var(--color-surface)}
+.employee-status-history-form[hidden]{display:none!important}.employee-status-history-form .employee-contract-form-actions{grid-column:1/-1}
 
 /* Profil animateur en libre-service */
 .profile-self-service-page {
@@ -463,6 +469,9 @@ body.page-employes .employees-list .salarie-directory-item.active .employee-list
     .employee-contract-row{align-items:flex-start;flex-direction:column}
     .employee-contract-form{grid-template-columns:minmax(0,1fr)}
     .employee-contract-form-actions{grid-column:1}
+    .employee-status-history-row{align-items:flex-start;flex-direction:column}
+    .employee-status-history-form{grid-template-columns:minmax(0,1fr)}
+    .employee-status-history-form .employee-contract-form-actions{grid-column:1}
 }
 
 

@@ -13,12 +13,13 @@ from collections import defaultdict
 from datetime import date, timedelta
 from io import BytesIO
 
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 
-from ..models import Affectation, EffectifEnfantsJour, Evenement
+from ..models import Affectation, EffectifEnfantsJour, Evenement, HistoriqueStatutAnimateur
 from .flottants import est_groupe_flottants
 from .status_colors import statut_payload
+from .statuts import statut_pour_date
 
 JOURS_FR = [
     "Lundi",
@@ -98,7 +99,15 @@ def _planning_matrix(debut: date, fin: date, jours_selectionnes: set[date] | Non
     """
     affectations = list(
         Affectation.objects.select_related("animateur", "centre", "evenement").prefetch_related(
-            "animateur__qualifications", "horaires_journaliers"
+            "animateur__qualifications",
+            Prefetch(
+                "animateur__historique_statuts",
+                queryset=HistoriqueStatutAnimateur.objects.select_related("statut")
+                .filter(date_effet__lte=fin)
+                .order_by("-date_effet", "-id"),
+                to_attr="_historique_statuts_dates",
+            ),
+            "horaires_journaliers",
         )
         .filter(debut__date__lte=fin, fin__date__gt=debut)
         .order_by(
@@ -159,7 +168,10 @@ def _planning_matrix(debut: date, fin: date, jours_selectionnes: set[date] | Non
                 if nom not in noms_par_case[key]:
                     noms_par_case[key].append(nom)
                     couleurs_par_case[key].append(
-                        statut_payload(affectation.animateur.qualifications.all())["couleur_statut"]
+                        statut_payload(
+                            affectation.animateur.qualifications.all(),
+                            statut_resolu=statut_pour_date(affectation.animateur, jour),
+                        )["couleur_statut"]
                     )
 
     return dates, groupes, noms_par_case, couleurs_par_case

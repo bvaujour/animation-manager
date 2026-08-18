@@ -31,8 +31,8 @@ from animateurs.models import (
 from .affinites import synchroniser_affinites_groupes
 from .flottants import groupes_visibles
 from .dates import parse_to_aware_datetime
-from .qualifications import couvertures_qualifications
 from .disponibilites import disponibilite_effective
+from .statuts import ids_qualifications_pour_date, prefetch_historiques_statuts
 
 
 @dataclass
@@ -134,8 +134,7 @@ def generer_planning_auto(payload):
         .prefetch_related("dates_exclues", "periodes_scolaires", "besoins_qualifications__qualification")
         .order_by("centre__ordre", "centre__nom", "ordre", "nom", "id")
     )
-    animateurs = list(
-        Animateur.objects.prefetch_related(
+    animateurs_queryset = Animateur.objects.prefetch_related(
             "disponibilites",
             "preferences",
             "qualifications",
@@ -148,9 +147,8 @@ def generer_planning_auto(payload):
                 ),
                 to_attr="formations_bloquantes",
             ),
-        )
-        .order_by("prenom", "nom", "id")
-    )
+        ).order_by("prenom", "nom", "id")
+    animateurs = list(prefetch_historiques_statuts(animateurs_queryset, date_fin=jours[-1]))
     if not groupes:
         return {"error": "Aucun groupe n'est configuré."}, 400
     if not animateurs:
@@ -173,17 +171,15 @@ def generer_planning_auto(payload):
         besoins_statuts[groupe.id] = {identifiant: minimum for identifiant, minimum in tous.items() if identifiant in statuts_ids}
         besoins_diplomes[groupe.id] = {identifiant: minimum for identifiant, minimum in tous.items() if identifiant not in statuts_ids}
 
-    couvertures = couvertures_qualifications()
     qualifications_effectives = {}
     diplomes_possedes = {}
     for animateur in animateurs:
         diplomes = {q.id for q in animateur.qualifications.all() if not q.est_statut}
         diplomes_possedes[animateur.id] = diplomes
-        qualifications_effectives[animateur.id] = {
-            identifiant
-            for diplome_id in diplomes
-            for identifiant in couvertures.get(diplome_id, {diplome_id})
-        }
+        for jour in jours:
+            qualifications_effectives[(animateur.id, jour)] = ids_qualifications_pour_date(
+                animateur, jour, qualifications=list(animateur.qualifications.all())
+            )
 
     disponibilites = {a.id: list(a.disponibilites.all()) for a in animateurs}
     centres_interdits = {
@@ -236,10 +232,12 @@ def generer_planning_auto(payload):
         score += len(animateurs) - rang_animateur[animateur.id]
         return score
 
-    def manques(selection, besoins, groupe_id):
+    def manques(selection, besoins, groupe_id, jour):
         resultat = {}
         for qualification_id, minimum in besoins[groupe_id].items():
-            couverts = sum(qualification_id in qualifications_effectives[a.id] for a in selection)
+            couverts = sum(
+                qualification_id in qualifications_effectives[(a.id, jour)] for a in selection
+            )
             if couverts < minimum:
                 resultat[qualification_id] = minimum - couverts
         return resultat
@@ -269,7 +267,7 @@ def generer_planning_auto(payload):
                     selection = selections[groupe.id]
                     if len(selection) >= groupe.effectif_cible:
                         continue
-                    attendus = manques(selection, besoins, groupe.id)
+                    attendus = manques(selection, besoins, groupe.id, jour)
                     if not attendus:
                         continue
                     for animateur in disponibles_jour:
@@ -278,7 +276,10 @@ def generer_planning_auto(payload):
                         score = score_affinite_preferences(animateur, groupe)
                         if score is None:
                             continue
-                        couverts = {qid for qid in attendus if qid in qualifications_effectives[animateur.id]}
+                        couverts = {
+                            qid for qid in attendus
+                            if qid in qualifications_effectives[(animateur.id, jour)]
+                        }
                         if not couverts:
                             continue
                         # Pour couvrir un statut, on préserve si possible les
@@ -288,7 +289,9 @@ def generer_planning_auto(payload):
                             diplomes_reserves = sum(
                                 minimum
                                 for autre in groupes_jour
-                                for qid, minimum in manques(selections[autre.id], besoins_diplomes, autre.id).items()
+                                for qid, minimum in manques(
+                                    selections[autre.id], besoins_diplomes, autre.id, jour
+                                ).items()
                                 if qid in diplomes_possedes[animateur.id]
                             )
                         valeur = (
@@ -312,8 +315,8 @@ def generer_planning_auto(payload):
         def capacite_generique(groupe, *, selections=selections):
             restantes = max(0, groupe.effectif_cible - len(selections[groupe.id]))
             manques_restants = {
-                **manques(selections[groupe.id], besoins_statuts, groupe.id),
-                **manques(selections[groupe.id], besoins_diplomes, groupe.id),
+                **manques(selections[groupe.id], besoins_statuts, groupe.id, jour),
+                **manques(selections[groupe.id], besoins_diplomes, groupe.id, jour),
             }
             return max(0, restantes - max(manques_restants.values(), default=0))
 
@@ -339,8 +342,8 @@ def generer_planning_auto(payload):
                 semaine_centres[(animateur.id, groupe.centre_id)] += 1
                 groupes_du_jour[animateur.id].add(groupe.id)
             tous_manques = {
-                **manques(selection, besoins_statuts, groupe.id),
-                **manques(selection, besoins_diplomes, groupe.id),
+                **manques(selection, besoins_statuts, groupe.id, jour),
+                **manques(selection, besoins_diplomes, groupe.id, jour),
             }
             if tous_manques:
                 qualifications_manquantes_total += sum(tous_manques.values())

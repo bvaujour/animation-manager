@@ -21,6 +21,7 @@ from animateurs.models import (
     Centre,
     EffectifEnfantsJour,
     Evenement,
+    HistoriqueStatutAnimateur,
     Sejour,
     Sortie,
     StatutPreparationSemaine,
@@ -28,7 +29,7 @@ from animateurs.models import (
 from animateurs.services.categories_groupes import categorie_age_groupe
 from animateurs.services.flottants import est_groupe_flottants, groupes_visibles
 from animateurs.services.formations import resume_formations_dashboard
-from animateurs.services.qualifications import couvertures_qualifications
+from animateurs.services.statuts import ids_qualifications_pour_date
 
 ETAT_OK = "ok"
 ETAT_VIGILANCE = "vigilance"
@@ -141,7 +142,17 @@ def generer_tableau_de_bord(date_reference: datetime.date):
             fin__gt=_dt_locale(debut_recherche),
         )
         .select_related("animateur", "centre", "evenement", "evenement__groupe")
-        .prefetch_related("animateur__qualifications", "horaires_journaliers")
+        .prefetch_related(
+            "animateur__qualifications",
+            Prefetch(
+                "animateur__historique_statuts",
+                queryset=HistoriqueStatutAnimateur.objects.select_related("statut")
+                .filter(date_effet__lt=fin_recherche)
+                .order_by("-date_effet", "-id"),
+                to_attr="_historique_statuts_dates",
+            ),
+            "horaires_journaliers",
+        )
         .order_by("debut", "animateur__prenom", "animateur__nom")
     )
 
@@ -162,13 +173,13 @@ def generer_tableau_de_bord(date_reference: datetime.date):
         for horaire in affectation.horaires_journaliers.all():
             horaires_par_cle[(affectation.evenement_id, horaire.date)].add(animateur.id)
 
-    couvertures = couvertures_qualifications()
     qualifications_effectives = {}
     for animateur in animateurs_par_id.values():
-        ids = set()
-        for qualification in animateur.qualifications.all():
-            ids.update(couvertures.get(qualification.id, {qualification.id}))
-        qualifications_effectives[animateur.id] = ids
+        qualifications = list(animateur.qualifications.all())
+        for jour in _jours(debut_recherche, fin_recherche):
+            qualifications_effectives[(animateur.id, jour)] = ids_qualifications_pour_date(
+                animateur, jour, qualifications=qualifications
+            )
 
     groupes_ouverts_cache = {}
     groupe_metriques_cache = {}
@@ -206,7 +217,7 @@ def generer_tableau_de_bord(date_reference: datetime.date):
             couverts = sum(
                 1
                 for animateur_id in ids_affectes
-                if besoin.qualification_id in qualifications_effectives.get(animateur_id, set())
+                if besoin.qualification_id in qualifications_effectives.get((animateur_id, jour), set())
             )
             if couverts < besoin.nombre_minimum:
                 qualifications_manquantes.append(

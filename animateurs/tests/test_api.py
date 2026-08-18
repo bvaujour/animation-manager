@@ -529,13 +529,14 @@ class AnimateursListPerformanceTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 25)
         # Le but est de garantir l'absence de N+1 : le nombre de requêtes doit
-        # rester constant quel que soit le nombre d'animateurs. Sur les 9, deux
+        # rester constant quel que soit le nombre d'animateurs. Sur les 10, deux
         # sont le coût fixe de l'authentification (session + utilisateur) apporté
         # par ConnexionTestCase ; les autres chargent les relations, dont la
-        # nouvelle table d'affinités animateur-groupe.
+        # nouvelle table d'affinités animateur-groupe et l'historique daté des
+        # statuts chargé en bloc.
         self.assertLessEqual(
             len(contexte),
-            9,
+            10,
             f"La liste a effectué {len(contexte)} requêtes au lieu d'un nombre fixe.",
         )
 
@@ -555,12 +556,12 @@ class AnimateursListPerformanceTests(ConnexionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 25)
-        # Deux requêtes fixes supplémentaires calculent les jours réellement
-        # ouverts et les formations bloquantes de la semaine. Le volume reste
-        # constant quel que soit le nombre d'animateurs.
+        # Les requêtes fixes supplémentaires calculent les jours ouverts,
+        # chargent les formations bloquantes et l'historique daté des statuts.
+        # Le volume reste constant quel que soit le nombre d'animateurs.
         self.assertLessEqual(
             len(contexte),
-            10,
+            11,
             f"La liste Planning a effectué {len(contexte)} requêtes.",
         )
 

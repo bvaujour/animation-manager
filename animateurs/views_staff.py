@@ -33,6 +33,7 @@ from .services.comptes import traiter_acces_compte
 from .services.disponibilites import fusionner_et_nettoyer_disponibilites
 from .services.serializers import animateur_planning_to_dict, animateur_to_dict
 from .services.situation_semaine import jours_ouverts_planning, situation_animateur_semaine
+from .services.statuts import prefetch_historiques_statuts
 
 # ---------------------------------------------------------------------------
 # API - Animateurs (lecture, création, suppression)
@@ -94,6 +95,8 @@ def api_animateurs(request):
             Prefetch("preferences", queryset=preferences),
             Prefetch("disponibilites", queryset=disponibilites, to_attr="_filtre_disponibilites"),
         )
+        date_fin_statuts = (fin_filtre - datetime.timedelta(days=1)) if fin_filtre else timezone.localdate()
+        animateurs = prefetch_historiques_statuts(animateurs, date_fin=date_fin_statuts)
         if debut_filtre and fin_filtre:
             formations_bloquantes = Formation.objects.filter(
                 statut__in=(Formation.STATUT_PREVUE, Formation.STATUT_EN_COURS),
@@ -110,7 +113,10 @@ def api_animateurs(request):
             animateurs = animateurs.select_related(
                 "evenement_preferee__centre",
                 "utilisateur",
-            ).prefetch_related(Prefetch("affinites_groupes", queryset=affinites), "contrats")
+            ).prefetch_related(
+                Prefetch("affinites_groupes", queryset=affinites),
+                "contrats",
+            )
         if inclure_affectations:
             affectations = Affectation.objects.only("id", "animateur_id", "centre_id", "debut", "fin")
             if debut_filtre and fin_filtre:
@@ -141,8 +147,24 @@ def api_animateurs(request):
                     fin_filtre,
                 )
 
-        serializer = animateur_planning_to_dict if format_planning else animateur_to_dict
-        return JsonResponse([serializer(a) for a in animateurs], safe=False)
+        if format_planning and debut_filtre and fin_filtre:
+            dates_reference = [
+                debut_filtre + datetime.timedelta(days=index)
+                for index in range((fin_filtre - debut_filtre).days)
+            ]
+            aujourd_hui = timezone.localdate()
+            date_reference = aujourd_hui if debut_filtre <= aujourd_hui < fin_filtre else debut_filtre
+            resultat = [
+                animateur_planning_to_dict(
+                    animateur,
+                    date_reference=date_reference,
+                    dates_reference=dates_reference,
+                )
+                for animateur in animateurs
+            ]
+        else:
+            resultat = [animateur_to_dict(animateur) for animateur in animateurs]
+        return JsonResponse(resultat, safe=False)
 
     try:
         payload = json.loads(request.body)

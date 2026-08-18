@@ -94,11 +94,18 @@ def statut_principal_des_qualifications(qualifications):
     return statuts[0] if statuts else None
 
 
-def statut_payload(qualifications) -> dict:
+_STATUT_NON_RESOLU = object()
+
+
+def statut_payload(qualifications, *, statut_resolu=_STATUT_NON_RESOLU) -> dict:
     """Construit les champs JSON communs utilisés par les interfaces salariés."""
 
     qualifications = list(qualifications)
-    statuts = statuts_des_qualifications(qualifications)
+    statuts = (
+        statuts_des_qualifications(qualifications)
+        if statut_resolu is _STATUT_NON_RESOLU
+        else ([statut_resolu] if statut_resolu is not None else [])
+    )
     principal = statuts[0] if statuts else None
     couleur = couleur_pour_statut(principal)
     return {

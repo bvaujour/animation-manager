@@ -284,6 +284,57 @@ class Animateur(models.Model):
         return f"{self.prenom} {self.nom}"
 
 
+class HistoriqueStatutAnimateur(models.Model):
+    """Changement daté du statut fonctionnel d'un animateur."""
+
+    ORIGINE_MANUELLE = "manuelle"
+    ORIGINE_FORMATION = "formation"
+    ORIGINE_REPRISE = "reprise"
+    ORIGINE_CHOICES = (
+        (ORIGINE_MANUELLE, "Saisie manuelle"),
+        (ORIGINE_FORMATION, "Formation"),
+        (ORIGINE_REPRISE, "Reprise technique"),
+    )
+
+    animateur = models.ForeignKey(Animateur, on_delete=models.CASCADE, related_name="historique_statuts")
+    statut = models.ForeignKey(
+        Qualification,
+        on_delete=models.PROTECT,
+        related_name="historiques_statut_animateurs",
+        limit_choices_to={"est_statut": True},
+    )
+    date_effet = models.DateField()
+    origine = models.CharField(max_length=16, choices=ORIGINE_CHOICES, default=ORIGINE_MANUELLE)
+    date_effet_incertaine = models.BooleanField(
+        default=False,
+        help_text="Vrai pour une date technique de reprise qui n'est pas une date d'obtention connue.",
+    )
+    commentaire = models.CharField(max_length=240, blank=True)
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-date_effet", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("animateur", "date_effet"),
+                name="unique_statut_animateur_date_effet",
+            )
+        ]
+
+    def clean(self):
+        if self.statut_id and not self.statut.est_statut:
+            raise ValidationError({"statut": "Choisissez un statut existant."})
+
+    def save(self, *args, **kwargs):
+        self.commentaire = self.commentaire.strip()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.animateur} — {self.statut} dès le {self.date_effet:%d/%m/%Y}"
+
+
 class Contrat(models.Model):
     """Contrat daté d'un animateur, conservé indépendamment de la Paie actuelle."""
 

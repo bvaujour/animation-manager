@@ -12,6 +12,7 @@ from animateurs.services.status_colors import (
     couleur_texte_pour_fond,
     statut_payload,
 )
+from animateurs.services.statuts import statut_actuel, statut_pour_date
 
 
 def _centre_preference_to_dict(preference):
@@ -38,18 +39,30 @@ def _formations_indisponibles_payload(formations):
     ]
 
 
-def _qualifications_payload(qualifications):
+def _qualifications_payload(qualifications, *, statut_resolu=None, statut_date_resolu=False):
     """Retourne les champs communs aux sérialisations complète et Planning."""
+
+    qualifications_ordinaires = [item for item in qualifications if not item.est_statut]
+    qualification_ids = {
+        qualification.id for qualification in qualifications_ordinaires
+    }
+    if statut_date_resolu and statut_resolu is not None:
+        qualification_ids.add(statut_resolu.id)
+    elif not statut_date_resolu:
+        qualification_ids.update(
+            identifiant
+            for qualification in qualifications
+            for identifiant in (qualification.id, qualification.statut_id)
+            if identifiant
+        )
+    noms_qualifications = [qualification.nom for qualification in qualifications_ordinaires]
+    if statut_date_resolu and statut_resolu is not None:
+        noms_qualifications.append(statut_resolu.nom)
+    elif not statut_date_resolu:
+        noms_qualifications = [qualification.nom for qualification in qualifications]
     return {
-        "qualification_ids": sorted(
-            {
-                identifiant
-                for qualification in qualifications
-                for identifiant in (qualification.id, qualification.statut_id)
-                if identifiant
-            }
-        ),
-        "qualifications": [qualification.nom for qualification in qualifications],
+        "qualification_ids": sorted(qualification_ids),
+        "qualifications": noms_qualifications,
         "qualification_icones": [
             {"id": qualification.id, "nom": qualification.nom, "icone": qualification.icone}
             for qualification in qualifications
@@ -79,9 +92,21 @@ def contrat_to_dict(contrat):
     }
 
 
+def historique_statut_to_dict(entree):
+    return {
+        "id": entree.id,
+        "statut_id": entree.statut_id,
+        "statut_nom": entree.statut.nom,
+        "date_effet": entree.date_effet.isoformat(),
+        "origine": entree.origine,
+        "origine_libelle": entree.get_origine_display(),
+        "date_effet_incertaine": entree.date_effet_incertaine,
+        "commentaire": entree.commentaire,
+    }
+
+
 def affectation_to_event(affectation):
     qualifications = list(affectation.animateur.qualifications.all())
-    statut = statut_payload(qualifications)
     horaires = {
         horaire.date.isoformat(): {
             "heure_arrivee": horaire.heure_arrivee.strftime("%H:%M"),
@@ -99,6 +124,8 @@ def affectation_to_event(affectation):
         titre += f" · {plage['heure_arrivee']}–{plage['heure_depart']}"
     debut_local = timezone.localtime(affectation.debut).date()
     fin_locale = timezone.localtime(affectation.fin).date()
+    statut_date = statut_pour_date(affectation.animateur, debut_local)
+    statut = statut_payload(qualifications, statut_resolu=statut_date)
     formations = getattr(affectation.animateur, "_planning_formations", None)
     conflits_formation = []
     jour = debut_local
@@ -141,9 +168,10 @@ def affectation_to_event(affectation):
     }
 
 
-def animateur_to_dict(animateur):
+def animateur_to_dict(animateur, *, date_reference=None):
     qualifications = list(animateur.qualifications.all())
-    statut = statut_payload(qualifications)
+    statut_date = statut_pour_date(animateur, date_reference) if date_reference else statut_actuel(animateur)
+    statut = statut_payload(qualifications, statut_resolu=statut_date)
     preferences = list(animateur.preferences.all())
     disponibilites_source = (
         animateur._filtre_disponibilites
@@ -154,6 +182,7 @@ def animateur_to_dict(animateur):
     affectations = list(getattr(animateur, "_filtre_affectations", []))
     formations = list(getattr(animateur, "_filtre_formations", []))
     contrats = list(animateur.contrats.all())
+    historique_statuts = list(getattr(animateur, "_historique_statuts", []))
     affinites = list(animateur.affinites_groupes.all())
 
     affinites_groupes = [
@@ -211,6 +240,7 @@ def animateur_to_dict(animateur):
         "numero_securite_sociale": animateur.numero_securite_sociale,
         "paie_jour": str(animateur.paie_jour) if animateur.paie_jour is not None else None,
         "contrats": [contrat_to_dict(contrat) for contrat in contrats],
+        "historique_statuts": [historique_statut_to_dict(entree) for entree in historique_statuts],
         "age": animateur.age,
         # Couleur historique conservée en base, mais les interfaces utilisent
         # désormais exclusivement la couleur automatique du statut.
@@ -218,7 +248,9 @@ def animateur_to_dict(animateur):
         **statut,
         # Les catégories sont ajoutées aux identifiants effectifs pour que les
         # filtres puissent trouver tous les diplômes d'une même famille.
-        **_qualifications_payload(qualifications),
+        **_qualifications_payload(
+            qualifications, statut_resolu=statut_date, statut_date_resolu=True
+        ),
         "centre_prefere": centre_prefere,
         "centres_secondaires": centres_secondaires,
         "centres_preferes": centres_preferes,
@@ -253,7 +285,7 @@ def animateur_to_dict(animateur):
     }
 
 
-def animateur_planning_to_dict(animateur):
+def animateur_planning_to_dict(animateur, *, date_reference=None, dates_reference=None):
     """Version compacte de l'animateur pour la barre latérale du Planning.
 
     La fiche complète contient des données administratives et l'historique des
@@ -263,7 +295,15 @@ def animateur_planning_to_dict(animateur):
     """
 
     qualifications = list(animateur.qualifications.all())
-    statut = statut_payload(qualifications)
+    date_reference = date_reference or timezone.localdate()
+    statut_date = statut_pour_date(animateur, date_reference)
+    statut = statut_payload(qualifications, statut_resolu=statut_date)
+    statuts_par_date = {}
+    for jour in dates_reference or []:
+        statut_jour = statut_pour_date(animateur, jour)
+        statuts_par_date[jour.isoformat()] = (
+            {"id": statut_jour.id, "nom": statut_jour.nom} if statut_jour else None
+        )
     preferences = list(animateur.preferences.all())
     disponibilites_source = (
         animateur._filtre_disponibilites
@@ -289,7 +329,10 @@ def animateur_planning_to_dict(animateur):
         "email": animateur.email,
         "couleur": statut["couleur_statut"],
         **statut,
-        **_qualifications_payload(qualifications),
+        **_qualifications_payload(
+            qualifications, statut_resolu=statut_date, statut_date_resolu=True
+        ),
+        "statuts_par_date": statuts_par_date,
         "centre_prefere": centre_prefere,
         "centres_preferes": centres_preferes,
         "centres_interdits": centres_interdits,

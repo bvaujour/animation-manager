@@ -68,6 +68,7 @@ from .views_parametres import (
     api_types_primes,
     parametres,
 )
+from .views_statuts import api_historique_statut_detail, api_historique_statuts
 
 __all__ = [
     "accueil",
@@ -76,6 +77,8 @@ __all__ = [
     "api_affectation_detail",
     "api_animateur_detail",
     "api_animateurs",
+    "api_historique_statut_detail",
+    "api_historique_statuts",
     "api_contrat_detail",
     "api_contrats",
     "api_centre_detail",
