@@ -154,6 +154,18 @@ class ContratApiTests(ConnexionTestCase):
         self.assertEqual(conflit.status_code, 400)
         self.assertIn("chevauche", conflit.json()["error"])
 
+    def test_api_accepte_un_permanent_sans_dates(self):
+        response = self.client.post(self.url, data=json.dumps({
+            "type_contrat": "permanent", "date_debut": None, "date_fin": None,
+        }), content_type="application/json")
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(response.json()["date_debut"])
+        self.assertEqual(response.json()["statut"], Contrat.STATUT_EN_COURS)
+
+        script = Path(settings.BASE_DIR, "static/js/animateurs.js").read_text(encoding="utf-8")
+        self.assertIn('required = mode !== "paie_habituelle"', script)
+        self.assertIn("Sans dates renseignées", script)
+
     def test_animateur_sans_contrat_reste_serialisable_et_interface_est_conditionnelle(self):
         detail = self.client.get(reverse("api_animateur_detail", args=[self.animateur.id]))
         self.assertEqual(detail.status_code, 200)

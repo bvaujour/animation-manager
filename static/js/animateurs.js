@@ -25,6 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let qualifications = [];
     let statuts = [];
     let centres = [];
+    let typesContrats = [];
     let selectedId = null;
     let previousSelectedId = null;
     let activeDetailTab = "fiche";
@@ -257,8 +258,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function formatDateContrat(valeur) {
-        if (!valeur) return "sans date de fin";
+        if (!valeur) return "";
         return new Intl.DateTimeFormat("fr-FR").format(new Date(`${valeur}T12:00:00`));
+    }
+
+    function periodeContrat(contrat) {
+        if (!contrat.date_debut && !contrat.date_fin) return "Sans dates renseignées";
+        if (contrat.date_debut && !contrat.date_fin) return `Depuis le ${formatDateContrat(contrat.date_debut)}`;
+        if (!contrat.date_debut && contrat.date_fin) return `Jusqu’au ${formatDateContrat(contrat.date_fin)}`;
+        return `${formatDateContrat(contrat.date_debut)} → ${formatDateContrat(contrat.date_fin)}`;
     }
 
     function contratsHtml(a) {
@@ -268,14 +276,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 || String(second.date_debut).localeCompare(String(premier.date_debut));
         });
         const liste = contrats.length ? contrats.map((contrat) => {
-            const remuneration = contrat.type_contrat === "cee"
+            const remuneration = contrat.mode_paie === "cee_journalier"
                 ? `Taux journalier de référence : ${formatMontantContrat(contrat.taux_journalier_reference)} / jour`
+                : contrat.mode_paie === "paie_habituelle" ? "Paie habituelle / hors calcul"
                 : `Salaire mensuel de référence : ${formatMontantContrat(contrat.salaire_mensuel_reference)}`;
             return `<article class="employee-contract-row employee-contract-row--${escapeHtml(contrat.statut)}">
                 <div class="employee-contract-main">
                     <span class="employee-contract-status">${escapeHtml(contrat.statut_libelle)}</span>
                     <strong>${escapeHtml(contrat.type_contrat_libelle)}</strong>
-                    <span>${formatDateContrat(contrat.date_debut)} → ${formatDateContrat(contrat.date_fin)}</span>
+                    <span>${escapeHtml(periodeContrat(contrat))}</span>
                     <small>${escapeHtml(remuneration)}</small>
                 </div>
                 <div class="employee-contract-actions">
@@ -287,11 +296,19 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${liste}
             <form class="employee-contract-form" id="employee-contract-form" hidden>
                 <input type="hidden" id="contract-id">
-                <div class="field"><label for="contract-type">Type de contrat</label><select id="contract-type" required><option value="cee">CEE</option><option value="cdd">CDD</option><option value="apprentissage">Apprentissage</option></select></div>
+                <div class="field"><label for="contract-type">Type de contrat</label><select id="contract-type" required>${typesContrats.map((item) => `<option value="${escapeHtml(item.code)}" data-pay-mode="${escapeHtml(item.mode_remuneration)}">${escapeHtml(item.nom)}</option>`).join("")}</select></div>
                 <div class="field"><label for="contract-start">Date de début</label><input id="contract-start" type="date" required></div>
                 <div class="field"><label for="contract-end">Date de fin</label><input id="contract-end" type="date"></div>
                 <div class="field" data-contract-daily><label for="contract-daily">Taux journalier de référence</label><input id="contract-daily" type="number" min="0" step="0.01" inputmode="decimal"></div>
                 <div class="field" data-contract-monthly hidden><label for="contract-monthly">Salaire mensuel de référence</label><input id="contract-monthly" type="number" min="0" step="0.01" inputmode="decimal"></div>
+                <div class="field" data-contract-salary-date hidden><label for="contract-salary-date">Date d’effet de la rémunération</label><input id="contract-salary-date" type="date"></div>
+                <div class="field" data-contract-time-mode hidden><label for="contract-time-mode">Mode de temps de travail</label><select id="contract-time-mode"><option value="non_renseigne">Non renseigné</option><option value="hebdomadaire">Hebdomadaire</option><option value="mensuel">Mensuel</option><option value="annualise">Annualisé / lissé</option></select></div>
+                <div class="field" data-contract-weekly hidden><label for="contract-weekly">Heures par semaine</label><input id="contract-weekly" type="number" min="0" step="0.01"></div>
+                <div class="field" data-contract-monthly-hours hidden><label for="contract-monthly-hours">Heures par mois</label><input id="contract-monthly-hours" type="number" min="0" step="0.01"></div>
+                <div class="field" data-contract-annual hidden><label for="contract-annual">Heures par an</label><input id="contract-annual" type="number" min="0" step="0.01"></div>
+                <div class="field" data-contract-pay-mode hidden><label for="contract-pay-mode">Mode de rémunération</label><select id="contract-pay-mode"></select></div>
+                <div class="field" data-contract-apprentice-year hidden><label for="contract-apprentice-year">Année d’exécution initiale</label><select id="contract-apprentice-year"><option value="">À renseigner</option><option value="1">1re année</option><option value="2">2e année</option><option value="3">3e année</option></select></div>
+                <div class="field" data-contract-apprentice-date hidden><label for="contract-apprentice-date">Date d’effet de l’année</label><input id="contract-apprentice-date" type="date"></div>
                 <div class="employee-contract-form-actions"><button class="btn btn-primary btn-small" type="submit">Enregistrer</button><button class="btn btn-ghost btn-small" type="button" data-contract-cancel>Annuler</button></div>
             </form>`;
     }
@@ -366,12 +383,12 @@ document.addEventListener("DOMContentLoaded", () => {
                         </div>
                     </section>
 
-                    ${isNew ? "" : `<section class="fiche-section fiche-card employee-compact-card employee-contracts-card">
+                    ${isNew ? "" : `<section id="contrats" class="fiche-section fiche-card employee-compact-card employee-contracts-card">
                         <div class="fiche-section-head"><h3>Contrats</h3><button class="btn btn-ghost btn-small" type="button" data-contract-add>+ Ajouter un contrat</button></div>
                         <div class="employee-contract-list">${contratsHtml(a)}</div>
                     </section>`}
 
-                    ${isNew ? "" : `<section class="fiche-section fiche-card employee-compact-card employee-status-history-card">
+                    ${isNew ? "" : `<section id="historique-statut" class="fiche-section fiche-card employee-compact-card employee-status-history-card">
                         <div class="fiche-section-head"><h3>Historique du statut</h3><button class="btn btn-ghost btn-small" data-status-history-add type="button">+ Ajouter un changement</button></div>
                         ${historiqueStatutsHtml(a)}
                     </section>`}
@@ -571,11 +588,32 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!form) return;
         const type = form.querySelector("#contract-type");
         const actualiserRemuneration = () => {
-            const cee = type.value === "cee";
+            const mode = type.selectedOptions[0]?.dataset.payMode || "cee_journalier";
+            const cee = mode === "cee_journalier";
+            const mensualise = mode === "mensualise";
+            const apprentissage = mode === "apprentissage";
+            const temps = form.querySelector("#contract-time-mode").value;
+            const payMode = form.querySelector("#contract-pay-mode");
+            const optionsAttendues = apprentissage
+                ? [["grille_auto", "Minimum grille automatique"], ["grille_controle", "Salaire contractuel avec contrôle du minimum"]]
+                : [["salaire_fixe", "Salaire fixe"], ["minimum_smic", "Minimum SMIC automatique"], ["fixe_controle", "Salaire fixe avec contrôle du minimum"]];
+            if (!optionsAttendues.some(([value]) => value === payMode.value)) {
+                payMode.innerHTML = optionsAttendues.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+            }
             form.querySelector("[data-contract-daily]").hidden = !cee;
-            form.querySelector("[data-contract-monthly]").hidden = cee;
+            form.querySelector("[data-contract-monthly]").hidden = !(mensualise || apprentissage);
+            form.querySelector("[data-contract-salary-date]").hidden = !(mensualise || apprentissage);
+            form.querySelector("[data-contract-time-mode]").hidden = !mensualise;
+            form.querySelector("[data-contract-pay-mode]").hidden = !(mensualise || apprentissage);
+            form.querySelector("[data-contract-weekly]").hidden = !mensualise || temps !== "hebdomadaire";
+            form.querySelector("[data-contract-monthly-hours]").hidden = !mensualise || !["mensuel", "annualise"].includes(temps);
+            form.querySelector("[data-contract-annual]").hidden = !mensualise || temps !== "annualise";
+            form.querySelector("[data-contract-apprentice-year]").hidden = !apprentissage;
+            form.querySelector("[data-contract-apprentice-date]").hidden = !apprentissage;
             form.querySelector("#contract-daily").required = cee;
-            form.querySelector("#contract-monthly").required = !cee;
+            form.querySelector("#contract-start").required = mode !== "paie_habituelle";
+            const remuneration = form.querySelector("#contract-pay-mode").value;
+            form.querySelector("#contract-monthly").required = mensualise && remuneration !== "minimum_smic";
         };
         const ouvrir = (contrat = null) => {
             form.hidden = false;
@@ -585,6 +623,19 @@ document.addEventListener("DOMContentLoaded", () => {
             form.querySelector("#contract-end").value = contrat?.date_fin || "";
             form.querySelector("#contract-daily").value = contrat?.taux_journalier_reference || "";
             form.querySelector("#contract-monthly").value = contrat?.salaire_mensuel_reference || "";
+            form.querySelector("#contract-salary-date").value = contrat?.historique_remunerations?.[0]?.date_effet || contrat?.date_debut || "";
+            form.querySelector("#contract-time-mode").value = contrat?.mode_temps_travail || "non_renseigne";
+            form.querySelector("#contract-weekly").value = contrat?.heures_hebdomadaires || "";
+            form.querySelector("#contract-monthly-hours").value = contrat?.heures_mensuelles_reference || "";
+            form.querySelector("#contract-annual").value = contrat?.heures_annuelles_reference || "";
+            const payMode = form.querySelector("#contract-pay-mode");
+            const selectedMode = type.selectedOptions[0]?.dataset.payMode;
+            payMode.innerHTML = selectedMode === "apprentissage"
+                ? '<option value="grille_auto">Minimum grille automatique</option><option value="grille_controle">Salaire contractuel avec contrôle du minimum</option>'
+                : '<option value="salaire_fixe">Salaire fixe</option><option value="minimum_smic">Minimum SMIC automatique</option><option value="fixe_controle">Salaire fixe avec contrôle du minimum</option>';
+            payMode.value = contrat?.mode_remuneration || (selectedMode === "apprentissage" ? "grille_controle" : "salaire_fixe");
+            form.querySelector("#contract-apprentice-year").value = contrat?.annee_execution_initiale || "";
+            form.querySelector("#contract-apprentice-date").value = contrat?.date_effet_annee_execution || "";
             actualiserRemuneration();
             form.querySelector("#contract-start").focus();
         };
@@ -596,6 +647,8 @@ document.addEventListener("DOMContentLoaded", () => {
             setStatus(message);
         };
         type.addEventListener("change", actualiserRemuneration);
+        form.querySelector("#contract-time-mode").addEventListener("change", actualiserRemuneration);
+        form.querySelector("#contract-pay-mode").addEventListener("change", actualiserRemuneration);
         detailEl.querySelector("[data-contract-add]")?.addEventListener("click", () => ouvrir());
         detailEl.querySelectorAll("[data-contract-edit]").forEach((bouton) => bouton.addEventListener("click", () => {
             ouvrir((a.contrats || []).find((item) => Number(item.id) === Number(bouton.dataset.contractEdit)));
@@ -612,13 +665,23 @@ document.addEventListener("DOMContentLoaded", () => {
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             const id = Number(form.querySelector("#contract-id").value) || null;
-            const cee = type.value === "cee";
+            const mode = type.selectedOptions[0]?.dataset.payMode || "cee_journalier";
+            const cee = mode === "cee_journalier";
+            const mensualise = ["mensualise", "apprentissage"].includes(mode);
             const payload = {
                 type_contrat: type.value,
                 date_debut: form.querySelector("#contract-start").value,
                 date_fin: form.querySelector("#contract-end").value || null,
                 taux_journalier_reference: cee ? (form.querySelector("#contract-daily").value || null) : null,
-                salaire_mensuel_reference: cee ? null : (form.querySelector("#contract-monthly").value || null),
+                salaire_mensuel_reference: mensualise ? (form.querySelector("#contract-monthly").value || null) : null,
+                date_effet_remuneration: mensualise ? (form.querySelector("#contract-salary-date").value || form.querySelector("#contract-start").value) : null,
+                mode_temps_travail: form.querySelector("#contract-time-mode").value,
+                heures_hebdomadaires: form.querySelector("#contract-weekly").value || null,
+                heures_mensuelles_reference: form.querySelector("#contract-monthly-hours").value || null,
+                heures_annuelles_reference: form.querySelector("#contract-annual").value || null,
+                mode_remuneration: form.querySelector("#contract-pay-mode").value || "salaire_fixe",
+                annee_execution_initiale: form.querySelector("#contract-apprentice-year").value || null,
+                date_effet_annee_execution: form.querySelector("#contract-apprentice-date").value || null,
             };
             try {
                 await apiFetch(`/api/animateurs/${a.id}/contrats/${id ? `${id}/` : ""}`, {
@@ -971,6 +1034,12 @@ document.addEventListener("DOMContentLoaded", () => {
         window.history.replaceState({}, "", url);
     }
 
+    function afficherSectionDemandee() {
+        const sectionId = window.location.hash.slice(1);
+        if (!["contrats", "historique-statut"].includes(sectionId)) return;
+        requestAnimationFrame(() => document.getElementById(sectionId)?.scrollIntoView({ block: "center" }));
+    }
+
     async function chargerHistoriqueStatuts(a) {
         if (!a?.id) return;
         a.historique_statuts = await apiFetch(`/api/animateurs/${a.id}/historique-statuts/`);
@@ -992,6 +1061,7 @@ document.addEventListener("DOMContentLoaded", () => {
         await chargerHistoriqueStatuts(a);
         renderList();
         renderFiche(a);
+        afficherSectionDemandee();
     }
 
     async function loadAnimateurs() {
@@ -1002,14 +1072,16 @@ document.addEventListener("DOMContentLoaded", () => {
     async function init() {
         if (listEl) listEl.innerHTML = '<p class="empty-note">Chargement des salariés…</p>';
         try {
-            const [animateursCharges, qualificationsChargees, centresCharges] = await Promise.all([
+            const [animateursCharges, qualificationsChargees, centresCharges, typesContratsCharges] = await Promise.all([
                 loadAnimateurs(),
                 apiFetch("/api/qualifications/"),
                 apiFetch("/api/centres/").then((items) => Promise.all(items.map(async (centre) => ({
                     ...centre,
                     evenements: await apiFetch(`/api/centres/${centre.id}/groupes/`),
                 })))),
+                apiFetch("/api/types-contrats/"),
             ]);
+            typesContrats = typesContratsCharges;
             statuts = qualificationsChargees.filter((qualification) => qualification.est_statut);
             qualifications = qualificationsChargees.filter((qualification) => !qualification.est_statut);
             centres = centresCharges;
@@ -1036,6 +1108,7 @@ document.addEventListener("DOMContentLoaded", () => {
             await chargerHistoriqueStatuts(employee);
             renderList();
             renderFiche(employee);
+            afficherSectionDemandee();
         } catch (err) {
             if (listEl) listEl.innerHTML = `<p class="empty-note">${escapeHtml(erreurMessage(err, "Chargement impossible."))}</p>`;
             detailEl.innerHTML = `<div class="evenement-empty"><strong>Chargement impossible</strong><p>${escapeHtml(erreurMessage(err, "Erreur inconnue"))}</p></div>`;

@@ -1,11 +1,11 @@
 """API des réunions et journées de télétravail/préparation."""
 
+import datetime
 import json
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
@@ -13,7 +13,9 @@ from django.views.decorators.http import require_http_methods
 from .models import Affectation, ActiviteTravailComplementaire, ParticipationTravailComplementaire
 from .services.temps_travail import (
     SelectionTempsTravailInvalide,
+    activites_temps_travail_pour_periodes,
     animateurs_affectes_sur_jours,
+    comptabiliser_jours_complementaires,
     ids_animateurs_affectes_a_date,
     selectionner_periodes,
 )
@@ -32,24 +34,7 @@ def _selection(request, payload=None):
 
 def _activites_selectionnees(periodes):
     """Charge en une fois les activités correspondant exactement à la sélection."""
-
-    ids = {periode.id for periode in periodes}
-    participations = ParticipationTravailComplementaire.objects.select_related("animateur").order_by(
-        "animateur__prenom", "animateur__nom", "animateur_id"
-    )
-    candidates = (
-        ActiviteTravailComplementaire.objects.filter(periodes__in=periodes)
-        .prefetch_related(
-            Prefetch("periodes", to_attr="periodes_chargees"),
-            Prefetch("participations", queryset=participations, to_attr="participations_chargees"),
-        )
-        .distinct()
-    )
-    return [
-        activite
-        for activite in candidates
-        if {item.id for item in activite.periodes_chargees} == ids
-    ]
+    return activites_temps_travail_pour_periodes(periodes)
 
 
 def _reunion_json(activite, ids_en_conflit):
@@ -146,24 +131,16 @@ def _donnees_temps_travail(request, periodes, jours, debut, fin):
             for item in preparation.participations_chargees
         }
 
-    complements = {
-        animateur_id: {"reunion": Decimal("0"), "preparation": Decimal("0")}
-        for animateur_id in ids_eligibles
-    }
-    for reunion in reunions_activites:
-        date_iso = reunion.date.isoformat() if reunion.date else None
-        for participation in reunion.participations_chargees:
-            if participation.animateur_id not in ids_eligibles:
-                continue
-            deja_affecte = date_iso in dates_affectees.get(participation.animateur_id, set())
-            if deja_affecte and not participation.autoriser_double_comptage:
-                continue
-            complements[participation.animateur_id]["reunion"] += participation.nombre_jours
-
-    if preparation:
-        for participation in preparation.participations_chargees:
-            if participation.animateur_id in ids_eligibles:
-                complements[participation.animateur_id]["preparation"] += participation.nombre_jours
+    complements = comptabiliser_jours_complementaires(
+        ids_eligibles,
+        {
+            animateur_id: {
+                datetime.date.fromisoformat(item) for item in dates
+            }
+            for animateur_id, dates in dates_affectees.items()
+        },
+        activites,
+    )
 
     synthese = []
     for animateur in animateurs:

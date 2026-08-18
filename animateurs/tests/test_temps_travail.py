@@ -228,6 +228,24 @@ class TempsTravailComplementaireTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(str(self.julie.id), response.json()["preparation"])
 
+    def test_synthese_somme_plusieurs_saisies_de_preparation(self):
+        for intitule, nombre in (("Préparation A", "2.00"), ("Préparation B", "1.50")):
+            activite = ActiviteTravailComplementaire.objects.create(
+                type=ActiviteTravailComplementaire.TYPE_PREPARATION,
+                intitule=intitule,
+            )
+            activite.periodes.set([self.semaine_1, self.semaine_2])
+            ParticipationTravailComplementaire.objects.create(
+                activite=activite, animateur=self.julie, nombre_jours=nombre
+            )
+
+        synthese = self.client.get(
+            reverse("api_temps_travail"), {"periode_ids": self._selection()}
+        ).json()["synthese"]
+        julie = next(item for item in synthese if item["animateur_id"] == self.julie.id)
+        self.assertEqual(julie["jours_preparation"], 3.5)
+        self.assertEqual(julie["jours_total_recapitulatif"], 4.5)
+
     def test_prime_ne_proratise_pas_les_activites_sans_semaine_reelle(self):
         reunion = ActiviteTravailComplementaire.objects.create(
             type="reunion", intitule="Réunion paie", date=datetime.date(2026, 6, 20)

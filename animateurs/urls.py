@@ -21,6 +21,7 @@ from .views import (
     api_historique_statuts,
     api_contrat_detail,
     api_contrats,
+    api_types_contrats_actifs,
     api_centre_detail,
     api_conflits_reunion,
     api_centres,
@@ -47,6 +48,8 @@ from .views import (
     api_periodes_scolaires_previsualiser,
     api_planning,
     api_parametres,
+    api_parametres_contrats,
+    api_parametre_contrat_detail,
     api_parametres_paie,
     api_baremes_cee,
     api_types_primes,
@@ -58,6 +61,8 @@ from .views import (
     api_qualifications,
     api_preparation_travail,
     api_prime_journaliere,
+    api_attributions_primes,
+    api_attribution_prime_detail,
     api_recapitulatif,
     api_reunion_detail,
     api_reunions,
@@ -155,6 +160,12 @@ urlpatterns = [
     path("parametres/", direction_requise(parametres), name="parametres"),
     path("api/parametres/", direction_requise_api(api_parametres), name="api_parametres"),
     path("api/parametres/paie/", direction_requise_api(api_parametres_paie), name="api_parametres_paie"),
+    path("api/parametres/contrats/", direction_requise_api(api_parametres_contrats), name="api_parametres_contrats"),
+    path(
+        "api/parametres/contrats/<str:ressource>/<int:objet_id>/",
+        direction_requise_api(api_parametre_contrat_detail),
+        name="api_parametre_contrat_detail",
+    ),
     path("api/parametres/baremes-cee/", direction_requise_api(api_baremes_cee), name="api_baremes_cee"),
     path("api/parametres/primes/", direction_requise_api(api_types_primes), name="api_types_primes"),
     path(
@@ -203,6 +214,7 @@ urlpatterns = [
     ),
     # --- API : animateurs ---
     path("api/animateurs/", direction_requise_api(api_animateurs), name="api_animateurs"),
+    path("api/types-contrats/", direction_requise_api(api_types_contrats_actifs), name="api_types_contrats_actifs"),
     path(
         "api/animateurs/<int:animateur_id>/", direction_requise_api(api_animateur_detail), name="api_animateur_detail"
     ),
@@ -351,6 +363,12 @@ urlpatterns = [
     ),
     path("api/recapitulatif/", direction_requise_api(api_recapitulatif), name="api_recapitulatif"),
     path("api/recapitulatif/prime-journaliere/", direction_requise_api(api_prime_journaliere), name="api_prime_journaliere"),
+    path("api/recapitulatif/primes/", direction_requise_api(api_attributions_primes), name="api_attributions_primes"),
+    path(
+        "api/recapitulatif/primes/<int:attribution_id>/",
+        direction_requise_api(api_attribution_prime_detail),
+        name="api_attribution_prime_detail",
+    ),
     # --- API : documents ---
     path("api/documents/", lecture_partagee_api(api_documents), name="api_documents"),
     path("api/documents/<int:document_id>/", direction_requise_api(api_document_detail), name="api_document_detail"),

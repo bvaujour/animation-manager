@@ -1,6 +1,6 @@
 import datetime
 from decimal import Decimal
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 
 from django.conf import settings
@@ -14,7 +14,11 @@ from animateurs.models import (
 )
 from animateurs.tests.base import ConnexionTestCase
 from animateurs.tests.factories import creer_periode
-from animateurs.services.recapitulatif import lignes_recapitulatif_paie
+from animateurs.services.recapitulatif import (
+    alertes_recapitulatif_paie,
+    generer_recapitulatif_paie_pdf,
+    lignes_recapitulatif_paie,
+)
 
 
 class RecapitulatifDashboardTests(ConnexionTestCase):
@@ -178,6 +182,142 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
         self.assertLess(javascript.index("selectRange(startInput.value, endInput.value);"), javascript.index('openTab(new URLSearchParams'))
         self.assertIn('buildApiUrl("/recapitulatif/export-paie.pdf")', javascript)
         self.assertIn('buildApiUrl("/recapitulatif/export.xlsx")', javascript)
+
+    def test_tableau_centres_separe_jours_details_contrat_et_reference_mensuelle(self):
+        javascript = (Path(settings.BASE_DIR) / "static/js/recapitulatif.js").read_text(encoding="utf-8")
+        css = (Path(settings.BASE_DIR) / "static/css/recapitulatif.css").read_text(encoding="utf-8")
+
+        self.assertIn('<span class="paie-mobile-content"><span class="paie-cell-main">${result.jours_travailles}</span>${details}</span>', javascript)
+        self.assertNotIn('${result.jours_travailles}${details', javascript)
+        self.assertIn("segment.contrat_date_debut || segment.date_debut", javascript)
+        self.assertIn("segment.contrat_date_fin || segment.date_fin", javascript)
+        self.assertIn("Référence mensuelle</span>", javascript)
+        self.assertIn('if (type === "apprentissage") return "Apprentissage";', javascript)
+        self.assertNotIn('if (type === "apprentissage") return "Apprentissage / alternance";', javascript)
+        self.assertIn("paie-pay-block paie-pay-block--reference", javascript)
+        self.assertIn(".paie-pay-block--reference .paie-cell-main{color:var(--color-danger", css)
+        self.assertIn("@media (max-width:799px)", css)
+        self.assertIn(".recap-centres-table colgroup,.recap-centres-table thead{display:none}", css)
+        self.assertIn("grid-template-columns:minmax(0,1fr) minmax(min-content,auto)", css)
+        self.assertIn("td.complementary-column,.recap-centres-table tbody td.total-column", css)
+        self.assertIn("justify-self:end;text-align:right", css)
+        self.assertIn(".recap-centres-table{width:100%;table-layout:auto}", css)
+        self.assertIn(".recap-centres-table .employee-col,.recap-centres-table .compact-col{width:1%}", css)
+        self.assertNotIn("--recap-min-width", javascript)
+
+    def test_tableau_centres_guide_les_preparations_incompletes(self):
+        javascript = (Path(settings.BASE_DIR) / "static/js/recapitulatif.js").read_text(encoding="utf-8")
+        css = (Path(settings.BASE_DIR) / "static/css/recapitulatif.css").read_text(encoding="utf-8")
+        animateurs_js = (Path(settings.BASE_DIR) / "static/js/animateurs.js").read_text(encoding="utf-8")
+        parametres_js = (Path(settings.BASE_DIR) / "static/js/parametres.js").read_text(encoding="utf-8")
+        parametres_html = (Path(settings.BASE_DIR) / "templates/parametres.html").read_text(encoding="utf-8")
+
+        self.assertIn('taux_contractuel_manquant: { label: "Taux contractuel manquant", section: "contrats" }', javascript)
+        self.assertIn('salaire_mensuel_manquant: { label: "Salaire mensuel manquant", section: "contrats" }', javascript)
+        self.assertIn('statut_manquant: { label: "Statut manquant", section: "historique-statut" }', javascript)
+        self.assertIn('bareme_manquant: { label: "Barème CEE manquant", settings: true }', javascript)
+        self.assertIn('paie-contract-segment--implicit', javascript)
+        self.assertIn('CEE par défaut', javascript)
+        self.assertIn('Contrat non renseigné', javascript)
+        self.assertIn('payroll-preparation-row--incomplete', javascript)
+        self.assertIn('payroll-preparation-row--verification', javascript)
+        self.assertIn('.paie-non-calculable:focus-visible', css)
+        self.assertIn('payroll-preparation-row--incomplete>th', css)
+
+        self.assertIn('payroll-preparation-row--verification>th', css)
+        self.assertIn('id="contrats"', animateurs_js)
+        self.assertIn('id="historique-statut"', animateurs_js)
+        self.assertIn('id="baremes-cee"', parametres_html)
+        self.assertIn('window.location.hash === "#baremes-cee"', parametres_js)
+
+        response = self.client.get(reverse("recapitulatif"))
+        self.assertContains(response, 'data-employees-url="/employes/"')
+        self.assertContains(response, 'data-settings-url="/parametres/"')
+
+    def test_onglet_prime_rend_uniquement_les_eligibilites_du_backend(self):
+        javascript = (Path(settings.BASE_DIR) / "static/js/recapitulatif.js").read_text(encoding="utf-8")
+        css = (Path(settings.BASE_DIR) / "static/css/recapitulatif.css").read_text(encoding="utf-8")
+        self.assertIn("primeEligibility = new Map", javascript)
+        self.assertIn("contexte.primes", javascript)
+        self.assertIn("prime.semaines_eligibles", javascript)
+        self.assertIn("semaine.jours_eligibles.map", javascript)
+        self.assertIn('amount.hidden = prime.type_montant === "fixe"', javascript)
+        self.assertIn("Aucune nouvelle prime éligible sur cette période", javascript)
+        self.assertIn("Primes à attribuer", javascript)
+        self.assertIn("Historique des primes", javascript)
+        self.assertIn("[Number(item.id), item]", javascript)
+        self.assertNotIn("[Number(item.id), item.primes_eligibles || []]", javascript)
+        self.assertEqual(javascript.count("Aucune nouvelle prime éligible sur cette période"), 1)
+        self.assertIn("data-prime-id", javascript)
+        self.assertIn("data-prime-entry-level", javascript)
+        self.assertIn('niveau === "semaine"', javascript)
+        self.assertIn('niveau === "jour"', javascript)
+        self.assertNotIn("data-prime-type", javascript)
+        self.assertIn("if (addAttribution.disabled) return", javascript)
+        self.assertIn("setPrimeEditorBusy(editor, true)", javascript)
+        self.assertIn("bodies = [{...baseBody, jours}]", javascript)
+        self.assertIn("applyPrimeSynthesis(id, synthese)", javascript)
+        self.assertIn('? "Enregistrement en attente…" : "Enregistrement…"', javascript)
+        self.assertIn("showPrimeLocalError(form", javascript)
+        self.assertIn("data-total-primes-animateur", javascript)
+        self.assertIn("prime.jours_eligibles.length - joursDisponibles.length", javascript)
+        self.assertIn("Aucun jour restant à attribuer", javascript)
+        self.assertIn("prime.semaines_affichees", javascript)
+        self.assertIn("synthese.contexte_prime", javascript)
+        self.assertIn("Attributions en doublon sur cette période", javascript)
+        self.assertIn("function primeSummaryValues(prime)", javascript)
+        self.assertIn('detail: "aucune attribution"', javascript)
+        self.assertIn("resume.montants_variables", javascript)
+        self.assertIn("`${resume.quantite} j`", javascript)
+        self.assertIn("updatePrimeEditorSummary(form.closest", javascript)
+        self.assertIn('class="payroll-prime-summary-main"', javascript)
+        self.assertIn('>(${escapeHtml(resume.detail)})</span>', javascript)
+        self.assertIn(".payroll-prime-summary-main{display:flex", css)
+        self.assertIn('mode === "jour"', javascript)
+        self.assertIn("item.nombre_jours", javascript)
+        self.assertIn("formatMoney(item.montant_unitaire)", javascript)
+        self.assertIn("= ${formatMoney(item.montant_total)}", javascript)
+        self.assertEqual(javascript.count("await loadRecap()"), 2)
+        suppression = javascript.split('const deleteAttribution = event.target.closest("[data-delete-attribution]")', 1)[1].split('const editAttribution =', 1)[0]
+        self.assertIn("enqueuePrimeDeletion", suppression)
+        self.assertNotIn("setPrimeEditorBusy", suppression)
+        self.assertNotIn("loadRecap", suppression)
+        self.assertIn("const primeMutationQueues = new Map()", javascript)
+        self.assertIn("const queuedPrimeMutations = new Set()", javascript)
+        self.assertIn('key: `${id}:${typePrimeId}`', javascript)
+        self.assertIn('"Suppression en attente…"', javascript)
+        self.assertIn("async function processPrimeMutationQueue(key)", javascript)
+        self.assertIn("function enqueuePrimeMutation(entry)", javascript)
+        self.assertIn('key: `${id}:${prime.id}`', javascript)
+        self.assertIn("const response = await entry.run()", javascript)
+        self.assertIn("if (queuedPrimeMutations.has(entry.token)) return", javascript)
+        self.assertIn('item?.setAttribute("aria-busy", "true")', javascript)
+        self.assertIn("applyPrimeSynthesis(entry.animateurId, response.synthese)", javascript)
+        self.assertIn("restoreQueuedDeletionStates()", javascript)
+        self.assertIn("function optimisticAttribution(", javascript)
+        self.assertIn('item.dataset.optimisticAttribution = ""', javascript)
+        self.assertIn('"Enregistrement…"', javascript)
+        self.assertIn('"Mise à jour…"', javascript)
+        self.assertIn("optimistic?.rollback()", javascript)
+        self.assertIn('item?.classList.add("is-pending-mutation")', javascript)
+        self.assertIn("jours_eligibles: entry.joursEligibles", javascript)
+        self.assertIn("jours_eligibles: prime.jours_eligibles || []", javascript)
+        self.assertNotIn("contexteAnimateur.primes[index] = synthese.contexte_prime", javascript)
+        self.assertIn("...contexteAnimateur.primes[index]", javascript)
+        self.assertIn(".payroll-attribution.is-pending-mutation", css)
+
+    def test_periode_paie_est_memorisee_et_restauree_avant_le_chargement(self):
+        javascript = (Path(settings.BASE_DIR) / "static/js/recapitulatif.js").read_text(encoding="utf-8")
+        self.assertIn('PAYROLL_RANGE_STORAGE_KEY = "animation-manager:payroll-date-range-v1"', javascript)
+        self.assertIn("function isValidIsoDate(value)", javascript)
+        self.assertIn("range.end < range.start", javascript)
+        self.assertIn("localStorage.setItem(PAYROLL_RANGE_STORAGE_KEY", javascript)
+        self.assertIn("const persistedRange = persistedPayrollRange();", javascript)
+        self.assertIn("startInput.value = persistedRange?.start || formatIsoDate(firstDay)", javascript)
+        self.assertLess(
+            javascript.index("const persistedRange = persistedPayrollRange();"),
+            javascript.rindex("selectRange(startInput.value, endInput.value);"),
+        )
 
     def test_plage_calendaire_utilise_des_bornes_inclusives(self):
         self._affecter(self.julie, datetime.date(2026, 7, 6))
@@ -420,10 +560,10 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
 
     def test_interface_formate_la_prime_journaliere_sans_centimes(self):
         javascript = (Path(settings.BASE_DIR) / "static/js/recapitulatif.js").read_text(encoding="utf-8")
-        self.assertIn('step="1"', javascript)
+        self.assertIn('step="0.01"', javascript)
         self.assertIn("function formatDailyPrime", javascript)
         self.assertIn('`${number}\u00a0€`', javascript)
-        self.assertNotIn('step="0.01"', javascript)
+        self.assertIn("data-prime-id", javascript)
         self.assertIn("data-cancel-prime", javascript)
         self.assertIn("data-delete-prime", javascript)
 
@@ -456,6 +596,61 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
         self.assertIn("recapitulatif_paie_20260706_20260710.pdf", response["Content-Disposition"])
         self.assertTrue(response.content.startswith(b"%PDF"))
 
+    def test_pdf_utilise_base_cee_cp_primes_salaire_mensuel_et_alertes(self):
+        def ligne(prenom, nom, **champs):
+            return {
+                "prenom": prenom, "nom": nom, "jours_affectation": 10,
+                "jours_reunion": 0, "jours_preparation": 0, "jours_travailles": 10,
+                "base_cee": "0.00", "indemnite_cp_cee": "0.00",
+                "salaire_mensuel_reference": None, "base_mensuelle_reference": None,
+                "montant_primes_preparees": "0.00", "total_prepare": "0.00",
+                "etat_preparation": "pret", "paie_habituelle": False,
+                "alertes_paie": [], **champs,
+            }
+
+        recap = {
+            "animateurs": [
+                ligne(
+                    "Ange", "DUMONT", base_cee="600.00", indemnite_cp_cee="60.00",
+                    montant_primes_preparees="80.00", total_prepare="740.00",
+                    alertes_paie=[{
+                        "message": "Contrat non renseigné — CEE appliqué par défaut",
+                        "niveau": "information",
+                    }, {
+                        "message": "Statut historique incertain pour cette période.",
+                        "niveau": "a_verifier",
+                    }],
+                ),
+                ligne(
+                    "Ambre", "BAIN", salaire_mensuel_reference="900.00",
+                    base_mensuelle_reference="900.00", total_prepare="900.00",
+                ),
+                ligne(
+                    "Paul", "PERMANENT", paie_habituelle=True,
+                ),
+            ],
+            "total_jours": 30, "total_primes_preparees": "80.00",
+            "total_prepare": "1640.00",
+        }
+        pdf = generer_recapitulatif_paie_pdf(
+            recap, datetime.date(2026, 7, 1), datetime.date(2026, 7, 31)
+        )
+        lignes = lignes_recapitulatif_paie(recap)
+        self.assertTrue(pdf.startswith(b"%PDF"))
+        self.assertEqual(lignes[1][5:], [
+            "600,00 €", "60,00 €", "—", "80,00 €", "740,00 €",
+        ])
+        self.assertEqual(lignes[2][7:], ["900,00 €", "0,00 €", "900,00 €"])
+        self.assertEqual(lignes[3][-1], "Paie habituelle")
+        self.assertNotIn("Paie par jour", lignes[0])
+        self.assertEqual(alertes_recapitulatif_paie(recap), [{
+            "animateur": "Ange DUMONT",
+            "messages": [
+                "Contrat non renseigné — CEE appliqué par défaut",
+                "Statut historique incertain pour cette période.",
+            ],
+        }])
+
     def test_export_excel_recapitulatif(self):
         from openpyxl import load_workbook
         from io import BytesIO
@@ -471,8 +666,11 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
         )
         self.assertIn("recapitulatif_20260706_20260710.xlsx", response["Content-Disposition"])
         classeur = load_workbook(BytesIO(response.content), data_only=True)
-        self.assertEqual(classeur.sheetnames, ["Totaux paie", "Détail par centre"])
+        self.assertEqual(classeur.sheetnames, ["Totaux paie", "Détail par centre", "Préparation contrats"])
         self.assertEqual(classeur["Totaux paie"]["A3"].value, "Julie Martin")
+        self.assertEqual(classeur["Totaux paie"]["F2"].value, "Base CEE")
+        self.assertEqual(classeur["Totaux paie"]["H2"].value, "Salaire mensuel de référence")
+        self.assertNotIn("Paie par jour", [cell.value for cell in classeur["Totaux paie"][2]])
 
     def test_exports_acceptent_la_meme_plage_calendaire_inclusive(self):
         self._affecter(self.julie, datetime.date(2026, 7, 6), duree=2)
@@ -506,13 +704,85 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
 
         self.assertEqual(len(lignes), 3)  # en-tête, un animateur, total général
         self.assertEqual(lignes[1], [
-            "Julie Martin", "9", "1", "0", "10", "65,00 €",
-            "650,00 €", "34,00 €", "684,00 €",
+            "Julie Martin", "9", "1", "0", "10", "0,00 €",
+            "0,00 €", "—", "34,00 €", "Incomplet",
+        ])
+        self.assertEqual(lignes[0], [
+            "Animateur", "Affectations", "Réunions", "Télétravail / préparation",
+            "Total jours", "Base CEE", "CP CEE", "Salaire mensuel de référence",
+            "Primes", "Total préparé",
         ])
         self.assertEqual(julie["jours_travailles"], 10)
         self.assertEqual(julie["montant_primes"], "34.00")
         self.assertNotIn("0.125", " ".join(lignes[1]))
         self.assertFalse(any("Semaine" in cellule for ligne in lignes for cellule in ligne))
+
+    def test_totaux_reutilisent_les_complements_temps_travail_dune_selection_englobante(self):
+        seconde = creer_periode(debut=datetime.date(2026, 7, 13), nom="Été — Semaine 2")
+        troisieme = creer_periode(debut=datetime.date(2026, 7, 20), nom="Été — Semaine 3")
+        quatrieme = creer_periode(debut=datetime.date(2026, 7, 27), nom="Été — Semaine 4")
+        aout = creer_periode(debut=datetime.date(2026, 8, 24), nom="Été — Août")
+        ambre = Animateur.objects.create(prenom="Ambre", nom="BAIN")
+        ange = Animateur.objects.create(prenom="Ange", nom="DUMONT")
+        cassidy = Animateur.objects.create(prenom="Cassidy", nom="BOMBLE")
+        jordan = Animateur.objects.create(prenom="Jordan", nom="SIMON")
+        jours_ete = [
+            periode.debut + datetime.timedelta(days=decalage)
+            for periode in (self.periode, seconde, troisieme, quatrieme)
+            for decalage in range(5)
+        ]
+        for animateur, nombre in ((ambre, 18), (ange, 10), (cassidy, 18), (jordan, 7)):
+            for jour in jours_ete[:nombre]:
+                self._affecter(animateur, jour)
+
+        reunion = ActiviteTravailComplementaire.objects.create(
+            type="reunion", intitule="Réunion été", date=datetime.date(2026, 7, 4)
+        )
+        selection_complete = [self.periode, seconde, troisieme, quatrieme, aout]
+        reunion.periodes.set(selection_complete)
+        for animateur in (ambre, ange, cassidy):
+            ParticipationTravailComplementaire.objects.create(
+                activite=reunion, animateur=animateur, nombre_jours="1.00"
+            )
+        preparation = ActiviteTravailComplementaire.objects.create(
+            type="preparation", intitule="Prépa planning Ado"
+        )
+        preparation.periodes.set(selection_complete)
+        ParticipationTravailComplementaire.objects.create(
+            activite=preparation, animateur=jordan, nombre_jours="3.00"
+        )
+        ancienne_selection = ActiviteTravailComplementaire.objects.create(
+            type="preparation", intitule="Ancienne sélection étroite"
+        )
+        ancienne_selection.periodes.set([seconde])
+        ParticipationTravailComplementaire.objects.create(
+            activite=ancienne_selection, animateur=jordan, nombre_jours="1.00"
+        )
+
+        data = self.client.get(reverse("api_recapitulatif"), {
+            "date_debut": "2026-07-01", "date_fin": "2026-07-31",
+        }).json()
+        temps = self.client.get(reverse("api_temps_travail"), {
+            "periode_ids": ",".join(str(item.id) for item in selection_complete),
+        }).json()
+        par_nom = {item["prenom"]: item for item in data["animateurs"]}
+        synthese = {item["prenom"]: item for item in temps["synthese"]}
+        attendus = {
+            "Ambre": (18, 1, 0, 19), "Ange": (10, 1, 0, 11),
+            "Cassidy": (18, 1, 0, 19), "Jordan": (7, 0, 3, 10),
+        }
+        for prenom, attendu in attendus.items():
+            ligne = par_nom[prenom]
+            self.assertEqual((
+                ligne["jours_affectation"], ligne["jours_reunion"],
+                ligne["jours_preparation"], ligne["jours_travailles"],
+            ), attendu)
+            self.assertEqual(ligne["jours_reunion"], synthese[prenom]["jours_reunion"])
+            self.assertEqual(ligne["jours_preparation"], synthese[prenom]["jours_preparation"])
+            self.assertEqual(ligne["jours_travailles"], synthese[prenom]["jours_total_recapitulatif"])
+
+        lignes_export = {ligne[0]: ligne for ligne in lignes_recapitulatif_paie(data)[1:-1]}
+        self.assertEqual(lignes_export["Jordan SIMON"][1:5], ["7", "0", "3", "10"])
 
     def test_reunion_n_est_pas_divisee_sur_les_semaines_vides(self):
         periodes = [self.periode] + [

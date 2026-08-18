@@ -55,14 +55,25 @@ from .views_planning import (
     api_planning_auto,
     api_planning_plage,
 )
-from .views_reporting import api_document_detail, api_documents, api_prime_journaliere, api_recapitulatif, export_recapitulatif_excel, export_recapitulatif_paie_pdf
+from .views_reporting import (
+    api_attribution_prime_detail,
+    api_attributions_primes,
+    api_document_detail,
+    api_documents,
+    api_prime_journaliere,
+    api_recapitulatif,
+    export_recapitulatif_excel,
+    export_recapitulatif_paie_pdf,
+)
 from .views_staff import api_animateur_detail, api_animateurs, api_disponibilite_detail, api_disponibilites
 from .views_worktime import api_conflits_reunion, api_preparation_travail, api_reunion_detail, api_reunions, api_temps_travail
 from .views_formations import api_formation_cloture, api_formation_detail, api_formations, formations
-from .views_contrats import api_contrat_detail, api_contrats
+from .views_contrats import api_contrat_detail, api_contrats, api_types_contrats_actifs
 from .views_parametres import (
     api_baremes_cee,
     api_parametres,
+    api_parametres_contrats,
+    api_parametre_contrat_detail,
     api_parametres_paie,
     api_type_prime_detail,
     api_types_primes,
@@ -81,6 +92,7 @@ __all__ = [
     "api_historique_statuts",
     "api_contrat_detail",
     "api_contrats",
+    "api_types_contrats_actifs",
     "api_centre_detail",
     "api_conflits_reunion",
     "api_centres",
@@ -110,6 +122,8 @@ __all__ = [
     "api_planning_auto",
     "api_planning_plage",
     "api_parametres",
+    "api_parametres_contrats",
+    "api_parametre_contrat_detail",
     "api_parametres_paie",
     "api_baremes_cee",
     "api_types_primes",

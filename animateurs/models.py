@@ -335,16 +335,101 @@ class HistoriqueStatutAnimateur(models.Model):
         return f"{self.animateur} — {self.statut} dès le {self.date_effet:%d/%m/%Y}"
 
 
+class TypeContrat(models.Model):
+    """Type contractuel configurable, relié à un mode de paie connu."""
+
+    MODE_CEE = "cee_journalier"
+    MODE_MENSUALISE = "mensualise"
+    MODE_APPRENTISSAGE = "apprentissage"
+    MODE_PAIE_HABITUELLE = "paie_habituelle"
+    MODE_CHOICES = (
+        (MODE_CEE, "Journalier CEE"),
+        (MODE_MENSUALISE, "Mensualisé"),
+        (MODE_APPRENTISSAGE, "Apprentissage"),
+        (MODE_PAIE_HABITUELLE, "Paie habituelle / hors calcul"),
+    )
+
+    structure = models.ForeignKey(
+        "ParametresStructure", on_delete=models.CASCADE, related_name="types_contrats"
+    )
+    nom = models.CharField(max_length=100)
+    code = models.SlugField(max_length=50)
+    actif = models.BooleanField(default=True)
+    ordre = models.PositiveSmallIntegerField(default=0)
+    description = models.TextField(blank=True)
+    mode_remuneration = models.CharField(max_length=24, choices=MODE_CHOICES)
+    systeme = models.BooleanField(default=False)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("ordre", "nom", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("structure", "code"), name="unique_type_contrat_structure_code"
+            )
+        ]
+
+    def clean(self):
+        self.nom = self.nom.strip()
+        self.code = self.code.strip().lower()
+        if not self.nom:
+            raise ValidationError({"nom": "Le nom du type de contrat est obligatoire."})
+        if not self.code:
+            raise ValidationError({"code": "Le code du type de contrat est obligatoire."})
+        if self.pk and self.systeme:
+            precedent = TypeContrat.objects.filter(pk=self.pk).values_list("code", flat=True).first()
+            if precedent and precedent != self.code:
+                raise ValidationError({"code": "Le code stable d'un type système ne peut pas être modifié."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.systeme:
+            raise ValidationError("Un type de contrat système ne peut pas être supprimé.")
+        return super().delete(*args, **kwargs)
+
+    def __str__(self):
+        return self.nom
+
+
 class Contrat(models.Model):
     """Contrat daté d'un animateur, conservé indépendamment de la Paie actuelle."""
 
     TYPE_CEE = "cee"
     TYPE_CDD = "cdd"
     TYPE_APPRENTISSAGE = "apprentissage"
+    TYPE_PERMANENT = "permanent"
     TYPE_CHOICES = (
         (TYPE_CEE, "CEE"),
         (TYPE_CDD, "CDD"),
         (TYPE_APPRENTISSAGE, "Apprentissage"),
+        (TYPE_PERMANENT, "Permanent"),
+    )
+
+    TEMPS_NON_RENSEIGNE = "non_renseigne"
+    TEMPS_HEBDOMADAIRE = "hebdomadaire"
+    TEMPS_MENSUEL = "mensuel"
+    TEMPS_ANNUALISE = "annualise"
+    TEMPS_CHOICES = (
+        (TEMPS_NON_RENSEIGNE, "Non renseigné"),
+        (TEMPS_HEBDOMADAIRE, "Hebdomadaire"),
+        (TEMPS_MENSUEL, "Mensuel"),
+        (TEMPS_ANNUALISE, "Annualisé / lissé"),
+    )
+    REMUNERATION_FIXE = "salaire_fixe"
+    REMUNERATION_MINIMUM_SMIC = "minimum_smic"
+    REMUNERATION_FIXE_CONTROLE = "fixe_controle"
+    REMUNERATION_GRILLE_AUTO = "grille_auto"
+    REMUNERATION_GRILLE_CONTROLE = "grille_controle"
+    REMUNERATION_CHOICES = (
+        (REMUNERATION_FIXE, "Salaire fixe"),
+        (REMUNERATION_MINIMUM_SMIC, "Minimum SMIC automatique"),
+        (REMUNERATION_FIXE_CONTROLE, "Salaire fixe avec contrôle du minimum"),
+        (REMUNERATION_GRILLE_AUTO, "Minimum grille automatique"),
+        (REMUNERATION_GRILLE_CONTROLE, "Salaire contractuel avec contrôle du minimum"),
     )
 
     STATUT_A_VENIR = "a_venir"
@@ -352,11 +437,27 @@ class Contrat(models.Model):
     STATUT_TERMINE = "termine"
 
     animateur = models.ForeignKey(Animateur, on_delete=models.CASCADE, related_name="contrats")
-    type_contrat = models.CharField(max_length=20, choices=TYPE_CHOICES)
-    date_debut = models.DateField()
+    # Champ de compatibilité conservé pour les anciens consommateurs ; le
+    # référentiel TypeContrat porte désormais les choix configurables.
+    type_contrat = models.CharField(max_length=50)
+    type_contrat_ref = models.ForeignKey(
+        TypeContrat,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="contrats",
+    )
+    date_debut = models.DateField(null=True, blank=True)
     date_fin = models.DateField(null=True, blank=True)
     taux_journalier_reference = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     salaire_mensuel_reference = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    mode_temps_travail = models.CharField(max_length=20, choices=TEMPS_CHOICES, default=TEMPS_NON_RENSEIGNE)
+    heures_hebdomadaires = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    heures_mensuelles_reference = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    heures_annuelles_reference = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    mode_remuneration = models.CharField(max_length=24, choices=REMUNERATION_CHOICES, default=REMUNERATION_FIXE)
+    annee_execution_initiale = models.PositiveSmallIntegerField(null=True, blank=True)
+    date_effet_annee_execution = models.DateField(null=True, blank=True)
     cree_le = models.DateTimeField(auto_now_add=True)
     modifie_le = models.DateTimeField(auto_now=True)
 
@@ -366,7 +467,7 @@ class Contrat(models.Model):
     @property
     def statut(self):
         aujourd_hui = timezone.localdate()
-        if self.date_debut > aujourd_hui:
+        if self.date_debut and self.date_debut > aujourd_hui:
             return self.STATUT_A_VENIR
         if self.date_fin and self.date_fin < aujourd_hui:
             return self.STATUT_TERMINE
@@ -380,52 +481,97 @@ class Contrat(models.Model):
             self.STATUT_TERMINE: "Terminé",
         }[self.statut]
 
+    @property
+    def definition_type(self):
+        return self.type_contrat_ref
+
+    @property
+    def mode_paie(self):
+        if self.type_contrat_ref_id:
+            return self.type_contrat_ref.mode_remuneration
+        return {
+            self.TYPE_CEE: TypeContrat.MODE_CEE,
+            self.TYPE_APPRENTISSAGE: TypeContrat.MODE_APPRENTISSAGE,
+            self.TYPE_PERMANENT: TypeContrat.MODE_PAIE_HABITUELLE,
+        }.get(self.type_contrat, TypeContrat.MODE_MENSUALISE)
+
+    @property
+    def libelle_type(self):
+        if self.type_contrat_ref_id:
+            return self.type_contrat_ref.nom
+        return dict(self.TYPE_CHOICES).get(self.type_contrat, self.type_contrat)
+
     def clean(self):
         erreurs = {}
-        if self.date_fin and self.date_fin < self.date_debut:
+        mode_paie = self.mode_paie
+        if mode_paie != TypeContrat.MODE_PAIE_HABITUELLE and self.date_debut is None:
+            erreurs["date_debut"] = "La date de début est obligatoire pour ce type de contrat."
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
             erreurs["date_fin"] = "La date de fin ne peut pas être antérieure à la date de début."
-
-        if self.type_contrat == self.TYPE_CEE:
+        if mode_paie == TypeContrat.MODE_CEE:
             if self.taux_journalier_reference is None:
                 erreurs["taux_journalier_reference"] = "Le taux journalier de référence est obligatoire pour un CEE."
             if self.salaire_mensuel_reference is not None:
                 erreurs["salaire_mensuel_reference"] = "Le salaire mensuel doit rester vide pour un CEE."
-        elif self.type_contrat in (self.TYPE_CDD, self.TYPE_APPRENTISSAGE):
-            if self.salaire_mensuel_reference is None:
+        elif mode_paie == TypeContrat.MODE_MENSUALISE:
+            if self.mode_remuneration in (self.REMUNERATION_FIXE, self.REMUNERATION_FIXE_CONTROLE) and self.salaire_mensuel_reference is None:
                 erreurs["salaire_mensuel_reference"] = "Le salaire mensuel de référence est obligatoire pour ce contrat."
             if self.taux_journalier_reference is not None:
                 erreurs["taux_journalier_reference"] = "Le taux journalier doit rester vide pour ce contrat."
+            if self.mode_remuneration == self.REMUNERATION_MINIMUM_SMIC and not (
+                self.heures_mensuelles_reference is not None
+                or self.heures_hebdomadaires is not None
+            ):
+                erreurs["heures_mensuelles_reference"] = "Un volume mensuel ou hebdomadaire est obligatoire pour le minimum SMIC automatique."
+        elif mode_paie == TypeContrat.MODE_APPRENTISSAGE:
+            if self.mode_remuneration in (self.REMUNERATION_FIXE, self.REMUNERATION_GRILLE_CONTROLE) and self.salaire_mensuel_reference is None:
+                erreurs["salaire_mensuel_reference"] = "Le salaire contractuel est obligatoire dans ce mode."
+            if self.mode_remuneration in (self.REMUNERATION_GRILLE_AUTO, self.REMUNERATION_GRILLE_CONTROLE):
+                if not self.animateur_id or not self.animateur.date_naissance:
+                    erreurs["annee_execution_initiale"] = "La date de naissance de l'animateur est nécessaire au calcul apprentissage."
+                if self.annee_execution_initiale not in (1, 2, 3):
+                    erreurs["annee_execution_initiale"] = "L'année d'exécution doit être comprise entre 1 et 3."
 
         if self.taux_journalier_reference is not None and self.taux_journalier_reference < 0:
             erreurs["taux_journalier_reference"] = "Le taux journalier ne peut pas être négatif."
         if self.salaire_mensuel_reference is not None and self.salaire_mensuel_reference < 0:
             erreurs["salaire_mensuel_reference"] = "Le salaire mensuel ne peut pas être négatif."
+        for champ in ("heures_hebdomadaires", "heures_mensuelles_reference", "heures_annuelles_reference"):
+            valeur = getattr(self, champ)
+            if valeur is not None and valeur < 0:
+                erreurs[champ] = "Le volume horaire ne peut pas être négatif."
 
-        if self.animateur_id and self.date_debut and not erreurs.get("date_fin"):
-            fin = self.date_fin
+        if self.animateur_id and not erreurs.get("date_fin"):
             chevauchements = Contrat.objects.filter(animateur_id=self.animateur_id).exclude(pk=self.pk)
-            chevauchements = chevauchements.filter(
-                models.Q(date_fin__isnull=True) | models.Q(date_fin__gte=self.date_debut)
-            )
-            if fin:
-                chevauchements = chevauchements.filter(date_debut__lte=fin)
+            if self.date_debut:
+                chevauchements = chevauchements.filter(
+                    models.Q(date_fin__isnull=True) | models.Q(date_fin__gte=self.date_debut)
+                )
+            if self.date_fin:
+                chevauchements = chevauchements.filter(
+                    models.Q(date_debut__isnull=True) | models.Q(date_debut__lte=self.date_fin)
+                )
             contrat = chevauchements.order_by("date_debut", "id").first()
             if contrat:
                 fin_contrat = contrat.date_fin.strftime("%d/%m/%Y") if contrat.date_fin else "sans date de fin"
+                debut_contrat = contrat.date_debut.strftime("%d/%m/%Y") if contrat.date_debut else "sans date de début"
                 erreurs["date_debut"] = (
-                    f"Ce contrat chevauche le {contrat.get_type_contrat_display()} "
-                    f"du {contrat.date_debut.strftime('%d/%m/%Y')} au {fin_contrat}."
+                    f"Ce contrat chevauche le {contrat.libelle_type} "
+                    f"du {debut_contrat} au {fin_contrat}."
                 )
 
         if erreurs:
             raise ValidationError(erreurs)
 
     def save(self, *args, **kwargs):
+        if self.type_contrat_ref_id:
+            self.type_contrat = self.type_contrat_ref.code
         self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.get_type_contrat_display()} — {self.animateur} — {self.date_debut:%d/%m/%Y}"
+        debut = self.date_debut.strftime("%d/%m/%Y") if self.date_debut else "sans date"
+        return f"{self.libelle_type} — {self.animateur} — {debut}"
 
 
 class ParametresStructure(models.Model):
@@ -508,6 +654,101 @@ class BaremeCEE(models.Model):
         super().save(*args, **kwargs)
 
 
+class ReferenceSMIC(models.Model):
+    """Référence locale et historisée ; la Paie ne consulte jamais Internet."""
+
+    structure = models.ForeignKey(ParametresStructure, on_delete=models.CASCADE, related_name="references_smic")
+    date_effet = models.DateField()
+    montant_horaire = models.DecimalField(max_digits=8, decimal_places=4, validators=[MinValueValidator(Decimal("0.00"))])
+    montant_mensuel_35h = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(Decimal("0.00"))])
+    source = models.CharField(max_length=160, blank=True)
+    identifiant_externe = models.CharField(max_length=160, blank=True)
+    recupere_le = models.DateTimeField(null=True, blank=True)
+    commentaire = models.CharField(max_length=240, blank=True)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-date_effet", "-id")
+        constraints = [
+            models.UniqueConstraint(fields=("structure", "date_effet"), name="unique_smic_structure_date")
+        ]
+
+    def save(self, *args, **kwargs):
+        self.source = self.source.strip()
+        self.commentaire = self.commentaire.strip()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
+class BaremeApprentissage(models.Model):
+    """Pourcentage de SMIC d'une tranche d'âge et d'une année d'exécution."""
+
+    structure = models.ForeignKey(ParametresStructure, on_delete=models.CASCADE, related_name="baremes_apprentissage")
+    date_effet = models.DateField()
+    annee_execution = models.PositiveSmallIntegerField()
+    age_minimum = models.PositiveSmallIntegerField()
+    age_maximum = models.PositiveSmallIntegerField(null=True, blank=True)
+    pourcentage_smic = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
+    actif = models.BooleanField(default=True)
+    commentaire = models.CharField(max_length=240, blank=True)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-date_effet", "annee_execution", "age_minimum", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("structure", "date_effet", "annee_execution", "age_minimum"),
+                name="unique_bareme_apprentissage_tranche_date",
+            )
+        ]
+
+    def clean(self):
+        erreurs = {}
+        if self.annee_execution not in (1, 2, 3):
+            erreurs["annee_execution"] = "L'année d'exécution doit être comprise entre 1 et 3."
+        if self.age_maximum is not None and self.age_maximum < self.age_minimum:
+            erreurs["age_maximum"] = "L'âge maximum ne peut pas être inférieur à l'âge minimum."
+        if erreurs:
+            raise ValidationError(erreurs)
+
+    def save(self, *args, **kwargs):
+        self.commentaire = self.commentaire.strip()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
+class HistoriqueRemunerationContrat(models.Model):
+    ORIGINE_MANUELLE = "manuel"
+    ORIGINE_GRILLE = "grille_automatique"
+    ORIGINE_AJUSTEMENT = "ajustement"
+    ORIGINE_CHOICES = (
+        (ORIGINE_MANUELLE, "Manuel"),
+        (ORIGINE_GRILLE, "Grille automatique"),
+        (ORIGINE_AJUSTEMENT, "Ajustement"),
+    )
+
+    contrat = models.ForeignKey(Contrat, on_delete=models.CASCADE, related_name="historique_remunerations")
+    date_effet = models.DateField()
+    montant_mensuel = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
+    origine = models.CharField(max_length=24, choices=ORIGINE_CHOICES, default=ORIGINE_MANUELLE)
+    commentaire = models.CharField(max_length=240, blank=True)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-date_effet", "-id")
+        constraints = [
+            models.UniqueConstraint(fields=("contrat", "date_effet"), name="unique_remuneration_contrat_date")
+        ]
+
+    def save(self, *args, **kwargs):
+        self.commentaire = self.commentaire.strip()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
 class TypePrime(models.Model):
     """Prime configurable, indépendante de ses futures attributions en Paie."""
 
@@ -537,6 +778,9 @@ class TypePrime(models.Model):
     montant_fixe = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     montant_maximum = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     contrats_eligibles = models.JSONField(default=list, blank=True)
+    types_contrats_eligibles = models.ManyToManyField(
+        TypeContrat, blank=True, related_name="types_primes_eligibles"
+    )
     tous_statuts = models.BooleanField(default=True)
     statuts_eligibles = models.ManyToManyField(
         Qualification,
@@ -556,6 +800,10 @@ class TypePrime(models.Model):
     def clean(self):
         erreurs = {}
         contrats_valides = {valeur for valeur, _ in Contrat.TYPE_CHOICES}
+        if self.structure_id:
+            contrats_valides.update(
+                TypeContrat.objects.filter(structure_id=self.structure_id).values_list("code", flat=True)
+            )
         contrats = list(dict.fromkeys(self.contrats_eligibles or []))
         if any(item not in contrats_valides for item in contrats):
             erreurs["contrats_eligibles"] = "Un type de contrat éligible est invalide."
@@ -586,6 +834,50 @@ class TypePrime(models.Model):
 
     def __str__(self):
         return self.nom
+
+
+class AttributionPrime(models.Model):
+    """Prime de paie figée : les changements du référentiel ne sont pas rétroactifs."""
+
+    animateur = models.ForeignKey(Animateur, on_delete=models.CASCADE, related_name="attributions_primes")
+    type_prime = models.ForeignKey(TypePrime, on_delete=models.PROTECT, related_name="attributions")
+    centre = models.ForeignKey(
+        "Centre", on_delete=models.SET_NULL, null=True, blank=True, related_name="attributions_primes"
+    )
+    date_debut = models.DateField()
+    date_fin = models.DateField()
+    mode_calcul = models.CharField(max_length=20, choices=TypePrime.MODE_CHOICES)
+    montant_unitaire = models.DecimalField(max_digits=10, decimal_places=2)
+    montant_total = models.DecimalField(max_digits=12, decimal_places=2)
+    commentaire = models.CharField(max_length=240, blank=True)
+    attribue_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="primes_attribuees",
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-date_debut", "animateur__prenom", "animateur__nom", "id")
+
+    def clean(self):
+        erreurs = {}
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+            erreurs["date_fin"] = "La date de fin ne peut pas précéder la date de début."
+        if self.montant_unitaire is not None and self.montant_unitaire < 0:
+            erreurs["montant_unitaire"] = "Le montant ne peut pas être négatif."
+        if self.montant_total is not None and self.montant_total < 0:
+            erreurs["montant_total"] = "Le montant total ne peut pas être négatif."
+        if erreurs:
+            raise ValidationError(erreurs)
+
+    def save(self, *args, **kwargs):
+        self.commentaire = self.commentaire.strip()
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class TypeAccueil(models.Model):

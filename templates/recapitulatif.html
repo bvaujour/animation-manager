@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="{% static 'css/temps-travail.css' %}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
-<main id="main-content" class="page-shell page-shell--wide recap-page">
+<main id="main-content" class="page-shell page-shell--wide recap-page" data-recap-root data-employees-url="{% url 'employes' %}" data-settings-url="{% url 'parametres' %}">
     {% include "partials/_page_header.html" with title="Paie" header_class="recap-header" picker_mode="none" recap_date_range=True actions_class="recap-exports" action_id="btn-recap-excel" action_label="Exporter en Excel" action_class="btn-primary" second_action_id="btn-recap-pdf" second_action_label="Exporter en PDF" second_action_class="btn-secondary" %}
     <div class="tabs recap-tabs app-page-tabs app-page-tabs-row" id="recap-tabs" role="tablist" aria-label="Rubriques de paie">
         <button id="worktime-tab" class="tab-btn active" data-recap-tab="temps-travail" type="button" role="tab" aria-selected="true"><span class="tab-label-full">Temps de travail</span><span class="tab-label-short">Temps de travail</span></button>
@@ -42,12 +42,12 @@
         <div class="ui-section-heading section-header">
             <div>
                 <h2 id="recap-paie-title">Prime</h2>
-                <p>Primes appliquées à la période sélectionnée</p>
+                <p>Attributions issues des types de primes actifs configurés dans Paramètres</p>
             </div>
         </div>
         <div id="recap-payroll-scope" class="payroll-scope" aria-live="polite"></div>
         <div id="recap-payroll" class="recap-table-wrap"></div>
-        <div class="payroll-actions">
+        <div class="payroll-actions" hidden>
             <button id="cancel-payroll-primes" class="btn btn-secondary" type="button" disabled>Annuler les modifications</button>
             <button id="save-payroll-primes" class="btn btn-primary" type="button" disabled>Valider les primes</button>
         </div>

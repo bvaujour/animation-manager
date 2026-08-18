@@ -3,20 +3,35 @@
 import datetime
 import json
 import logging
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Prefetch, Q, Sum
 from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .access import est_direction
-from .models import Affectation, Animateur, Centre, Document, PeriodeScolaire, PrimeJournalierePeriode
+from .models import (
+    Affectation, Animateur, AttributionPrime, Centre, Contrat, Document,
+    HistoriqueStatutAnimateur, PeriodeScolaire, PrimeJournalierePeriode, TypePrime,
+)
 from .services.dates import parse_to_aware_datetime
 
 logger = logging.getLogger(__name__)
 from .services.documents import normaliser_nom_document, valider_periode_document
 from .services.recapitulatif import generer_recapitulatif, generer_recapitulatif_excel, generer_recapitulatif_paie_pdf
+from .services.preparation_paie import enrichir_recapitulatif_paie
+from .services.primes import (
+    attributions_primes_se_chevauchent,
+    creer_attribution_prime,
+    nombre_jours_attribution_prime,
+)
+from .services.contrats import situation_contractuelle_pour_date
+from .services.parametres import prime_est_eligible
+from .services.statuts import statut_pour_date
 from .services.serializers import document_to_dict
 
 # ---------------------------------------------------------------------------
@@ -116,73 +131,65 @@ def _selection_recapitulatif(request):
     return debut, fin, jours_selectionnes, periodes, None
 
 
-def _ajouter_preparation_paie(recap, periodes):
-    """Enrichit le calcul commun avec les primes propres à chaque semaine."""
+def _ajouter_preparation_paie(recap, periodes, debut, fin):
+    """Conserve l'ancien contrat d'API puis ajoute la nouvelle préparation datée."""
 
     periode_ids = [periode.id for periode in periodes]
-    animateur_ids = [ligne["id"] for ligne in recap["animateurs"]]
     primes = {
-        (prime.animateur_id, prime.periode_id): prime.montant
-        for prime in PrimeJournalierePeriode.objects.filter(
-            animateur_id__in=animateur_ids,
+        (item.animateur_id, item.periode_id): item.montant
+        for item in PrimeJournalierePeriode.objects.filter(
+            animateur_id__in=[ligne["id"] for ligne in recap["animateurs"]],
             periode_id__in=periode_ids,
         )
     }
     for ligne in recap["animateurs"]:
-        montants = [primes.get((ligne["id"], periode_id), Decimal("0.00")) for periode_id in periode_ids]
-        valeurs = set(montants)
-        prime_variable = len(valeurs) > 1
-        prime = montants[0] if montants and not prime_variable else None
-        base = Decimal(ligne["paie_jour"]) if ligne["paie_jour"] is not None else None
-        total_jour = base + prime if base is not None and prime is not None else None
-        jours_affectation = {item["date"] for item in ligne["jours"]}
-        dates_reunions = ligne.get("dates_reunions_comptabilisees", [])
-        jours_par_periode = []
-        for periode, montant_periode in zip(periodes, montants):
-            jours = sum(
-                1 for jour in jours_affectation
-                if periode.debut.isoformat() <= jour <= periode.fin.isoformat()
-            )
-            jours += sum(
-                1 for jour in dates_reunions
-                if periode.debut.isoformat() <= jour <= periode.fin.isoformat()
-            )
-            jours_par_periode.append(Decimal(jours))
-        # Une préparation sans date ne peut être rattachée sans ambiguïté
-        # que lorsque la sélection contient une seule semaine. Elle n'est
-        # surtout jamais divisée artificiellement entre plusieurs semaines.
-        if len(periodes) == 1:
-            jours_par_periode[0] += Decimal(str(ligne["jours_preparation"]))
+        montants = [primes.get((ligne["id"], periode.id), Decimal("0.00")) for periode in periodes]
+        prime = montants[0] if montants and len(set(montants)) == 1 else None
         details = []
         total_prime = Decimal("0.00")
-        for periode, montant_periode, jours in zip(periodes, montants, jours_par_periode):
-            prime_semaine = (jours * montant_periode).quantize(Decimal("0.01"))
-            total_prime += prime_semaine
+        dates_affectations = {datetime.date.fromisoformat(item["date"]) for item in ligne["jours"]}
+        dates_reunions = {
+            datetime.date.fromisoformat(item) for item in ligne.get("dates_reunions_comptabilisees", [])
+        }
+        for periode, montant in zip(periodes, montants):
+            jours = Decimal(sum(periode.debut <= jour <= periode.fin for jour in dates_affectations))
+            jours += Decimal(sum(periode.debut <= jour <= periode.fin for jour in dates_reunions))
+            if len(periodes) == 1:
+                jours += Decimal(str(ligne["jours_preparation"]))
+            montant_periode = (jours * montant).quantize(Decimal("0.01"))
+            total_prime += montant_periode
             details.append({
-                "periode_id": periode.id,
-                "libelle": periode.libelle_avec_annee,
+                "periode_id": periode.id, "libelle": periode.libelle_avec_annee,
                 "jours": int(jours) if jours == jours.to_integral_value() else float(jours),
-                "prime_jour": str(montant_periode.quantize(Decimal("0.01"))),
-                "montant_prime": str(prime_semaine),
+                "prime_jour": str(montant.quantize(Decimal("0.01"))),
+                "montant_prime": str(montant_periode),
             })
+        base = Decimal(ligne["paie_jour"]) if ligne["paie_jour"] is not None else None
         paie_base = Decimal(ligne["paie_totale"]) if ligne["paie_totale"] is not None else None
-        total_estime = paie_base + total_prime if paie_base is not None else None
-        ligne["prime_jour"] = str(prime.quantize(Decimal("0.01"))) if prime is not None else None
-        ligne["prime_jour_variable"] = prime_variable
-        ligne["total_jour_avec_prime"] = str(total_jour.quantize(Decimal("0.01"))) if total_jour is not None else None
-        ligne["total_paie_estime"] = str(total_estime.quantize(Decimal("0.01"))) if total_estime is not None else None
-        ligne["paie_base"] = ligne["paie_totale"]
-        ligne["montant_primes"] = str(total_prime.quantize(Decimal("0.01")))
-        ligne["primes_detail"] = details
-        ligne["prime_modifiable"] = bool(periode_ids and base is not None)
+        ligne.update({
+            "prime_jour": str(prime.quantize(Decimal("0.01"))) if prime is not None else None,
+            "prime_jour_variable": len(set(montants)) > 1,
+            "total_jour_avec_prime": str((base + prime).quantize(Decimal("0.01")))
+            if base is not None and prime is not None else None,
+            "paie_base": ligne["paie_totale"],
+            "montant_primes": str(total_prime),
+            "primes_detail": details,
+            "prime_modifiable": bool(periode_ids and base is not None),
+            "total_paie_estime": str((paie_base + total_prime).quantize(Decimal("0.01")))
+            if paie_base is not None else None,
+        })
 
     recap["total_primes"] = str(sum(
-        (Decimal(ligne["montant_primes"]) for ligne in recap["animateurs"]), Decimal("0.00")
+        (Decimal(item["montant_primes"]) for item in recap["animateurs"]), Decimal("0.00")
     ).quantize(Decimal("0.01")))
     recap["total_paie_avec_primes"] = str(sum(
-        (Decimal(ligne["total_paie_estime"]) for ligne in recap["animateurs"] if ligne["total_paie_estime"] is not None),
+        (Decimal(item["total_paie_estime"]) for item in recap["animateurs"] if item["total_paie_estime"] is not None),
         Decimal("0.00"),
     ).quantize(Decimal("0.01")))
+
+    return enrichir_recapitulatif_paie(
+        recap, debut.date(), fin.date() - datetime.timedelta(days=1), periodes
+    )
 
 
 def api_recapitulatif(request):
@@ -198,7 +205,7 @@ def api_recapitulatif(request):
         jours_selectionnes=jours_selectionnes,
         periode_ids=[periode.id for periode in periodes] if jours_selectionnes is not None else None,
     )
-    _ajouter_preparation_paie(recap, periodes)
+    _ajouter_preparation_paie(recap, periodes, debut, fin)
 
     return JsonResponse(
         {
@@ -216,6 +223,9 @@ def api_recapitulatif(request):
             "total_primes": recap["total_primes"],
             "total_paie_avec_primes": recap["total_paie_avec_primes"],
             "tarifs_manquants": recap["tarifs_manquants"],
+            "total_prepare": recap.get("total_prepare"),
+            "total_primes_preparees": recap.get("total_primes_preparees"),
+            "preparations_incompletes": recap.get("preparations_incompletes", 0),
         }
     )
 
@@ -254,7 +264,7 @@ def api_prime_journaliere(request):
                 animateur_id=animateur_id, periode_id__in=periode_ids
             ).delete()
         recap = generer_recapitulatif(debut, fin, jours_selectionnes=jours_selectionnes, periode_ids=periode_ids)
-        _ajouter_preparation_paie(recap, periodes)
+        _ajouter_preparation_paie(recap, periodes, debut, fin)
         ligne = next((item for item in recap["animateurs"] if item["id"] == animateur_id), None)
         return JsonResponse({
             "success": True, "deleted_count": deleted_count,
@@ -316,7 +326,7 @@ def api_prime_journaliere(request):
                         animateur_id=animateur_id, periode=periode, defaults={"montant": montant}
                     )
 
-    _ajouter_preparation_paie(recap, periodes)
+    _ajouter_preparation_paie(recap, periodes, debut, fin)
     resultat = {
         "semaines_modifiees": len(periodes),
         "animateurs_modifies": len(primes_validees),
@@ -333,6 +343,517 @@ def api_prime_journaliere(request):
     return JsonResponse(resultat)
 
 
+def _attribution_prime_dict(item):
+    return {
+        "id": item.id,
+        "animateur_id": item.animateur_id,
+        "animateur_nom": str(item.animateur),
+        "type_prime_id": item.type_prime_id,
+        "nom": item.type_prime.nom,
+        "type_prime_nom": item.type_prime.nom,
+        "mode_calcul": item.mode_calcul,
+        "mode_libelle": dict(TypePrime.MODE_CHOICES).get(item.mode_calcul, item.mode_calcul),
+        "date_debut": item.date_debut.isoformat(),
+        "date_fin": item.date_fin.isoformat(),
+        "montant_unitaire": str(item.montant_unitaire),
+        "montant_total": str(item.montant_total),
+        "nombre_jours": nombre_jours_attribution_prime(item),
+        "commentaire": item.commentaire,
+        "centre_id": item.centre_id,
+    }
+
+
+def _jours_travailles_pour_periode(debut, fin):
+    recap = generer_recapitulatif(
+        timezone.make_aware(datetime.datetime.combine(debut, datetime.time.min)),
+        timezone.make_aware(datetime.datetime.combine(fin + datetime.timedelta(days=1), datetime.time.min)),
+    )
+    return {
+        item["id"]: sorted(
+            {datetime.date.fromisoformat(jour["date"]) for jour in item.get("jours", [])}
+            | {datetime.date.fromisoformat(jour) for jour in item.get("dates_reunions_comptabilisees", [])}
+        )
+        for item in recap["animateurs"]
+    }
+
+
+def _niveaux_saisie_prime(prime):
+    """Expose la granularité d'interface sans modifier le mode métier de la prime."""
+    if prime.mode_calcul == TypePrime.MODE_JOUR:
+        return ["mois", "semaine", "jour"]
+    if prime.mode_calcul == TypePrime.MODE_SEMAINE:
+        return ["mois", "semaine"]
+    if prime.mode_calcul == TypePrime.MODE_MOIS:
+        return ["mois"]
+    return []
+
+
+def _prime_context_payload(prime, jours_eligibles, *, semaines_eligibles=None, attributions=None):
+    attributions = list(attributions or [])
+    resume_attributions = _resume_attributions_prime(prime, attributions)
+    jours_deja_attribues = [
+        jour for jour in jours_eligibles
+        if any(attributions_primes_se_chevauchent(
+            prime.mode_calcul, jour, jour, item.date_debut, item.date_fin
+        ) for item in attributions)
+    ]
+    deja = set(jours_deja_attribues)
+    jours_disponibles = [jour for jour in jours_eligibles if jour not in deja]
+    conflits = _nombre_conflits_attributions_prime(prime, attributions)
+    payload = {
+        "id": prime.id, "nom": prime.nom,
+        "mode_calcul": prime.mode_calcul,
+        "mode_libelle": prime.get_mode_calcul_display(),
+        "type_montant": prime.type_montant,
+        "montant_fixe": str(prime.montant_fixe) if prime.montant_fixe is not None else None,
+        "montant_maximum": str(prime.montant_maximum) if prime.montant_maximum is not None else None,
+        "jours_eligibles": [jour.isoformat() for jour in jours_eligibles],
+        "jours_deja_attribues": [jour.isoformat() for jour in jours_deja_attribues],
+        "jours_disponibles": [jour.isoformat() for jour in jours_disponibles],
+        "segments_eligibles": _segments_depuis_dates(jours_eligibles),
+        "segments_disponibles": _segments_depuis_dates(jours_disponibles),
+        "entierement_attribue": bool(jours_eligibles and not jours_disponibles),
+        "conflits_existants": conflits,
+        "resume_attributions": resume_attributions,
+        "attributions_couvertures": [{
+            "id": item.id,
+            "jours": [
+                jour.isoformat() for jour in jours_eligibles
+                if attributions_primes_se_chevauchent(
+                    prime.mode_calcul, jour, jour, item.date_debut, item.date_fin
+                )
+            ],
+        } for item in attributions],
+        "niveaux_saisie": _niveaux_saisie_prime(prime),
+    }
+    if semaines_eligibles is not None:
+        payload["semaines_toutes_eligibles"] = semaines_eligibles
+        semaines_disponibles = []
+        for semaine in semaines_eligibles:
+            jours = [jour for jour in semaine["jours_eligibles"] if jour in {
+                item.isoformat() for item in jours_disponibles
+            }]
+            if jours:
+                semaines_disponibles.append({**semaine, "jours_eligibles": jours})
+        payload["semaines_eligibles"] = semaines_disponibles
+        multiplicateur = (
+            len(semaines_disponibles)
+            if prime.mode_calcul == TypePrime.MODE_SEMAINE
+            else len(jours_disponibles)
+        )
+    else:
+        multiplicateur = 1 if jours_disponibles else 0
+    payload["multiplicateur_periode"] = multiplicateur
+    payload["estimation_fixe_periode"] = (
+        str((prime.montant_fixe * multiplicateur).quantize(Decimal("0.01")))
+        if prime.montant_fixe is not None else None
+    )
+    return payload
+
+
+def _resume_attributions_prime(prime, attributions):
+    """Construit le résumé d'affichage sans requête ni recalcul Paie."""
+    montants_unitaires = {item.montant_unitaire for item in attributions}
+    if prime.mode_calcul == TypePrime.MODE_JOUR:
+        quantite_attribuee = sum(nombre_jours_attribution_prime(item) for item in attributions)
+    else:
+        quantite_attribuee = len(attributions)
+    return {
+        "nombre_attributions": len(attributions),
+        "quantite": quantite_attribuee,
+        "montant_total": str(sum(
+            (item.montant_total for item in attributions), Decimal("0.00")
+        ).quantize(Decimal("0.01"))) if attributions else None,
+        "montant_unitaire": str(next(iter(montants_unitaires)))
+        if len(montants_unitaires) == 1 else None,
+        "montants_variables": len(montants_unitaires) > 1,
+    }
+
+
+def _nombre_conflits_attributions_prime(prime, attributions):
+    return sum(
+        attributions_primes_se_chevauchent(
+            prime.mode_calcul,
+            premier.date_debut,
+            premier.date_fin,
+            second.date_debut,
+            second.date_fin,
+        )
+        for index, premier in enumerate(attributions)
+        for second in attributions[index + 1:]
+    )
+
+
+def _segments_depuis_dates(dates):
+    segments = []
+    for jour in dates:
+        if segments and datetime.date.fromisoformat(segments[-1]["date_fin"]) + datetime.timedelta(days=1) == jour:
+            segments[-1]["date_fin"] = jour.isoformat()
+        else:
+            segments.append({"date_debut": jour.isoformat(), "date_fin": jour.isoformat()})
+    return segments
+
+
+def _dates_iso_valides(valeurs):
+    try:
+        return sorted({datetime.date.fromisoformat(item) for item in valeurs})
+    except (TypeError, ValueError):
+        raise ValueError("Les jours sélectionnés sont invalides.") from None
+
+
+def _synthese_attributions_prime(
+    animateur, debut=None, fin=None, type_prime=None, jours_eligibles=None
+):
+    """Retour minimal après mutation : attributions et totaux, sans Planning/Paie."""
+    queryset = AttributionPrime.objects.filter(animateur=animateur)
+    if debut is not None and fin is not None:
+        queryset = queryset.filter(date_debut__lte=fin, date_fin__gte=debut)
+    montant_total = queryset.aggregate(total=Sum("montant_total"))["total"] or Decimal("0.00")
+    if type_prime is not None:
+        queryset = queryset.filter(type_prime=type_prime)
+    attributions = list(queryset.select_related(
+        "animateur", "type_prime", "centre"
+    ).order_by("date_debut", "date_fin", "id"))
+    resultat = {
+        "animateur_id": animateur.id,
+        "attributions": [_attribution_prime_dict(item) for item in attributions],
+        "montant_total": str(montant_total.quantize(Decimal("0.01"))),
+        "montant_total_type_prime": str(sum(
+            (item.montant_total for item in attributions), Decimal("0.00")
+        ).quantize(Decimal("0.01"))),
+    }
+    if type_prime is not None and debut is not None and fin is not None:
+        # Le navigateur conserve les jours éligibles chargés au GET initial. La
+        # mutation ne renvoie que les couvertures qui ont réellement changé.
+        jours_periode = [
+            debut + datetime.timedelta(days=index)
+            for index in range((fin - debut).days + 1)
+        ]
+        resultat["contexte_prime"] = {
+            "id": type_prime.id,
+            "conflits_existants": _nombre_conflits_attributions_prime(type_prime, attributions),
+            "resume_attributions": _resume_attributions_prime(type_prime, attributions),
+            "attributions_couvertures": [{
+                "id": item.id,
+                "jours": [
+                    jour.isoformat() for jour in jours_periode
+                    if attributions_primes_se_chevauchent(
+                        type_prime.mode_calcul, jour, jour, item.date_debut, item.date_fin
+                    )
+                ],
+            } for item in attributions],
+        }
+        if jours_eligibles is not None:
+            jours_eligibles = sorted(set(jours_eligibles))
+            jours_deja = [
+                jour for jour in jours_eligibles
+                if any(attributions_primes_se_chevauchent(
+                    type_prime.mode_calcul, jour, jour, item.date_debut, item.date_fin
+                ) for item in attributions)
+            ]
+            deja = set(jours_deja)
+            jours_disponibles = [jour for jour in jours_eligibles if jour not in deja]
+            resultat["contexte_prime"].update({
+                "jours_eligibles": [jour.isoformat() for jour in jours_eligibles],
+                "jours_deja_attribues": [jour.isoformat() for jour in jours_deja],
+                "jours_disponibles": [jour.isoformat() for jour in jours_disponibles],
+                "segments_disponibles": _segments_depuis_dates(jours_disponibles),
+                "entierement_attribue": bool(jours_eligibles and not jours_disponibles),
+            })
+    return resultat
+
+
+def _periode_mutation_prime(data=None, request=None):
+    data = data or {}
+    debut_brut = data.get("periode_debut") or (request.GET.get("date_debut") if request else None)
+    fin_brut = data.get("periode_fin") or (request.GET.get("date_fin") if request else None)
+    try:
+        return (
+            datetime.date.fromisoformat(debut_brut) if debut_brut else None,
+            datetime.date.fromisoformat(fin_brut) if fin_brut else None,
+        )
+    except (TypeError, ValueError):
+        return None, None
+
+
+def _eligibilites_primes(debut, fin, primes, jours_par_animateur):
+    historiques = HistoriqueStatutAnimateur.objects.select_related("statut").filter(
+        date_effet__lte=fin
+    ).order_by("-date_effet", "-id")
+    contrats = Contrat.objects.select_related("type_contrat_ref").filter(
+        Q(date_debut__isnull=True) | Q(date_debut__lte=fin)
+    ).filter(Q(date_fin__isnull=True) | Q(date_fin__gte=debut)).order_by("date_debut", "id")
+    animateurs = Animateur.objects.prefetch_related(
+        "qualifications",
+        Prefetch("historique_statuts", queryset=historiques, to_attr="_historique_statuts_dates"),
+        Prefetch("contrats", queryset=contrats, to_attr="_contrats_paie"),
+    ).filter(id__in=jours_par_animateur).order_by("prenom", "nom", "id")
+    attributions_par_cle = defaultdict(list)
+    for attribution in AttributionPrime.objects.filter(
+        animateur_id__in=jours_par_animateur,
+        type_prime_id__in=[prime.id for prime in primes],
+        date_debut__lte=fin,
+        date_fin__gte=debut,
+    ).only("id", "animateur_id", "type_prime_id", "date_debut", "date_fin", "mode_calcul"):
+        attributions_par_cle[(attribution.animateur_id, attribution.type_prime_id)].append(attribution)
+    resultat = []
+    for animateur in animateurs:
+        jours_travailles = jours_par_animateur.get(animateur.id, [])
+        if not jours_travailles:
+            continue
+        semaines = {}
+        primes_periode = []
+        contextes_primes = []
+        for prime in primes:
+            attributions_prime = attributions_par_cle[(animateur.id, prime.id)]
+            jours_eligibles = []
+            for jour in jours_travailles:
+                situation = situation_contractuelle_pour_date(animateur, jour)
+                if prime_est_eligible(
+                    prime, animateur=animateur, contrat=situation.type_contrat,
+                    statut=statut_pour_date(animateur, jour), date=jour,
+                ):
+                    jours_eligibles.append(jour)
+            if not jours_eligibles:
+                continue
+            if prime.mode_calcul in (TypePrime.MODE_MOIS, TypePrime.MODE_FORFAIT):
+                contexte_prime = _prime_context_payload(
+                    prime, jours_eligibles, attributions=attributions_prime
+                )
+                primes_periode.append(contexte_prime)
+                contextes_primes.append(contexte_prime)
+                continue
+            par_semaine = {}
+            for jour in jours_eligibles:
+                lundi = jour - datetime.timedelta(days=jour.weekday())
+                par_semaine.setdefault(lundi, []).append(jour)
+            for lundi, jours_prime in par_semaine.items():
+                borne_debut = max(debut, lundi)
+                borne_fin = min(fin, lundi + datetime.timedelta(days=6))
+                semaine = semaines.setdefault(lundi, {
+                    "date_debut": borne_debut.isoformat(), "date_fin": borne_fin.isoformat(),
+                    "jours_travailles": [jour.isoformat() for jour in jours_travailles if borne_debut <= jour <= borne_fin],
+                    "primes_eligibles": [],
+                })
+                semaine["primes_eligibles"].append(_prime_context_payload(
+                    prime, jours_prime, attributions=attributions_prime
+                ))
+            semaines_prime = []
+            for lundi, jours_prime in sorted(par_semaine.items()):
+                borne_debut = max(debut, lundi)
+                borne_fin = min(fin, lundi + datetime.timedelta(days=6))
+                semaines_prime.append({
+                    "date_debut": borne_debut.isoformat(),
+                    "date_fin": borne_fin.isoformat(),
+                    "jours_travailles": [
+                        jour.isoformat() for jour in jours_travailles
+                        if borne_debut <= jour <= borne_fin
+                    ],
+                    "jours_eligibles": [jour.isoformat() for jour in jours_prime],
+                })
+            contextes_primes.append(_prime_context_payload(
+                prime, jours_eligibles, semaines_eligibles=semaines_prime,
+                attributions=attributions_prime,
+            ))
+        if semaines or primes_periode:
+            resultat.append({
+                "id": animateur.id,
+                "semaines": [semaines[key] for key in sorted(semaines)],
+                "primes_periode": primes_periode,
+                "primes": contextes_primes,
+            })
+    return resultat
+
+
+@require_http_methods(["GET", "POST"])
+def api_attributions_primes(request):
+    """Liste et crée les primes typées ; l'éligibilité est toujours revalidée au serveur."""
+
+    if request.method == "GET":
+        debut_brut = request.GET.get("date_debut")
+        fin_brut = request.GET.get("date_fin")
+        queryset = AttributionPrime.objects.select_related("animateur", "type_prime", "centre")
+        if debut_brut and fin_brut:
+            queryset = queryset.filter(date_debut__lte=fin_brut, date_fin__gte=debut_brut)
+        primes = list(TypePrime.objects.filter(active=True).prefetch_related(
+            "types_contrats_eligibles", "statuts_eligibles"
+        ).order_by("nom"))
+        for prime in primes:
+            prime._types_contrats_eligibles_codes = {item.code for item in prime.types_contrats_eligibles.all()}
+            prime._statuts_eligibles_ids = {item.id for item in prime.statuts_eligibles.all()}
+        debut = datetime.date.fromisoformat(debut_brut) if debut_brut else None
+        fin = datetime.date.fromisoformat(fin_brut) if fin_brut else None
+        return JsonResponse({
+            "types_primes": [
+                {
+                    "id": item.id, "nom": item.nom, "mode_calcul": item.mode_calcul,
+                    "mode_libelle": item.get_mode_calcul_display(), "type_montant": item.type_montant,
+                    "montant_fixe": str(item.montant_fixe) if item.montant_fixe is not None else None,
+                    "montant_maximum": str(item.montant_maximum) if item.montant_maximum is not None else None,
+                }
+                for item in primes
+            ],
+            "attributions": [_attribution_prime_dict(item) for item in queryset],
+            "animateurs": _eligibilites_primes(
+                debut, fin, primes, _jours_travailles_pour_periode(debut, fin)
+            ) if debut and fin else [],
+        })
+    try:
+        data = json.loads(request.body or "{}")
+        animateur = Animateur.objects.get(pk=int(data.get("animateur_id")))
+        type_prime = TypePrime.objects.get(pk=int(data.get("type_prime_id")))
+        jours_selectionnes = _dates_iso_valides(data.get("jours", [])) if "jours" in data else []
+        jours_contexte = _dates_iso_valides(data.get("jours_eligibles", [])) if "jours_eligibles" in data else None
+        if jours_selectionnes:
+            if type_prime.mode_calcul not in (TypePrime.MODE_JOUR, TypePrime.MODE_SEMAINE):
+                raise ValueError("La sélection de jours ne correspond pas au mode de cette prime.")
+            jours_travailles = set(_jours_travailles_pour_periode(
+                jours_selectionnes[0], jours_selectionnes[-1]
+            ).get(animateur.id, []))
+            if not set(jours_selectionnes).issubset(jours_travailles):
+                raise ValueError("Une prime ne peut porter que sur des jours travaillés.")
+            if type_prime.mode_calcul == TypePrime.MODE_SEMAINE:
+                attribution = creer_attribution_prime(
+                    animateur=animateur, type_prime=type_prime,
+                    date_debut=jours_selectionnes[0], date_fin=jours_selectionnes[-1],
+                    montant=data.get("montant"), centre=None,
+                    commentaire=data.get("commentaire", ""), utilisateur=request.user,
+                )
+                resultat = _attribution_prime_dict(attribution)
+                periode_debut, periode_fin = _periode_mutation_prime(data)
+                periode_debut = periode_debut or jours_selectionnes[0]
+                periode_fin = periode_fin or jours_selectionnes[-1]
+                resultat["synthese"] = _synthese_attributions_prime(
+                    animateur, periode_debut, periode_fin, type_prime, jours_contexte
+                )
+                return JsonResponse(resultat, status=201)
+            with transaction.atomic():
+                attributions = [
+                    creer_attribution_prime(
+                        animateur=animateur, type_prime=type_prime,
+                        date_debut=datetime.date.fromisoformat(segment["date_debut"]),
+                        date_fin=datetime.date.fromisoformat(segment["date_fin"]),
+                        montant=data.get("montant"), centre=None,
+                        commentaire=data.get("commentaire", ""), utilisateur=request.user,
+                    )
+                    for segment in _segments_depuis_dates(jours_selectionnes)
+                ]
+            periode_debut, periode_fin = _periode_mutation_prime(data)
+            periode_debut = periode_debut or jours_selectionnes[0]
+            periode_fin = periode_fin or jours_selectionnes[-1]
+            return JsonResponse({
+                "attributions": [_attribution_prime_dict(item) for item in attributions],
+                "synthese": _synthese_attributions_prime(
+                    animateur, periode_debut, periode_fin, type_prime, jours_contexte
+                ),
+            }, status=201)
+        date_debut = datetime.date.fromisoformat(data.get("date_debut", ""))
+        date_fin = datetime.date.fromisoformat(data.get("date_fin") or data.get("date_debut", ""))
+        if type_prime.mode_calcul == TypePrime.MODE_SEMAINE and not _jours_travailles_pour_periode(
+            date_debut, date_fin
+        ).get(animateur.id, []):
+            raise ValueError("Une prime hebdomadaire nécessite une semaine travaillée.")
+        centre = Centre.objects.get(pk=int(data["centre_id"])) if data.get("centre_id") else None
+        attribution = creer_attribution_prime(
+            animateur=animateur, type_prime=type_prime, date_debut=date_debut, date_fin=date_fin,
+            montant=data.get("montant"), centre=centre, commentaire=data.get("commentaire", ""),
+            utilisateur=request.user,
+        )
+    except (ValueError, TypeError, json.JSONDecodeError, Animateur.DoesNotExist,
+            TypePrime.DoesNotExist, Centre.DoesNotExist) as exc:
+        return JsonResponse({"error": "Les données de la prime sont invalides."}, status=400)
+    except Exception as exc:
+        from django.core.exceptions import ValidationError
+        if isinstance(exc, ValidationError):
+            return JsonResponse({"error": exc.messages[0]}, status=400)
+        raise
+    resultat = _attribution_prime_dict(attribution)
+    periode_debut, periode_fin = _periode_mutation_prime(data)
+    periode_debut = periode_debut or attribution.date_debut
+    periode_fin = periode_fin or attribution.date_fin
+    resultat["synthese"] = _synthese_attributions_prime(
+        animateur, periode_debut, periode_fin, type_prime, jours_contexte
+    )
+    return JsonResponse(resultat, status=201)
+
+
+@require_http_methods(["PATCH", "DELETE"])
+def api_attribution_prime_detail(request, attribution_id):
+    attribution = get_object_or_404(
+        AttributionPrime.objects.select_related("animateur", "type_prime"), pk=attribution_id
+    )
+    if request.method == "DELETE":
+        animateur = attribution.animateur
+        try:
+            data = json.loads(request.body or "{}")
+            jours_contexte = _dates_iso_valides(data.get("jours_eligibles", [])) if "jours_eligibles" in data else None
+        except (TypeError, ValueError, json.JSONDecodeError):
+            jours_contexte = None
+        attribution.delete()
+        periode_debut, periode_fin = _periode_mutation_prime(request=request)
+        return JsonResponse({
+            "ok": True,
+            "synthese": _synthese_attributions_prime(
+                animateur, periode_debut, periode_fin, attribution.type_prime, jours_contexte
+            ),
+        })
+    try:
+        data = json.loads(request.body or "{}")
+        jours_contexte = _dates_iso_valides(data.get("jours_eligibles", [])) if "jours_eligibles" in data else None
+        type_prime = TypePrime.objects.get(pk=int(data.get("type_prime_id", attribution.type_prime_id)))
+        animateur = Animateur.objects.get(pk=int(data.get("animateur_id", attribution.animateur_id)))
+        if "jours" in data:
+            jours = _dates_iso_valides(data.get("jours", []))
+            if not jours or type_prime.mode_calcul != TypePrime.MODE_JOUR:
+                raise ValueError
+            jours_travailles = set(_jours_travailles_pour_periode(jours[0], jours[-1]).get(animateur.id, []))
+            if not set(jours).issubset(jours_travailles):
+                raise ValueError
+            with transaction.atomic():
+                nouvelles = [
+                    creer_attribution_prime(
+                        animateur=animateur, type_prime=type_prime,
+                        date_debut=datetime.date.fromisoformat(segment["date_debut"]),
+                        date_fin=datetime.date.fromisoformat(segment["date_fin"]),
+                        montant=data.get("montant", attribution.montant_unitaire),
+                        centre=attribution.centre, commentaire=data.get("commentaire", attribution.commentaire),
+                        utilisateur=request.user, exclure_attribution_id=attribution.id,
+                    ) for segment in _segments_depuis_dates(jours)
+                ]
+                attribution.delete()
+            periode_debut, periode_fin = _periode_mutation_prime(data)
+            return JsonResponse({
+                "attributions": [_attribution_prime_dict(item) for item in nouvelles],
+                "synthese": _synthese_attributions_prime(
+                    animateur, periode_debut, periode_fin, type_prime, jours_contexte
+                ),
+            })
+        with transaction.atomic():
+            nouvelle = creer_attribution_prime(
+                animateur=animateur,
+                type_prime=type_prime,
+                date_debut=datetime.date.fromisoformat(data.get("date_debut", attribution.date_debut.isoformat())),
+                date_fin=datetime.date.fromisoformat(data.get("date_fin", attribution.date_fin.isoformat())),
+                montant=data.get("montant", attribution.montant_unitaire),
+                centre=attribution.centre,
+                commentaire=data.get("commentaire", attribution.commentaire),
+                utilisateur=request.user,
+                exclure_attribution_id=attribution.id,
+            )
+            attribution.delete()
+    except Exception as exc:
+        from django.core.exceptions import ValidationError
+        if isinstance(exc, ValidationError):
+            return JsonResponse({"error": exc.messages[0]}, status=400)
+        return JsonResponse({"error": "Les données de la prime sont invalides."}, status=400)
+    resultat = _attribution_prime_dict(nouvelle)
+    periode_debut, periode_fin = _periode_mutation_prime(data)
+    resultat["synthese"] = _synthese_attributions_prime(
+        animateur, periode_debut, periode_fin, type_prime, jours_contexte
+    )
+    return JsonResponse(resultat)
+
+
 def export_recapitulatif_paie_pdf(request):
     """Télécharge les totaux de paie correspondant aux semaines sélectionnées."""
 
@@ -345,7 +866,7 @@ def export_recapitulatif_paie_pdf(request):
         jours_selectionnes=jours_selectionnes,
         periode_ids=[periode.id for periode in periodes] if jours_selectionnes is not None else None,
     )
-    _ajouter_preparation_paie(recap, periodes)
+    _ajouter_preparation_paie(recap, periodes, debut, fin)
     dernier_jour = fin.date() - datetime.timedelta(days=1)
     contenu = generer_recapitulatif_paie_pdf(recap, debut.date(), dernier_jour)
     response = HttpResponse(contenu, content_type="application/pdf")
@@ -365,7 +886,7 @@ def export_recapitulatif_excel(request):
         debut, fin, jours_selectionnes=jours_selectionnes,
         periode_ids=[periode.id for periode in periodes] if jours_selectionnes is not None else None,
     )
-    _ajouter_preparation_paie(recap, periodes)
+    _ajouter_preparation_paie(recap, periodes, debut, fin)
     dernier_jour = fin.date() - datetime.timedelta(days=1)
     contenu = generer_recapitulatif_excel(recap, debut.date(), dernier_jour)
     response = HttpResponse(

@@ -76,8 +76,10 @@ def contrat_to_dict(contrat):
         "id": contrat.id,
         "animateur_id": contrat.animateur_id,
         "type_contrat": contrat.type_contrat,
-        "type_contrat_libelle": contrat.get_type_contrat_display(),
-        "date_debut": contrat.date_debut.isoformat(),
+        "type_contrat_ref_id": contrat.type_contrat_ref_id,
+        "type_contrat_libelle": contrat.libelle_type,
+        "mode_paie": contrat.mode_paie,
+        "date_debut": contrat.date_debut.isoformat() if contrat.date_debut else None,
         "date_fin": contrat.date_fin.isoformat() if contrat.date_fin else None,
         "taux_journalier_reference": (
             str(contrat.taux_journalier_reference) if contrat.taux_journalier_reference is not None else None
@@ -85,6 +87,19 @@ def contrat_to_dict(contrat):
         "salaire_mensuel_reference": (
             str(contrat.salaire_mensuel_reference) if contrat.salaire_mensuel_reference is not None else None
         ),
+        "mode_temps_travail": contrat.mode_temps_travail,
+        "heures_hebdomadaires": str(contrat.heures_hebdomadaires) if contrat.heures_hebdomadaires is not None else None,
+        "heures_mensuelles_reference": str(contrat.heures_mensuelles_reference) if contrat.heures_mensuelles_reference is not None else None,
+        "heures_annuelles_reference": str(contrat.heures_annuelles_reference) if contrat.heures_annuelles_reference is not None else None,
+        "mode_remuneration": contrat.mode_remuneration,
+        "annee_execution_initiale": contrat.annee_execution_initiale,
+        "date_effet_annee_execution": (
+            contrat.date_effet_annee_execution.isoformat() if contrat.date_effet_annee_execution else None
+        ),
+        "historique_remunerations": [
+            {"id": item.id, "date_effet": item.date_effet.isoformat(), "montant_mensuel": str(item.montant_mensuel), "origine": item.origine}
+            for item in contrat.historique_remunerations.all()
+        ],
         "statut": contrat.statut,
         "statut_libelle": contrat.libelle_statut,
         "cree_le": contrat.cree_le.isoformat(),

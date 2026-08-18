@@ -3,12 +3,13 @@
 {% block title %}Paramètres{% endblock %}
 {% block page_styles %}<link rel="stylesheet" href="{% static 'css/parametres.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
-<main id="main-content" class="page-shell page-shell--wide settings-page" data-settings-root data-api-url="{% url 'api_parametres' %}" data-payroll-url="{% url 'api_parametres_paie' %}" data-rates-url="{% url 'api_baremes_cee' %}" data-primes-url="{% url 'api_types_primes' %}">
+<main id="main-content" class="page-shell page-shell--wide settings-page" data-settings-root data-api-url="{% url 'api_parametres' %}" data-payroll-url="{% url 'api_parametres_paie' %}" data-rates-url="{% url 'api_baremes_cee' %}" data-primes-url="{% url 'api_types_primes' %}" data-contract-settings-url="{% url 'api_parametres_contrats' %}">
     {% include "partials/_page_header.html" with title="Paramètres" picker_mode="none" header_class="settings-header" %}
     <div id="settings-form" class="settings-form">
         <div class="tabs app-page-tabs app-page-tabs-row settings-tabs" role="tablist" aria-label="Rubriques des paramètres">
             <button class="tab-btn active" data-tab="structure" type="button" role="tab">Structure</button>
             <button class="tab-btn" data-tab="paie" type="button" role="tab">Paie</button>
+            <button class="tab-btn" data-tab="contrats" type="button" role="tab">Contrats</button>
             <button class="tab-btn" data-tab="rh" type="button" role="tab">Planning &amp; RH</button>
             <button class="tab-btn" data-tab="encadrement" type="button" role="tab">Encadrement &amp; qualifications</button>
         </div>
@@ -25,10 +26,57 @@
             </div>
         </section>
 
+        <section class="tab-panel ui-card settings-card" data-panel="contrats" hidden>
+            <h2>Contrats</h2>
+            <div class="settings-contract-layout">
+                <section class="settings-payroll-section">
+                    <div class="settings-section-head"><div><h3>Types de contrats</h3><p>Chaque type utilise un mode de rémunération connu.</p></div><button class="btn btn-ghost btn-small" data-contract-type-add type="button">+ Ajouter un type</button></div>
+                    <div data-contract-types-list class="settings-reference-list"></div>
+                    <form data-contract-type-form class="settings-inline-form" hidden>
+                        <input name="id" type="hidden"><div class="field"><label>Nom</label><input name="nom" required maxlength="100"></div>
+                        <div class="field"><label>Code stable</label><input name="code" required maxlength="50"></div>
+                        <div class="field"><label>Mode de rémunération</label><select name="mode_remuneration" required></select></div>
+                        <div class="field"><label>Ordre</label><input name="ordre" type="number" min="0" value="0"></div>
+                        <label class="settings-switch"><input name="actif" type="checkbox" checked><span>Actif</span></label>
+                        <div class="field settings-span-2"><label>Description</label><input name="description" maxlength="240"></div>
+                        <div class="settings-prime-form-actions"><button class="btn btn-primary btn-small" type="submit">Enregistrer</button><button class="btn btn-ghost btn-small" data-contract-type-cancel type="button">Annuler</button></div>
+                    </form>
+                </section>
+                <section class="settings-payroll-section" id="smic-references">
+                    <div class="settings-section-head"><div><h3>SMIC et références</h3><p data-current-smic>Aucune référence enregistrée.</p></div><button class="btn btn-ghost btn-small" data-smic-add type="button">+ Ajouter</button></div>
+                    <div data-smic-list class="settings-reference-list"></div>
+                    <form data-smic-form class="settings-inline-form" hidden>
+                        <input name="id" type="hidden"><div class="field"><label>Date d’effet</label><input name="date_effet" type="date" required></div>
+                        <div class="field"><label>Montant horaire</label><input name="montant_horaire" type="number" min="0" step="0.0001" required></div>
+                        <div class="field"><label>Montant mensuel 35 h</label><input name="montant_mensuel_35h" type="number" min="0" step="0.01"></div>
+                        <div class="field"><label>Source</label><input name="source" maxlength="160"></div>
+                        <div class="field settings-span-2"><label>Commentaire</label><input name="commentaire" maxlength="240"></div>
+                        <div class="settings-prime-form-actions"><button class="btn btn-primary btn-small" type="submit">Enregistrer</button><button class="btn btn-ghost btn-small" data-smic-cancel type="button">Annuler</button></div>
+                    </form>
+                    <button class="btn btn-ghost btn-small" data-smic-sync type="button" disabled title="Source officielle non configurée">Mettre à jour depuis la source officielle</button>
+                </section>
+                <section class="settings-payroll-section"><div class="settings-section-head"><div><h3>Règles CDD</h3><p>Les contrats mensualisés définissent leur volume (hebdomadaire, mensuel ou annualisé) et choisissent salaire fixe, minimum SMIC ou contrôle du minimum.</p></div></div><p class="settings-note">30 h/semaine correspondent à 130 h/mois selon la formule 52 / 12. L’annualisation sans équivalent mensuel ne produit aucun minimum artificiel.</p></section>
+                <section class="settings-payroll-section">
+                    <div class="settings-section-head"><div><h3>Apprentissage</h3><p>Grille historisée par année d’exécution et tranche d’âge.</p></div><button class="btn btn-ghost btn-small" data-apprentice-rate-add type="button">+ Ajouter une tranche</button></div>
+                    <div data-apprentice-rates-list class="settings-reference-list"></div>
+                    <form data-apprentice-rate-form class="settings-inline-form" hidden>
+                        <input name="id" type="hidden"><div class="field"><label>Date d’effet</label><input name="date_effet" type="date" required></div>
+                        <div class="field"><label>Année d’exécution</label><input name="annee_execution" type="number" min="1" max="3" required></div>
+                        <div class="field"><label>Âge minimum</label><input name="age_minimum" type="number" min="0" required></div>
+                        <div class="field"><label>Âge maximum</label><input name="age_maximum" type="number" min="0"></div>
+                        <div class="field"><label>Pourcentage du SMIC</label><input name="pourcentage_smic" type="number" min="0" step="0.01" required></div>
+                        <label class="settings-switch"><input name="actif" type="checkbox" checked><span>Active</span></label>
+                        <div class="field settings-span-2"><label>Commentaire</label><input name="commentaire" maxlength="240"></div>
+                        <div class="settings-prime-form-actions"><button class="btn btn-primary btn-small" type="submit">Enregistrer</button><button class="btn btn-ghost btn-small" data-apprentice-rate-cancel type="button">Annuler</button></div>
+                    </form>
+                </section>
+            </div>
+        </section>
+
         <section class="tab-panel ui-card settings-card" data-panel="paie" hidden>
             <h2>Paie</h2>
             <div class="settings-payroll-layout">
-                <section class="settings-payroll-section settings-rates-section">
+                <section id="baremes-cee" class="settings-payroll-section settings-rates-section">
                     <div class="settings-section-head"><div><h3>Rémunération CEE</h3><p>Barème journalier historisé par statut.</p></div><label class="settings-switch"><input name="adapter_taux_cee_changement_statut" type="checkbox"><span>Adapter automatiquement au changement de statut</span></label></div>
                     <div id="settings-cee-rates" class="settings-rate-list"><p class="settings-note">Chargement des statuts…</p></div>
                 </section>

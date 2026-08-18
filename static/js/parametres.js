@@ -5,7 +5,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     const status = document.getElementById("settings-status");
     const primeForm = document.getElementById("settings-prime-form");
     let payrollData = { statuts: [], baremes: [], primes: [], types_contrats: [], modes_calcul: [], types_montant: [] };
+    let contractData = { types: [], references_smic: [], baremes_apprentissage: [], modes_paie: [] };
     initTabs(root);
+    if (window.location.hash === "#baremes-cee") {
+        root.querySelector('[data-tab="paie"]')?.click();
+        requestAnimationFrame(() => document.getElementById("baremes-cee")?.scrollIntoView({ block: "center" }));
+    }
 
     function setStatus(message = "", error = false) {
         status.textContent = message;
@@ -57,6 +62,62 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     function formatDateFr(value) {
         return new Intl.DateTimeFormat("fr-FR").format(new Date(`${value}T12:00:00`));
+    }
+
+    function contractResourceUrl(resource, id = null) {
+        return id ? `${root.dataset.contractSettingsUrl}${resource}/${id}/` : root.dataset.contractSettingsUrl;
+    }
+
+    function openSettingsForm(form, item = null) {
+        form.hidden = false;
+        form.reset();
+        [...form.elements].forEach((field) => {
+            if (!field.name || !item || !(field.name in item)) return;
+            if (field.type === "checkbox") field.checked = Boolean(item[field.name]);
+            else field.value = item[field.name] ?? "";
+        });
+        form.querySelector("input:not([type=hidden]), select")?.focus();
+    }
+
+    function renderContractSettings() {
+        const typesList = root.querySelector("[data-contract-types-list]");
+        typesList.innerHTML = contractData.types.map((item) => `<article class="settings-reference-row"><div><strong>${escapeHtml(item.nom)}</strong><small>${escapeHtml(item.mode_remuneration_libelle)} · ${item.actif ? "Actif" : "Inactif"}${item.systeme ? " · système" : ""}</small></div><button class="btn btn-ghost btn-small" data-contract-type-edit="${item.id}" type="button">Modifier</button></article>`).join("") || '<p class="settings-note">Aucun type.</p>';
+        typesList.querySelectorAll("[data-contract-type-edit]").forEach((button) => button.addEventListener("click", () => openSettingsForm(root.querySelector("[data-contract-type-form]"), contractData.types.find((item) => Number(item.id) === Number(button.dataset.contractTypeEdit)))));
+        const current = contractData.references_smic.find((item) => Number(item.id) === Number(contractData.smic_actuel_id));
+        root.querySelector("[data-current-smic]").textContent = current ? `${current.montant_horaire} €/h · applicable depuis le ${formatDateFr(current.date_effet)}` : "Aucune référence enregistrée.";
+        const smicList = root.querySelector("[data-smic-list]");
+        smicList.innerHTML = contractData.references_smic.map((item) => `<article class="settings-reference-row"><div><strong>${escapeHtml(item.montant_horaire)} €/h</strong><small>${formatDateFr(item.date_effet)}${item.source ? ` · ${escapeHtml(item.source)}` : ""}</small></div><button class="btn btn-ghost btn-small" data-smic-edit="${item.id}" type="button">Modifier</button></article>`).join("") || '<p class="settings-note">Historique vide.</p>';
+        smicList.querySelectorAll("[data-smic-edit]").forEach((button) => button.addEventListener("click", () => openSettingsForm(root.querySelector("[data-smic-form]"), contractData.references_smic.find((item) => Number(item.id) === Number(button.dataset.smicEdit)))));
+        const ratesList = root.querySelector("[data-apprentice-rates-list]");
+        ratesList.innerHTML = contractData.baremes_apprentissage.map((item) => `<article class="settings-reference-row"><div><strong>Année ${item.annee_execution} · ${item.age_minimum}${item.age_maximum === null ? "+" : `–${item.age_maximum}`} ans</strong><small>${escapeHtml(item.pourcentage_smic)} % · depuis le ${formatDateFr(item.date_effet)}${item.actif ? "" : " · inactive"}</small></div><button class="btn btn-ghost btn-small" data-apprentice-rate-edit="${item.id}" type="button">Modifier</button></article>`).join("") || '<p class="settings-note">Aucune grille configurée.</p>';
+        ratesList.querySelectorAll("[data-apprentice-rate-edit]").forEach((button) => button.addEventListener("click", () => openSettingsForm(root.querySelector("[data-apprentice-rate-form]"), contractData.baremes_apprentissage.find((item) => Number(item.id) === Number(button.dataset.apprenticeRateEdit)))));
+    }
+
+    async function chargerContrats() {
+        contractData = await apiFetch(root.dataset.contractSettingsUrl);
+        const select = root.querySelector('[data-contract-type-form] [name="mode_remuneration"]');
+        select.innerHTML = contractData.modes_paie.map((item) => `<option value="${item.value}">${escapeHtml(item.label)}</option>`).join("");
+        root.querySelector("[data-smic-sync]").disabled = !contractData.provider_smic?.disponible;
+        renderContractSettings();
+    }
+
+    function setupContractForm(selector, resource, fields) {
+        const form = root.querySelector(selector);
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const id = Number(form.elements.id.value) || null;
+            const payload = { ressource: resource };
+            fields.forEach((name) => {
+                const input = form.elements[name];
+                payload[name] = input.type === "checkbox" ? input.checked : (input.value || null);
+            });
+            try {
+                await apiFetch(contractResourceUrl(resource, id), { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) });
+                form.hidden = true;
+                await Promise.all([chargerContrats(), chargerPaie()]);
+                setStatus("Paramètre de contrat enregistré.");
+            } catch (error) { setStatus(erreurMessage(error, "Enregistrement impossible."), true); }
+        });
     }
 
     function primePayload(prime, changes = {}) {
@@ -148,7 +209,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function charger() {
         setStatus("Chargement…");
         try {
-            const [settings] = await Promise.all([apiFetch(root.dataset.apiUrl), chargerPaie()]);
+            const [settings] = await Promise.all([apiFetch(root.dataset.apiUrl), chargerPaie(), chargerContrats()]);
             afficher(settings);
             setStatus();
         } catch (error) { setStatus(erreurMessage(error, "Chargement impossible."), true); }
@@ -194,6 +255,16 @@ document.addEventListener("DOMContentLoaded", async () => {
             setStatus(id ? "Prime modifiée." : "Prime ajoutée.");
         } catch (error) { setStatus(erreurMessage(error, "Enregistrement de la prime impossible."), true); }
     });
+
+    root.querySelector("[data-contract-type-add]").addEventListener("click", () => openSettingsForm(root.querySelector("[data-contract-type-form]")));
+    root.querySelector("[data-smic-add]").addEventListener("click", () => openSettingsForm(root.querySelector("[data-smic-form]")));
+    root.querySelector("[data-apprentice-rate-add]").addEventListener("click", () => openSettingsForm(root.querySelector("[data-apprentice-rate-form]")));
+    root.querySelector("[data-contract-type-cancel]").addEventListener("click", () => { root.querySelector("[data-contract-type-form]").hidden = true; });
+    root.querySelector("[data-smic-cancel]").addEventListener("click", () => { root.querySelector("[data-smic-form]").hidden = true; });
+    root.querySelector("[data-apprentice-rate-cancel]").addEventListener("click", () => { root.querySelector("[data-apprentice-rate-form]").hidden = true; });
+    setupContractForm("[data-contract-type-form]", "type", ["nom", "code", "mode_remuneration", "ordre", "actif", "description"]);
+    setupContractForm("[data-smic-form]", "smic", ["date_effet", "montant_horaire", "montant_mensuel_35h", "source", "commentaire"]);
+    setupContractForm("[data-apprentice-rate-form]", "apprentissage", ["date_effet", "annee_execution", "age_minimum", "age_maximum", "pourcentage_smic", "actif", "commentaire"]);
 
     await charger();
 });

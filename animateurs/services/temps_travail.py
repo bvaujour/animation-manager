@@ -1,14 +1,95 @@
 """Sélection des périodes et salariés concernés par le temps complémentaire."""
 
 import datetime
+from collections import defaultdict
+from decimal import Decimal
 
+from django.db.models import Prefetch
 from django.utils import timezone
 
-from animateurs.models import Affectation, PeriodeScolaire
+from animateurs.models import (
+    Affectation, ActiviteTravailComplementaire, ParticipationTravailComplementaire,
+    PeriodeScolaire,
+)
 
 
 class SelectionTempsTravailInvalide(ValueError):
     pass
+
+
+def activites_temps_travail_pour_periodes(periodes, *, accepter_selection_englobante=False):
+    """Charge les activités du même contexte de périodes que Temps de travail.
+
+    Une plage libre de Paie ne transporte pas les identifiants sélectionnés par
+    l'écran Temps de travail. Dans ce cas seulement, une activité enregistrée
+    sur une sélection englobante est retenue (par exemple juillet + août pour
+    un récapitulatif limité à juillet). La sélection englobante la plus proche
+    évite de reprendre une saisie créée pour une seule semaine.
+    """
+
+    ids = {periode.id for periode in periodes}
+    if not ids:
+        return []
+    participations = ParticipationTravailComplementaire.objects.select_related(
+        "animateur"
+    ).order_by("animateur__prenom", "animateur__nom", "animateur_id")
+    candidates = list(
+        ActiviteTravailComplementaire.objects.filter(periodes__in=periodes)
+        .prefetch_related(
+            Prefetch("periodes", to_attr="periodes_chargees"),
+            Prefetch("participations", queryset=participations, to_attr="participations_chargees"),
+        )
+        .distinct()
+    )
+    signatures = {
+        activite.id: frozenset(item.id for item in activite.periodes_chargees)
+        for activite in candidates
+    }
+    resultat = []
+    for type_activite in {
+        ActiviteTravailComplementaire.TYPE_REUNION,
+        ActiviteTravailComplementaire.TYPE_PREPARATION,
+    }:
+        candidates_type = [item for item in candidates if item.type == type_activite]
+        exactes = [item for item in candidates_type if signatures[item.id] == ids]
+        if exactes or not accepter_selection_englobante:
+            resultat.extend(exactes)
+            continue
+        englobantes = [item for item in candidates_type if ids < signatures[item.id]]
+        if englobantes:
+            taille_minimale = min(len(signatures[item.id]) for item in englobantes)
+            resultat.extend(
+                item for item in englobantes if len(signatures[item.id]) == taille_minimale
+            )
+    return resultat
+
+
+def comptabiliser_jours_complementaires(animateur_ids, dates_affectees, activites):
+    """Source commune des réunions et préparations incluses dans la Paie."""
+
+    resultat = defaultdict(lambda: {
+        "reunion": Decimal("0"),
+        "preparation": Decimal("0"),
+        "dates_reunions": set(),
+    })
+    animateur_ids = set(animateur_ids)
+    for activite in activites:
+        for participation in activite.participations_chargees:
+            animateur_id = participation.animateur_id
+            if animateur_id not in animateur_ids:
+                continue
+            if activite.type == ActiviteTravailComplementaire.TYPE_REUNION:
+                if (
+                    activite.date in dates_affectees.get(animateur_id, set())
+                    and not participation.autoriser_double_comptage
+                ):
+                    continue
+                resultat[animateur_id]["reunion"] += participation.nombre_jours
+                if activite.date:
+                    resultat[animateur_id]["dates_reunions"].add(activite.date)
+            elif activite.type == ActiviteTravailComplementaire.TYPE_PREPARATION:
+                resultat[animateur_id]["preparation"] += participation.nombre_jours
+    return resultat
 
 
 def selectionner_periodes(identifiants):
