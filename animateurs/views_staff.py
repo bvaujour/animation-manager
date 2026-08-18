@@ -110,7 +110,7 @@ def api_animateurs(request):
             animateurs = animateurs.select_related(
                 "evenement_preferee__centre",
                 "utilisateur",
-            ).prefetch_related(Prefetch("affinites_groupes", queryset=affinites))
+            ).prefetch_related(Prefetch("affinites_groupes", queryset=affinites), "contrats")
         if inclure_affectations:
             affectations = Affectation.objects.only("id", "animateur_id", "centre_id", "debut", "fin")
             if debut_filtre and fin_filtre:
@@ -227,6 +227,7 @@ def api_animateurs(request):
             "preferences__centre",
             "disponibilites",
             "affinites_groupes__evenement__centre",
+            "contrats",
         )
         .get(pk=animateur.id)
     )
@@ -253,6 +254,7 @@ def api_animateur_detail(request, animateur_id):
                 "qualifications",
                 "preferences__centre",
                 "disponibilites",
+                "contrats",
             )
             .get(pk=animateur_id)
         )
@@ -271,6 +273,7 @@ def api_animateur_detail(request, animateur_id):
                 "preferences__centre",
                 "disponibilites",
                 "affinites_groupes__evenement__centre",
+                "contrats",
             )
             .get(pk=animateur.id)
         )
@@ -384,6 +387,7 @@ def api_animateur_detail(request, animateur_id):
             "preferences__centre",
             "disponibilites",
             "affinites_groupes__evenement__centre",
+            "contrats",
         )
         .get(pk=animateur.id)
     )

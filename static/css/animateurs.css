@@ -221,6 +221,17 @@ body.page-employes .employees-list .salarie-directory-item .evenement-list-color
 .employee-status-color-info{display:flex;align-items:center;gap:9px;min-height:38px;padding:8px 10px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface-sunken);color:var(--color-text-muted);font-size:.74rem}
 .employee-status-color-info strong{color:var(--color-text)}
 .employee-status-color-dot{flex:0 0 auto;width:20px;height:20px;border-radius:6px;background:var(--status-color,#94a3b8);box-shadow:0 0 0 1px color-mix(in srgb,var(--status-color,#94a3b8) 72%,#0000)}
+.employee-contract-list{display:grid;gap:6px}
+.employee-contract-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface-sunken)}
+.employee-contract-row--en_cours{border-color:color-mix(in srgb,var(--color-primary) 45%,var(--color-border));background:color-mix(in srgb,var(--color-primary) 5%,white)}
+.employee-contract-main{min-width:0;display:flex;align-items:baseline;flex-wrap:wrap;gap:3px 8px;font-size:.75rem}
+.employee-contract-main strong{font-size:.84rem}
+.employee-contract-main small{flex-basis:100%;color:var(--color-text-muted)}
+.employee-contract-status{padding:2px 6px;border-radius:999px;background:var(--color-surface);color:var(--color-primary-dark);font-size:.64rem;font-weight:800}
+.employee-contract-actions,.employee-contract-form-actions{display:flex;flex-wrap:wrap;gap:5px}
+.employee-contract-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:7px;margin-top:7px;padding:8px;border:1px dashed color-mix(in srgb,var(--color-primary) 45%,var(--color-border));border-radius:9px;background:var(--color-surface)}
+.employee-contract-form[hidden],.employee-contract-form [hidden]{display:none!important}
+.employee-contract-form-actions{grid-column:1/-1;justify-content:flex-end}
 
 /* Profil animateur en libre-service */
 .profile-self-service-page {
@@ -449,6 +460,9 @@ body.page-employes .employees-list .salarie-directory-item.active .employee-list
     .employee-list-meta small + small{display:none}
     .employee-list-indicator{height:21px}
     body.page-employes .employee-detail-panels{overflow:visible}
+    .employee-contract-row{align-items:flex-start;flex-direction:column}
+    .employee-contract-form{grid-template-columns:minmax(0,1fr)}
+    .employee-contract-form-actions{grid-column:1}
 }
 
 

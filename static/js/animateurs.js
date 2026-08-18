@@ -247,8 +247,52 @@ document.addEventListener("DOMContentLoaded", () => {
             paie_jour: null, age: null, couleur: "#94A3B8", statut_principal: null,
             qualification_ids: [], centres_preferes: [], centres_interdits: [], centre_prefere: null, centres_secondaires: [],
             evenement_preferee: null, evenement_preferee_id: null, disponibilites: [], affinites_groupes: [], historique_groupes: [],
-            role: "animateur", access: { exists: false, username: null, active: false },
+            contrats: [], role: "animateur", access: { exists: false, username: null, active: false },
         };
+    }
+
+    function formatMontantContrat(valeur) {
+        return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(Number(valeur));
+    }
+
+    function formatDateContrat(valeur) {
+        if (!valeur) return "sans date de fin";
+        return new Intl.DateTimeFormat("fr-FR").format(new Date(`${valeur}T12:00:00`));
+    }
+
+    function contratsHtml(a) {
+        const contrats = [...(a.contrats || [])].sort((premier, second) => {
+            const priorite = { en_cours: 0, a_venir: 1, termine: 2 };
+            return (priorite[premier.statut] - priorite[second.statut])
+                || String(second.date_debut).localeCompare(String(premier.date_debut));
+        });
+        const liste = contrats.length ? contrats.map((contrat) => {
+            const remuneration = contrat.type_contrat === "cee"
+                ? `Taux journalier de référence : ${formatMontantContrat(contrat.taux_journalier_reference)} / jour`
+                : `Salaire mensuel de référence : ${formatMontantContrat(contrat.salaire_mensuel_reference)}`;
+            return `<article class="employee-contract-row employee-contract-row--${escapeHtml(contrat.statut)}">
+                <div class="employee-contract-main">
+                    <span class="employee-contract-status">${escapeHtml(contrat.statut_libelle)}</span>
+                    <strong>${escapeHtml(contrat.type_contrat_libelle)}</strong>
+                    <span>${formatDateContrat(contrat.date_debut)} → ${formatDateContrat(contrat.date_fin)}</span>
+                    <small>${escapeHtml(remuneration)}</small>
+                </div>
+                <div class="employee-contract-actions">
+                    <button class="btn btn-ghost btn-small" type="button" data-contract-edit="${Number(contrat.id)}">Modifier</button>
+                    <button class="btn-danger btn-small" type="button" data-contract-delete="${Number(contrat.id)}">Supprimer</button>
+                </div>
+            </article>`;
+        }).join("") : '<p class="empty-note">Contrat non renseigné.</p>';
+        return `${liste}
+            <form class="employee-contract-form" id="employee-contract-form" hidden>
+                <input type="hidden" id="contract-id">
+                <div class="field"><label for="contract-type">Type de contrat</label><select id="contract-type" required><option value="cee">CEE</option><option value="cdd">CDD</option><option value="apprentissage">Apprentissage</option></select></div>
+                <div class="field"><label for="contract-start">Date de début</label><input id="contract-start" type="date" required></div>
+                <div class="field"><label for="contract-end">Date de fin</label><input id="contract-end" type="date"></div>
+                <div class="field" data-contract-daily><label for="contract-daily">Taux journalier de référence</label><input id="contract-daily" type="number" min="0" step="0.01" inputmode="decimal"></div>
+                <div class="field" data-contract-monthly hidden><label for="contract-monthly">Salaire mensuel de référence</label><input id="contract-monthly" type="number" min="0" step="0.01" inputmode="decimal"></div>
+                <div class="employee-contract-form-actions"><button class="btn btn-primary btn-small" type="submit">Enregistrer</button><button class="btn btn-ghost btn-small" type="button" data-contract-cancel>Annuler</button></div>
+            </form>`;
     }
 
     function renderFiche(a, isNew = false) {
@@ -303,6 +347,11 @@ document.addEventListener("DOMContentLoaded", () => {
                             </div>
                         </div>
                     </section>
+
+                    ${isNew ? "" : `<section class="fiche-section fiche-card employee-compact-card employee-contracts-card">
+                        <div class="fiche-section-head"><h3>Contrats</h3><button class="btn btn-ghost btn-small" type="button" data-contract-add>+ Ajouter un contrat</button></div>
+                        <div class="employee-contract-list">${contratsHtml(a)}</div>
+                    </section>`}
 
                     <section class="fiche-section fiche-card employee-compact-card">
                         <div class="fiche-section-head"><h3>Diplômes</h3></div>
@@ -421,6 +470,7 @@ document.addEventListener("DOMContentLoaded", () => {
         detailEl.querySelector("#fiche-save").addEventListener("click", () => saveFiche(a, isNew));
 
         if (!isNew) {
+            initialiserContrats(a);
             initialiserEmailAnimateur(a);
             detailEl.querySelector("#fiche-create-access-now")?.addEventListener("click", () => actionCompte(a, { create_access: true }));
             detailEl.querySelector("#fiche-reset-password")?.addEventListener("click", () => actionCompte(a, { reset_password: true }, "Créer un nouveau mot de passe provisoire ?"));
@@ -442,6 +492,70 @@ document.addEventListener("DOMContentLoaded", () => {
             detailEl.querySelector("#fiche-delete").addEventListener("click", () => deleteAnimateur(a));
             renderDisponibilites(a.id);
         }
+    }
+
+    function initialiserContrats(a) {
+        const form = detailEl.querySelector("#employee-contract-form");
+        if (!form) return;
+        const type = form.querySelector("#contract-type");
+        const actualiserRemuneration = () => {
+            const cee = type.value === "cee";
+            form.querySelector("[data-contract-daily]").hidden = !cee;
+            form.querySelector("[data-contract-monthly]").hidden = cee;
+            form.querySelector("#contract-daily").required = cee;
+            form.querySelector("#contract-monthly").required = !cee;
+        };
+        const ouvrir = (contrat = null) => {
+            form.hidden = false;
+            form.querySelector("#contract-id").value = contrat?.id || "";
+            type.value = contrat?.type_contrat || "cee";
+            form.querySelector("#contract-start").value = contrat?.date_debut || "";
+            form.querySelector("#contract-end").value = contrat?.date_fin || "";
+            form.querySelector("#contract-daily").value = contrat?.taux_journalier_reference || "";
+            form.querySelector("#contract-monthly").value = contrat?.salaire_mensuel_reference || "";
+            actualiserRemuneration();
+            form.querySelector("#contract-start").focus();
+        };
+        const rafraichir = async (message) => {
+            await loadAnimateurs();
+            const actualise = animateurs.find((item) => Number(item.id) === Number(a.id));
+            renderFiche(actualise);
+            setStatus(message);
+        };
+        type.addEventListener("change", actualiserRemuneration);
+        detailEl.querySelector("[data-contract-add]")?.addEventListener("click", () => ouvrir());
+        detailEl.querySelectorAll("[data-contract-edit]").forEach((bouton) => bouton.addEventListener("click", () => {
+            ouvrir((a.contrats || []).find((item) => Number(item.id) === Number(bouton.dataset.contractEdit)));
+        }));
+        detailEl.querySelectorAll("[data-contract-delete]").forEach((bouton) => bouton.addEventListener("click", async () => {
+            const contrat = (a.contrats || []).find((item) => Number(item.id) === Number(bouton.dataset.contractDelete));
+            if (!contrat || !confirm(`Supprimer le contrat ${contrat.type_contrat_libelle} débutant le ${formatDateContrat(contrat.date_debut)} ?`)) return;
+            try {
+                await apiFetch(`/api/animateurs/${a.id}/contrats/${contrat.id}/`, { method: "DELETE" });
+                await rafraichir("Contrat supprimé.");
+            } catch (error) { setStatus(erreurMessage(error, "Suppression impossible."), true); }
+        }));
+        form.querySelector("[data-contract-cancel]").addEventListener("click", () => { form.hidden = true; });
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const id = Number(form.querySelector("#contract-id").value) || null;
+            const cee = type.value === "cee";
+            const payload = {
+                type_contrat: type.value,
+                date_debut: form.querySelector("#contract-start").value,
+                date_fin: form.querySelector("#contract-end").value || null,
+                taux_journalier_reference: cee ? (form.querySelector("#contract-daily").value || null) : null,
+                salaire_mensuel_reference: cee ? null : (form.querySelector("#contract-monthly").value || null),
+            };
+            try {
+                await apiFetch(`/api/animateurs/${a.id}/contrats/${id ? `${id}/` : ""}`, {
+                    method: id ? "PATCH" : "POST",
+                    body: JSON.stringify(payload),
+                });
+                await rafraichir(id ? "Contrat modifié." : "Contrat ajouté.");
+            } catch (error) { setStatus(erreurMessage(error, "Enregistrement du contrat impossible."), true); }
+        });
+        actualiserRemuneration();
     }
 
 

@@ -17,6 +17,8 @@ from .views import (
     api_affectation_detail,
     api_animateur_detail,
     api_animateurs,
+    api_contrat_detail,
+    api_contrats,
     api_centre_detail,
     api_conflits_reunion,
     api_centres,
@@ -185,6 +187,16 @@ urlpatterns = [
     path("api/animateurs/", direction_requise_api(api_animateurs), name="api_animateurs"),
     path(
         "api/animateurs/<int:animateur_id>/", direction_requise_api(api_animateur_detail), name="api_animateur_detail"
+    ),
+    path(
+        "api/animateurs/<int:animateur_id>/contrats/",
+        direction_requise_api(api_contrats),
+        name="api_contrats",
+    ),
+    path(
+        "api/animateurs/<int:animateur_id>/contrats/<int:contrat_id>/",
+        direction_requise_api(api_contrat_detail),
+        name="api_contrat_detail",
     ),
     path(
         "api/animateurs/<int:animateur_id>/disponibilites/",

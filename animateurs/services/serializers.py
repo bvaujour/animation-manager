@@ -58,6 +58,27 @@ def _qualifications_payload(qualifications):
     }
 
 
+def contrat_to_dict(contrat):
+    return {
+        "id": contrat.id,
+        "animateur_id": contrat.animateur_id,
+        "type_contrat": contrat.type_contrat,
+        "type_contrat_libelle": contrat.get_type_contrat_display(),
+        "date_debut": contrat.date_debut.isoformat(),
+        "date_fin": contrat.date_fin.isoformat() if contrat.date_fin else None,
+        "taux_journalier_reference": (
+            str(contrat.taux_journalier_reference) if contrat.taux_journalier_reference is not None else None
+        ),
+        "salaire_mensuel_reference": (
+            str(contrat.salaire_mensuel_reference) if contrat.salaire_mensuel_reference is not None else None
+        ),
+        "statut": contrat.statut,
+        "statut_libelle": contrat.libelle_statut,
+        "cree_le": contrat.cree_le.isoformat(),
+        "modifie_le": contrat.modifie_le.isoformat(),
+    }
+
+
 def affectation_to_event(affectation):
     qualifications = list(affectation.animateur.qualifications.all())
     statut = statut_payload(qualifications)
@@ -132,6 +153,7 @@ def animateur_to_dict(animateur):
     disponibilites = list(disponibilites_source)
     affectations = list(getattr(animateur, "_filtre_affectations", []))
     formations = list(getattr(animateur, "_filtre_formations", []))
+    contrats = list(animateur.contrats.all())
     affinites = list(animateur.affinites_groupes.all())
 
     affinites_groupes = [
@@ -188,6 +210,7 @@ def animateur_to_dict(animateur):
         "adresse": animateur.adresse,
         "numero_securite_sociale": animateur.numero_securite_sociale,
         "paie_jour": str(animateur.paie_jour) if animateur.paie_jour is not None else None,
+        "contrats": [contrat_to_dict(contrat) for contrat in contrats],
         "age": animateur.age,
         # Couleur historique conservée en base, mais les interfaces utilisent
         # désormais exclusivement la couleur automatique du statut.

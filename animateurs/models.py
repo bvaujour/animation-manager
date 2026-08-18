@@ -284,6 +284,99 @@ class Animateur(models.Model):
         return f"{self.prenom} {self.nom}"
 
 
+class Contrat(models.Model):
+    """Contrat daté d'un animateur, conservé indépendamment de la Paie actuelle."""
+
+    TYPE_CEE = "cee"
+    TYPE_CDD = "cdd"
+    TYPE_APPRENTISSAGE = "apprentissage"
+    TYPE_CHOICES = (
+        (TYPE_CEE, "CEE"),
+        (TYPE_CDD, "CDD"),
+        (TYPE_APPRENTISSAGE, "Apprentissage"),
+    )
+
+    STATUT_A_VENIR = "a_venir"
+    STATUT_EN_COURS = "en_cours"
+    STATUT_TERMINE = "termine"
+
+    animateur = models.ForeignKey(Animateur, on_delete=models.CASCADE, related_name="contrats")
+    type_contrat = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    date_debut = models.DateField()
+    date_fin = models.DateField(null=True, blank=True)
+    taux_journalier_reference = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    salaire_mensuel_reference = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-date_debut", "-id")
+
+    @property
+    def statut(self):
+        aujourd_hui = timezone.localdate()
+        if self.date_debut > aujourd_hui:
+            return self.STATUT_A_VENIR
+        if self.date_fin and self.date_fin < aujourd_hui:
+            return self.STATUT_TERMINE
+        return self.STATUT_EN_COURS
+
+    @property
+    def libelle_statut(self):
+        return {
+            self.STATUT_A_VENIR: "À venir",
+            self.STATUT_EN_COURS: "En cours",
+            self.STATUT_TERMINE: "Terminé",
+        }[self.statut]
+
+    def clean(self):
+        erreurs = {}
+        if self.date_fin and self.date_fin < self.date_debut:
+            erreurs["date_fin"] = "La date de fin ne peut pas être antérieure à la date de début."
+
+        if self.type_contrat == self.TYPE_CEE:
+            if self.taux_journalier_reference is None:
+                erreurs["taux_journalier_reference"] = "Le taux journalier de référence est obligatoire pour un CEE."
+            if self.salaire_mensuel_reference is not None:
+                erreurs["salaire_mensuel_reference"] = "Le salaire mensuel doit rester vide pour un CEE."
+        elif self.type_contrat in (self.TYPE_CDD, self.TYPE_APPRENTISSAGE):
+            if self.salaire_mensuel_reference is None:
+                erreurs["salaire_mensuel_reference"] = "Le salaire mensuel de référence est obligatoire pour ce contrat."
+            if self.taux_journalier_reference is not None:
+                erreurs["taux_journalier_reference"] = "Le taux journalier doit rester vide pour ce contrat."
+
+        if self.taux_journalier_reference is not None and self.taux_journalier_reference < 0:
+            erreurs["taux_journalier_reference"] = "Le taux journalier ne peut pas être négatif."
+        if self.salaire_mensuel_reference is not None and self.salaire_mensuel_reference < 0:
+            erreurs["salaire_mensuel_reference"] = "Le salaire mensuel ne peut pas être négatif."
+
+        if self.animateur_id and self.date_debut and not erreurs.get("date_fin"):
+            fin = self.date_fin
+            chevauchements = Contrat.objects.filter(animateur_id=self.animateur_id).exclude(pk=self.pk)
+            chevauchements = chevauchements.filter(
+                models.Q(date_fin__isnull=True) | models.Q(date_fin__gte=self.date_debut)
+            )
+            if fin:
+                chevauchements = chevauchements.filter(date_debut__lte=fin)
+            contrat = chevauchements.order_by("date_debut", "id").first()
+            if contrat:
+                fin_contrat = contrat.date_fin.strftime("%d/%m/%Y") if contrat.date_fin else "sans date de fin"
+                erreurs["date_debut"] = (
+                    f"Ce contrat chevauche le {contrat.get_type_contrat_display()} "
+                    f"du {contrat.date_debut.strftime('%d/%m/%Y')} au {fin_contrat}."
+                )
+
+        if erreurs:
+            raise ValidationError(erreurs)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.get_type_contrat_display()} — {self.animateur} — {self.date_debut:%d/%m/%Y}"
+
+
 class TypeAccueil(models.Model):
     """Référentiel commun des contextes d'activité de l'application."""
 

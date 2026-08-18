@@ -59,6 +59,7 @@ from .views_reporting import api_document_detail, api_documents, api_prime_journ
 from .views_staff import api_animateur_detail, api_animateurs, api_disponibilite_detail, api_disponibilites
 from .views_worktime import api_conflits_reunion, api_preparation_travail, api_reunion_detail, api_reunions, api_temps_travail
 from .views_formations import api_formation_cloture, api_formation_detail, api_formations, formations
+from .views_contrats import api_contrat_detail, api_contrats
 
 __all__ = [
     "accueil",
@@ -67,6 +68,8 @@ __all__ = [
     "api_affectation_detail",
     "api_animateur_detail",
     "api_animateurs",
+    "api_contrat_detail",
+    "api_contrats",
     "api_centre_detail",
     "api_conflits_reunion",
     "api_centres",
