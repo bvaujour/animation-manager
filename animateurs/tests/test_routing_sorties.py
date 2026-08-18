@@ -1,4 +1,4 @@
-import datetime
+﻿import datetime
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -344,7 +344,7 @@ class EstimationTrajetSortieTests(ConnexionTestCase):
         self.assertEqual(response.json()["transport"]["source_heure_arrivee"], "manuelle")
 
     def test_formulaire_ne_reference_plus_depart_vers_destination(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
         self.assertNotIn("heure_depart_site", javascript)
         self.assertNotIn("Départ vers la destination", javascript)
         self.assertIn("Temps d’arrêt par site", javascript)

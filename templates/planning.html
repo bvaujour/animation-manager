@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="{% static 'css/staff-list.css' %}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
-{% include "partials/_page_header.html" with title="Planning" header_class="planning-page-header planning-page-header-compact" container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
+{% include "partials/_page_header.html" with title="Planning" header_class="planning-page-header planning-page-header-compact" context_selector=True container_id="planning-period-nav" previous_id="btn-prev" today_id="btn-today" next_id="btn-next" label_id="toolbar-label" %}
 <nav class="planning-tabs app-page-tabs app-page-tabs-row" data-tab-count="2" aria-label="Sections du planning">
     <button id="planning-tab-affectations" class="planning-tab active" type="button" role="tab" aria-selected="true" aria-controls="layout" data-planning-mode="affectations">
         <span class="planning-tab-icon" aria-hidden="true">♟</span>
@@ -189,6 +189,19 @@
     <div class="modal-box modal-box-small">
         <div class="modal-header"><h2>Remplissage automatique</h2><button class="modal-close" data-modal-close type="button" aria-label="Fermer">&times;</button></div>
         <div class="modal-body"><div id="modal-auto-remplissage-content"></div></div>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="modal-formation-derogation" hidden>
+    <div class="modal-box modal-box-small" role="dialog" aria-modal="true" aria-labelledby="formation-derogation-title">
+        <div class="modal-header"><h2 id="formation-derogation-title">Attention</h2><button class="modal-close" id="formation-derogation-close" type="button" aria-label="Fermer">&times;</button></div>
+        <div class="modal-body">
+            <div id="formation-derogation-message"></div>
+            <div class="modal-actions">
+                <button id="formation-derogation-safe" class="btn btn-secondary" type="button">Annuler</button>
+                <button id="formation-derogation-force" class="btn btn-primary" type="button">Affecter quand même</button>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

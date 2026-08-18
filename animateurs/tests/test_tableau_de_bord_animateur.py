@@ -18,6 +18,7 @@ from animateurs.models import (
     Evenement,
     HoraireAffectationJour,
     ParticipationTravailComplementaire,
+    PublicationPlanning,
     Sortie,
     SortieParticipation,
 )
@@ -61,6 +62,7 @@ class TableauDeBordAnimateurTests(TestCase):
             debut=debut,
             fin=fin,
         )
+        PublicationPlanning.objects.create(semaine_debut=self.lundi, publie=True)
         Affectation.objects.create(
             animateur=self.collegue,
             centre=self.centre,
@@ -106,6 +108,7 @@ class TableauDeBordAnimateurTests(TestCase):
             titre="Livret animateur",
             fichier=SimpleUploadedFile("livret.pdf", b"pdf", content_type="application/pdf"),
             permanent=True,
+            publie=True,
         )
         self.client.force_login(self.user)
 
@@ -117,17 +120,15 @@ class TableauDeBordAnimateurTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Tableau de bord")
-        self.assertContains(response, "Mon planning de la semaine")
+        self.assertContains(response, "Mon planning")
         self.assertNotContains(response, "Bonjour Marine")
-        self.assertContains(response, "Saint-Martin-d&#x27;Estréaux")
-        self.assertContains(response, "Groupe 3/5 ans")
-        self.assertContains(response, "8h – 17h30")
-        self.assertContains(response, "19 enfants")
-        self.assertContains(response, "Ambre")
-        self.assertContains(response, "Sortie : Piscine")
+        self.assertContains(response, 'id="home-calendars"')
+        self.assertContains(response, 'data-calendar-date="2026-08-24"')
+        self.assertContains(response, "Sorties de la semaine")
+        self.assertContains(response, "Piscine de Roanne")
         self.assertContains(response, "Réunion d&#x27;équipe")
         self.assertContains(response, "Livret animateur")
-        self.assertContains(response, "Mon tableau de bord")
+        self.assertContains(response, "Tableau de bord")
         self.assertContains(response, 'class="app-rail"')
         self.assertNotContains(response, 'class="animator-sidebar"')
 
@@ -140,8 +141,8 @@ class TableauDeBordAnimateurTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Semaine du 31 août au 4 septembre 2026")
-        self.assertContains(response, "Aucune affectation")
-        self.assertContains(response, "Revenir à cette semaine")
+        self.assertContains(response, "Le planning de cette semaine n’est pas encore publié")
+        self.assertContains(response, "Cette semaine")
 
     def test_la_direction_conserve_sa_navigation_compacte(self):
         direction = get_user_model().objects.create_superuser(

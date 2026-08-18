@@ -117,19 +117,129 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
         self.assertEqual(julie["centres"][0]["paie"], "130.00")
         self.assertEqual(julie["paie_totale"], "130.00")
 
-    def test_page_recapitulatif_affiche_les_deux_onglets(self):
+    def test_page_paie_affiche_les_quatre_onglets_dans_le_bon_ordre(self):
         response = self.client.get(reverse("recapitulatif"))
+        contenu = response.content.decode()
 
+        self.assertContains(response, "Paie")
+        self.assertContains(response, "Temps de travail")
+        self.assertContains(response, "Prime")
         self.assertContains(response, "Jours et paie par centre")
         self.assertContains(response, "Totaux par animateur")
+        self.assertLess(contenu.index("Temps de travail"), contenu.index("Prime"))
+        self.assertLess(contenu.index("Prime"), contenu.index("Jours et paie par centre"))
+        self.assertLess(contenu.index("Jours et paie par centre"), contenu.index("Totaux par animateur"))
+        self.assertContains(response, 'data-recap-panel="temps-travail"')
         self.assertContains(response, 'data-recap-panel="centres"')
-        self.assertContains(response, 'id="periode-select"')
+        self.assertNotContains(response, 'id="recap-period-selector"')
+        self.assertContains(response, 'id="recap-date-start"')
+        self.assertContains(response, 'id="recap-date-end"')
+        self.assertContains(response, 'id="recap-refresh"')
         self.assertContains(response, 'data-week-picker-mode="multiple"')
-        self.assertContains(response, "Choisir des semaines ou une période")
+        self.assertNotContains(response, 'id="app-type-accueil"')
+        self.assertNotContains(response, 'id="app-periode-accueil"')
         self.assertContains(response, 'id="btn-recap-pdf"')
         self.assertContains(response, 'id="btn-recap-excel"')
-        self.assertContains(response, "Préparation de la paie")
         self.assertContains(response, 'data-recap-panel="paie"')
+        self.assertNotContains(response, 'data-recap-panel="temps-travail" hidden')
+        self.assertContains(response, 'data-recap-panel="centres" hidden')
+        self.assertContains(response, 'data-recap-panel="totaux" hidden')
+        self.assertContains(response, 'data-recap-panel="paie" hidden')
+
+    def test_interface_initialise_les_bornes_au_mois_civil_courant(self):
+        javascript = (Path(settings.BASE_DIR) / "static/js/recapitulatif.js").read_text(encoding="utf-8")
+
+        self.assertIn("new Date(today.getFullYear(), today.getMonth(), 1)", javascript)
+        self.assertIn("new Date(today.getFullYear(), today.getMonth() + 1, 0)", javascript)
+        self.assertIn('refreshButton?.addEventListener("click"', javascript)
+
+    def test_entete_recapitulatif_reste_sur_une_ligne_en_affichage_ordinateur(self):
+        response = self.client.get(reverse("recapitulatif"))
+        contenu = response.content.decode()
+        css = (Path(settings.BASE_DIR) / "static/css/recapitulatif.css").read_text(encoding="utf-8")
+
+        titre = contenu.index('class="app-page-title"')
+        filtres = contenu.index('class="recap-date-filters"')
+        exports = contenu.index("recap-exports")
+        self.assertLess(titre, filtres)
+        self.assertLess(filtres, exports)
+        self.assertIn("@media (min-width:800px){.recap-header{flex-wrap:nowrap!important}", css)
+        self.assertIn(".recap-header .recap-date-filters{display:flex;align-items:center", css)
+        self.assertIn("flex:0 0 160px;width:160px", css)
+        self.assertIn("margin-left:auto!important", css)
+
+    def test_interface_charge_actualise_les_trois_onglets_et_transmet_les_dates(self):
+        javascript = (Path(settings.BASE_DIR) / "static/js/recapitulatif.js").read_text(encoding="utf-8")
+
+        self.assertIn('new URLSearchParams({date_debut: selectedRange.start, date_fin: selectedRange.end})', javascript)
+        self.assertIn('refreshButton?.addEventListener("click", () => selectRange(startInput.value, endInput.value))', javascript)
+        self.assertIn('const selected = ["temps-travail", "paie", "centres", "totaux"].includes(tabName)', javascript)
+        self.assertIn('button.addEventListener("click", () => openTab(button.dataset.recapTab))', javascript)
+        self.assertLess(javascript.index("selectRange(startInput.value, endInput.value);"), javascript.index('openTab(new URLSearchParams'))
+        self.assertIn('buildApiUrl("/recapitulatif/export-paie.pdf")', javascript)
+        self.assertIn('buildApiUrl("/recapitulatif/export.xlsx")', javascript)
+
+    def test_plage_calendaire_utilise_des_bornes_inclusives(self):
+        self._affecter(self.julie, datetime.date(2026, 7, 6))
+        self._affecter(self.julie, datetime.date(2026, 7, 20))
+
+        response = self.client.get(
+            reverse("api_recapitulatif") + "?date_debut=2026-07-01&date_fin=2026-07-31"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["periode"]["debut"], "2026-07-01")
+        self.assertEqual(data["periode"]["fin"], "2026-07-31")
+        self.assertEqual(data["animateurs"][0]["jours_travailles"], 2)
+
+    def test_mois_civil_calcule_le_premier_et_le_dernier_jour(self):
+        response = self.client.get(reverse("api_recapitulatif") + "?mois=2028-02")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["periode"]["debut"], "2028-02-01")
+        self.assertEqual(response.json()["periode"]["fin"], "2028-02-29")
+
+    def test_plage_personnalisee_refuse_une_fin_anterieure(self):
+        response = self.client.get(
+            reverse("api_recapitulatif") + "?date_debut=2026-07-20&date_fin=2026-07-06"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("antérieure", response.json()["error"])
+
+    def test_plage_calendaire_agrege_les_activites_de_plusieurs_semaines(self):
+        for jour in (datetime.date(2026, 7, 6), datetime.date(2026, 7, 13), datetime.date(2026, 7, 27)):
+            self._affecter(self.julie, jour)
+
+        data = self.client.get(
+            reverse("api_recapitulatif") + "?date_debut=2026-07-01&date_fin=2026-07-31"
+        ).json()
+
+        self.assertEqual(data["animateurs"][0]["jours_affectation"], 3)
+
+    def test_plage_calendaire_ne_filtre_aucun_type_accueil(self):
+        from animateurs.models import TypeAccueil
+
+        types = [
+            TypeAccueil.objects.get(code="vacances"),
+            TypeAccueil.objects.get(code="periscolaire"),
+            TypeAccueil.objects.get(code="sejours"),
+        ]
+        for index, type_accueil in enumerate(types):
+            periode = creer_periode(
+                debut=datetime.date(2026, 7, 6) + datetime.timedelta(days=7 * index),
+                nom=f"Semaine {type_accueil.nom}",
+            )
+            periode.type_accueil = type_accueil
+            periode.save(update_fields=["type_accueil"])
+            self._affecter(self.julie, periode.debut)
+
+        data = self.client.get(
+            reverse("api_recapitulatif") + "?date_debut=2026-07-01&date_fin=2026-07-31"
+        ).json()
+
+        self.assertEqual(data["animateurs"][0]["jours_affectation"], 3)
 
     def test_prime_journaliere_est_limitee_et_propre_a_la_periode(self):
         self._affecter(self.julie, datetime.date(2026, 7, 6), duree=2)
@@ -363,6 +473,18 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
         classeur = load_workbook(BytesIO(response.content), data_only=True)
         self.assertEqual(classeur.sheetnames, ["Totaux paie", "Détail par centre"])
         self.assertEqual(classeur["Totaux paie"]["A3"].value, "Julie Martin")
+
+    def test_exports_acceptent_la_meme_plage_calendaire_inclusive(self):
+        self._affecter(self.julie, datetime.date(2026, 7, 6), duree=2)
+        query = "?date_debut=2026-07-01&date_fin=2026-07-31"
+
+        pdf = self.client.get(reverse("export_recapitulatif_paie_pdf") + query)
+        excel = self.client.get(reverse("export_recapitulatif_excel") + query)
+
+        self.assertEqual(pdf.status_code, 200)
+        self.assertEqual(excel.status_code, 200)
+        self.assertIn("recapitulatif_paie_20260701_20260731.pdf", pdf["Content-Disposition"])
+        self.assertIn("recapitulatif_20260701_20260731.xlsx", excel["Content-Disposition"])
 
     def test_tableau_pdf_agrege_exactement_les_totaux_ecran(self):
         seconde = creer_periode(debut=datetime.date(2026, 7, 13), nom="Été — Semaine 2")

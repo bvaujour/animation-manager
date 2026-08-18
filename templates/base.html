@@ -17,6 +17,11 @@
 </head>
 <body class="app-body{% if request.user.is_authenticated and not utilisateur_est_direction %} animator-space-body{% endif %} {% block body_class %}{% endblock %}">
     {% csrf_token %}
+    {% if active_page != "employes" and active_page != "recapitulatif" and active_page != "formations" %}
+        {% if not utilisateur_est_direction or active_page != "accueil" and active_page != "planning" and active_page != "temps_travail" and active_page != "sorties" and active_page != "materiel" %}
+            {% include "partials/_type_accueil_selector.html" %}
+        {% endif %}
+    {% endif %}
     {% include "partials/_nav.html" with active=active_page %}
     {% block content %}{% endblock %}
 
@@ -27,6 +32,7 @@
     <script src="{% static 'js/common/forms.js' %}?v={{ asset_version }}"></script>
     <script src="{% static 'js/common/week-picker.js' %}?v={{ asset_version }}"></script>
     <script src="{% static 'js/common/staff-filter.js' %}?v={{ asset_version }}"></script>
+    <script src="{% static 'js/common/type-accueil-selector.js' %}?v={{ asset_version }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

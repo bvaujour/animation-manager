@@ -3,7 +3,7 @@
 {% block page_styles %}<link rel="stylesheet" href="{% static 'css/sorties.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main class="page-shell page-shell--fluid sorties-page">
-  {% include "partials/_page_header.html" with title="Sorties" header_class="sorties-header" picker_mode="multiple" picker_id="sorties-periods" picker_placeholder="Choisir une période" actions_class="sorties-toolbar" action_id="nouvelle-sortie" action_label="Nouvelle sortie" %}
+  {% include "partials/_page_header.html" with title="Sorties" header_class="sorties-header" context_selector=True picker_mode="multiple" picker_id="sorties-periods" picker_placeholder="Choisir une période" actions_class="sorties-toolbar" action_id="nouvelle-sortie" action_label="Nouvelle sortie" %}
   <aside class="sortie-status-legend" aria-label="Légende du statut des sorties">
     <span class="sortie-status sortie-status--prete">Prête</span>
     <span>Nom, date et destination · Groupes et effectifs renseignés · Animateurs affectés · Encadrement conforme · Horaires de départ et retour</span>

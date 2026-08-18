@@ -221,3 +221,66 @@ def recuperer_semaines(
             "année scolaire et cette zone. L’année n’est peut-être pas encore publiée."
         )
     return semaines
+
+
+def regrouper_semaines_vacances(semaines: list[SemaineVacances]) -> list[dict]:
+    """Regroupe les semaines importables sous leur période complète."""
+    groupes = {}
+    for semaine in semaines:
+        nom = _nom_vacances(semaine.description_source) or semaine.nom.split("—", 1)[0].strip()
+        cle = (nom, semaine.debut.year)
+        groupe = groupes.setdefault(cle, {"nom": f"{nom} {semaine.debut.year}", "semaines": []})
+        groupe["semaines"].append(semaine.to_dict())
+    return sorted(groupes.values(), key=lambda item: item["semaines"][0]["debut"])
+
+
+def calculer_periodes_scolaires(annee_scolaire: str, semaines_vacances: list[SemaineVacances]) -> list[dict]:
+    """Calcule une référence scolaire unique entre les semaines de vacances."""
+    debut_annee = int(annee_scolaire[:4])
+    jour = dt.date(debut_annee, 9, 1)
+    fin = dt.date(debut_annee + 1, 7, 4)
+    vacances = {
+        semaine.debut + dt.timedelta(days=offset)
+        for semaine in semaines_vacances
+        for offset in range((semaine.fin - semaine.debut).days + 1)
+    }
+    jours_scolaires = []
+    while jour <= fin:
+        if jour.weekday() < 5 and jour not in vacances:
+            jours_scolaires.append(jour)
+        jour += dt.timedelta(days=1)
+
+    blocs = []
+    courant = []
+    precedent = None
+    for date_jour in jours_scolaires:
+        if precedent and (date_jour - precedent).days > 3:
+            blocs.append(courant)
+            courant = []
+        courant.append(date_jour)
+        precedent = date_jour
+    if courant:
+        blocs.append(courant)
+
+    noms = ("Rentrée → Toussaint", "Toussaint → Noël", "Noël → Hiver", "Hiver → Printemps", "Printemps → Été")
+    resultat = []
+    for index, dates in enumerate(blocs[:5]):
+        semaines = {}
+        for date_jour in dates:
+            lundi = date_jour - dt.timedelta(days=date_jour.weekday())
+            semaines.setdefault(lundi, []).append(date_jour)
+        resultat.append({
+            "nom": noms[index],
+            "debut": dates[0].isoformat(),
+            "fin": dates[-1].isoformat(),
+            "semaines": [
+                {
+                    "id": lundi.isoformat(),
+                    "debut": jours[0].isoformat(),
+                    "fin": jours[-1].isoformat(),
+                    "jours_scolaires": [item.isoformat() for item in jours],
+                }
+                for lundi, jours in semaines.items()
+            ],
+        })
+    return resultat

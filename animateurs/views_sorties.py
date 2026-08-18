@@ -4,6 +4,7 @@ import json
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.db import transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -27,6 +28,7 @@ from animateurs.models import (
 )
 from animateurs.services.affectations import creer_affectation, supprimer_jour_affectation
 from animateurs.services.flottants import groupes_visibles
+from animateurs.services.documents import normaliser_nom_document
 from animateurs.services.localisation import (
     LocalisationError,
     rechercher_communes_par_code_postal,
@@ -196,6 +198,23 @@ def _catalogue_groupes(jour=None):
 
 def _catalogue_animateurs(sortie):
     return animateurs_eligibles_responsabilites(sortie)
+
+
+def _periodes_sortie(sortie):
+    return PeriodeScolaire.objects.filter(
+        debut__lte=sortie.date, fin__gte=sortie.date
+    ).order_by("debut", "ordre", "id")
+
+
+def _catalogue_documents_sortie(sortie):
+    documents = Document.objects.filter(
+        Q(periodes__debut__lte=sortie.date, periodes__fin__gte=sortie.date)
+        | Q(periode_debut__lte=sortie.date, periode_fin__gte=sortie.date)
+    ).distinct().order_by("titre", "id")
+    return [
+        {"id": item.id, "titre": item.titre, "url": item.fichier.url}
+        for item in documents
+    ]
 
 
 def _ids_groupes(data):
@@ -605,6 +624,7 @@ def api_sortie_detail(request, sortie_id):
                 **_donnees_sortie_utilisateur(sortie, request.user),
                 "catalogue_groupes": _catalogue_groupes(sortie.date),
                 "catalogue_animateurs": catalogue_animateurs,
+                "catalogue_documents": _catalogue_documents_sortie(sortie),
                 # Liste dédiée, déjà filtrée côté serveur. Le navigateur ne
                 # reçoit ici aucun salarié affecté, y compris les flottants.
                 "animateurs_supplementaires": [
@@ -776,7 +796,18 @@ def api_sortie_detail(request, sortie_id):
                 sortie.liens.all().delete()
                 SortieLien.objects.bulk_create(liens)
             if "document_ids" in data:
-                sortie.documents.set(Document.objects.filter(pk__in=data["document_ids"]))
+                try:
+                    document_ids = list(dict.fromkeys(int(value) for value in data["document_ids"]))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("La sélection de documents est invalide.") from exc
+                documents_valides = Document.objects.filter(
+                    Q(periodes__debut__lte=sortie.date, periodes__fin__gte=sortie.date)
+                    | Q(periode_debut__lte=sortie.date, periode_fin__gte=sortie.date),
+                    pk__in=document_ids,
+                ).distinct()
+                if documents_valides.count() != len(document_ids):
+                    raise ValueError("Un document sélectionné n’appartient pas à la semaine de la sortie.")
+                sortie.documents.set(documents_valides)
     except ValidationError as exc:
         return JsonResponse({"error": " ".join(exc.messages)}, status=400)
     except (ValueError, TypeError) as exc:
@@ -788,5 +819,51 @@ def api_sortie_detail(request, sortie_id):
             **_donnees_sortie_utilisateur(sortie, request.user),
             "catalogue_groupes": _catalogue_groupes(sortie.date),
             "catalogue_animateurs": _catalogue_animateurs(sortie),
+            "catalogue_documents": _catalogue_documents_sortie(sortie),
         }
+    )
+
+
+@require_http_methods(["POST"])
+def api_sortie_document_upload(request, sortie_id):
+    try:
+        sortie = Sortie.objects.get(pk=sortie_id)
+    except Sortie.DoesNotExist:
+        return JsonResponse({"error": "Sortie introuvable."}, status=404)
+
+    fichier = request.FILES.get("fichier")
+    titre = request.POST.get("titre", "").strip()
+    if not fichier:
+        return JsonResponse({"error": "Choisissez un fichier."}, status=400)
+    if not titre:
+        titre = str(fichier.name).rsplit(".", 1)[0].strip() or "Document de la sortie"
+
+    periodes = list(_periodes_sortie(sortie))
+    if not periodes:
+        return JsonResponse(
+            {"error": "Aucune semaine ne correspond à la date de cette sortie."},
+            status=400,
+        )
+
+    fichier.name = normaliser_nom_document(fichier.name)
+    try:
+        with transaction.atomic():
+            document = Document.objects.create(
+                titre=titre,
+                fichier=fichier,
+                permanent=False,
+                periode_debut=min(item.debut for item in periodes),
+                periode_fin=max(item.fin for item in periodes),
+                publie=True,
+            )
+            document.periodes.set(periodes)
+            sortie.documents.add(document)
+    except Exception:
+        return JsonResponse(
+            {"error": "Le fichier n’a pas pu être enregistré. Réessaie plus tard."},
+            status=503,
+        )
+    return JsonResponse(
+        {"id": document.id, "titre": document.titre, "url": document.fichier.url},
+        status=201,
     )

@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from animateurs.models import Affectation, Animateur, Centre, Evenement
 
-from .disponibilites import animateur_disponible
+from .disponibilites import indisponibilite_effective_sur_plage
 from .flottants import (
     TYPE_AFFECTATION_FLOTTANT,
     TYPE_AFFECTATION_GROUPE,
@@ -54,25 +54,43 @@ def animateur_en_conflit(animateur, debut, fin, evenement=None, exclude_id=None)
     return bool(_conflits_affectation(animateur, debut, fin, exclude_id=exclude_id))
 
 
-def valider_affectation(animateur, debut, fin, evenement=None, exclude_id=None):
+def _message_indisponibilite(animateur, indisponibilite):
+    jour, resultat = indisponibilite
+    if resultat.type_indisponibilite == "formation":
+        formation = animateur.formations.get(pk=resultat.formation_id)
+        return (
+            f"{animateur.prenom} {animateur.nom} est en formation "
+            f"« {formation.intitule} » le {jour.strftime('%d/%m/%Y')}."
+        )
+    return f"{animateur.prenom} {animateur.nom} n'est pas disponible le {jour.strftime('%d/%m/%Y')}."
+
+
+def valider_affectation(
+    animateur, debut, fin, evenement=None, exclude_id=None, *, autoriser_formation=False
+):
     if fin <= debut:
         return "La date de fin doit être après la date de début."
     if animateur_en_conflit(animateur, debut, fin, evenement=evenement, exclude_id=exclude_id):
         return "Cet animateur a déjà une affectation ce jour-là."
-    if not animateur_disponible(animateur, debut, fin):
-        return "Cet animateur n'est pas disponible à cette date."
+    indisponibilite = indisponibilite_effective_sur_plage(animateur, debut, fin)
+    if indisponibilite:
+        if autoriser_formation and indisponibilite[1].type_indisponibilite == "formation":
+            return None
+        return _message_indisponibilite(animateur, indisponibilite)
     return None
 
 
 @transaction.atomic
-def creer_affectation(*, animateur, centre, debut, fin, evenement=None):
+def creer_affectation(*, animateur, centre, debut, fin, evenement=None, autoriser_formation=False):
     # Sérialise les créations concurrentes pour un même salarié. Ainsi, une
     # fiche Sorties restée ouverte ne peut pas créer un doublon si le Planning
     # a changé entre le chargement de la liste et la confirmation.
     animateur = Animateur.objects.select_for_update().get(pk=animateur.pk)
     evenement = evenement or evenement_par_defaut_pour_centre(centre)
     _valider_ouverture_evenement(evenement, debut, fin)
-    erreur = valider_affectation(animateur, debut, fin, evenement=evenement)
+    erreur = valider_affectation(
+        animateur, debut, fin, evenement=evenement, autoriser_formation=autoriser_formation
+    )
     if erreur:
         raise ValueError(erreur)
     if evenement.centre_id != centre.id:
@@ -166,7 +184,9 @@ def _isoler_plage_en_flottant(affectation, evenement_flottant, debut, fin):
 
 
 @transaction.atomic
-def creer_ou_deplacer_affectation_flottante(*, animateur, centre, debut, fin):
+def creer_ou_deplacer_affectation_flottante(
+    *, animateur, centre, debut, fin, autoriser_formation=False
+):
     """Crée une affectation flottante sans champ SQL supplémentaire.
 
     L'opération est idempotente : une seconde requête identique renvoie la
@@ -241,8 +261,12 @@ def creer_ou_deplacer_affectation_flottante(*, animateur, centre, debut, fin):
             "Supprime ou raccourcis cette affectation avant de le placer en flottant."
         )
 
-    if not animateur_disponible(animateur, debut, fin):
-        raise ValueError("Cet animateur n'est pas disponible à cette date.")
+    indisponibilite = indisponibilite_effective_sur_plage(animateur, debut, fin)
+    if indisponibilite:
+        if autoriser_formation and indisponibilite[1].type_indisponibilite == "formation":
+            indisponibilite = None
+    if indisponibilite:
+        raise ValueError(_message_indisponibilite(animateur, indisponibilite))
 
     return (
         Affectation.objects.create(
@@ -265,6 +289,7 @@ def modifier_affectation(
     centre=None,
     evenement=None,
     type_affectation=None,
+    autoriser_formation=False,
 ):
     if debut is not None:
         affectation.debut = debut
@@ -297,6 +322,7 @@ def modifier_affectation(
         affectation.fin,
         evenement=affectation.evenement,
         exclude_id=affectation.id,
+        autoriser_formation=autoriser_formation,
     )
     if erreur:
         raise ValueError(erreur)

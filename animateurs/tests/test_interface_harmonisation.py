@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 from django.conf import settings
 
@@ -6,6 +6,43 @@ from animateurs.tests.base import ConnexionTestCase
 
 
 class InterfaceHarmonisationTests(ConnexionTestCase):
+    def test_administration_et_salaries_n_affichent_aucune_navigation_hebdomadaire(self):
+        for url in ("/administration/", "/employes/"):
+            reponse = self.client.get(url)
+            self.assertEqual(reponse.status_code, 200, url)
+            self.assertNotContains(reponse, "week-navigation")
+            self.assertNotContains(reponse, "Aujourd’hui")
+
+    def test_le_contexte_est_dans_les_entetes_concernes_et_absent_des_salaries(self):
+        pages_avec_contexte = (
+            "/",
+            "/planning/",
+            "/sorties/",
+            "/demandes-materiel/",
+        )
+        for url in pages_avec_contexte:
+            reponse = self.client.get(url)
+            self.assertEqual(reponse.status_code, 200, url)
+            contenu = reponse.content.decode()
+            self.assertEqual(contenu.count('id="app-type-accueil"'), 1, url)
+            self.assertEqual(contenu.count('id="app-periode-accueil"'), 1, url)
+            position_titre = contenu.index('class="app-page-title"')
+            position_contexte = contenu.index('class="app-context-selector"')
+            fin_entete = contenu.index("</header>", position_titre)
+            self.assertLess(position_titre, position_contexte, url)
+            self.assertLess(position_contexte, fin_entete, url)
+
+        self.assertRedirects(
+            self.client.get("/temps-travail/"),
+            "/recapitulatif/?onglet=temps-travail",
+            fetch_redirect_response=False,
+        )
+
+        salaries = self.client.get("/employes/")
+        self.assertEqual(salaries.status_code, 200)
+        self.assertNotContains(salaries, 'id="app-type-accueil"')
+        self.assertNotContains(salaries, 'id="app-periode-accueil"')
+
     def test_accueil_direction_et_planning_chargent_leurs_styles_adaptes(self):
         accueil = self.client.get("/")
         planning = self.client.get("/planning/")
@@ -18,8 +55,8 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertContains(planning, 'class="planning-view-week calendar-sites"')
 
     def test_calendriers_partages_respectent_hidden_sans_imposer_le_layout_du_planning(self):
-        css = (Path(settings.BASE_DIR) / "static/css/calendars.css").read_text()
-        planning_css = (Path(settings.BASE_DIR) / "static/css/planning.css").read_text()
+        css = (Path(settings.BASE_DIR) / "static/css/calendars.css").read_text(encoding="utf-8")
+        planning_css = (Path(settings.BASE_DIR) / "static/css/planning.css").read_text(encoding="utf-8")
 
         css_compact = css.replace(" ", "")
         self.assertIn(".calendar-site-card[hidden]", css)
@@ -40,10 +77,10 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             "templates/mes_disponibilites.html",
         ]
         for fichier in pages_principales:
-            contenu = (Path(settings.BASE_DIR) / fichier).read_text()
+            contenu = (Path(settings.BASE_DIR) / fichier).read_text(encoding="utf-8")
             self.assertIn("partials/_page_header.html", contenu, fichier)
 
-        entete = (Path(settings.BASE_DIR) / "templates/partials/_page_header.html").read_text()
+        entete = (Path(settings.BASE_DIR) / "templates/partials/_page_header.html").read_text(encoding="utf-8")
         self.assertIn("partials/_week_navigation.html", entete)
         self.assertIn("app-page-header--week-only", entete)
         self.assertIn("app-page-title", entete)
@@ -51,10 +88,10 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertNotIn("app-page-header__title", entete)
 
         for fichier in ("templates/gestion.html", "templates/partials/_emails_admin.html"):
-            contenu = (Path(settings.BASE_DIR) / fichier).read_text()
+            contenu = (Path(settings.BASE_DIR) / fichier).read_text(encoding="utf-8")
             self.assertIn("partials/_week_picker.html", contenu, fichier)
 
-        composant = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text()
+        composant = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text(encoding="utf-8")
         self.assertIn("function groupPeriods", composant)
         self.assertIn("function vacationLabel", composant)
         self.assertIn("function weekLabel", composant)
@@ -65,8 +102,8 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("period?.fin", composant)
 
     def test_la_navigation_est_une_barre_d_icones_non_depliable(self):
-        navigation = (Path(settings.BASE_DIR) / "templates/partials/_nav.html").read_text()
-        script = (Path(settings.BASE_DIR) / "static/js/ui.js").read_text()
+        navigation = (Path(settings.BASE_DIR) / "templates/partials/_nav.html").read_text(encoding="utf-8")
+        script = (Path(settings.BASE_DIR) / "static/js/ui.js").read_text(encoding="utf-8")
 
         self.assertIn('class="app-rail"', navigation)
         self.assertIn('class="app-rail-links"', navigation)
@@ -83,25 +120,25 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             "templates/recapitulatif.html": "recap-tabs app-page-tabs app-page-tabs-row",
         }
         for fichier, classe_onglets in attentes.items():
-            contenu = (Path(settings.BASE_DIR) / fichier).read_text()
+            contenu = (Path(settings.BASE_DIR) / fichier).read_text(encoding="utf-8")
             position_entete = contenu.index('partials/_page_header.html')
             position_onglets = contenu.index(classe_onglets)
             self.assertGreater(position_onglets, position_entete, fichier)
 
-        entete = (Path(settings.BASE_DIR) / "templates/partials/_page_header.html").read_text()
+        entete = (Path(settings.BASE_DIR) / "templates/partials/_page_header.html").read_text(encoding="utf-8")
         self.assertNotIn("app-page-tabs", entete)
         self.assertNotIn("planning-tabs", entete)
 
     def test_les_selecteurs_d_une_page_partagent_le_meme_appel_api(self):
-        composant = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text()
+        composant = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text(encoding="utf-8")
         self.assertIn("let sharedPeriodsRequest = null", composant)
         self.assertIn("function loadSharedPeriods", composant)
         self.assertIn("const periods = await loadSharedPeriods()", composant)
         self.assertIn("navigateGeneric", composant)
 
     def test_documents_et_emails_utilisent_exactement_le_meme_partial(self):
-        documents = (Path(settings.BASE_DIR) / "templates/gestion.html").read_text()
-        emails = (Path(settings.BASE_DIR) / "templates/partials/_emails_admin.html").read_text()
+        documents = (Path(settings.BASE_DIR) / "templates/gestion.html").read_text(encoding="utf-8")
+        emails = (Path(settings.BASE_DIR) / "templates/partials/_emails_admin.html").read_text(encoding="utf-8")
 
         for contenu in (documents, emails):
             self.assertIn("partials/_week_picker.html", contenu)
@@ -109,7 +146,7 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             self.assertIn('placeholder="Choisir des semaines"', contenu)
             self.assertIn("clear_id=", contenu)
 
-        edition_documents = (Path(settings.BASE_DIR) / "static/js/documents-management.js").read_text()
+        edition_documents = (Path(settings.BASE_DIR) / "static/js/documents-management.js").read_text(encoding="utf-8")
         self.assertIn("mainPickerRoot.cloneNode(true)", edition_documents)
         self.assertNotIn("function pickerMarkup", edition_documents)
 
@@ -120,13 +157,13 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             "templates/partials/_emails_admin.html",
         ]
         for fichier in fichiers:
-            contenu = (Path(settings.BASE_DIR) / fichier).read_text()
+            contenu = (Path(settings.BASE_DIR) / fichier).read_text(encoding="utf-8")
             self.assertIn("partials/_staff_filter.html", contenu, fichier)
 
     def test_les_filtres_salaries_s_ouvrent_dans_une_modal_centree(self):
-        partial = (Path(settings.BASE_DIR) / "templates/partials/_staff_filter.html").read_text()
-        script = (Path(settings.BASE_DIR) / "static/js/common/staff-filter.js").read_text()
-        css = (Path(settings.BASE_DIR) / "static/css/common-base.css").read_text()
+        partial = (Path(settings.BASE_DIR) / "templates/partials/_staff_filter.html").read_text(encoding="utf-8")
+        script = (Path(settings.BASE_DIR) / "static/js/common/staff-filter.js").read_text(encoding="utf-8")
+        css = (Path(settings.BASE_DIR) / "static/css/common-base.css").read_text(encoding="utf-8")
 
         self.assertIn("<dialog", partial)
         self.assertIn("data-staff-filter-dialog", partial)
@@ -138,14 +175,14 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn(".compact-filter__dialog::backdrop", css)
 
     def test_helpers_communs_des_annees_scolaires_sont_presents(self):
-        contenu = (Path(settings.BASE_DIR) / "static/js/ui.js").read_text()
+        contenu = (Path(settings.BASE_DIR) / "static/js/ui.js").read_text(encoding="utf-8")
 
         self.assertIn("function anneeScolaireCourante", contenu)
         self.assertIn("function grouperPeriodesParAnnee", contenu)
         self.assertIn("function anneePeriodesADeplier", contenu)
 
     def test_api_fetch_preserve_les_envois_formdata(self):
-        contenu = (Path(settings.BASE_DIR) / "static/js/ui.js").read_text()
+        contenu = (Path(settings.BASE_DIR) / "static/js/ui.js").read_text(encoding="utf-8")
 
         self.assertIn("const bodyIsFormData", contenu)
         self.assertIn("!bodyIsFormData", contenu)
@@ -153,8 +190,8 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn('config.cache = "no-store"', contenu)
 
     def test_planning_charge_les_effectifs_en_une_requete_par_semaine(self):
-        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text()
-        donnees_partagees = (Path(settings.BASE_DIR) / "static/js/common/planning-data.js").read_text()
+        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text(encoding="utf-8")
+        donnees_partagees = (Path(settings.BASE_DIR) / "static/js/common/planning-data.js").read_text(encoding="utf-8")
 
         self.assertIn("PlanningData.fetchWeekEffectifs", planning)
         self.assertIn("/api/effectifs-enfants/", donnees_partagees)
@@ -162,7 +199,7 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertNotIn("evenement.effectifs_enfants || []", planning)
 
     def test_planning_personnel_affiche_chaque_groupe_avec_son_effectif(self):
-        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text()
+        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text(encoding="utf-8")
 
         self.assertIn("centre.evenements.forEach((evenement)", accueil)
         self.assertIn("creerCalendrierEvenement(centre, evenement", accueil)
@@ -171,15 +208,15 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("item.nombre", accueil)
 
     def test_entetes_ne_proposent_pas_la_selection_de_plusieurs_semaines(self):
-        navigation = (Path(settings.BASE_DIR) / "templates/partials/_week_navigation.html").read_text()
-        selecteur = (Path(settings.BASE_DIR) / "templates/partials/_week_picker.html").read_text()
+        navigation = (Path(settings.BASE_DIR) / "templates/partials/_week_navigation.html").read_text(encoding="utf-8")
+        selecteur = (Path(settings.BASE_DIR) / "templates/partials/_week_picker.html").read_text(encoding="utf-8")
 
         self.assertIn("navigation_only=True", navigation)
         self.assertIn("generic_navigation=True", navigation)
         self.assertIn("{% if navigation_only %}", selecteur)
 
     def test_planning_personnel_reste_navigable_quand_une_semaine_est_vide(self):
-        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text()
+        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text(encoding="utf-8")
 
         self.assertIn("periodes[indexCourant + delta]", accueil)
         self.assertIn("periode.debut > dateCourante", accueil)
@@ -188,28 +225,28 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertNotIn('visiblePeriod.textContent = "aucun planning"', accueil)
 
     def test_navigation_globale_ne_depasse_pas_les_periodes_enregistrees(self):
-        selecteur = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text()
+        selecteur = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text(encoding="utf-8")
 
         self.assertIn("updateNavigationState()", selecteur)
         self.assertIn("previous.disabled = !hasPrevious", selecteur)
         self.assertIn("next.disabled = !hasNext", selecteur)
 
     def test_libelle_semaine_suit_toujours_la_date_active(self):
-        selecteur = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text()
+        selecteur = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text(encoding="utf-8")
 
         self.assertIn("this.updateSingleLabel();", selecteur)
         self.assertNotIn("if (updateLabel)", selecteur)
         self.assertIn("period ? periodLabel(period) : this.placeholder", selecteur)
         self.assertIn("const activeExists = this.periods.some", selecteur)
-        self.assertIn('addEventListener("week-picker:ready"', (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text())
+        self.assertIn('addEventListener("week-picker:ready"', (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text(encoding="utf-8"))
 
     def test_page_sans_zone_documents_ne_declenche_pas_son_chargement(self):
-        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text()
+        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text(encoding="utf-8")
 
         self.assertIn("if (!documentsContainer) return;", accueil)
 
     def test_import_excel_actualise_immediatement_les_effectifs_du_planning(self):
-        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text()
+        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text(encoding="utf-8")
 
         self.assertIn('document.addEventListener("effectifs-enfants-importes", async (event) =>', planning)
         self.assertIn("PlanningData.invalidateWeekEffectifs();", planning)
@@ -218,8 +255,8 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("await Promise.all(calendars.map((calendar) => chargerEffectifsEnfants(calendar)))", planning)
 
     def test_effectifs_et_taux_sont_modifiables_directement_dans_les_cartes(self):
-        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text()
-        css = (Path(settings.BASE_DIR) / "static/css/planning.css").read_text()
+        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text(encoding="utf-8")
+        css = (Path(settings.BASE_DIR) / "static/css/planning.css").read_text(encoding="utf-8")
 
         self.assertIn("function ouvrirEditionEffectifInline", planning)
         self.assertIn('data-effectif-inline="nombre"', planning)
@@ -228,7 +265,7 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn(".planning-inline-editor", css)
 
     def test_clic_effectif_ne_declenche_pas_la_selection_du_jour(self):
-        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text()
+        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text(encoding="utf-8")
 
         self.assertIn('selectable: estModeAffectations()', planning)
         self.assertIn('calendar.setOption("selectable", modeAffectationsActif)', planning)
@@ -236,7 +273,7 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn('["pointerdown", "mousedown", "touchstart"]', planning)
 
     def test_selecteur_centres_souvre_vers_la_droite_du_menu_general(self):
-        css = (Path(settings.BASE_DIR) / "static/css/planning.css").read_text().replace(" ", "")
+        css = (Path(settings.BASE_DIR) / "static/css/planning.css").read_text(encoding="utf-8").replace(" ", "")
 
         debut = css.index(".planning-centres-dropdown-menu{")
         regle = css[debut:css.index("}", debut)]
@@ -244,20 +281,22 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("right:auto", regle)
 
     def test_semaine_selectionnee_est_persistante_et_partagee(self):
-        selecteur = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text()
-        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text()
-        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text()
-        dashboard = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text()
-        recapitulatif = (Path(settings.BASE_DIR) / "static/js/recapitulatif.js").read_text()
+        selecteur = (Path(settings.BASE_DIR) / "static/js/common/week-picker.js").read_text(encoding="utf-8")
+        planning = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text(encoding="utf-8")
+        accueil = (Path(settings.BASE_DIR) / "static/js/accueil.js").read_text(encoding="utf-8")
+        dashboard = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text(encoding="utf-8")
+        recapitulatif = (Path(settings.BASE_DIR) / "static/js/recapitulatif.js").read_text(encoding="utf-8")
 
         self.assertIn("animation-manager-selected-week-date-v1", selecteur)
         self.assertIn("getPersistedDate", selecteur)
         self.assertIn("setPersistedDate", selecteur)
-        for contenu in (planning, accueil, dashboard, recapitulatif):
+        for contenu in (planning, accueil, dashboard):
             self.assertIn("WeekPicker.getPersistedDate", contenu)
+        self.assertIn("selectedRange", recapitulatif)
+        self.assertIn("recap-date-start", recapitulatif)
 
     def test_planning_recharge_les_statuts_animateurs_pour_la_semaine(self):
-        contenu = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text()
+        contenu = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text(encoding="utf-8")
 
         self.assertIn('format: "planning"', contenu)
         self.assertIn("debut: plage.debut", contenu)
@@ -265,9 +304,9 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("rafraichirAnimateursSemaine", contenu)
 
     def test_planning_propose_les_horaires_sur_chaque_affectation(self):
-        template = (Path(settings.BASE_DIR) / "templates/planning.html").read_text()
-        script = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text()
-        css = (Path(settings.BASE_DIR) / "static/css/planning.css").read_text()
+        template = (Path(settings.BASE_DIR) / "templates/planning.html").read_text(encoding="utf-8")
+        script = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text(encoding="utf-8")
+        css = (Path(settings.BASE_DIR) / "static/css/planning.css").read_text(encoding="utf-8")
 
         self.assertNotIn('data-planning-mode="horaires"', template)
         self.assertNotIn('id="planning-horaires-panel"', template)
@@ -284,7 +323,7 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertNotIn("body.page-planning.planning-mode-horaires", css)
 
     def test_tableau_de_bord_conserve_le_libelle_commun_du_selecteur_de_semaine(self):
-        script = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text()
+        script = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text(encoding="utf-8")
 
         self.assertIn("picker?.setActiveDate(data.periode.debut_semaine", script)
         self.assertIn('addEventListener("week-picker:ready", (event)', script)
@@ -292,8 +331,8 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertNotIn('getElementById("dashboard-visible-period")', script)
 
     def test_tableau_de_bord_regroupe_les_alertes_et_affiche_les_nouvelles_metriques(self):
-        template = (Path(settings.BASE_DIR) / "templates/accueil.html").read_text()
-        script = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text()
+        template = (Path(settings.BASE_DIR) / "templates/accueil.html").read_text(encoding="utf-8")
+        script = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text(encoding="utf-8")
 
         self.assertIn('id="kpi-moderes"', template)
         self.assertIn("moyenne_enfants_groupe_jour", script)
@@ -301,9 +340,9 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("dashboard-alert-count", script)
 
     def test_ordre_des_blocs_du_tableau_de_bord_est_persistant(self):
-        template = (Path(settings.BASE_DIR) / "templates/accueil.html").read_text()
-        script = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text()
-        css = (Path(settings.BASE_DIR) / "static/css/dashboard.css").read_text()
+        template = (Path(settings.BASE_DIR) / "templates/accueil.html").read_text(encoding="utf-8")
+        script = (Path(settings.BASE_DIR) / "static/js/dashboard.js").read_text(encoding="utf-8")
+        css = (Path(settings.BASE_DIR) / "static/css/dashboard.css").read_text(encoding="utf-8")
 
         self.assertIn('data-dashboard-block="centres"', template)
         self.assertIn('data-dashboard-block="couverture"', template)
@@ -323,11 +362,11 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             "static/js/common/week-picker.js",
         ]
         for fichier in fichiers:
-            contenu = (Path(settings.BASE_DIR) / fichier).read_text()
+            contenu = (Path(settings.BASE_DIR) / fichier).read_text(encoding="utf-8")
             self.assertNotIn("fetch(", contenu, fichier)
 
     def test_la_couche_commune_est_chargee_apres_les_styles_de_page(self):
-        base = (Path(settings.BASE_DIR) / "templates/base.html").read_text()
+        base = (Path(settings.BASE_DIR) / "templates/base.html").read_text(encoding="utf-8")
 
         self.assertIn("css/common-ui.css", base)
         self.assertIn("css/app-layout.css", base)
@@ -355,13 +394,13 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             "templates/recapitulatif.html": ["page-shell", "partials/_page_header.html", "ui-card"],
         }
         for fichier, classes in attentes.items():
-            contenu = (Path(settings.BASE_DIR) / fichier).read_text()
+            contenu = (Path(settings.BASE_DIR) / fichier).read_text(encoding="utf-8")
             for classe in classes:
                 self.assertIn(classe, contenu, fichier)
 
     def test_les_disponibilites_sont_une_liste_chronologique_centree_sur_la_semaine_courante(self):
-        template = (Path(settings.BASE_DIR) / "templates/mes_disponibilites.html").read_text()
-        script = (Path(settings.BASE_DIR) / "static/js/mes-disponibilites.js").read_text()
+        template = (Path(settings.BASE_DIR) / "templates/mes_disponibilites.html").read_text(encoding="utf-8")
+        script = (Path(settings.BASE_DIR) / "static/js/mes-disponibilites.js").read_text(encoding="utf-8")
 
         self.assertIn('picker_mode="none"', template)
         self.assertIn('<article class="availability-period availability-week-card', script)
@@ -371,13 +410,13 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("scrollIntoView({block:", script)
 
     def test_le_script_email_definit_l_affichage_de_configuration(self):
-        contenu = (Path(settings.BASE_DIR) / "static/js/emails.js").read_text()
+        contenu = (Path(settings.BASE_DIR) / "static/js/emails.js").read_text(encoding="utf-8")
 
         self.assertIn("function afficherConfiguration()", contenu)
         self.assertGreaterEqual(contenu.count("afficherConfiguration"), 2)
 
     def test_les_variables_de_densite_sont_centralisees(self):
-        css = (Path(settings.BASE_DIR) / "static/css/common-ui.css").read_text()
+        css = (Path(settings.BASE_DIR) / "static/css/common-ui.css").read_text(encoding="utf-8")
 
         self.assertIn("--page-gutter", css)
         self.assertIn("--card-padding", css)
@@ -386,37 +425,35 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn(".ui-card", css)
 
     def test_le_responsive_ne_possede_que_deux_versions(self):
-        css_dir = Path(settings.BASE_DIR) / "static/css"
-        layout = (css_dir / "app-layout.css").read_text()
+        layout = (Path(settings.BASE_DIR) / "static/css/app-layout.css").read_text(encoding="utf-8")
+        media_layout = {
+            ligne.strip() for ligne in layout.splitlines()
+            if ligne.strip().startswith("@media") and "print" not in ligne
+        }
 
-        self.assertEqual(layout.count("@media"), 1)
-        self.assertIn("@media (max-width: 800px)", layout)
-        for fichier in css_dir.glob("*.css"):
-            if fichier.name == "app-layout.css":
-                continue
-            contenu = fichier.read_text()
-            media_ecran = [
-                ligne for ligne in contenu.splitlines()
-                if "@media" in ligne and "print" not in ligne
-            ]
-            self.assertEqual(media_ecran, [], fichier.name)
+        self.assertTrue(media_layout)
+        self.assertEqual(
+            media_layout,
+            {"@media (min-width: 800px) {", "@media (max-width: 799px) {"},
+        )
 
     def test_layout_global_ne_possede_que_les_modes_pc_et_portable(self):
-        css = (Path(settings.BASE_DIR) / "static/css/app-layout.css").read_text()
+        css = (Path(settings.BASE_DIR) / "static/css/app-layout.css").read_text(encoding="utf-8")
 
         self.assertIn("@media (min-width: 800px)", css)
         self.assertIn("@media (max-width: 799px)", css)
         self.assertNotIn("@media (max-width: 800px)", css)
         self.assertNotIn("@media (max-width: 359px)", css)
-        self.assertIn("INTÉGRITÉ DU LAYOUT", css)
+        self.assertIn("--site-desktop-gutter", css)
+        self.assertIn("--site-mobile-gutter", css)
 
     def test_calendrier_animateur_utilise_toute_la_largeur_disponible(self):
-        dashboard_css = (Path(settings.BASE_DIR) / "static/css/animateur-dashboard.css").read_text().replace(" ", "")
-        calendars_css = (Path(settings.BASE_DIR) / "static/css/calendars.css").read_text().replace(" ", "")
-        layout_css = (Path(settings.BASE_DIR) / "static/css/app-layout.css").read_text().replace(" ", "")
+        dashboard_css = (Path(settings.BASE_DIR) / "static/css/animateur-dashboard.css").read_text(encoding="utf-8").replace(" ", "")
+        calendars_css = (Path(settings.BASE_DIR) / "static/css/calendars.css").read_text(encoding="utf-8").replace(" ", "")
+        layout_css = (Path(settings.BASE_DIR) / "static/css/app-layout.css").read_text(encoding="utf-8").replace(" ", "")
 
         self.assertIn(".animator-dashboard{width:100%;max-width:none", dashboard_css)
         self.assertIn(".calendar-sites{\nwidth:100%;\nmax-width:none", calendars_css)
-        self.assertIn("body.animator-dashboard-body.home-calendars.calendar-sites", layout_css)
+        self.assertIn("body.animator-dashboard-body:is(.home-calendars,.calendar-sites", layout_css)
         self.assertIn("width:100%!important", layout_css)
         self.assertIn("grid-template-columns:minmax(0,1fr)!important", layout_css)

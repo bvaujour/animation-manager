@@ -417,10 +417,11 @@ class AnimateurDetailApiTests(ConnexionTestCase):
 class GestionEtDisponibiliteApiTests(ConnexionTestCase):
     def setUp(self):
         self.animateur = Animateur.objects.create(prenom="Alice", nom="Martin")
+        demain = timezone.localdate() + datetime.timedelta(days=1)
         self.disponibilite = Disponibilite.objects.create(
             animateur=self.animateur,
-            debut=datetime.date(2026, 8, 3),
-            fin=datetime.date(2026, 8, 7),
+            debut=demain,
+            fin=demain + datetime.timedelta(days=4),
         )
 
     def test_employees_are_separate_from_management(self):
@@ -454,15 +455,17 @@ class GestionEtDisponibiliteApiTests(ConnexionTestCase):
         )
 
     def test_update_disponibilite(self):
+        nouveau_debut = timezone.localdate() + datetime.timedelta(days=2)
+        nouvelle_fin = nouveau_debut + datetime.timedelta(days=4)
         response = self.client.patch(
             f"/api/animateurs/{self.animateur.id}/disponibilites/{self.disponibilite.id}/",
-            data=json.dumps({"debut": "2026-08-04", "fin": "2026-08-08"}),
+            data=json.dumps({"debut": nouveau_debut.isoformat(), "fin": nouvelle_fin.isoformat()}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
         self.disponibilite.refresh_from_db()
-        self.assertEqual(self.disponibilite.debut, datetime.date(2026, 8, 4))
-        self.assertEqual(self.disponibilite.fin, datetime.date(2026, 8, 8))
+        self.assertEqual(self.disponibilite.debut, nouveau_debut)
+        self.assertEqual(self.disponibilite.fin, nouvelle_fin)
 
     def test_delete_disponibilite(self):
         response = self.client.delete(
@@ -552,11 +555,12 @@ class AnimateursListPerformanceTests(ConnexionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 25)
-        # Une requête fixe supplémentaire calcule les jours réellement ouverts
-        # de la semaine pour fournir une situation fiable à la barre latérale.
+        # Deux requêtes fixes supplémentaires calculent les jours réellement
+        # ouverts et les formations bloquantes de la semaine. Le volume reste
+        # constant quel que soit le nombre d'animateurs.
         self.assertLessEqual(
             len(contexte),
-            9,
+            10,
             f"La liste Planning a effectué {len(contexte)} requêtes.",
         )
 

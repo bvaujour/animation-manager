@@ -1,9 +1,12 @@
 """Sérialisation JSON centralisée des modèles de l'application."""
 
+import datetime
+
 from django.utils import timezone
 
 from animateurs.models import jours_feries_france
 from animateurs.services.flottants import est_groupe_flottants, type_affectation
+from animateurs.services.disponibilites import formation_bloquante
 from animateurs.services.status_colors import (
     couleur_pour_statut,
     couleur_texte_pour_fond,
@@ -20,6 +23,19 @@ def _centre_preference_to_dict(preference):
         "code": centre.code,
         "couleur": centre.couleur,
     }
+
+
+def _formations_indisponibles_payload(formations):
+    return [
+        {
+            "id": formation.id,
+            "intitule": formation.intitule,
+            "debut": formation.date_debut.isoformat(),
+            "fin": formation.date_fin.isoformat(),
+            "motif": f"Formation — {formation.intitule}",
+        }
+        for formation in formations
+    ]
 
 
 def _qualifications_payload(qualifications):
@@ -62,6 +78,21 @@ def affectation_to_event(affectation):
         titre += f" · {plage['heure_arrivee']}–{plage['heure_depart']}"
     debut_local = timezone.localtime(affectation.debut).date()
     fin_locale = timezone.localtime(affectation.fin).date()
+    formations = getattr(affectation.animateur, "_planning_formations", None)
+    conflits_formation = []
+    jour = debut_local
+    while jour < fin_locale:
+        formation = formation_bloquante(affectation.animateur, jour, formations=formations)
+        if formation:
+            conflits_formation.append({
+                "formation_id": formation.id,
+                "intitule": formation.intitule,
+                "date": jour.isoformat(),
+                "motif": f"Formation — {formation.intitule}",
+            })
+        jour += datetime.timedelta(days=1)
+    if conflits_formation:
+        titre += "  ⚠ FORMATION"
     return {
         "id": affectation.id,
         "title": titre,
@@ -76,6 +107,7 @@ def affectation_to_event(affectation):
         "extendedProps": {
             "animateur_id": affectation.animateur_id,
             "animateur_nom": f"{affectation.animateur.prenom} {affectation.animateur.nom}",
+            "conflits_formation": conflits_formation,
             "centre_id": affectation.centre_id,
             # Noms modernes et alias historiques pour ne pas casser un ancien cache JS.
             "groupe_id": affectation.evenement_id,
@@ -99,6 +131,7 @@ def animateur_to_dict(animateur):
     )
     disponibilites = list(disponibilites_source)
     affectations = list(getattr(animateur, "_filtre_affectations", []))
+    formations = list(getattr(animateur, "_filtre_formations", []))
     affinites = list(animateur.affinites_groupes.all())
 
     affinites_groupes = [
@@ -175,6 +208,7 @@ def animateur_to_dict(animateur):
         "disponibilites": [
             {"debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()} for dispo in disponibilites
         ],
+        "formations_indisponibles": _formations_indisponibles_payload(formations),
         "affectations": [
             {
                 "debut": affectation.debut.isoformat(),
@@ -215,6 +249,7 @@ def animateur_planning_to_dict(animateur):
     )
     disponibilites = list(disponibilites_source)
     affectations = list(getattr(animateur, "_filtre_affectations", []))
+    formations = list(getattr(animateur, "_filtre_formations", []))
 
     prefere_relations = [pref for pref in preferences if pref.est_prefere and not pref.est_interdit]
     interdites_relations = [pref for pref in preferences if pref.est_interdit]
@@ -239,6 +274,7 @@ def animateur_planning_to_dict(animateur):
         "disponibilites": [
             {"debut": dispo.debut.isoformat(), "fin": dispo.fin.isoformat()} for dispo in disponibilites
         ],
+        "formations_indisponibles": _formations_indisponibles_payload(formations),
         "affectations": [
             {
                 "debut": timezone.localtime(affectation.debut).date().isoformat(),
@@ -358,6 +394,7 @@ def qualification_to_dict(qualification):
 
 def document_to_dict(document):
     periodes = list(document.periodes.all())
+    centres = list(document.centres.all())
     return {
         "id": document.id,
         "titre": document.titre,
@@ -369,6 +406,9 @@ def document_to_dict(document):
         "periode_fin": document.periode_fin.isoformat() if document.periode_fin else None,
         "libelle_periode": document.libelle_periode,
         "periode_ids": [periode.id for periode in periodes],
+        "tous_centres": document.tous_centres,
+        "centre_ids": [centre.id for centre in centres],
+        "centres": [{"id": centre.id, "nom": centre.nom, "code": centre.code} for centre in centres],
         "periodes": [
             {
                 "id": periode.id,

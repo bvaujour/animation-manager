@@ -15,9 +15,19 @@ from collections import defaultdict
 from django.db.models import Prefetch
 from django.utils import timezone
 
-from animateurs.models import Affectation, Animateur, Centre, EffectifEnfantsJour, Evenement
+from animateurs.models import (
+    Affectation,
+    Animateur,
+    Centre,
+    EffectifEnfantsJour,
+    Evenement,
+    Sejour,
+    Sortie,
+    StatutPreparationSemaine,
+)
 from animateurs.services.categories_groupes import categorie_age_groupe
 from animateurs.services.flottants import est_groupe_flottants, groupes_visibles
+from animateurs.services.formations import resume_formations_dashboard
 from animateurs.services.qualifications import couvertures_qualifications
 
 ETAT_OK = "ok"
@@ -493,11 +503,35 @@ def generer_tableau_de_bord(date_reference: datetime.date):
         )
     )
 
+    fin_semaine = fin_semaine_exclusive - datetime.timedelta(days=1)
+    nombre_sejours = Sejour.objects.filter(
+        actif=True,
+        date_debut__lte=fin_semaine,
+        date_fin__gte=debut_semaine,
+    ).distinct().count()
+    nombre_sorties = Sortie.objects.filter(
+        date__range=(debut_semaine, fin_semaine),
+    ).distinct().count()
+    statut_manuel = (
+        StatutPreparationSemaine.objects.filter(debut_semaine=debut_semaine)
+        .select_related("modifie_par")
+        .first()
+    )
+
     return {
         "date_selectionnee": debut_semaine.isoformat(),
         "periode": {
             "debut_semaine": debut_semaine.isoformat(),
-            "fin_semaine": (fin_semaine_exclusive - datetime.timedelta(days=1)).isoformat(),
+            "fin_semaine": fin_semaine.isoformat(),
+        },
+        "nombre_sejours": nombre_sejours,
+        "nombre_sorties": nombre_sorties,
+        "statut_preparation_manuel": {
+            "est_force_prete": bool(statut_manuel and statut_manuel.est_force_prete),
+            "modifie_par": statut_manuel.modifie_par.get_username()
+            if statut_manuel and statut_manuel.modifie_par
+            else "",
+            "modifie_le": statut_manuel.modifie_le.isoformat() if statut_manuel else None,
         },
         "indicateurs": {
             **{cle: valeur for cle, valeur in semaine.items() if cle != "jours"},
@@ -513,4 +547,5 @@ def generer_tableau_de_bord(date_reference: datetime.date):
             for jour in semaine["jours"]
         ],
         "alertes": alertes,
+        "formations": resume_formations_dashboard(),
     }

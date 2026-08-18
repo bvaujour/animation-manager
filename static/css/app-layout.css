@@ -80,6 +80,54 @@ body.login-body > .app-rail {
   display: none !important;
 }
 
+.app-context-selector {
+  position: fixed;
+  z-index: 1550;
+  top: 6px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid #d7e2e5;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 2px 8px rgba(38, 61, 70, .08);
+}
+
+.app-context-selector label {
+  display: grid;
+  gap: 1px;
+}
+
+.app-context-selector label > span {
+  color: #5c7078;
+  font-size: .62rem;
+  font-weight: 700;
+}
+
+body.app-body .app-context-selector select {
+  min-height: 28px !important;
+  max-width: 190px;
+  padding: 3px 24px 3px 7px;
+  font-size: .72rem !important;
+}
+
+@media (max-width: 799px) {
+  .app-context-selector {
+    position: static;
+    margin: 5px 6px 0;
+  }
+
+  .app-context-selector label {
+    flex: 1 1 0;
+  }
+
+  body.app-body .app-context-selector select {
+    width: 100%;
+    max-width: none;
+  }
+}
+
 .app-rail {
   position: fixed;
   z-index: 1600;
@@ -214,6 +262,7 @@ body.app-body :is(
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
+  flex-wrap: wrap;
   gap: 8px !important;
   margin: 0 0 var(--site-page-gap) !important;
   padding: 5px 2px 7px !important;
@@ -274,6 +323,22 @@ body.app-body .app-page-header--week-only .app-page-week {
   width: min(560px, 65%);
   max-width: none;
   justify-self: auto;
+}
+
+/* Le sélecteur de contexte appartient à l'en-tête sur les pages concernées. */
+body.app-body .app-page-header .app-context-selector {
+  position: static;
+  z-index: auto;
+  flex: 0 1 420px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+body.app-body .app-page-header--title-only {
+  justify-content: flex-start !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -1978,6 +2043,28 @@ body.page-planning.has-fixed-page-header #layout.planning-workspace {
   height: calc(100dvh - var(--app-fixed-header-height, 0px) - 45px) !important;
 }
 
+/* Ordre compact propre au tableau de bord : précédent, semaine, aujourd'hui,
+   suivant. Le libellé absorbe seul la largeur disponible. */
+body.dashboard-body #dashboard-period-nav.week-navigation {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+}
+
+body.dashboard-body #dashboard-period-nav .week-navigation-controls {
+  display: contents !important;
+}
+
+body.dashboard-body #dashboard-period-nav .week-picker__select {
+  order: 2;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+body.dashboard-body #dashboard-prev-week { order: 1; }
+body.dashboard-body #dashboard-current-week { order: 3; }
+body.dashboard-body #dashboard-next-week { order: 4; }
+
 @media (min-width: 800px) {
   body.app-body.has-fixed-page-header :is(
     .app-page-header,
@@ -1985,6 +2072,49 @@ body.page-planning.has-fixed-page-header #layout.planning-workspace {
     .sortie-detail-header
   ) {
     left: var(--site-rail-size) !important;
+  }
+
+  body.dashboard-body.has-fixed-page-header .dashboard-header {
+    top: 0 !important;
+    right: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap;
+    gap: 8px 12px !important;
+    padding: 8px max(var(--site-desktop-gutter), 12px) !important;
+    z-index: 1720 !important;
+  }
+
+  body.dashboard-body .dashboard-header .app-page-title {
+    flex: 0 0 auto;
+    white-space: nowrap !important;
+  }
+
+  body.dashboard-body .dashboard-header .app-context-selector {
+    position: static;
+    z-index: auto;
+    flex: 0 1 420px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  body.dashboard-body .dashboard-header .app-page-week {
+    flex: 1 1 470px;
+    width: auto !important;
+    max-width: 680px !important;
+    margin-left: auto;
+  }
+
+  body.dashboard-body #dashboard-period-nav.week-navigation,
+  body.dashboard-body #dashboard-period-nav .week-navigation-controls {
+    flex-wrap: nowrap;
+  }
+
+  body.dashboard-body #dashboard-period-nav .week-picker__select {
+    min-width: 0;
   }
 }
 
@@ -1996,6 +2126,70 @@ body.page-planning.has-fixed-page-header #layout.planning-workspace {
   ) {
     left: 0 !important;
     padding: 4px var(--site-mobile-gutter) !important;
+  }
+
+  body.dashboard-body.has-fixed-page-header {
+    padding-top: 0 !important;
+  }
+
+  body.dashboard-body.has-fixed-page-header .dashboard-header {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: wrap;
+    gap: 8px !important;
+    margin: 0 0 var(--site-page-gap) !important;
+    padding: 8px var(--site-mobile-gutter) !important;
+    z-index: auto !important;
+  }
+
+  body.dashboard-body .dashboard-header .app-page-week {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  body.dashboard-body .dashboard-header .app-page-title {
+    flex: 0 0 auto;
+  }
+
+  body.dashboard-body .dashboard-header .app-context-selector {
+    position: static;
+    z-index: auto;
+    flex: 1 1 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  body.app-body .app-page-header .app-context-selector {
+    flex: 1 1 100%;
+    width: 100%;
+    margin: 0;
+  }
+
+  body.dashboard-body #dashboard-period-nav.week-navigation {
+    width: 100% !important;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+  }
+
+  body.dashboard-body #dashboard-period-nav .week-picker__select {
+    min-width: 0;
+  }
+
+  body.dashboard-body #dashboard-period-nav .week-navigation-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    justify-content: center;
   }
 
   body.animator-dashboard-body .animator-dashboard-header {

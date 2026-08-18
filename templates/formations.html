@@ -1,0 +1,65 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Formations{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/formations.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main class="page-shell formations-page">
+  {% include "partials/_page_header.html" with title="Formations" picker_mode="none" header_class="formations-header" actions_class="formations-header-actions" action_id="formation-add" action_label="+ Ajouter une formation" action_class="btn-primary" %}
+
+  <section class="formations-filters ui-card" aria-label="Filtres des formations">
+    <div class="formations-status-filters" role="group" aria-label="Filtrer par statut">
+      <button class="formation-filter active" type="button" data-status="">Toutes</button>
+      <button class="formation-filter" type="button" data-status="prevue">Prévues</button>
+      <button class="formation-filter" type="button" data-status="en_cours">En cours</button>
+      <button class="formation-filter" type="button" data-status="a_cloturer">À clôturer</button>
+      <button class="formation-filter" type="button" data-status="terminee">Terminées</button>
+      <button class="formation-filter" type="button" data-status="annulee">Annulées</button>
+    </div>
+    <label class="formations-animator-filter">Animateur<select id="formation-animateur-filter"><option value="">Tous les animateurs</option></select></label>
+  </section>
+
+  <div id="formations-list" class="formations-list" aria-live="polite"><p class="empty-note">Chargement des formations…</p></div>
+</main>
+
+<dialog id="formation-dialog" class="formation-dialog">
+  <form id="formation-form" novalidate>
+    <header><h2 id="formation-dialog-title">Ajouter une formation</h2><button type="button" data-close aria-label="Fermer">×</button></header>
+    <div class="formation-form-grid">
+      <label class="full">Intitulé<input name="intitule" maxlength="180" required></label>
+      <label>Date de début<input name="date_debut" type="date" required></label>
+      <label>Date de fin<input name="date_fin" type="date" required></label>
+      <label>Statut<select name="statut" required></select></label>
+      <label>Qualification liée<select name="qualification_id"><option value="">Aucune</option></select></label>
+      <label class="full">Autre qualification / qualification libre<input name="qualification_libre" maxlength="180"></label>
+      <label>Organisme<input name="organisme" maxlength="180"></label>
+      <label>E-mail du contact<input name="email_contact" type="email" maxlength="254"></label>
+      <label>Téléphone du contact<input name="telephone_contact" type="tel" maxlength="40"></label>
+      <label>Lieu<input name="lieu" maxlength="180"></label>
+      <label>Hébergement<select name="hebergement"><option value="">Non renseigné</option><option value="internat">Internat</option><option value="externat">Externat</option></select></label>
+      <fieldset class="full formation-participants">
+        <legend>Animateurs concernés</legend>
+        <div id="formation-participants-list"></div>
+      </fieldset>
+      <fieldset class="full formation-documents">
+        <legend>Documents liés</legend>
+        <div id="formation-documents-list"><p class="empty-note">Aucun document dans la bibliothèque.</p></div>
+      </fieldset>
+      <label class="full">Commentaire / notes<textarea name="commentaire" rows="3"></textarea></label>
+    </div>
+    <p id="formation-form-error" class="form-error" role="alert" hidden></p>
+    <footer><button class="btn btn-secondary" type="button" data-close>Annuler</button><button class="btn btn-primary" type="submit">Enregistrer</button></footer>
+  </form>
+</dialog>
+
+<dialog id="formation-close-dialog" class="formation-dialog formation-close-dialog">
+  <form id="formation-close-form">
+    <header><div><h2>Clôturer la formation</h2><p id="formation-close-summary"></p></div><button type="button" data-close aria-label="Fermer">×</button></header>
+    <div class="formation-close-content">
+      <div class="formation-close-heading"><strong>Participants</strong><button id="formation-all-present" class="btn btn-secondary btn-small" type="button">Tous présents</button></div>
+      <div id="formation-presences-list" class="formation-presences-list"></div>
+    </div>
+    <p id="formation-close-error" class="form-error" role="alert" hidden></p>
+    <footer><button class="btn btn-secondary" type="button" data-close>Annuler</button><button class="btn btn-primary" type="submit">Valider la clôture</button></footer>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/formations.js' %}?v={{ asset_version }}"></script>{% endblock %}

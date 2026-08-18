@@ -12,6 +12,39 @@ document.addEventListener("DOMContentLoaded", () => {
     const mainPickerRoot = document.getElementById("doc-semaines-picker");
     const mainPicker = WeekPicker.get(mainPickerRoot);
     let periods = mainPicker?.periods || [];
+    let centres = [];
+
+    function initCentreSelector(root, { tousCentres = true, centreIds = [] } = {}) {
+        const selected = new Set((centreIds || []).map(Number));
+        const list = root.querySelector(".document-centres-list");
+        list.innerHTML = centres.map((centre) => `
+            <label class="form-check"><input class="form-check-input" type="checkbox" value="${centre.id}" ${selected.has(Number(centre.id)) ? "checked" : ""}><span class="form-check-label">${escapeHtml(centre.nom)}</span></label>
+        `).join("");
+        const initialMode = tousCentres ? "tous" : (selected.size === 1 ? "un" : "plusieurs");
+        const initialRadio = root.querySelector(`[name="centres_mode"][value="${initialMode}"]`);
+        if (initialRadio) initialRadio.checked = true;
+
+        const update = () => {
+            const mode = root.querySelector('[name="centres_mode"]:checked')?.value || "tous";
+            list.hidden = mode === "tous";
+            if (mode === "un") {
+                const checked = [...list.querySelectorAll('input:checked')];
+                checked.slice(1).forEach((input) => { input.checked = false; });
+            }
+        };
+        root.querySelectorAll('[name="centres_mode"]').forEach((radio) => radio.addEventListener("change", update));
+        list.addEventListener("change", (event) => {
+            if (root.querySelector('[name="centres_mode"]:checked')?.value === "un" && event.target.checked) {
+                list.querySelectorAll("input").forEach((input) => { if (input !== event.target) input.checked = false; });
+            }
+        });
+        update();
+        return {
+            tousCentres: () => root.querySelector('[name="centres_mode"]:checked')?.value === "tous",
+            ids: () => [...list.querySelectorAll('input:checked')].map((input) => Number(input.value)),
+            refresh: update,
+        };
+    }
 
     function selectedIds(picker = mainPicker) {
         return picker?.getSelectedIds() || [];
@@ -68,6 +101,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     <span class="field-label">Semaines concernées</span>
                     <div class="document-inline-picker-slot"></div>
                 </div>
+                <div class="field document-editor-centres">
+                    <span class="field-label">Centres concernés</span>
+                    <label class="form-check"><input class="form-check-input" type="radio" name="centres_mode" value="tous"><span class="form-check-label">Tous les centres</span></label>
+                    <label class="form-check"><input class="form-check-input" type="radio" name="centres_mode" value="un"><span class="form-check-label">Un seul centre</span></label>
+                    <label class="form-check"><input class="form-check-input" type="radio" name="centres_mode" value="plusieurs"><span class="form-check-label">Plusieurs centres sélectionnés</span></label>
+                    <div class="document-centres-list"></div>
+                </div>
                 <p class="form-error"></p>
                 <div class="editor-actions">
                     <button class="btn btn-primary" type="submit">Enregistrer</button>
@@ -82,6 +122,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 selectedIds: documentItem.periode_ids || [],
             });
             const editorPermanent = editor.elements.permanent;
+            const editorCentres = initCentreSelector(editor.querySelector(".document-editor-centres"), {
+                tousCentres: documentItem.tous_centres,
+                centreIds: documentItem.centre_ids,
+            });
             const editorPeriods = editor.querySelector(".document-editor-periods");
             const updateEditorMode = () => setPickerVisibility({ permanent: editorPermanent.checked, field: editorPeriods, picker: editorPicker });
             editorPermanent.addEventListener("change", updateEditorMode);
@@ -96,6 +140,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     inlineError.textContent = "Sélectionne au moins une semaine ou choisis Document permanent.";
                     return;
                 }
+                if (!editorCentres.tousCentres() && !editorCentres.ids().length) {
+                    inlineError.textContent = "Sélectionne au moins un centre.";
+                    return;
+                }
                 try {
                     await apiFetch(`/api/documents/${documentItem.id}/`, {
                         method: "PATCH",
@@ -104,6 +152,8 @@ document.addEventListener("DOMContentLoaded", () => {
                             permanent: editorPermanent.checked,
                             periode_ids: editorPermanent.checked ? [] : ids,
                             publie: editor.elements.publie.checked,
+                            tous_centres: editorCentres.tousCentres(),
+                            centre_ids: editorCentres.ids(),
                         }),
                     });
                     afficherToast("Document modifié.");
@@ -162,6 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
         errorElement.textContent = "";
         const file = fileInput.files[0];
         const ids = selectedIds();
+        const centreSelection = initMainCentres;
         if (!file) {
             errorElement.textContent = "Choisis un fichier.";
             return;
@@ -170,16 +221,23 @@ document.addEventListener("DOMContentLoaded", () => {
             errorElement.textContent = "Sélectionne au moins une semaine ou choisis Document permanent.";
             return;
         }
+        if (!centreSelection.tousCentres() && !centreSelection.ids().length) {
+            errorElement.textContent = "Sélectionne au moins un centre.";
+            return;
+        }
 
         const data = new FormData();
         data.append("titre", titleInput.value.trim());
         data.append("fichier", file);
         data.append("permanent", permanentInput.checked ? "true" : "false");
         data.append("publie", document.getElementById("doc-publie")?.checked ? "true" : "false");
+        data.append("tous_centres", centreSelection.tousCentres() ? "true" : "false");
+        centreSelection.ids().forEach((id) => data.append("centre_ids", String(id)));
         if (!permanentInput.checked) ids.forEach((id) => data.append("periode_ids", String(id)));
         try {
             await apiFetch("/api/documents/", { method: "POST", body: data });
             form.reset();
+            centreSelection.refresh();
             mainPicker?.clear();
             setPickerVisibility({ permanent: false });
             afficherToast("Document ajouté.");
@@ -189,6 +247,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    let initMainCentres;
+    async function initCentres() {
+        centres = await apiFetch("/api/centres/");
+        initMainCentres = initCentreSelector(document.getElementById("doc-centres-field"));
+    }
+
     permanentInput?.addEventListener("change", () => setPickerVisibility({ permanent: permanentInput.checked }));
     setPickerVisibility({ permanent: permanentInput?.checked });
 
@@ -196,5 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
         periods = event.detail.periods || [];
     });
     if (mainPicker?.ready) periods = mainPicker.periods;
-    loadDocuments();
+    initCentres().then(loadDocuments).catch((error) => {
+        errorElement.textContent = erreurMessage(error, "Impossible de charger les centres.");
+    });
 });

@@ -323,6 +323,22 @@
 .gestion-page .period-year-content{padding:0 10px 10px}
 .gestion-page .period-saved-row{gap:10px;padding:9px 8px}
 .gestion-page .period-table-wrap{max-width:100%;overflow-x:auto}
+.gestion-page .period-type-options{display:grid;grid-template-columns:repeat(4,minmax(105px,1fr));gap:8px}
+.gestion-page .period-type-option{position:relative;cursor:pointer}
+.gestion-page .period-type-option input{position:absolute;opacity:0;pointer-events:none}
+.gestion-page .period-type-option span{display:flex;align-items:center;justify-content:center;min-height:38px;padding:7px 10px;border:1px solid var(--color-border);border-radius:10px;background:#fff;font-weight:750}
+.gestion-page .period-type-option input:checked+span{border-color:var(--color-primary);background:color-mix(in srgb,var(--color-primary) 10%,white);color:var(--color-primary)}
+.gestion-page .period-import-type{margin-top:12px}
+.gestion-page .period-type-badge{width:max-content;padding:2px 7px;border-radius:999px;background:color-mix(in srgb,var(--color-primary) 9%,white);color:var(--color-primary);font-weight:700}
+.gestion-page .period-edit-form{width:100%}
+@media (max-width:700px){.gestion-page .period-type-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.gestion-page .period-stays-section{margin-top:24px;padding-top:18px;border-top:1px solid var(--color-border)}
+.gestion-page .school-reference-list{display:grid;gap:10px;margin-top:14px}
+.gestion-page .school-reference-card{padding:12px;border:1px solid var(--color-border);border-radius:12px;background:#fff}
+.gestion-page .school-reference-card>label{display:flex;align-items:center;gap:8px}
+.gestion-page .school-reference-card ul{display:grid;gap:4px;margin:9px 0 0 25px;padding:0;list-style:none}
+.gestion-page .school-reference-card li{display:flex;flex-direction:column;color:var(--color-text)}
+.gestion-page .school-reference-card small{color:var(--color-text-muted)}
 .gestion-page .gestion-documents{width:100%;max-width:none;margin:0;padding:16px}
 .gestion-page .gestion-documents .gestion-section-heading h1{margin:0 0 12px;font-size:1rem}
 .gestion-page .upload-form{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,1.2fr) minmax(240px,1.5fr) auto;gap:12px;align-items:end}

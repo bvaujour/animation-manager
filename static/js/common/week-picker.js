@@ -8,7 +8,10 @@
 
     function loadSharedPeriods() {
         if (!sharedPeriodsRequest) {
-            sharedPeriodsRequest = apiFetch("/api/periodes-scolaires/").catch((error) => {
+            // Cette option ne modifie pas l'API historique : elle demande
+            // seulement aux sélecteurs communs de reprendre le contexte de
+            // travail mémorisé entre les pages.
+            sharedPeriodsRequest = apiFetch("/api/periodes-scolaires/?contexte_travail=1").catch((error) => {
                 sharedPeriodsRequest = null;
                 throw error;
             });

@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .access import est_direction
-from .models import Affectation, Animateur, Centre, Evenement, HoraireAffectationJour, PublicationPlanning, Qualification
+from .models import Affectation, Animateur, Centre, Evenement, Formation, HoraireAffectationJour, PublicationPlanning, Qualification
 from .services.affectations import (
     creer_affectation,
     creer_ou_deplacer_affectation_flottante,
@@ -87,6 +87,13 @@ def api_planning(request):
         .prefetch_related(
             "horaires_journaliers",
             Prefetch("animateur__qualifications", queryset=qualifications_statuts),
+            Prefetch(
+                "animateur__formations",
+                queryset=Formation.objects.filter(
+                    statut__in=(Formation.STATUT_PREVUE, Formation.STATUT_EN_COURS)
+                ).only("id", "intitule", "date_debut", "date_fin", "statut"),
+                to_attr="_planning_formations",
+            ),
         )
     )
 
@@ -174,6 +181,7 @@ def api_affectation_create(request):
                 centre=centre,
                 debut=debut,
                 fin=fin,
+                autoriser_formation=payload.get("forcer_formation") is True,
             )
             return JsonResponse(
                 affectation_to_event(affectation),
@@ -188,6 +196,7 @@ def api_affectation_create(request):
             evenement=evenement,
             debut=debut,
             fin=fin,
+            autoriser_formation=payload.get("forcer_formation") is True,
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=409)
@@ -281,6 +290,7 @@ def api_affectation_detail(request, affectation_id):
             centre=nouveau_centre,
             evenement=nouvelle_evenement,
             type_affectation=payload.get("type_affectation") if "type_affectation" in payload else None,
+            autoriser_formation=payload.get("forcer_formation") is True,
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=409)

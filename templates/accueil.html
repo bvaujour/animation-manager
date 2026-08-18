@@ -5,7 +5,7 @@
 {% block extra_head %}{% if not utilisateur_est_direction %}<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>{% endif %}{% endblock %}
 {% block page_styles %}
 {% if utilisateur_est_direction %}
-<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}-period-ready-4">
 {% else %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
@@ -16,9 +16,19 @@
 {% endblock %}
 {% block content %}
 {% if utilisateur_est_direction %}
-<main id="dashboard-root" tabindex="-1" class="page-shell page-shell--fluid dashboard-page" data-api-url="{% url 'api_tableau_de_bord' %}">
-    {% include "partials/_page_header.html" with title="Tableau de bord" header_class="dashboard-header" week_aria_label="Choix de la période du tableau de bord" container_id="dashboard-period-nav" previous_id="dashboard-prev-week" today_id="dashboard-current-week" next_id="dashboard-next-week" label_id="dashboard-visible-period" %}
+<main id="dashboard-root" tabindex="-1" class="page-shell page-shell--fluid dashboard-page" data-api-url="{% url 'api_tableau_de_bord' %}" data-preparation-status-url="{% url 'api_statut_preparation_semaine' %}" data-can-force-preparation="{% if request.user.is_superuser %}true{% else %}false{% endif %}" data-type-accueil="{{ type_accueil_selectionne }}"{% if type_accueil_selectionne == "vacances" and periode_accueil_active %} data-periode-accueil-debut="{{ periode_accueil_active.debut|date:'Y-m-d' }}" data-periode-accueil-fin="{{ periode_accueil_active.fin|date:'Y-m-d' }}" data-periode-accueil-libelle="{{ periode_accueil_active.libelle_selection }}"{% endif %}>
+    {% include "partials/_page_header.html" with title="Tableau de bord" header_class="dashboard-header" context_selector=True week_aria_label="Choix de la période du tableau de bord" container_id="dashboard-period-nav" previous_id="dashboard-prev-week" today_id="dashboard-current-week" next_id="dashboard-next-week" label_id="dashboard-visible-period" %}
 
+    {% if type_accueil_selectionne == "vacances" and periode_accueil_active %}
+    <section id="dashboard-period-overview" class="dashboard-period-overview" aria-labelledby="dashboard-period-overview-title">
+        <header><h2 id="dashboard-period-overview-title">Vue de la période — {{ periode_accueil_active.libelle_selection }}</h2></header>
+        <div id="dashboard-period-weeks" class="dashboard-period-weeks" aria-live="polite">
+            <div class="dashboard-period-loading">Chargement des semaines…</div>
+        </div>
+    </section>
+    <section class="dashboard-selected-week" aria-labelledby="dashboard-selected-week-title">
+        <h2 id="dashboard-selected-week-title" class="dashboard-section-title">Détail de la semaine sélectionnée</h2>
+    {% endif %}
     <section class="dashboard-kpis" aria-label="Indicateurs de la période affichée">
         <article class="dashboard-kpi" data-dashboard-block="couverture">
             <span class="dashboard-kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 2v3m10-3v3M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2Z"/></svg></span>
@@ -65,7 +75,7 @@
                 <a id="action-effectifs" class="dashboard-action dashboard-action--blue" href="{% url 'planning' %}?mode=effectifs"><strong>＋</strong><span>Renseigner les effectifs</span></a>
                 <a id="action-affectations" class="dashboard-action dashboard-action--green" href="{% url 'planning' %}?mode=affectations"><strong>♟</strong><span>Gérer les affectations</span></a>
                 <a class="dashboard-action dashboard-action--purple" href="{% url 'employes' %}?nouveau=1"><strong>♙</strong><span>Ajouter un animateur</span></a>
-                <a class="dashboard-action dashboard-action--orange" href="{% url 'recapitulatif' %}"><strong>▥</strong><span>Voir le récapitulatif</span></a>
+                <a class="dashboard-action dashboard-action--orange" href="{% url 'recapitulatif' %}"><strong>▥</strong><span>Voir la paie</span></a>
                 <a class="dashboard-action dashboard-action--pink" href="{% url 'administration' %}?onglet=emails"><strong>✉</strong><span>Envoyer un e-mail</span></a>
                 <a class="dashboard-action dashboard-action--slate" href="{% url 'administration' %}?onglet=export"><strong>⇩</strong><span>Exporter le planning</span></a>
             </div>
@@ -82,6 +92,14 @@
             <a class="dashboard-card-footer-link" id="dashboard-alerts-link" href="{% url 'planning' %}">Corriger dans le planning <span>›</span></a>
         </article>
 
+        <article id="dashboard-formations-card" class="dashboard-card dashboard-formations-card" data-dashboard-block="formations" hidden>
+            <header class="dashboard-card-header">
+                <div><h2><span class="dashboard-card-icon" aria-hidden="true">◇</span> Formations</h2><p id="dashboard-formations-summary">—</p></div>
+            </header>
+            <div id="dashboard-formations" class="dashboard-formations-list" aria-live="polite"></div>
+            <a class="dashboard-card-footer-link" href="{% url 'formations' %}">Voir les formations <span>›</span></a>
+        </article>
+
         <article class="dashboard-card dashboard-week-card" data-dashboard-block="semaine">
             <header class="dashboard-card-header">
                 <div><h2><span class="dashboard-card-icon" aria-hidden="true">▤</span> Détail de la semaine</h2><p id="dashboard-week-label">—</p></div>
@@ -90,6 +108,7 @@
             <div id="dashboard-week" class="dashboard-week-grid" aria-live="polite"></div>
         </article>
     </section>
+    {% if type_accueil_selectionne == "vacances" and periode_accueil_active %}</section>{% endif %}
 
     <div id="dashboard-loading" class="dashboard-loading" role="status" aria-live="polite">Mise à jour du tableau de bord…</div>
 </main>
@@ -251,7 +270,7 @@
 {% endblock %}
 {% block scripts %}
 {% if utilisateur_est_direction %}
-<script src="{% static 'js/dashboard.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'js/dashboard.js' %}?v={{ asset_version }}-vacances-period-4"></script>
 {% else %}
 <script src="{% static 'js/accueil.js' %}?v={{ asset_version }}"></script>
 <script src="{% static 'js/mes-disponibilites.js' %}?v={{ asset_version }}"></script>

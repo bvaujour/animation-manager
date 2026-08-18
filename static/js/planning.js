@@ -670,7 +670,48 @@ function libelleDate(dateStr)
 			return false;
 		}
 
-		return animateur.disponibilites.some((plage) => dateDansPlage(dateStr, plage.debut, plage.fin));
+		const declareDisponible = animateurDeclareDisponibleCeJour(animateur, dateStr);
+		return declareDisponible && !formationAnimateurCeJour(animateur, dateStr);
+	}
+
+	function animateurDeclareDisponibleCeJour(animateur, dateStr)
+	{
+		return (animateur.disponibilites || []).some((plage) => dateDansPlage(dateStr, plage.debut, plage.fin));
+	}
+
+	function formationAnimateurCeJour(animateur, dateStr)
+	{
+		return (animateur.formations_indisponibles || []).find((formation) => dateDansPlage(dateStr, formation.debut, formation.fin)) || null;
+	}
+
+	function messageIndisponibiliteAnimateur(animateur, dateStr)
+	{
+		const formation = formationAnimateurCeJour(animateur, dateStr);
+		if (formation) return `${animateur.prenom} ${animateur.nom} est en formation « ${formation.intitule} » le ${libelleDate(dateStr)}.`;
+		return `${animateur.prenom} n'est pas disponible le ${libelleDate(dateStr)}.`;
+	}
+
+	function demanderDerogationFormation(animateur, jours, modeSemaine = false)
+	{
+		const modal = document.getElementById("modal-formation-derogation");
+		const message = document.getElementById("formation-derogation-message");
+		const boutonSecurise = document.getElementById("formation-derogation-safe");
+		const boutonForcer = document.getElementById("formation-derogation-force");
+		const fermer = document.getElementById("formation-derogation-close");
+		const lignes = jours.map((jour) => {
+			const formation = formationAnimateurCeJour(animateur, jour);
+			return `<li>${escapeHtml(libelleDate(jour))} — ${escapeHtml(formation?.intitule || "Formation")}</li>`;
+		}).join("");
+		message.innerHTML = `<p><strong>${escapeHtml(animateur.prenom)} ${escapeHtml(animateur.nom)}</strong> est prévu en formation :</p><ul>${lignes}</ul>`;
+		boutonSecurise.textContent = modeSemaine ? "Affecter seulement les jours disponibles" : "Annuler";
+		boutonForcer.textContent = modeSemaine ? "Affecter quand même toute la période" : "Affecter quand même";
+		ouvrirModal(modal);
+		return new Promise((resolve) => {
+			const terminer = (choix) => { fermerModal(modal); resolve(choix); };
+			boutonSecurise.onclick = () => terminer(modeSemaine ? "disponibles" : "annuler");
+			boutonForcer.onclick = () => terminer("forcer");
+			fermer.onclick = () => terminer("annuler");
+		});
 	}
 
 
@@ -800,7 +841,7 @@ function libelleDate(dateStr)
 
 			if (!disponible)
 			{
-				chip.dataset.dayHint = "Non disponible ce jour-là";
+				chip.dataset.dayHint = formationAnimateurCeJour(animateur, dateStr)?.motif || "Non disponible ce jour-là";
 			}
 			else if (dejaPlace)
 			{
@@ -845,7 +886,7 @@ function libelleDate(dateStr)
 		afficherToast(`Choisis un animateur pour ${centre.nom} — ${evenement.nom}, le ${libelleDate(info.dateStr)}.`);
 	}
 
-	function creerAffectationDepuisJour(animateur, centre, evenement, calendar, debut)
+	async function creerAffectationDepuisJour(animateur, centre, evenement, calendar, debut, forcerFormation = false)
 	{
 		if (!evenementOuvertCeJour(evenement, debut))
 		{
@@ -853,6 +894,12 @@ function libelleDate(dateStr)
 		}
 
 		const fin = addDays(debut, 1);
+		if (formationAnimateurCeJour(animateur, debut) && !forcerFormation)
+		{
+			const choix = await demanderDerogationFormation(animateur, [debut]);
+			if (choix !== "forcer") return null;
+			forcerFormation = true;
+		}
 
 		return apiFetch("/api/affectations/",
 		{
@@ -863,6 +910,7 @@ function libelleDate(dateStr)
 				evenement_id: evenement.id,
 				debut: debut,
 				fin: fin,
+				forcer_formation: forcerFormation,
 			}),
 		}).then((data) =>
 		{
@@ -885,10 +933,23 @@ function libelleDate(dateStr)
 			if (evenementOuvertCeJour(evenement, jour)) joursOuverts.push(jour);
 		}
 
-		const joursAffectables = joursOuverts.filter((jour) =>
-			animateurDisponibleCeJour(animateur, jour)
+		const joursCandidats = joursOuverts.filter((jour) =>
+			animateurDeclareDisponibleCeJour(animateur, jour)
 			&& !animateurDejaAffecteCeJour(animateur.id, jour)
 		);
+		const joursFormation = joursCandidats.filter((jour) => formationAnimateurCeJour(animateur, jour));
+		let forcerFormation = false;
+		let joursAffectables = joursCandidats.filter((jour) => !formationAnimateurCeJour(animateur, jour));
+		if (joursFormation.length)
+		{
+			const choix = await demanderDerogationFormation(animateur, joursFormation, true);
+			if (choix === "annuler") return;
+			if (choix === "forcer")
+			{
+				forcerFormation = true;
+				joursAffectables = joursCandidats;
+			}
+		}
 		const ignores = joursOuverts.length - joursAffectables.length;
 		if (!joursAffectables.length)
 		{
@@ -896,7 +957,7 @@ function libelleDate(dateStr)
 			return;
 		}
 
-		const confirmation = confirm(
+		const confirmation = joursFormation.length ? true : confirm(
 			`Affecter ${animateur.prenom} ${animateur.nom} à ${centre.nom} — ${evenement.nom} `
 			+ `pour ${joursAffectables.length} jour${joursAffectables.length > 1 ? "s" : ""} cette semaine ?`
 			+ (ignores ? ` (${ignores} jour${ignores > 1 ? "s" : ""} indisponible${ignores > 1 ? "s" : ""} ou déjà affecté${ignores > 1 ? "s" : ""})` : "")
@@ -912,6 +973,7 @@ function libelleDate(dateStr)
 					evenement_id: evenement.id,
 					debut,
 					fin: addDays(debut, 1),
+					forcer_formation: forcerFormation && Boolean(formationAnimateurCeJour(animateur, debut)),
 				}),
 			})
 		));
@@ -932,7 +994,7 @@ function libelleDate(dateStr)
 		if (!animateur || !centre || !debut) return Promise.reject({ error: "Affectation flottante incomplète." });
 		if (!animateurDisponibleCeJour(animateur, debut))
 		{
-			return Promise.reject({ error: `${animateur.prenom} n'est pas disponible le ${libelleDate(debut)}.` });
+			return Promise.reject({ error: messageIndisponibiliteAnimateur(animateur, debut) });
 		}
 
 		const fin = addDays(debut, 1);
@@ -1010,7 +1072,7 @@ function libelleDate(dateStr)
 		{
 			if (!animateurDisponibleCeJour(animateur, date))
 			{
-				afficherToast(`${animateur.prenom} n'est pas disponible le ${libelleDate(date)}.`, true);
+				afficherToast(messageIndisponibiliteAnimateur(animateur, date), true);
 			}
 			else
 			{
@@ -1055,12 +1117,13 @@ function libelleDate(dateStr)
 	// (glisser-déposer classique). On enregistre le nouveau créneau côté
 	// serveur, et si le serveur refuse (conflit, indisponibilité...) on
 	// annule visuellement le déplacement avec info.revert().
-	function updateAffectation(info, centre = null, evenement = null)
+	function updateAffectation(info, centre = null, evenement = null, forcerFormation = false)
 	{
 		const event = info.event;
 		const payload = {
 			debut: event.startStr,
 			fin: event.endStr || addDays(event.startStr, 1),
+			forcer_formation: forcerFormation,
 		};
 
 		if (evenement)
@@ -1464,16 +1527,6 @@ function libelleDate(dateStr)
 		input.select();
 	}
 
-	function iconeEffectif(type)
-	{
-		const icones = {
-			enfants: `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2a4 4 0 0 0-4 4c0 .62.14 1.2.39 1.72A5.5 5.5 0 0 0 6.5 18v2h11v-2a5.5 5.5 0 0 0-1.89-4.28c.25-.52.39-1.1.39-1.72a4 4 0 0 0-4-4Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm0 6c1.93 0 3.5 1.57 3.5 3.5V18h-7v-4.5A3.5 3.5 0 0 1 12 10Z"/></svg>`,
-			ratio: `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 3h10v2h-4v3.1a5 5 0 0 1 3.9 3.9H20v2h-3.1a5 5 0 0 1-9.8 0H4v-2h3.1A5 5 0 0 1 11 8.1V5H7V3Zm5 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>`,
-			nonCouverts: `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2a4 4 0 0 0-4 4c0 .62.14 1.2.39 1.72A5.5 5.5 0 0 0 6.5 18v2h7.18A6 6 0 0 1 18 10.35V10a4 4 0 0 0-2.39-3.66A4 4 0 0 0 12 2Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm0 6c.4 0 .79.07 1.15.2A6 6 0 0 0 12 13.5c0 1.74.74 3.31 1.92 4.4H8.5v-4.4A3.5 3.5 0 0 1 12 10Zm6 2a1 1 0 0 1 1 1v3.59l1.2 1.2-1.41 1.42L17 17.41V13a1 1 0 0 1 1-1Zm0 8a1.15 1.15 0 1 1 0-2.3A1.15 1.15 0 0 1 18 20Z"/></svg>`,
-		};
-		return `<span class="planning-effectif-icon planning-effectif-icon--${type}">${icones[type] || ""}</span>`;
-	}
-
 	function afficherEffectifsEnfantsDansCalendrier(calendar)
 	{
 		// Dans l’onglet Affectations, l’effectif est un véritable événement
@@ -1499,21 +1552,20 @@ function libelleDate(dateStr)
 			cadre.querySelector(".planning-effectif-enfants-zone")?.remove();
 			cadre.querySelector(".planning-uncovered-children")?.remove();
 
+			if (!evenementOuvertCeJour(calendar.evenementPlanning, dateStr)) return;
+
 			const valeur = normaliserEffectifJour(
 				valeurs[dateStr],
 				calendar.evenementPlanning.enfants_par_animateur_defaut
 			);
-			if (!valeur.nombre) return;
 
 			const animateursAffectes = compterAnimateursAffectes(calendar, dateStr);
-			const couvertureLieu = calculerCouvertureLieu(calendar.centrePlanning?.id, dateStr);
-			const enfantsNonCouverts = couvertureLieu.parGroupe.get(Number(calendar.evenementPlanning.id))
-				?? Math.max(0, valeur.nombre - (animateursAffectes * valeur.enfantsParAnimateur));
-			const etat = enfantsNonCouverts > 0 ? "manque" : "ok";
-			const flottantsLabel = couvertureLieu.flottants.length
-				? ` — flottant${couvertureLieu.flottants.length > 1 ? "s" : ""} : ${couvertureLieu.flottants.map((item) => `1/${item.ratio}`).join(", ")}`
-				: "";
-			const details = `${valeur.nombre} enfant${valeur.nombre > 1 ? "s" : ""} — taux 1/${valeur.enfantsParAnimateur} — ${animateursAffectes} animateur${animateursAffectes > 1 ? "s" : ""} fixe${animateursAffectes > 1 ? "s" : ""}${flottantsLabel} — ${enfantsNonCouverts} enfant${enfantsNonCouverts > 1 ? "s" : ""} non couvert${enfantsNonCouverts > 1 ? "s" : ""}`;
+			const ratioReel = valeur.nombre && animateursAffectes
+				? Math.ceil(valeur.nombre / animateursAffectes)
+				: null;
+			const etat = !valeur.nombre ? "vide" : (ratioReel !== null && ratioReel <= valeur.enfantsParAnimateur ? "ok" : "manque");
+			const ratioReelTexte = !valeur.nombre ? "—" : (ratioReel === null ? "aucun animateur" : `1/${ratioReel}`);
+			const details = `${valeur.nombre} enfant${valeur.nombre > 1 ? "s" : ""} — objectif 1/${valeur.enfantsParAnimateur} — réel : ${ratioReelTexte}`;
 
 
 			const zone = document.createElement("div");
@@ -1522,9 +1574,9 @@ function libelleDate(dateStr)
 			badge.className = `planning-effectif-enfants planning-effectif-enfants--${etat}`;
 			badge.innerHTML = `
 				<span class="planning-effectif-details">
-					<span class="planning-effectif-line planning-effectif-main" title="Nombre d’enfants">${iconeEffectif("enfants")}<button class="planning-inline-edit-trigger" type="button" data-effectif-inline="nombre" aria-label="Modifier l’effectif du ${escapeHtml(libelleJourEffectif(dateStr))}" title="Nombre d’enfants — cliquer pour modifier"><strong>${valeur.nombre}</strong></button></span>
-					<span class="planning-effectif-line planning-ratio-visible" title="Taux d’encadrement">${iconeEffectif("ratio")}<button class="planning-inline-edit-trigger" type="button" data-effectif-inline="ratio" aria-label="Modifier le taux d’encadrement du ${escapeHtml(libelleJourEffectif(dateStr))}" title="Taux d’encadrement — cliquer pour modifier"><strong>1/${valeur.enfantsParAnimateur}</strong></button></span>
-					<span class="planning-effectif-line planning-enfants-non-couverts" title="Nombre d’enfants non couverts">${iconeEffectif("nonCouverts")}<strong>${enfantsNonCouverts}</strong></span>
+					<span class="planning-effectif-line planning-effectif-main"><button class="planning-inline-edit-trigger" type="button" data-effectif-inline="nombre" aria-label="Modifier l’effectif du ${escapeHtml(libelleJourEffectif(dateStr))}" title="Nombre d’enfants — cliquer pour modifier"><strong>${valeur.nombre}</strong> enfant${valeur.nombre > 1 ? "s" : ""}</button></span>
+					<span class="planning-effectif-line planning-ratio-visible"><span class="planning-effectif-label">Objectif :</span><button class="planning-inline-edit-trigger" type="button" data-effectif-inline="ratio" aria-label="Modifier le taux d’encadrement du ${escapeHtml(libelleJourEffectif(dateStr))}" title="Taux d’encadrement — cliquer pour modifier"><strong>1/${valeur.enfantsParAnimateur}</strong></button></span>
+					<span class="planning-effectif-line planning-ratio-reel planning-ratio-reel--${etat}"><span class="planning-effectif-label">Réel :</span><strong>${ratioReelTexte}</strong></span>
 				</span>`;
 			badge.querySelectorAll("[data-effectif-inline]").forEach((bouton) =>
 			{
@@ -2144,6 +2196,23 @@ function libelleDate(dateStr)
 					.catch((err) => afficherToast(erreurMessage(err, "Cette affectation n'a pas pu être enregistrée."), true));
 			},
 
+			eventDidMount: function (info)
+			{
+				const conflits = info.event.extendedProps?.conflits_formation || [];
+				if (!conflits.length) return;
+				info.el.classList.add("affectation-formation-conflict");
+				const titre = info.el.querySelector(".fc-event-title");
+				if (titre)
+				{
+					titre.textContent = titre.textContent.replace(/\s*⚠\s*FORMATION\s*$/u, "");
+					const motif = document.createElement("span");
+					motif.className = "planning-conflict-reason planning-conflict-reason--formation";
+					motif.innerHTML = '<strong class="planning-conflict-reason-icon" aria-hidden="true">⚠</strong><strong class="planning-conflict-reason-label">FORMATION</strong>';
+					titre.append(" ", motif);
+				}
+				info.el.title = conflits.map((item) => `⚠ En formation : ${item.intitule} — ${libelleDate(item.date)}`).join("\n");
+			},
+
 			eventAllow: function (dropInfo, draggedEvent)
 			{
 				if (!estModeAffectations()) return false;
@@ -2155,7 +2224,10 @@ function libelleDate(dateStr)
 				const animateurId = idAnimateurDepuisEvent(draggedEvent);
 				if (!animateurId) return true;
 				const animateur = animateursPlanning.find((a) => Number(a.id) === Number(animateurId));
-				if (animateur && !animateurDisponibleCeJour(animateur, debut)) return false;
+				// Pour une formation, laisser le dépôt atteindre l'API afin que le
+				// serveur renvoie le motif explicite. Le badge reste néanmoins exclu
+				// des propositions normales par animateurDisponibleCeJour().
+				if (animateur && !animateurDisponibleCeJour(animateur, debut) && !formationAnimateurCeJour(animateur, debut)) return false;
 
 				return !animateurDejaAffecteSurIntervalle(
 					animateurId,
@@ -2165,7 +2237,7 @@ function libelleDate(dateStr)
 				);
 			},
 
-			eventReceive: function (info)
+			eventReceive: async function (info)
 			{
 				if (!estModeAffectations()) { info.event.remove(); return; }
 				const debut = info.event.startStr;
@@ -2180,11 +2252,27 @@ function libelleDate(dateStr)
 
 				if (info.event.id)
 				{
-					updateAffectation(info, centre, evenement).catch(() => info.event.remove());
+					const animateur = animateursPlanning.find((item) => Number(item.id) === Number(idAnimateurDepuisEvent(info.event)));
+					let forcerFormation = false;
+					if (animateur && formationAnimateurCeJour(animateur, debut))
+					{
+						const choix = await demanderDerogationFormation(animateur, [debut]);
+						if (choix !== "forcer") { if (typeof info.revert === "function") info.revert(); return; }
+						forcerFormation = true;
+					}
+					updateAffectation(info, centre, evenement, forcerFormation).catch(() => info.event.remove());
 					return;
 				}
 
 				const animateurId = info.event.extendedProps.animateurId;
+				const animateur = animateursPlanning.find((item) => Number(item.id) === Number(animateurId));
+				let forcerFormation = false;
+				if (animateur && formationAnimateurCeJour(animateur, debut))
+				{
+					const choix = await demanderDerogationFormation(animateur, [debut]);
+					if (choix !== "forcer") { info.event.remove(); return; }
+					forcerFormation = true;
+				}
 				apiFetch("/api/affectations/",
 				{
 					method: "POST",
@@ -2194,6 +2282,7 @@ function libelleDate(dateStr)
 						evenement_id: evenement.id,
 						debut: debut,
 						fin: fin,
+						forcer_formation: forcerFormation,
 					}),
 				}).then(() =>
 				{
@@ -2211,7 +2300,13 @@ function libelleDate(dateStr)
 				});
 			},
 
-			eventDrop: function (info) { if (estModeAffectations()) updateAffectation(info, centre, evenement); },
+			eventDrop: async function (info) {
+				if (!estModeAffectations()) return;
+				const animateur = animateursPlanning.find((item) => Number(item.id) === Number(idAnimateurDepuisEvent(info.event)));
+				const formation = animateur && formationAnimateurCeJour(animateur, info.event.startStr);
+				if (formation && await demanderDerogationFormation(animateur, [info.event.startStr]) !== "forcer") { info.revert(); return; }
+				updateAffectation(info, centre, evenement, Boolean(formation));
+			},
 			eventResize: function (info) { if (estModeAffectations()) updateAffectation(info, centre, evenement); },
 
 			eventClick: function (info)

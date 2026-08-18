@@ -1,9 +1,21 @@
 .recap-page{padding-bottom:48px}
 .recap-header{margin-bottom:18px}
+.recap-header{display:flex!important;align-items:center!important}
+.recap-header .app-page-title{flex:0 0 auto;align-self:center}
+.recap-header .recap-date-filters{display:flex;align-items:center;flex:0 0 auto;gap:8px;min-width:0;white-space:nowrap}
+.recap-header .recap-date-filters label{display:flex;align-items:center;flex:0 0 auto;gap:5px;color:var(--color-text-muted);font-size:.72rem;font-weight:700}
+.recap-header .recap-date-filters input{flex:0 0 160px;width:160px;min-height:30px;padding:3px 6px;font-size:.76rem}
+.recap-header .recap-date-filters .btn{flex:0 0 auto;width:auto;align-self:center}
+.recap-header .recap-exports{display:flex;align-items:center;flex:0 0 auto;width:auto!important;margin-left:auto!important}
+.recap-header .recap-exports .btn{flex:0 0 auto;width:auto}
+.recap-period-error{margin:0;color:var(--color-danger,#b42318);font-size:.8rem;font-weight:700}
+.payroll-scope span{display:block}
+@media (min-width:800px){.recap-header{flex-wrap:nowrap!important}.recap-header .recap-date-filters{flex-wrap:nowrap;width:auto}.recap-header .recap-exports{flex-wrap:nowrap}}
+@media (max-width:799px){.recap-header .recap-date-filters{width:100%;flex-wrap:wrap;white-space:normal}.recap-header .recap-date-filters label{flex:1 1 145px}.recap-header .recap-date-filters input{flex:1;width:auto}.recap-header .recap-exports{width:100%!important;margin-left:0!important}}
 .periode-card{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 .periode-card .week-picker{flex:1 1 360px;max-width:520px}
 .periode-affichee{margin:0 0 0 auto;color:var(--color-text-muted)}
-.recap-card{overflow:hidden}
+.recap-card{overflow:visible}
 .section-header{margin-bottom:14px}
 .section-header h2{margin-bottom:4px}
 .section-header p{margin:0;color:var(--color-text-muted)}
@@ -19,7 +31,10 @@
 .empty-state strong,.empty-state span{display:block}
 .empty-state strong{margin-bottom:5px;color:var(--color-text)}
 
-.recap-tabs{margin-bottom:14px}
+body.app-body .recap-page .recap-tabs{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));width:100%;max-width:none!important;margin-bottom:14px;overflow:hidden!important}
+body.app-body .recap-page .recap-tabs .tab-btn{min-width:0;max-width:100%;width:100%;padding-inline:clamp(3px,1vw,12px)!important;font-size:clamp(10px,1.1vw,14px)!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.app-body .recap-page .recap-tabs .tab-label-full{display:inline}
+body.app-body .recap-page .recap-tabs .tab-label-short{display:none}
 .recap-tab-panel[hidden]{display:none}
 .recap-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
 .recap-legend{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px;max-width:50%}
@@ -81,3 +96,11 @@
 .payroll-prime-detail{display:block;margin-top:4px;color:var(--color-text-muted);font-size:.72rem;line-height:1.4}
 .payroll-row-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:6px}
 .btn-small{padding:6px 9px;font-size:.75rem}
+
+@media (max-width:560px){
+  body.app-body .recap-page .recap-tabs .tab-label-full{display:none}
+  body.app-body .recap-page .recap-tabs .tab-label-short{display:inline}
+}
+
+/* Le composant Temps de travail partage désormais la largeur de la page Paie. */
+.recap-page .worktime-page{padding:0;gap:14px}

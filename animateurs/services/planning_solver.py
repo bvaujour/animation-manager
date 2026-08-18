@@ -16,6 +16,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils.dateparse import parse_date
 
 from animateurs.models import (
@@ -23,6 +24,7 @@ from animateurs.models import (
     AffiniteGroupeAnimateur,
     Animateur,
     Evenement,
+    Formation,
     Qualification,
 )
 
@@ -30,6 +32,7 @@ from .affinites import synchroniser_affinites_groupes
 from .flottants import groupes_visibles
 from .dates import parse_to_aware_datetime
 from .qualifications import couvertures_qualifications
+from .disponibilites import disponibilite_effective
 
 
 @dataclass
@@ -132,7 +135,20 @@ def generer_planning_auto(payload):
         .order_by("centre__ordre", "centre__nom", "ordre", "nom", "id")
     )
     animateurs = list(
-        Animateur.objects.prefetch_related("disponibilites", "preferences", "qualifications")
+        Animateur.objects.prefetch_related(
+            "disponibilites",
+            "preferences",
+            "qualifications",
+            Prefetch(
+                "formations",
+                queryset=Formation.objects.filter(
+                    statut__in=(Formation.STATUT_PREVUE, Formation.STATUT_EN_COURS),
+                    date_debut__lte=jours[-1],
+                    date_fin__gte=jours[0],
+                ),
+                to_attr="formations_bloquantes",
+            ),
+        )
         .order_by("prenom", "nom", "id")
     )
     if not groupes:
@@ -198,7 +214,12 @@ def generer_planning_auto(payload):
     details_qualifications = []
 
     def disponible(animateur, jour):
-        return any(plage.debut <= jour <= plage.fin for plage in disponibilites[animateur.id])
+        return disponibilite_effective(
+            animateur,
+            jour,
+            plages=disponibilites[animateur.id],
+            formations=animateur.formations_bloquantes,
+        ).disponible
 
     def score_affinite_preferences(animateur, groupe):
         if groupe.centre_id in centres_interdits[animateur.id]:

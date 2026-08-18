@@ -13,7 +13,8 @@
         <button class="tab-btn active" data-tab="lieux" type="button" role="tab">Lieux</button>
         <button class="tab-btn" data-tab="groupes" type="button" role="tab">Groupes</button>
         <button class="tab-btn" data-tab="qualifications" type="button" role="tab">Diplômes et statuts</button>
-        <button class="tab-btn" data-tab="periodes" type="button" role="tab">Périodes</button>
+        <button class="tab-btn" data-tab="periodes" type="button" role="tab">Périodes vacances</button>
+        <button class="tab-btn" data-tab="periodes-scolaires" type="button" role="tab">Périodes scolaires</button>
         <button class="tab-btn" data-tab="documents" type="button" role="tab">Documents</button>
     </div>
 
@@ -27,7 +28,10 @@
         <div id="panel-qualifications"></div>
     </div>
     <div class="tab-panel" data-panel="periodes" hidden>
-        <div id="panel-periodes"></div>
+        <div id="panel-periodes" data-type-accueil-selectionne="{{ type_accueil_selectionne }}"></div>
+    </div>
+    <div class="tab-panel" data-panel="periodes-scolaires" hidden>
+        <div id="panel-periodes-scolaires"></div>
     </div>
     <div class="tab-panel" data-panel="documents" hidden>
         <section class="ui-card gestion-documents" id="documents-management-app">
@@ -45,7 +49,14 @@
                     <span class="field-label" id="doc-semaines-title">Semaines concernées</span>
                     {% include "partials/_week_picker.html" with picker_id="doc-semaines-picker" picker_class="document-weeks-picker" toggle_id="doc-semaines-toggle" label_id="doc-semaines-label" menu_id="doc-semaines-menu" tree_id="doc-semaines-tree" clear_id="doc-semaines-effacer" mode="multiple" placeholder="Choisir des semaines" title_id="doc-semaines-title" %}
                 </div>
-                <label class="form-check"><input class="form-check-input" type="checkbox" id="doc-publie" name="publie"><span class="form-check-label">Publier immédiatement pour les animateurs</span></label>
+                <div class="field" id="doc-centres-field">
+                    <span class="field-label">Centres concernés</span>
+                    <label class="form-check"><input class="form-check-input" type="radio" name="centres_mode" value="tous" checked><span class="form-check-label">Tous les centres</span></label>
+                    <label class="form-check"><input class="form-check-input" type="radio" name="centres_mode" value="un"><span class="form-check-label">Un seul centre</span></label>
+                    <label class="form-check"><input class="form-check-input" type="radio" name="centres_mode" value="plusieurs"><span class="form-check-label">Plusieurs centres sélectionnés</span></label>
+                    <div class="document-centres-list" hidden></div>
+                </div>
+                <label class="form-check"><input class="form-check-input" type="checkbox" id="doc-publie" name="publie" checked><span class="form-check-label">Publié</span></label>
                 <p class="form-error" id="doc-error"></p>
                 <button class="btn btn-primary" type="submit">Ajouter le document</button>
             </form>
@@ -64,6 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
     GestionApp.mountGroupes(document.getElementById("panel-groupes"));
     GestionApp.mountQualifications(document.getElementById("panel-qualifications"));
     GestionApp.mountPeriodes(document.getElementById("panel-periodes"));
+    GestionApp.mountPeriodesScolaires(document.getElementById("panel-periodes-scolaires"));
 
     const root = document.getElementById("gestion-tabs").closest("main");
     initTabs(root);

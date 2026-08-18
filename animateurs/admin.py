@@ -8,8 +8,17 @@ couvrent pas encore : saisir les centres autorisés, les disponibilités,
 ou consulter/filtrer l'historique des affectations.
 """
 
-from django.contrib import admin
+from datetime import timedelta
+
+from django.contrib import admin, messages
+from django.db import transaction
+from django.db.models import Q
 from django.forms import CheckboxSelectMultiple
+from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
+
+from .admin_forms import ClassificationPeriodesForm
 
 from .models import (
     ActiviteTravailComplementaire,
@@ -25,16 +34,48 @@ from .models import (
     Evenement,
     Groupe,
     ModeleEmail,
+    ModalitePeriscolaire,
     PeriodeScolaire,
+    PeriodeCalendrier,
     ParticipationTravailComplementaire,
+    ParticipantSejour,
     PrimeJournalierePeriode,
     PreferenceCentre,
     Qualification,
+    Sejour,
     Sortie,
     SortieLien,
     SortieParticipation,
     SortieResponsabilite,
+    TypeAccueil,
 )
+
+
+@admin.register(TypeAccueil)
+class TypeAccueilAdmin(admin.ModelAdmin):
+    list_display = ("nom", "code", "ordre", "actif")
+    list_editable = ("ordre", "actif")
+    ordering = ("ordre", "nom")
+
+
+@admin.register(ModalitePeriscolaire)
+class ModalitePeriscolaireAdmin(admin.ModelAdmin):
+    list_display = ("nom", "code", "jour_entier", "heure_debut", "heure_fin", "actif", "ordre")
+    list_editable = ("heure_debut", "heure_fin", "actif", "ordre")
+
+
+class ParticipantSejourInline(admin.TabularInline):
+    model = ParticipantSejour
+    extra = 0
+
+
+@admin.register(Sejour)
+class SejourAdmin(admin.ModelAdmin):
+    list_display = ("nom", "date_debut", "date_fin", "destination", "periode_vacances", "source_lieu_legacy", "actif")
+    list_filter = ("actif", "date_debut")
+    search_fields = ("nom", "destination", "hebergement", "source_lieu_legacy__nom")
+    filter_horizontal = ("equipe",)
+    inlines = (ParticipantSejourInline,)
 
 
 class ParticipationTravailComplementaireInline(admin.TabularInline):
@@ -44,8 +85,8 @@ class ParticipationTravailComplementaireInline(admin.TabularInline):
 
 @admin.register(ActiviteTravailComplementaire)
 class ActiviteTravailComplementaireAdmin(admin.ModelAdmin):
-    list_display = ("intitule", "type", "date", "date_modification")
-    list_filter = ("type", "date")
+    list_display = ("intitule", "type", "type_accueil", "date", "date_modification")
+    list_filter = ("type", "type_accueil", "date")
     search_fields = ("intitule", "remarque")
     filter_horizontal = ("periodes",)
     inlines = (ParticipationTravailComplementaireInline,)
@@ -116,15 +157,117 @@ class QualificationAdmin(admin.ModelAdmin):
 
 @admin.register(PeriodeScolaire)
 class PeriodeScolaireAdmin(admin.ModelAdmin):
-    list_display = ("nom", "annee_scolaire", "zone", "debut", "fin")
-    list_filter = ("annee_scolaire", "zone")
+    change_list_template = "admin/animateurs/periodescolaire/change_list.html"
+    list_display = ("nom", "type_accueil", "annee_scolaire", "zone", "debut", "fin")
+    list_filter = ("type_accueil", "annee_scolaire", "zone")
     search_fields = ("nom", "description_source")
     ordering = ("-annee_scolaire", "zone", "debut")
+
+    def changelist_view(self, request, extra_context=None):
+        context = {**(extra_context or {}), "peut_classifier_periodes": self.has_change_permission(request)}
+        return super().changelist_view(request, extra_context=context)
+
+    def get_urls(self):
+        return [
+            path(
+                "classification/",
+                self.admin_site.admin_view(self.classification_periodes),
+                name="animateurs_periodescolaire_classification",
+            ),
+        ] + super().get_urls()
+
+    @staticmethod
+    def _semaines_comprises(periode):
+        lundi = periode.debut - timedelta(days=periode.debut.weekday())
+        semaines = []
+        while lundi <= periode.fin:
+            semaines.append((max(lundi, periode.debut), min(lundi + timedelta(days=6), periode.fin)))
+            lundi += timedelta(days=7)
+        return semaines
+
+    def _details_periodes(self, periodes, selected_ids=()):
+        selected_ids = {str(pk) for pk in selected_ids}
+        details = []
+        for periode in periodes:
+            groupes = list(
+                Evenement.objects.select_related("centre")
+                .filter(Q(permanent=True) | Q(periodes_scolaires=periode))
+                .order_by("centre__nom", "nom")
+                .distinct()
+            )
+            details.append({
+                "periode": periode,
+                "semaines": self._semaines_comprises(periode),
+                "groupes": groupes,
+                "centres": sorted({groupe.centre.nom for groupe in groupes}),
+                "selected": str(periode.pk) in selected_ids,
+            })
+        return details
+
+    def classification_periodes(self, request):
+        if not self.has_change_permission(request):
+            from django.core.exceptions import PermissionDenied
+
+            raise PermissionDenied
+
+        confirmation = request.method == "POST" and "confirmer" in request.POST
+        form = ClassificationPeriodesForm(request.POST or None)
+        apercu = None
+
+        if request.method == "POST" and form.is_valid():
+            periodes = list(form.cleaned_data["periode_ids"])
+            type_accueil = form.cleaned_data["type_accueil"]
+            if confirmation:
+                with transaction.atomic():
+                    ids = [periode.pk for periode in periodes]
+                    verrouillees = list(
+                        PeriodeScolaire.objects.select_for_update().filter(
+                            pk__in=ids,
+                            type_accueil__isnull=True,
+                        )
+                    )
+                    PeriodeScolaire.objects.filter(pk__in=[p.pk for p in verrouillees]).update(
+                        type_accueil=type_accueil
+                    )
+                messages.success(
+                    request,
+                    f"{len(verrouillees)} période(s) classée(s) dans « {type_accueil.nom} ».",
+                )
+                return HttpResponseRedirect(reverse("admin:animateurs_periodescolaire_classification"))
+            apercu = {
+                "type_accueil": type_accueil,
+                "details": self._details_periodes(periodes),
+                "ids": [periode.pk for periode in periodes],
+            }
+
+        periodes_non_classees = PeriodeScolaire.objects.filter(type_accueil__isnull=True).order_by(
+            "-debut", "nom"
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Classification des périodes",
+            "opts": self.model._meta,
+            "form": form,
+            "apercu": apercu,
+            "details_periodes": self._details_periodes(
+                periodes_non_classees,
+                request.POST.getlist("periode_ids") if request.method == "POST" else (),
+            ),
+        }
+        return TemplateResponse(request, "admin/animateurs/periodescolaire/classification.html", context)
+
+
+@admin.register(PeriodeCalendrier)
+class PeriodeCalendrierAdmin(admin.ModelAdmin):
+    list_display = ("nom", "categorie", "annee_scolaire", "zone", "debut", "fin")
+    list_filter = ("categorie", "annee_scolaire", "zone", "types_accueil")
+    filter_horizontal = ("types_accueil",)
 
 
 @admin.register(Centre)
 class CentreAdmin(admin.ModelAdmin):
     list_display = ("nom", "code", "couleur", "effectif_cible")
+    filter_horizontal = ("types_accueil",)
 
 
 @admin.register(Groupe)
@@ -152,6 +295,7 @@ class EvenementAdmin(admin.ModelAdmin):
     search_fields = ("nom", "centre__nom")
     ordering = ("centre__nom", "ordre", "nom")
     inlines = [DateExclueEvenementInline]
+    filter_horizontal = ("types_accueil", "periodes_scolaires")
 
 
 # --- Inlines affichés directement sur la fiche d'un animateur ---

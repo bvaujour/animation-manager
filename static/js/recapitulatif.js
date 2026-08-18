@@ -1,6 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
-    const pickerRoot = document.getElementById("periode-select");
-    const picker = WeekPicker.get(pickerRoot);
+    const startInput = document.getElementById("recap-date-start");
+    const endInput = document.getElementById("recap-date-end");
+    const periodError = document.getElementById("recap-period-error");
+    const refreshButton = document.getElementById("recap-refresh");
     const centresRoot = document.getElementById("recap-centres");
     const employeesRoot = document.getElementById("recap-salaries");
     const payrollRoot = document.getElementById("recap-payroll");
@@ -12,7 +14,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const scopeRoot = document.getElementById("recap-payroll-scope");
     const savePrimesButton = document.getElementById("save-payroll-primes");
     const cancelPrimesButton = document.getElementById("cancel-payroll-primes");
-    let selectedPeriods = [];
+    let selectedRange = null;
+    let payrollPeriodIds = [];
     let dirtyPrimes = new Map();
     let lastData = null;
 
@@ -48,9 +51,10 @@ document.addEventListener("DOMContentLoaded", () => {
         return `<span class="place-badge" style="--place-color:${escapeHtml(background)};--place-text:${textColorFor(background)}">${escapeHtml(centre.nom)}</span>`;
     }
 
-    function buildApiUrl() {
-        const ids = selectedPeriods.map((period) => period.id);
-        return ids.length ? `/api/recapitulatif/?periode_ids=${ids.join(",")}` : null;
+    function buildApiUrl(base = "/api/recapitulatif/") {
+        if (!selectedRange) return null;
+        const params = new URLSearchParams({date_debut: selectedRange.start, date_fin: selectedRange.end});
+        return `${base}?${params}`;
     }
 
     function displayLegend(centres) {
@@ -139,19 +143,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function updateScope() {
-        const groups = new Map();
-        selectedPeriods.forEach((period) => {
-            const name = String(period.nom || period.libelle || "Période").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "");
-            if (!groups.has(name)) groups.set(name, []);
-            groups.get(name).push(period);
-        });
-        scopeRoot.innerHTML = `<strong>${selectedPeriods.length} semaine${selectedPeriods.length > 1 ? "s" : ""} concernée${selectedPeriods.length > 1 ? "s" : ""}</strong>${[...groups.entries()].map(([name, periods]) => {
-            const allCount = (picker?.periods || []).filter((period) => String(period.nom || period.libelle || "").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "") === name).length;
-            return periods.length === allCount
-                ? `Toute la période ${escapeHtml(name)}`
-                : `${escapeHtml(name)} : ${periods.map((p) => escapeHtml(String(p.nom || p.libelle).replace(/^.*Semaine/i, "semaine"))).join(", ")}`;
-        }).join("<br>")}`;
-        savePrimesButton.textContent = `Valider les primes pour ${selectedPeriods.length} semaine${selectedPeriods.length > 1 ? "s" : ""}`;
+        const label = selectedRange?.label || "Aucune période sélectionnée";
+        scopeRoot.innerHTML = `<strong>${escapeHtml(label)}</strong><span>Tous les types d’accueil sont agrégés.</span>`;
+        savePrimesButton.textContent = "Valider les primes pour la période";
     }
 
     function updateDirtyActions() {
@@ -161,12 +155,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function deletionScopeLabel() {
-        if (!selectedPeriods.length) return "les semaines sélectionnées";
-        const vacationName = String(selectedPeriods[0].nom || selectedPeriods[0].libelle || "").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "");
-        const sameVacation = selectedPeriods.every((period) => String(period.nom || period.libelle || "").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "") === vacationName);
-        const allCount = (picker?.periods || []).filter((period) => String(period.nom || period.libelle || "").replace(/\s+(?:—|-)+\s+Semaine.*$/i, "") === vacationName).length;
-        if (sameVacation && selectedPeriods.length === allCount) return `toute la période ${vacationName}`;
-        return selectedPeriods.length > 1 ? `les ${selectedPeriods.length} semaines sélectionnées` : "la semaine sélectionnée";
+        return selectedRange?.label || "la période sélectionnée";
     }
 
     function displayPayroll(data) {
@@ -199,7 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function openTab(tabName) {
-        const selected = ["centres", "totaux", "paie"].includes(tabName) ? tabName : "centres";
+        const selected = ["temps-travail", "paie", "centres", "totaux"].includes(tabName) ? tabName : "temps-travail";
         tabButtons.forEach((button) => {
             const active = button.dataset.recapTab === selected;
             button.classList.toggle("active", active);
@@ -208,19 +197,22 @@ document.addEventListener("DOMContentLoaded", () => {
         tabPanels.forEach((panel) => {
             panel.hidden = panel.dataset.recapPanel !== selected;
         });
+        const url = new URL(window.location.href);
+        if (selected === "temps-travail") url.searchParams.delete("onglet");
+        else url.searchParams.set("onglet", selected);
+        window.history.replaceState({}, "", url);
     }
 
     async function loadRecap() {
         const url = buildApiUrl();
         if (!url) {
-            const emptyMessage = '<div class="empty-state"><strong>Aucune période sélectionnée</strong><span>Choisissez une ou plusieurs semaines.</span></div>';
+            const emptyMessage = '<div class="empty-state"><strong>Aucune période sélectionnée</strong><span>Choisissez un mois ou une plage de dates.</span></div>';
             centresRoot.innerHTML = emptyMessage;
             employeesRoot.innerHTML = emptyMessage;
             payrollRoot.innerHTML = emptyMessage;
             legendRoot.innerHTML = "";
             return;
         }
-        picker?.close();
         centresRoot.innerHTML = '<div class="loading-note">Calcul des jours et de la paie par centre…</div>';
         employeesRoot.innerHTML = '<div class="loading-note">Calcul des totaux…</div>';
         payrollRoot.innerHTML = '<div class="loading-note">Préparation des montants…</div>';
@@ -228,11 +220,12 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const data = await apiFetch(url);
             lastData = data;
+            payrollPeriodIds = data.periode?.ids || [];
             displayCentres(data);
             displayEmployees(data);
             displayPayroll(data);
         } catch (error) {
-            const message = erreurMessage(error, "Le récapitulatif n’a pas pu être chargé.");
+            const message = erreurMessage(error, "La paie n’a pas pu être chargée.");
             centresRoot.innerHTML = `<div class="empty-state"><strong>Chargement impossible</strong><span>${escapeHtml(message)}</span></div>`;
             employeesRoot.innerHTML = "";
             payrollRoot.innerHTML = "";
@@ -240,18 +233,37 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function selectPeriods(periods) {
+    function formatIsoDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    }
+
+    function formatRangeLabel(start, end) {
+        const formatter = new Intl.DateTimeFormat("fr-FR", {day: "numeric", month: "long", year: "numeric", timeZone: "UTC"});
+        return `Du ${formatter.format(new Date(`${start}T00:00:00Z`))} au ${formatter.format(new Date(`${end}T00:00:00Z`))} inclus`;
+    }
+
+    function selectRange(start, end) {
         if (dirtyPrimes.size && !window.confirm("Des primes modifiées ne sont pas enregistrées. Abandonner ces modifications ?")) {
-            picker?.setSelectedIds(selectedPeriods.map((period) => period.id));
-            return;
+            return false;
         }
+        if (!start || !end || end < start) {
+            periodError.textContent = "La date de fin ne peut pas être antérieure à la date de début.";
+            periodError.hidden = false;
+            return false;
+        }
+        periodError.hidden = true;
         dirtyPrimes.clear();
         updateDirtyActions();
-        selectedPeriods = periods || [];
+        payrollPeriodIds = [];
+        selectedRange = {start, end, label: formatRangeLabel(start, end)};
         updateScope();
-        if (pdfButton) pdfButton.disabled = selectedPeriods.length === 0;
-        if (excelButton) excelButton.disabled = selectedPeriods.length === 0;
+        if (pdfButton) pdfButton.disabled = false;
+        if (excelButton) excelButton.disabled = false;
         loadRecap();
+        return true;
     }
 
     tabButtons.forEach((button) => button.addEventListener("click", () => openTab(button.dataset.recapTab)));
@@ -283,9 +295,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!window.confirm(`Supprimer la prime de ${employee} pour ${scope} ?`)) return;
         deleteButton.disabled = true;
         try {
-            await apiFetch("/api/recapitulatif/prime-journaliere/", {method: "DELETE", body: JSON.stringify({animateur_id: id, periode_ids: selectedPeriods.map((period) => period.id)})});
+            await apiFetch("/api/recapitulatif/prime-journaliere/", {method: "DELETE", body: JSON.stringify({animateur_id: id, periode_ids: payrollPeriodIds})});
             dirtyPrimes.delete(id); updateDirtyActions(); await loadRecap();
-            afficherToast(`La prime de ${employee} a été supprimée pour les semaines sélectionnées.`);
+            afficherToast(`La prime de ${employee} a été supprimée pour la période sélectionnée.`);
         } catch (error) {
             deleteButton.disabled = false; afficherToast(erreurMessage(error, "La prime n'a pas pu être supprimée."), true);
         }
@@ -300,48 +312,32 @@ document.addEventListener("DOMContentLoaded", () => {
             await apiFetch("/api/recapitulatif/prime-journaliere/", {
                 method: "PUT",
                 body: JSON.stringify({
-                    periode_ids: selectedPeriods.map((period) => period.id),
+                    periode_ids: payrollPeriodIds,
                     primes,
                 }),
             });
             dirtyPrimes.clear(); updateDirtyActions(); await loadRecap();
-            afficherToast(`Les primes ont été enregistrées pour ${selectedPeriods.length} semaine${selectedPeriods.length > 1 ? "s" : ""}.`);
+            afficherToast("Les primes ont été enregistrées pour la période sélectionnée.");
         } catch (error) {
             afficherToast(erreurMessage(error, "Les primes n'ont pas pu être enregistrées."), true); updateDirtyActions();
         }
     });
     cancelPrimesButton?.addEventListener("click", () => { dirtyPrimes.clear(); updateDirtyActions(); if (lastData) displayPayroll(lastData); });
     pdfButton?.addEventListener("click", () => {
-        const ids = selectedPeriods.map((period) => period.id);
-        if (!ids.length) return;
-        window.location.assign(`/recapitulatif/export-paie.pdf?periode_ids=${ids.join(",")}`);
+        const url = buildApiUrl("/recapitulatif/export-paie.pdf");
+        if (url) window.location.assign(url);
     });
     excelButton?.addEventListener("click", () => {
-        const ids = selectedPeriods.map((period) => period.id);
-        if (!ids.length) return;
-        window.location.assign(`/recapitulatif/export.xlsx?periode_ids=${ids.join(",")}`);
+        const url = buildApiUrl("/recapitulatif/export.xlsx");
+        if (url) window.location.assign(url);
     });
-    pickerRoot?.addEventListener("week-picker:change", (event) => selectPeriods(event.detail?.periods));
-    pickerRoot?.addEventListener("week-picker:ready", (event) => {
-        const periods = picker?.periods || [];
-        if (!periods.length) {
-            selectPeriods([]);
-            return;
-        }
-        const selected = event.detail.picker.getSelectedPeriods();
-        if (selected.length) {
-            selectPeriods(selected);
-            return;
-        }
+    refreshButton?.addEventListener("click", () => selectRange(startInput.value, endInput.value));
 
-        // Hors vacances, proposer directement la prochaine semaine enregistrée.
-        const today = formatDateLocal(new Date());
-        const persistedDate = WeekPicker.getPersistedDate?.();
-        const persistedPeriod = persistedDate
-            ? periods.find((period) => period.debut <= persistedDate && period.fin >= persistedDate)
-            : null;
-        const fallback = persistedPeriod || periods.find((period) => period.debut > today) || periods.at(-1);
-        event.detail.picker.setSelectedIds(fallback ? [fallback.id] : []);
-    });
-    openTab("centres");
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    startInput.value = formatIsoDate(firstDay);
+    endInput.value = formatIsoDate(lastDay);
+    selectRange(startInput.value, endInput.value);
+    openTab(new URLSearchParams(window.location.search).get("onglet") || "temps-travail");
 });

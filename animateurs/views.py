@@ -15,6 +15,9 @@ from .views_catalogue import (
     api_groupes_partages,
     api_groupes_reordonner,
     api_periode_scolaire_detail,
+    api_calendrier_scolaire_enregistrer,
+    api_calendrier_scolaire_previsualiser,
+    api_sejours,
     api_periodes_scolaires,
     api_periodes_scolaires_importer,
     api_periodes_scolaires_previsualiser,
@@ -26,6 +29,7 @@ from .views_pages import (
     administration,
     api_mon_centre_affectation,
     api_tableau_de_bord,
+    api_statut_preparation_semaine,
     api_verification_export_planning,
     changer_mot_de_passe,
     demandes_materiel,
@@ -54,6 +58,7 @@ from .views_planning import (
 from .views_reporting import api_document_detail, api_documents, api_prime_journaliere, api_recapitulatif, export_recapitulatif_excel, export_recapitulatif_paie_pdf
 from .views_staff import api_animateur_detail, api_animateurs, api_disponibilite_detail, api_disponibilites
 from .views_worktime import api_conflits_reunion, api_preparation_travail, api_reunion_detail, api_reunions, api_temps_travail
+from .views_formations import api_formation_cloture, api_formation_detail, api_formations, formations
 
 __all__ = [
     "accueil",
@@ -76,7 +81,13 @@ __all__ = [
     "api_groupes_partages",
     "api_groupes_reordonner",
     "api_horaires_affectations_groupe",
+    "api_formation_detail",
+    "api_formation_cloture",
+    "api_formations",
     "api_periode_scolaire_detail",
+    "api_calendrier_scolaire_enregistrer",
+    "api_calendrier_scolaire_previsualiser",
+    "api_sejours",
     "api_periodes_scolaires",
     "api_periodes_scolaires_importer",
     "api_periodes_scolaires_previsualiser",
@@ -93,6 +104,7 @@ __all__ = [
     "api_reunions",
     "api_mon_centre_affectation",
     "api_tableau_de_bord",
+    "api_statut_preparation_semaine",
     "api_verification_export_planning",
     "api_temps_travail",
     "changer_mot_de_passe",
@@ -105,6 +117,7 @@ __all__ = [
     "export_planning_pdf",
     "export_recapitulatif_excel",
     "export_recapitulatif_paie_pdf",
+    "formations",
     "gestion",
     "mes_disponibilites",
     "mon_profil",

@@ -11,11 +11,11 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .access import est_direction
-from .models import Animateur, Document, PeriodeScolaire, PrimeJournalierePeriode
+from .models import Affectation, Animateur, Centre, Document, PeriodeScolaire, PrimeJournalierePeriode
 from .services.dates import parse_to_aware_datetime
 
 logger = logging.getLogger(__name__)
-from .services.documents import valider_periode_document
+from .services.documents import normaliser_nom_document, valider_periode_document
 from .services.recapitulatif import generer_recapitulatif, generer_recapitulatif_excel, generer_recapitulatif_paie_pdf
 from .services.serializers import document_to_dict
 
@@ -27,6 +27,9 @@ from .services.serializers import document_to_dict
 def _selection_recapitulatif(request):
     """Valide et transforme la sélection commune à l'écran et au PDF."""
     periode_ids_bruts = request.GET.get("periode_ids", "").strip()
+    mois_str = request.GET.get("mois", "").strip()
+    date_debut_str = request.GET.get("date_debut", "").strip()
+    date_fin_str = request.GET.get("date_fin", "").strip()
     periodes = []
     jours_selectionnes = None
 
@@ -52,6 +55,40 @@ def _selection_recapitulatif(request):
         fin_date = max(jours_selectionnes) + datetime.timedelta(days=1)
         debut = timezone.make_aware(datetime.datetime.combine(debut_date, datetime.time.min))
         fin = timezone.make_aware(datetime.datetime.combine(fin_date, datetime.time.min))
+    elif mois_str:
+        try:
+            debut_date = datetime.date.fromisoformat(f"{mois_str}-01")
+        except ValueError:
+            return None, None, None, None, "Le mois sélectionné est invalide."
+        mois_suivant = (
+            debut_date.replace(year=debut_date.year + 1, month=1)
+            if debut_date.month == 12
+            else debut_date.replace(month=debut_date.month + 1)
+        )
+        dernier_jour = mois_suivant - datetime.timedelta(days=1)
+        debut = timezone.make_aware(datetime.datetime.combine(debut_date, datetime.time.min))
+        fin = timezone.make_aware(datetime.datetime.combine(mois_suivant, datetime.time.min))
+        periodes = list(
+            PeriodeScolaire.objects.filter(debut__lte=dernier_jour, fin__gte=debut_date)
+            .order_by("debut", "ordre", "nom")
+        )
+    elif date_debut_str or date_fin_str:
+        if not date_debut_str or not date_fin_str:
+            return None, None, None, None, "Les dates de début et de fin sont obligatoires."
+        try:
+            debut_date = datetime.date.fromisoformat(date_debut_str)
+            dernier_jour = datetime.date.fromisoformat(date_fin_str)
+        except ValueError:
+            return None, None, None, None, "La période personnalisée est invalide."
+        if dernier_jour < debut_date:
+            return None, None, None, None, "La date de fin ne peut pas être antérieure à la date de début."
+        fin_date = dernier_jour + datetime.timedelta(days=1)
+        debut = timezone.make_aware(datetime.datetime.combine(debut_date, datetime.time.min))
+        fin = timezone.make_aware(datetime.datetime.combine(fin_date, datetime.time.min))
+        periodes = list(
+            PeriodeScolaire.objects.filter(debut__lte=dernier_jour, fin__gte=debut_date)
+            .order_by("debut", "ordre", "nom")
+        )
     else:
         debut_str = request.GET.get("debut")
         fin_str = request.GET.get("fin")
@@ -159,7 +196,7 @@ def api_recapitulatif(request):
         debut,
         fin,
         jours_selectionnes=jours_selectionnes,
-        periode_ids=[periode.id for periode in periodes],
+        periode_ids=[periode.id for periode in periodes] if jours_selectionnes is not None else None,
     )
     _ajouter_preparation_paie(recap, periodes)
 
@@ -167,7 +204,7 @@ def api_recapitulatif(request):
         {
             "periode": {
                 "debut": debut.date().isoformat(),
-                "fin": fin.date().isoformat(),
+                "fin": (fin.date() - datetime.timedelta(days=1)).isoformat(),
                 "ids": [periode.id for periode in periodes],
                 "libelles": [periode.libelle_avec_annee for periode in periodes],
             },
@@ -306,7 +343,7 @@ def export_recapitulatif_paie_pdf(request):
         debut,
         fin,
         jours_selectionnes=jours_selectionnes,
-        periode_ids=[periode.id for periode in periodes],
+        periode_ids=[periode.id for periode in periodes] if jours_selectionnes is not None else None,
     )
     _ajouter_preparation_paie(recap, periodes)
     dernier_jour = fin.date() - datetime.timedelta(days=1)
@@ -326,7 +363,7 @@ def export_recapitulatif_excel(request):
         return HttpResponse(erreur, status=400, content_type="text/plain; charset=utf-8")
     recap = generer_recapitulatif(
         debut, fin, jours_selectionnes=jours_selectionnes,
-        periode_ids=[periode.id for periode in periodes],
+        periode_ids=[periode.id for periode in periodes] if jours_selectionnes is not None else None,
     )
     _ajouter_preparation_paie(recap, periodes)
     dernier_jour = fin.date() - datetime.timedelta(days=1)
@@ -360,9 +397,25 @@ def api_documents(request):
     soit le statut permanent, soit une période début/fin."""
 
     if request.method == "GET":
-        documents_qs = Document.objects.prefetch_related("periodes").all().order_by("-date_ajout")
+        documents_qs = Document.objects.prefetch_related("periodes", "centres").all().order_by("-date_ajout")
         if not est_direction(request.user):
-            documents_qs = documents_qs.filter(publie=True)
+            animateur = getattr(request.user, "profil_animateur", None)
+            if animateur is None:
+                documents_qs = documents_qs.none()
+            else:
+                affectations = Affectation.objects.filter(animateur=animateur)
+                documents_visibles = []
+                for document in documents_qs.filter(publie=True):
+                    affectations_document = affectations
+                    if not document.permanent:
+                        debut = timezone.make_aware(datetime.datetime.combine(document.periode_debut, datetime.time.min))
+                        fin = timezone.make_aware(datetime.datetime.combine(document.periode_fin + datetime.timedelta(days=1), datetime.time.min))
+                        affectations_document = affectations_document.filter(debut__lt=fin, fin__gt=debut)
+                    if not document.tous_centres:
+                        affectations_document = affectations_document.filter(centre_id__in=document.centres.all())
+                    if (document.tous_centres and document.permanent) or affectations_document.exists():
+                        documents_visibles.append(document)
+                return JsonResponse([document_to_dict(d) for d in documents_visibles], safe=False)
         return JsonResponse([document_to_dict(d) for d in documents_qs], safe=False)
 
     titre = request.POST.get("titre", "").strip()
@@ -397,7 +450,21 @@ def api_documents(request):
     if erreur:
         return JsonResponse({"error": erreur}, status=400)
 
-    publie = str(request.POST.get("publie", "")).lower() in {"1", "true", "on", "yes"}
+    publie = str(request.POST.get("publie", "true")).lower() in {"1", "true", "on", "yes"}
+    tous_centres = str(request.POST.get("tous_centres", "true")).lower() in {"1", "true", "on", "yes"}
+    centre_ids_bruts = request.POST.getlist("centre_ids") or request.POST.getlist("centre_ids[]")
+    try:
+        centre_ids = list(dict.fromkeys(int(value) for value in centre_ids_bruts))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "La sélection de centres est invalide."}, status=400)
+    centres = list(Centre.objects.filter(pk__in=centre_ids)) if not tous_centres else []
+    if not tous_centres and (not centre_ids or len(centres) != len(centre_ids)):
+        return JsonResponse({"error": "Sélectionne au moins un centre valide."}, status=400)
+    nom_original = fichier.name
+    nom_normalise = normaliser_nom_document(nom_original)
+    fichier.name = nom_normalise
+    stockage = Document._meta.get_field("fichier").storage
+    backend_stockage = f"{stockage.__class__.__module__}.{stockage.__class__.__qualname__}"
     try:
         with transaction.atomic():
             document = Document.objects.create(
@@ -407,17 +474,26 @@ def api_documents(request):
                 permanent=permanent,
                 periode_debut=periode_debut,
                 periode_fin=periode_fin,
+                tous_centres=tous_centres,
             )
             if periodes:
                 document.periodes.set(periodes)
-    except Exception:
-        logger.exception("Échec du stockage du document %s", titre)
+            document.centres.set(centres)
+    except Exception as exc:
+        logger.exception(
+            "Échec du stockage d'un document : nom_original=%r nom_normalise=%r "
+            "taille=%r type_mime=%r backend_stockage=%s exception_type=%s exception_detail=%r",
+            nom_original,
+            nom_normalise,
+            getattr(fichier, "size", None),
+            getattr(fichier, "content_type", None),
+            backend_stockage,
+            type(exc).__name__,
+            str(exc),
+        )
         return JsonResponse(
             {
-                "error": (
-                    "Le fichier n'a pas pu être enregistré. Vérifie la configuration "
-                    "du stockage des documents, puis réessaie."
-                )
+                "error": "Le fichier n'a pas pu être enregistré. Réessaie plus tard."
             },
             status=503,
         )
@@ -448,10 +524,18 @@ def api_document_detail(request, document_id):
     titre = str(payload.get("titre", document.titre)).strip()
     publie = bool(payload.get("publie", document.publie))
     permanent = bool(payload.get("permanent", document.permanent))
+    tous_centres = bool(payload.get("tous_centres", document.tous_centres))
     try:
         periode_ids = list(dict.fromkeys(int(value) for value in payload.get("periode_ids", [])))
     except (TypeError, ValueError):
         return JsonResponse({"error": "La sélection de périodes est invalide."}, status=400)
+    try:
+        centre_ids = list(dict.fromkeys(int(value) for value in payload.get("centre_ids", [])))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "La sélection de centres est invalide."}, status=400)
+    centres = list(Centre.objects.filter(pk__in=centre_ids)) if not tous_centres else []
+    if not tous_centres and (not centre_ids or len(centres) != len(centre_ids)):
+        return JsonResponse({"error": "Sélectionne au moins un centre valide."}, status=400)
 
     if not titre:
         return JsonResponse({"error": "Le titre est obligatoire."}, status=400)
@@ -473,7 +557,9 @@ def api_document_detail(request, document_id):
     document.permanent = permanent
     document.periode_debut = periode_debut
     document.periode_fin = periode_fin
-    document.save(update_fields=["titre", "publie", "permanent", "periode_debut", "periode_fin"])
+    document.tous_centres = tous_centres
+    document.save(update_fields=["titre", "publie", "permanent", "periode_debut", "periode_fin", "tous_centres"])
     document.periodes.set(periodes)
+    document.centres.set(centres)
 
     return JsonResponse(document_to_dict(document))

@@ -1,0 +1,9 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {% if peut_classifier_periodes %}
+    <li><a href="{% url 'admin:animateurs_periodescolaire_classification' %}">Classifier les périodes</a></li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

@@ -1,6 +1,7 @@
 """Pages HTML, tableau de bord et exports administratifs."""
 
 import datetime
+import json
 
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.core.exceptions import ValidationError
@@ -12,7 +13,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.cache import never_cache
 
 from .access import est_direction
-from .models import Affectation, Centre, DemandeMateriel, PeriodeScolaire
+from .models import Affectation, Centre, DemandeMateriel, PeriodeScolaire, StatutPreparationSemaine
 from .services.animateur_dashboard import generer_tableau_de_bord_animateur
 from .services.comptes import valider_mot_de_passe
 from .services.dashboard import generer_tableau_de_bord
@@ -305,17 +306,48 @@ def api_tableau_de_bord(request):
     return JsonResponse(generer_tableau_de_bord(date_reference))
 
 
+@never_cache
+def api_statut_preparation_semaine(request):
+    """Force ou rétablit le seul libellé de préparation d'une semaine."""
+
+    if request.method != "POST":
+        return JsonResponse({"error": "Méthode non autorisée."}, status=405)
+    try:
+        payload = json.loads(request.body or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"error": "Données invalides."}, status=400)
+    date_reference = parse_date(str(payload.get("semaine", "")))
+    if date_reference is None or not isinstance(payload.get("forcer"), bool):
+        return JsonResponse({"error": "Semaine ou statut invalide."}, status=400)
+    debut_semaine = date_reference - datetime.timedelta(days=date_reference.weekday())
+    statut, _ = StatutPreparationSemaine.objects.update_or_create(
+        debut_semaine=debut_semaine,
+        defaults={
+            "est_force_prete": payload["forcer"],
+            "modifie_par": request.user,
+        },
+    )
+    return JsonResponse(
+        {
+            "debut_semaine": debut_semaine.isoformat(),
+            "est_force_prete": statut.est_force_prete,
+            "modifie_par": request.user.get_username(),
+            "modifie_le": statut.modifie_le.isoformat(),
+        }
+    )
+
+
 def planning(request):
     """Page principale des affectations et des effectifs enfants."""
     if request.GET.get("mode") == "temps-travail":
-        return redirect("temps_travail")
+        return redirect("/recapitulatif/?onglet=temps-travail")
     return render(request, "planning.html", {"active_page": "planning"})
 
 
 
 def temps_travail(request):
-    """Page autonome de saisie des réunions et journées de préparation."""
-    return render(request, "temps_travail.html", {"active_page": "temps_travail"})
+    """Conserve les anciens liens vers la saisie désormais intégrée à Paie."""
+    return redirect("/recapitulatif/?onglet=temps-travail")
 
 def gestion(request):
     """Gestion des lieux, groupes, qualifications, périodes et documents."""

@@ -519,9 +519,7 @@ document.addEventListener("DOMContentLoaded", () =>
         try
         {
             const url = `${materialForm.dataset.centreApi}?date=${encodeURIComponent(materialDate.value)}`;
-            const response = await fetch(url, {headers: {"X-Requested-With": "XMLHttpRequest"}});
-            if (!response.ok) return;
-            const data = await response.json();
+            const data = await apiFetch(url, {headers: {"X-Requested-With": "XMLHttpRequest"}});
             if (data.centre_id)
             {
                 materialCentre.value = String(data.centre_id);

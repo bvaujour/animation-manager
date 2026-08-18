@@ -752,7 +752,13 @@ function open(key,title){
     body.innerHTML=`<div class="full sortie-weather-editor">${details||weatherSummary()}<p class="sortie-muted">La météo utilise automatiquement la destination de la sortie. Modifiez les informations générales pour changer le lieu.</p>${weather?.statut==="prevision"?"":'<button type="button" class="btn btn-ghost" data-weather-refresh>Réessayer</button>'}</div>`;
     body.querySelector("[data-weather-refresh]")?.addEventListener("click",async()=>{weather=null;dialog.close();render();await loadWeather(true)});
   }else if(key==="liens"){
-    body.innerHTML=`<label class="full links-editor">Liens — une ligne par lien, sous la forme Libellé | URL<textarea name="liens">${(data.liens||[]).map(item=>`${item.libelle} | ${item.url}`).join("\n")}</textarea></label>`
+    const selected=new Set((data.documents||[]).map(item=>Number(item.id)));
+    const documents=(data.catalogue_documents||[]).map(item=>`<label class="sortie-document-choice"><input type="checkbox" name="document_ids" value="${item.id}" ${selected.has(Number(item.id))?"checked":""}><span>${escapeHtml(item.titre)}</span></label>`).join("");
+    body.innerHTML=`<div class="full sortie-resources-editor">
+      <section><h3>Documents de la semaine</h3><div class="sortie-document-choices">${documents||'<p class="sortie-muted">Aucun document disponible pour cette semaine.</p>'}</div></section>
+      <section class="sortie-document-upload"><h3>Ajouter un document</h3><label>Intitulé<input name="nouveau_document_titre" maxlength="150" placeholder="Le nom du fichier sera utilisé si laissé vide"></label><label>Fichier<input name="nouveau_document" type="file"></label><small>Le document sera publié et ajouté à Gestion → Documents pour la semaine de cette sortie.</small></section>
+      <label class="links-editor">Liens — une ligne par lien, sous la forme Libellé | URL<textarea name="liens">${escapeHtml((data.liens||[]).map(item=>`${item.libelle} | ${item.url}`).join("\n"))}</textarea></label>
+    </div>`
   }else {
     body.innerHTML=`<label class="full"><textarea name="${key}" rows="10">${escapeHtml(data.textes[key]||"")}</textarea></label>`
   }
@@ -849,11 +855,24 @@ form.addEventListener("submit",async event=>{
       if(key.startsWith("assignment-")) payload.affectations_responsables[key.replace("assignment-","")]=Number(value);
     }
   }
-  else if(current==="liens") payload.liens=String(fd.get("liens")||"").split("\n").map(row=>{const [libelle,...url]=row.split("|");return {libelle:libelle?.trim(),url:url.join("|").trim()}}).filter(item=>item.libelle&&item.url);
+  else if(current==="liens"){
+    payload.liens=String(fd.get("liens")||"").split("\n").map(row=>{const [libelle,...url]=row.split("|");return {libelle:libelle?.trim(),url:url.join("|").trim()}}).filter(item=>item.libelle&&item.url);
+    payload.document_ids=fd.getAll("document_ids").map(Number);
+  }
   else for(const [key,value] of fd) payload[key]=value;
 
   try{
     data=await apiFetch(`/api/sorties/${id}/`,{method:"PATCH",body:JSON.stringify(payload)});
+    if(current==="liens"){
+      const fichier=fd.get("nouveau_document");
+      if(fichier instanceof File&&fichier.size){
+        const upload=new FormData();
+        upload.append("titre",String(fd.get("nouveau_document_titre")||""));
+        upload.append("fichier",fichier);
+        await apiFetch(`/api/sorties/${id}/documents/`,{method:"POST",body:upload});
+        data=await apiFetch(`/api/sorties/${id}/`);
+      }
+    }
     const postalCodeChanged=current==="general"
       && String(payload.destination_code_postal||"").trim()!==previousPostalCode;
     pendingResponsibilities=null;

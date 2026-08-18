@@ -26,17 +26,18 @@ class AuthenticationRequiredTests(TestCase):
         self.client.force_login(user)
         response = self.client.get(reverse("accueil"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Mon tableau de bord")
+        self.assertContains(response, "Tableau de bord")
+        self.assertContains(response, "Mon planning")
 
     def test_compte_salarie_accede_aux_pages_de_son_tableau_de_bord(self):
         user = get_user_model().objects.create_user(username="espace-unique", password="secret-test")
         Animateur.objects.create(prenom="Alice", nom="Unique", utilisateur=user)
         self.client.force_login(user)
 
-        for route in ("mon_profil", "documents", "mes_disponibilites"):
+        self.assertEqual(self.client.get(reverse("mon_profil")).status_code, 200)
+        for route in ("documents", "mes_disponibilites"):
             with self.subTest(route=route):
-                response = self.client.get(reverse(route))
-                self.assertEqual(response.status_code, 200)
+                self.assertRedirects(self.client.get(reverse(route)), reverse("accueil"))
 
     def test_api_planning_salarie_retourne_toute_equipe_de_son_lieu(self):
         user = get_user_model().objects.create_user(username="planning-perso", password="secret-test")

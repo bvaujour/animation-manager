@@ -1,0 +1,72 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:animateurs_periodescolaire_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; Classification
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  {% if apercu %}
+    <h2>Récapitulatif avant validation</h2>
+    <p>Les périodes suivantes seront classées dans « {{ apercu.type_accueil.nom }} ».</p>
+    <table>
+      <thead><tr><th>Nom</th><th>Dates</th><th>Semaines comprises</th><th>Centres et groupes</th><th>Type actuel</th></tr></thead>
+      <tbody>
+      {% for detail in apercu.details %}
+        <tr>
+          <td>{{ detail.periode.nom }}</td>
+          <td>{{ detail.periode.debut|date:"d/m/Y" }} – {{ detail.periode.fin|date:"d/m/Y" }}</td>
+          <td>{% for debut, fin in detail.semaines %}{{ debut|date:"d/m/Y" }} – {{ fin|date:"d/m/Y" }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+          <td>{% for groupe in detail.groupes %}{{ groupe.centre.nom }} — {{ groupe.nom }}{% empty %}Aucune association{% endfor %}</td>
+          <td>{{ detail.periode.type_accueil|default:"Non renseigné" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <form method="post">
+      {% csrf_token %}
+      {% for id in apercu.ids %}<input type="hidden" name="periode_ids" value="{{ id }}">{% endfor %}
+      <input type="hidden" name="type_accueil" value="{{ apercu.type_accueil.pk }}">
+      <div class="submit-row">
+        <input type="submit" name="confirmer" value="Confirmer la classification" class="default">
+        <a href="{% url 'admin:animateurs_periodescolaire_classification' %}" class="closelink">Annuler</a>
+      </div>
+    </form>
+  {% else %}
+    {% if details_periodes %}
+      <form method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <fieldset class="module aligned">
+          <div class="form-row"><label for="id_type_accueil">Type d'accueil :</label>{{ form.type_accueil }}{{ form.type_accueil.errors }}</div>
+        </fieldset>
+        {{ form.periode_ids.errors }}
+        <table>
+          <thead><tr><th>Sélection</th><th>Nom</th><th>Dates</th><th>Semaines comprises</th><th>Centres et groupes</th><th>Type actuel</th></tr></thead>
+          <tbody>
+          {% for detail in details_periodes %}
+            <tr>
+              <td><input type="checkbox" name="periode_ids" value="{{ detail.periode.pk }}"{% if detail.selected %} checked{% endif %}></td>
+              <td>{{ detail.periode.nom }}</td>
+              <td>{{ detail.periode.debut|date:"d/m/Y" }} – {{ detail.periode.fin|date:"d/m/Y" }}</td>
+              <td>{% for debut, fin in detail.semaines %}{{ debut|date:"d/m/Y" }} – {{ fin|date:"d/m/Y" }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+              <td>{% for groupe in detail.groupes %}{{ groupe.centre.nom }} — {{ groupe.nom }}{% if not forloop.last %}<br>{% endif %}{% empty %}Aucune association{% endfor %}</td>
+              <td>{{ detail.periode.type_accueil|default:"Non renseigné" }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <div class="submit-row"><input type="submit" value="Afficher le récapitulatif" class="default"></div>
+      </form>
+    {% else %}
+      <p>Toutes les périodes sont déjà classées.</p>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

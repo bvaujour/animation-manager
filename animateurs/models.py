@@ -124,6 +124,15 @@ def normaliser_cle_unique(*valeurs):
     return " ".join(texte.split())
 
 
+def type_accueil_vacances_par_defaut():
+    """Repli technique pour les créations hors des formulaires applicatifs."""
+    return TypeAccueil.objects.only("pk").get(code=TypeAccueil.VACANCES).pk
+
+
+def type_accueil_sejours_par_defaut():
+    return TypeAccueil.objects.only("pk").get(code=TypeAccueil.SEJOURS).pk
+
+
 class Qualification(models.Model):
     """Un diplôme/une compétence qu'un animateur peut avoir (ex: BAFA,
     permis B, PSC1...). Purement déclaratif pour l’instant."""
@@ -275,6 +284,50 @@ class Animateur(models.Model):
         return f"{self.prenom} {self.nom}"
 
 
+class TypeAccueil(models.Model):
+    """Référentiel commun des contextes d'activité de l'application."""
+
+    VACANCES = "vacances"
+    MERCREDIS = "mercredis"
+    PERISCOLAIRE = "periscolaire"
+    SEJOURS = "sejours"
+
+    code = models.SlugField(max_length=24, unique=True)
+    nom = models.CharField(max_length=60, unique=True)
+    ordre = models.PositiveSmallIntegerField(default=0)
+    actif = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("ordre", "nom")
+        verbose_name = "type d'accueil"
+        verbose_name_plural = "types d'accueil"
+
+    def __str__(self):
+        return self.nom
+
+
+class ModalitePeriscolaire(models.Model):
+    MERCREDI_JOURNEE = "mercredi_journee"
+    MATIN = "matin"
+    MIDI = "midi"
+    SOIR = "soir"
+    DEVOIRS = "aide_devoirs"
+
+    code = models.SlugField(max_length=40, unique=True)
+    nom = models.CharField(max_length=100)
+    heure_debut = models.TimeField(null=True, blank=True)
+    heure_fin = models.TimeField(null=True, blank=True)
+    jour_entier = models.BooleanField(default=False)
+    actif = models.BooleanField(default=True)
+    ordre = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("ordre", "nom")
+
+    def __str__(self):
+        return self.nom
+
+
 class Centre(models.Model):
     """Un centre d'animation (ex: Pacaudière, Saint-Forgeux...). Chaque
     centre a son propre calendrier sur la page planning."""
@@ -309,6 +362,12 @@ class Centre(models.Model):
     )
 
     effectif_cible = models.PositiveSmallIntegerField(default=1)
+    types_accueil = models.ManyToManyField(
+        TypeAccueil,
+        related_name="centres",
+        blank=True,
+        help_text="Types d'accueil proposés dans ce lieu physique.",
+    )
 
     ordre = models.PositiveSmallIntegerField(
         default=0,
@@ -340,6 +399,12 @@ class Groupe(models.Model):
     enfants_par_animateur_defaut = models.PositiveSmallIntegerField(
         default=8,
         verbose_name="nombre d’enfants par animateur par défaut",
+    )
+    types_accueil = models.ManyToManyField(
+        TypeAccueil,
+        related_name="groupes_partages",
+        blank=True,
+        help_text="Types d'accueil utilisant cette définition partagée.",
     )
 
     class Meta:
@@ -384,6 +449,14 @@ class Evenement(models.Model):
         related_name="groupes",
         blank=True,
         verbose_name="périodes",
+    )
+    types_accueil = models.ManyToManyField(
+        TypeAccueil,
+        related_name="groupes_accueil",
+        blank=True,
+    )
+    modalite_periscolaire = models.ForeignKey(
+        ModalitePeriscolaire, on_delete=models.PROTECT, related_name="groupes_accueil", null=True, blank=True
     )
     ferme_jours_feries = models.BooleanField(
         default=True,
@@ -493,6 +566,14 @@ class EffectifEnfantsJour(models.Model):
         verbose_name="groupe",
     )
     date = models.DateField(db_index=True)
+    type_accueil = models.ForeignKey(
+        TypeAccueil,
+        on_delete=models.PROTECT,
+        related_name="effectifs_enfants",
+        null=True,
+        blank=True,
+    )
+    modalite_periscolaire = models.ForeignKey(ModalitePeriscolaire, on_delete=models.PROTECT, related_name="effectifs", null=True, blank=True)
     nombre = models.PositiveSmallIntegerField(default=0)
     heure_arrivee = models.TimeField(blank=True, null=True)
     heure_depart = models.TimeField(blank=True, null=True)
@@ -569,6 +650,14 @@ class BesoinQualification(models.Model):
     )
     qualification = models.ForeignKey(Qualification, on_delete=models.CASCADE)
     nombre_minimum = models.PositiveSmallIntegerField(default=1)
+    type_accueil = models.ForeignKey(
+        TypeAccueil,
+        on_delete=models.PROTECT,
+        related_name="besoins_qualifications",
+        null=True,
+        blank=True,
+    )
+    modalite_periscolaire = models.ForeignKey(ModalitePeriscolaire, on_delete=models.PROTECT, related_name="besoins", null=True, blank=True)
 
     class Meta:
         ordering = ["qualification__nom"]
@@ -648,6 +737,27 @@ class PeriodeScolaire(models.Model):
     fin = models.DateField()
     description_source = models.CharField(max_length=180, blank=True, default="")
     ordre = models.PositiveSmallIntegerField(default=0)
+    periode_calendrier = models.ForeignKey(
+        "PeriodeCalendrier",
+        on_delete=models.PROTECT,
+        related_name="semaines",
+        null=True,
+        blank=True,
+    )
+    type_accueil = models.ForeignKey(
+        TypeAccueil,
+        default=type_accueil_vacances_par_defaut,
+        on_delete=models.PROTECT,
+        related_name="periodes",
+    )
+    types_accueil = models.ManyToManyField(
+        TypeAccueil,
+        related_name="semaines_reference",
+        blank=True,
+        help_text="Types utilisant cette même semaine de référence.",
+    )
+    modalite_periscolaire = models.ForeignKey(ModalitePeriscolaire, on_delete=models.PROTECT, related_name="periodes_travail", null=True, blank=True)
+    modalites_periscolaires = models.ManyToManyField(ModalitePeriscolaire, related_name="semaines_reference", blank=True)
     date_import = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -672,7 +782,11 @@ class PeriodeScolaire(models.Model):
             raise ValidationError({"annee_scolaire": "Les années doivent être consécutives."})
         if self.fin < self.debut:
             raise ValidationError({"fin": "La date de fin doit suivre la date de début."})
-        if self.debut.weekday() != 0 or self.fin.weekday() != 4:
+        if (
+            self.type_accueil_id
+            and self.type_accueil.code == TypeAccueil.VACANCES
+            and (self.debut.weekday() != 0 or self.fin.weekday() != 4)
+        ):
             raise ValidationError("Une période importée doit aller du lundi au vendredi.")
 
     @property
@@ -696,6 +810,38 @@ class PeriodeScolaire(models.Model):
         return f"{self.libelle_avec_annee} ({self.debut:%d/%m/%Y} au {self.fin:%d/%m/%Y})"
 
 
+class PeriodeCalendrier(models.Model):
+    """Référence calendaire commune, distincte du type d'accueil."""
+
+    VACANCES = "vacances"
+    SCOLAIRE = "scolaire"
+    CATEGORIES = ((VACANCES, "Vacances scolaires"), (SCOLAIRE, "Période scolaire"))
+
+    categorie = models.CharField(max_length=12, choices=CATEGORIES)
+    nom = models.CharField(max_length=140)
+    annee_scolaire = models.CharField(max_length=9)
+    zone = models.CharField(max_length=1, choices=PeriodeScolaire.ZONES)
+    debut = models.DateField()
+    fin = models.DateField()
+    types_accueil = models.ManyToManyField(TypeAccueil, related_name="periodes_calendrier", blank=True)
+
+    class Meta:
+        ordering = ("-annee_scolaire", "zone", "debut", "nom")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("categorie", "annee_scolaire", "zone", "debut", "fin"),
+                name="unique_periode_calendrier_zone_dates",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(fin__gte=models.F("debut")),
+                name="periode_calendrier_fin_apres_debut",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.nom} {self.debut.year}"
+
+
 class Disponibilite(models.Model):
     """Une plage de dates (bornes incluses) où un animateur est
     disponible pour travailler.
@@ -716,6 +862,12 @@ class Disponibilite(models.Model):
     )
     debut = models.DateField(help_text="Premier jour de disponibilité")
     fin = models.DateField(help_text="Dernier jour de disponibilité (inclus)")
+    types_accueil = models.ManyToManyField(
+        TypeAccueil,
+        related_name="disponibilites",
+        blank=True,
+        help_text="Vide signifie que la disponibilité reste générale.",
+    )
 
     class Meta:
         ordering = ["debut"]
@@ -828,6 +980,14 @@ class Affectation(models.Model):
     )
     debut = models.DateTimeField()
     fin = models.DateTimeField()
+    type_accueil = models.ForeignKey(
+        TypeAccueil,
+        on_delete=models.PROTECT,
+        related_name="affectations",
+        null=True,
+        blank=True,
+    )
+    modalite_periscolaire = models.ForeignKey(ModalitePeriscolaire, on_delete=models.PROTECT, related_name="affectations", null=True, blank=True)
 
     class Meta:
         ordering = ["debut"]
@@ -873,6 +1033,15 @@ class ActiviteTravailComplementaire(models.Model):
     )
     date_creation = models.DateTimeField(auto_now_add=True)
     date_modification = models.DateTimeField(auto_now=True)
+    type_accueil = models.ForeignKey(
+        TypeAccueil,
+        on_delete=models.PROTECT,
+        related_name="activites_travail_complementaires",
+        null=True,
+        blank=True,
+        help_text="Vide signifie que l'activité reste visible dans la vue générale.",
+    )
+    modalite_periscolaire = models.ForeignKey(ModalitePeriscolaire, on_delete=models.PROTECT, related_name="activites_travail", null=True, blank=True)
 
     class Meta:
         ordering = ("date", "intitule", "id")
@@ -1021,6 +1190,14 @@ class PublicationPlanning(models.Model):
 
     semaine_debut = models.DateField(unique=True, db_index=True)
     publie = models.BooleanField(default=False, db_index=True)
+    type_accueil = models.ForeignKey(
+        TypeAccueil,
+        on_delete=models.PROTECT,
+        related_name="publications_planning",
+        null=True,
+        blank=True,
+    )
+    modalite_periscolaire = models.ForeignKey(ModalitePeriscolaire, on_delete=models.PROTECT, related_name="publications", null=True, blank=True)
     date_modification = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -1109,6 +1286,23 @@ class Document(models.Model):
         blank=True,
         help_text="Semaines auxquelles ce document est rattaché.",
     )
+    tous_centres = models.BooleanField(
+        default=True,
+        help_text="Si coché, le document concerne tous les centres.",
+    )
+    centres = models.ManyToManyField(
+        Centre,
+        related_name="documents",
+        blank=True,
+        help_text="Centres concernés lorsque le document n'est pas destiné à tous les centres.",
+    )
+    types_accueil = models.ManyToManyField(
+        TypeAccueil,
+        related_name="documents",
+        blank=True,
+        help_text="Types d'accueil concernés ; vide conserve le comportement général historique.",
+    )
+    modalites_periscolaires = models.ManyToManyField(ModalitePeriscolaire, related_name="documents", blank=True)
     publie = models.BooleanField(
         default=False,
         db_index=True,
@@ -1152,6 +1346,90 @@ class Document(models.Model):
         return self.titre
 
 
+class Sejour(models.Model):
+    """Séjour distinct d'un lieu, avec traçabilité de la donnée historique."""
+
+    nom = models.CharField(max_length=160)
+    type_accueil = models.ForeignKey(TypeAccueil, default=type_accueil_sejours_par_defaut, on_delete=models.PROTECT, related_name="sejours_structures")
+    date_debut = models.DateField(null=True, blank=True)
+    date_fin = models.DateField(null=True, blank=True)
+    destination = models.CharField(max_length=240, blank=True, default="")
+    hebergement = models.CharField(max_length=240, blank=True, default="")
+    periode_vacances = models.ForeignKey(
+        PeriodeCalendrier,
+        on_delete=models.PROTECT,
+        related_name="sejours",
+        null=True,
+        blank=True,
+        limit_choices_to={"categorie": PeriodeCalendrier.VACANCES},
+    )
+    equipe = models.ManyToManyField(Animateur, related_name="sejours", blank=True)
+    responsable = models.ForeignKey(Animateur, on_delete=models.PROTECT, related_name="sejours_responsable", null=True, blank=True)
+    documents = models.ManyToManyField(Document, related_name="sejours", blank=True)
+    source_lieu_legacy = models.OneToOneField(
+        Centre,
+        on_delete=models.PROTECT,
+        related_name="sejour_migre",
+        null=True,
+        blank=True,
+        help_text="Lieu historique conservé pendant sa migration progressive.",
+    )
+    actif = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("date_debut", "nom")
+
+    def clean(self):
+        super().clean()
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+            raise ValidationError({"date_fin": "La fin du séjour doit suivre son début."})
+
+    @property
+    def avertissement_periode_vacances(self):
+        if not self.periode_vacances or not self.date_debut or not self.date_fin:
+            return ""
+        if self.date_debut < self.periode_vacances.debut or self.date_fin > self.periode_vacances.fin:
+            return "Les dates du séjour dépassent la période de vacances associée."
+        return ""
+
+    def __str__(self):
+        return self.nom
+
+
+class StatutPreparationSemaine(models.Model):
+    """Surcharge purement visuelle du statut de préparation d'une semaine."""
+
+    debut_semaine = models.DateField(unique=True)
+    est_force_prete = models.BooleanField(default=False)
+    modifie_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="statuts_preparation_semaines_modifies",
+    )
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-debut_semaine",)
+
+    def __str__(self):
+        return f"Semaine du {self.debut_semaine:%d/%m/%Y}"
+
+
+class ParticipantSejour(models.Model):
+    sejour = models.ForeignKey(Sejour, on_delete=models.CASCADE, related_name="participants")
+    prenom = models.CharField(max_length=100)
+    nom = models.CharField(max_length=100)
+    date_naissance = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("nom", "prenom")
+
+    def __str__(self):
+        return f"{self.prenom} {self.nom}"
+
+
 class Sortie(models.Model):
     """Préparation d'une sortie ; les effectifs restent calculés depuis le Planning."""
 
@@ -1167,6 +1445,14 @@ class Sortie(models.Model):
     )
 
     nom = models.CharField(max_length=150)
+    type_accueil = models.ForeignKey(
+        TypeAccueil,
+        on_delete=models.PROTECT,
+        related_name="sorties",
+        null=True,
+        blank=True,
+    )
+    modalite_periscolaire = models.ForeignKey(ModalitePeriscolaire, on_delete=models.PROTECT, related_name="sorties", null=True, blank=True)
     date = models.DateField(db_index=True)
     destination = models.CharField(max_length=180)
     destination_adresse = models.CharField(max_length=240, blank=True, default="")
@@ -1411,6 +1697,12 @@ class ModeleEmail(models.Model):
     objet = models.CharField(max_length=200)
     message = models.TextField()
     actif = models.BooleanField(default=True)
+    types_accueil = models.ManyToManyField(
+        TypeAccueil,
+        related_name="modeles_email",
+        blank=True,
+        help_text="Vide signifie que le modèle reste utilisable dans tous les contextes.",
+    )
     ordre = models.PositiveSmallIntegerField(default=0)
     date_creation = models.DateTimeField(auto_now_add=True)
     date_modification = models.DateTimeField(auto_now=True)
@@ -1470,3 +1762,127 @@ class ProfilImportEffectifs(models.Model):
 
     def __str__(self):
         return self.nom
+
+
+class Formation(models.Model):
+    """Formation prévue puis clôturée avec la présence de chaque participant."""
+
+    STATUT_PREVUE = "prevue"
+    STATUT_EN_COURS = "en_cours"
+    STATUT_A_CLOTURER = "a_cloturer"
+    STATUT_TERMINEE = "terminee"
+    STATUT_ANNULEE = "annulee"
+    STATUT_CHOICES = (
+        (STATUT_PREVUE, "Prévue"),
+        (STATUT_EN_COURS, "En cours"),
+        (STATUT_A_CLOTURER, "À clôturer"),
+        (STATUT_TERMINEE, "Terminée"),
+        (STATUT_ANNULEE, "Annulée"),
+    )
+    HEBERGEMENT_INTERNAT = "internat"
+    HEBERGEMENT_EXTERNAT = "externat"
+    HEBERGEMENT_CHOICES = (
+        (HEBERGEMENT_INTERNAT, "Internat"),
+        (HEBERGEMENT_EXTERNAT, "Externat"),
+    )
+
+    intitule = models.CharField(max_length=180)
+    animateurs = models.ManyToManyField(
+        Animateur,
+        through="ParticipationFormation",
+        related_name="formations",
+        verbose_name="animateurs concernés",
+    )
+    date_debut = models.DateField()
+    date_fin = models.DateField()
+    organisme = models.CharField(max_length=180, blank=True)
+    email_contact = models.EmailField(blank=True, verbose_name="e-mail du contact")
+    telephone_contact = models.CharField(max_length=40, blank=True, verbose_name="téléphone du contact")
+    lieu = models.CharField(max_length=180, blank=True)
+    hebergement = models.CharField(max_length=12, choices=HEBERGEMENT_CHOICES, blank=True)
+    statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default=STATUT_PREVUE)
+    qualification = models.ForeignKey(
+        Qualification,
+        on_delete=models.SET_NULL,
+        related_name="formations_liees",
+        null=True,
+        blank=True,
+        verbose_name="qualification liée",
+    )
+    qualification_libre = models.CharField(
+        max_length=180,
+        blank=True,
+        verbose_name="autre qualification / qualification libre",
+    )
+    documents = models.ManyToManyField(
+        Document,
+        related_name="formations",
+        blank=True,
+        help_text="Documents existants de la bibliothèque liés à cette formation.",
+    )
+    commentaire = models.TextField(blank=True, verbose_name="commentaire / notes")
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("date_debut", "intitule", "id")
+        verbose_name = "formation"
+        verbose_name_plural = "formations"
+
+    def clean(self):
+        super().clean()
+        self.intitule = self.intitule.strip()
+        erreurs = {}
+        if not self.intitule:
+            erreurs["intitule"] = "L’intitulé est obligatoire."
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+            erreurs["date_fin"] = "La date de fin ne peut pas être antérieure à la date de début."
+        if erreurs:
+            raise ValidationError(erreurs)
+
+    def __str__(self):
+        return self.intitule
+
+    def statut_calcule(self, aujourd_hui=None):
+        """Statut visible : seules l'annulation et la clôture sont manuelles."""
+        aujourd_hui = aujourd_hui or timezone.localdate()
+        if self.statut == self.STATUT_ANNULEE:
+            return self.STATUT_ANNULEE
+        if self.statut == self.STATUT_TERMINEE:
+            return self.STATUT_TERMINEE
+        if aujourd_hui < self.date_debut:
+            return self.STATUT_PREVUE
+        if aujourd_hui <= self.date_fin:
+            return self.STATUT_EN_COURS
+        return self.STATUT_A_CLOTURER
+
+    @property
+    def statut_effectif(self):
+        return self.statut_calcule()
+
+
+class ParticipationFormation(models.Model):
+    PRESENCE_A_CONFIRMER = "a_confirmer"
+    PRESENCE_PRESENT = "present"
+    PRESENCE_ABSENT = "absent"
+    PRESENCE_CHOICES = (
+        (PRESENCE_A_CONFIRMER, "À confirmer"),
+        (PRESENCE_PRESENT, "Présent"),
+        (PRESENCE_ABSENT, "Absent"),
+    )
+
+    formation = models.ForeignKey(Formation, on_delete=models.CASCADE, related_name="participations")
+    animateur = models.ForeignKey(Animateur, on_delete=models.CASCADE, related_name="participations_formations")
+    presence = models.CharField(max_length=16, choices=PRESENCE_CHOICES, default=PRESENCE_A_CONFIRMER)
+
+    class Meta:
+        ordering = ("animateur__nom", "animateur__prenom", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("formation", "animateur"),
+                name="unique_participation_formation_animateur",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.formation} — {self.animateur} ({self.get_presence_display()})"

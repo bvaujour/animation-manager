@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
@@ -88,9 +88,9 @@ class LocalisationServiceTests(SimpleTestCase):
             rechercher_communes_par_code_postal("42640")
 
     def test_composant_est_reutilisable_bidirectionnel_et_sans_boucle(self):
-        javascript = Path(settings.BASE_DIR, "static/js/common/location-autocomplete.js").read_text()
-        gestion = Path(settings.BASE_DIR, "static/js/gestion.js").read_text()
-        sortie = Path(settings.BASE_DIR, "templates/sorties.html").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/common/location-autocomplete.js").read_text(encoding="utf-8")
+        gestion = Path(settings.BASE_DIR, "static/js/gestion.js").read_text(encoding="utf-8")
+        sortie = Path(settings.BASE_DIR, "templates/sorties.html").read_text(encoding="utf-8")
         self.assertIn("function initLocationAutocomplete", javascript)
         self.assertIn("params.code_postal", javascript)
         self.assertIn("{nom:value}", javascript)
@@ -104,7 +104,7 @@ class LocalisationServiceTests(SimpleTestCase):
         self.assertIn("data-location-autocomplete", sortie)
 
     def test_changement_code_postal_actualise_meteo_et_trajets_sans_rechargement(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
         self.assertIn("refreshDestinationCalculations", javascript)
         self.assertIn('meteo/?forcer=1', javascript)
         self.assertIn('["aller","heure_depart"', javascript)

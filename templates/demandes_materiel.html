@@ -4,7 +4,7 @@
 {% block page_styles %}<link rel="stylesheet" href="{% static 'css/demandes-materiel.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide material-page">
-    {% include "partials/_page_header.html" with title="Demandes de matériel" header_class="material-header" picker_mode="none" %}
+    {% include "partials/_page_header.html" with title="Demandes de matériel" header_class="material-header" picker_mode="none" context_selector=True %}
 
     {% if message %}<p class="material-feedback material-feedback--success" role="status">{{ message }}</p>{% endif %}
     {% if erreur %}<p class="material-feedback material-feedback--error" role="alert">{{ erreur }}</p>{% endif %}

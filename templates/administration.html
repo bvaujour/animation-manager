@@ -9,7 +9,7 @@
 
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide administration-page" data-active-tab="{{ active_tab|default:'export' }}">
-    {% include "partials/_page_header.html" with title="Administration" header_class="administration-page-header" container_id="administration-period-nav" previous_id="administration-prev-week" today_id="administration-current-week" next_id="administration-next-week" label_id="administration-visible-period" generic_navigation="true" %}
+    {% include "partials/_page_header.html" with title="Administration" header_class="administration-page-header" picker_mode="none" %}
     <div class="tabs admin-tabs app-page-tabs app-page-tabs-row" id="administration-tabs" role="tablist" aria-label="Administration">
         <button class="tab-btn{% if active_tab == 'export' %} active{% endif %}" data-admin-tab="export" type="button" role="tab" aria-selected="{% if active_tab == 'export' %}true{% else %}false{% endif %}">Exports</button>
         <button class="tab-btn{% if active_tab == 'emails' %} active{% endif %}" data-admin-tab="emails" type="button" role="tab" aria-selected="{% if active_tab == 'emails' %}true{% else %}false{% endif %}">E-mails</button>

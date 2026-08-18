@@ -1,5 +1,14 @@
 <header class="page-header app-page-header{% if picker_mode == 'multiple' %} app-page-header--picker-actions{% elif picker_mode == 'none' %} app-page-header--title-only{% else %} app-page-header--week-only{% endif %}{% if header_class %} {{ header_class }}{% endif %}">
     <h1 class="app-page-title">{{ title }}</h1>
+    {% if context_selector %}{% include "partials/_type_accueil_selector.html" %}{% endif %}
+    {% if recap_date_range %}
+        <div class="recap-date-filters" aria-label="Période de paie">
+            <label for="recap-date-start">Du <input id="recap-date-start" type="date" required></label>
+            <label for="recap-date-end">Au <input id="recap-date-end" type="date" required></label>
+            <button id="recap-refresh" class="btn btn-primary" type="button">Actualiser</button>
+            <span id="recap-period-error" class="recap-period-error" role="alert" hidden></span>
+        </div>
+    {% endif %}
     {% if picker_mode != "none" or action_id and action_label %}
         <div class="app-page-week{% if actions_class %} {{ actions_class }}{% endif %}" aria-label="{{ week_aria_label|default:'Choix de la période' }}">
             {% if picker_mode == "multiple" %}

@@ -259,12 +259,12 @@ class TempsTravailComplementaireTests(ConnexionTestCase):
         # hors période et la préparation n'a pas de date hebdomadaire.
         self.assertEqual(response.json()["total_paie_estime"], "245.00")
 
-    def test_temps_travail_est_une_page_autonome(self):
+    def test_temps_travail_est_integre_a_la_paie_et_les_anciens_liens_redirigent(self):
         planning = self.client.get(reverse("planning"))
         self.assertNotContains(planning, 'id="worktime-panel"')
         self.assertNotContains(planning, 'data-planning-mode="temps-travail"')
 
-        response = self.client.get(reverse("temps_travail"))
+        response = self.client.get(reverse("recapitulatif"))
         self.assertContains(response, "Temps de travail")
         self.assertContains(response, 'id="worktime-periods"')
         self.assertContains(response, 'data-week-picker-mode="multiple"')
@@ -272,5 +272,7 @@ class TempsTravailComplementaireTests(ConnexionTestCase):
         self.assertContains(response, 'id="worktime-summary"')
         self.assertContains(response, 'placeholder="Rechercher un nom ou un prénom"')
         self.assertNotContains(response, 'id="worktime-save-preparation"')
+        ancienne_page = self.client.get(reverse("temps_travail"))
+        self.assertRedirects(ancienne_page, reverse("recapitulatif") + "?onglet=temps-travail")
         legacy = self.client.get(reverse("planning") + "?mode=temps-travail")
-        self.assertRedirects(legacy, reverse("temps_travail"))
+        self.assertRedirects(legacy, reverse("recapitulatif") + "?onglet=temps-travail")

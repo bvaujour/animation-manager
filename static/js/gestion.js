@@ -1008,6 +1008,17 @@ function bouton(label, classes, onClick)
 	// ------------------------------------------------------------------
 	function mountPeriodes(container)
 	{
+		const typesAccueil = [["vacances", "Vacances"], ["periscolaire", "Périscolaire"], ["sejours", "Séjour"]];
+		const typeContexte = typesAccueil.some(([code]) => code === container.dataset.typeAccueilSelectionne)
+			? container.dataset.typeAccueilSelectionne : "vacances";
+		function choixTypes(nom, selection = typeContexte)
+		{
+			return `<div class="period-type-options">${typesAccueil.map(([code, libelle]) => `<label class="period-type-option"><input type="radio" name="${nom}" value="${code}" ${code === selection ? "checked" : ""} required><span>${libelle}</span></label>`).join("")}</div>`;
+		}
+		function typeSelectionne(root, nom)
+		{
+			return root.querySelector(`input[name="${nom}"]:checked`)?.value || "";
+		}
 		function anneeScolaireParDefaut()
 		{
 			const maintenant = new Date();
@@ -1020,10 +1031,23 @@ function bouton(label, classes, onClick)
 		container.innerHTML = `
 			<div class="periods-intro">
 				<div>
-					<p class="section-title">Importer les vacances scolaires</p>
+					<p class="section-title">Vacances scolaires</p>
 					
 				</div>
 				<span class="periods-independent-badge">Indépendant du planning</span>
+			</div>
+
+			<div class="gestion-form period-manual-form">
+				<p class="section-title">Ajouter une période</p>
+				<div class="edit-grid period-manual-grid">
+					<div class="field"><label>Nom</label><input class="period-create-name" required></div>
+					<div class="field"><label>Année scolaire</label><input class="period-create-year" maxlength="9" value="${anneeScolaireParDefaut()}" required></div>
+					<div class="field"><label>Zone</label><select class="period-create-zone"><option>A</option><option>B</option><option>C</option></select></div>
+					<div class="field"><label>Début</label><input class="period-create-start" type="date" required></div>
+					<div class="field"><label>Fin</label><input class="period-create-end" type="date" required></div>
+				</div>
+				<p class="form-error period-create-error"></p>
+				<button class="btn btn-primary period-create-submit" type="button">Ajouter une période de vacances manuellement</button>
 			</div>
 
 			<div class="gestion-form period-import-form">
@@ -1062,6 +1086,16 @@ function bouton(label, classes, onClick)
 				</div>
 			</div>
 			<div id="period-library" class="period-library"></div>
+			<section class="period-stays-section">
+				<p class="section-title">Séjours</p>
+				<div class="gestion-form period-stay-form"><div class="edit-grid">
+					<div class="field"><label>Nom</label><input class="stay-name"></div><div class="field"><label>Destination</label><input class="stay-destination"></div>
+					<div class="field"><label>Début</label><input class="stay-start" type="date"></div><div class="field"><label>Fin</label><input class="stay-end" type="date"></div>
+					<div class="field"><label>Période de vacances associée</label><select class="stay-vacation"><option value="">Aucune</option></select></div>
+					<div class="field"><label>Équipe</label><select class="stay-team" multiple></select></div>
+				</div><p class="form-error stay-error"></p><button class="btn btn-primary stay-submit" type="button">Ajouter le séjour</button></div>
+				<div class="period-stays-list"></div>
+			</section>
 		`;
 
 		const yearInput = container.querySelector("#period-school-year");
@@ -1074,24 +1108,60 @@ function bouton(label, classes, onClick)
 		let previewData = null;
 		let savedPeriods = [];
 
+		async function chargerSejours()
+		{
+			const data = await apiFetch("/api/sejours/");
+			container.querySelector(".stay-vacation").innerHTML = '<option value="">Aucune</option>' + data.periodes_vacances.map((item) => `<option value="${item.id}">${escapeHtml(item.nom)}</option>`).join("");
+			container.querySelector(".stay-team").innerHTML = data.animateurs.map((item) => `<option value="${item.id}">${escapeHtml(`${item.prenom} ${item.nom}`)}</option>`).join("");
+			container.querySelector(".period-stays-list").innerHTML = data.sejours.map((item) => `<div class="period-saved-row"><div class="period-saved-date"><strong>${escapeHtml(item.nom)}</strong><span>${escapeHtml(item.destination || "Destination non renseignée")} · ${escapeHtml(libelleDate(item.date_debut))} → ${escapeHtml(libelleDate(item.date_fin))}</span></div></div>`).join("") || '<p class="empty-note">Aucun séjour enregistré.</p>';
+		}
+
+		container.querySelector(".stay-submit").addEventListener("click", async () => {
+			const form = container.querySelector(".period-stay-form");
+			try {
+				await apiFetch("/api/sejours/", { method: "POST", body: JSON.stringify({ nom: form.querySelector(".stay-name").value.trim(), destination: form.querySelector(".stay-destination").value.trim(), date_debut: form.querySelector(".stay-start").value, date_fin: form.querySelector(".stay-end").value, periode_vacances_id: Number(form.querySelector(".stay-vacation").value) || null, equipe_ids: [...form.querySelector(".stay-team").selectedOptions].map((item) => Number(item.value)) }) });
+				afficherToast("Séjour ajouté."); await chargerSejours();
+			} catch (err) { form.querySelector(".stay-error").textContent = erreurMessage(err, "Ajout impossible."); }
+		});
+
 		function payloadImport()
 		{
 			return {
 				annee_scolaire: yearInput.value.trim(),
 				zone: zoneInput.value,
+				type_accueil: "vacances",
 			};
+		}
+
+		async function creerPeriode()
+		{
+			const form = container.querySelector(".period-manual-form");
+			const error = form.querySelector(".period-create-error");
+			error.textContent = "";
+			try {
+				await apiFetch("/api/periodes-scolaires/", { method: "POST", body: JSON.stringify({
+					nom: form.querySelector(".period-create-name").value.trim(),
+					annee_scolaire: form.querySelector(".period-create-year").value.trim(),
+					zone: form.querySelector(".period-create-zone").value,
+					debut: form.querySelector(".period-create-start").value,
+					fin: form.querySelector(".period-create-end").value,
+					type_accueil: "vacances",
+				}) });
+				form.querySelector(".period-create-name").value = "";
+				form.querySelector(".period-create-start").value = "";
+				form.querySelector(".period-create-end").value = "";
+				afficherToast("Période ajoutée.");
+				await chargerBibliotheque();
+			} catch (err) { error.textContent = erreurMessage(err, "Ajout impossible."); }
 		}
 
 		function rendrePreview(data)
 		{
 			previewData = data;
-			const rows = data.periodes.map((periode) => `
-				<tr>
-					<td><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong>${periode.deja_enregistree ? '<span class="period-existing">Déjà enregistrée</span>' : ""}</td>
-					<td>${escapeHtml(libelleDate(periode.debut))}</td>
-					<td>${escapeHtml(libelleDate(periode.fin))}</td>
-				</tr>
-			`).join("");
+			const rows = (data.groupes || []).map((groupe) => `<tbody><tr class="period-group-row"><th colspan="4">${escapeHtml(groupe.nom)}</th></tr>${groupe.semaines.map((periode) => `
+				<tr><td><input class="vacation-week-choice" type="checkbox" value="${periode.debut}" ${periode.deja_enregistree ? "disabled" : "checked"}></td>
+				<td><strong>Semaine du ${escapeHtml(libelleDate(periode.debut))} au ${escapeHtml(libelleDate(periode.fin))}</strong>${periode.deja_enregistree ? '<span class="period-existing">Déjà enregistrée</span>' : ""}</td>
+				<td>${escapeHtml(libelleDate(periode.debut))}</td><td>${escapeHtml(libelleDate(periode.fin))}</td></tr>`).join("")}</tbody>`).join("");
 
 			previewZone.innerHTML = `
 				<section class="period-preview-card">
@@ -1104,12 +1174,12 @@ function bouton(label, classes, onClick)
 					</div>
 					<div class="period-table-wrap">
 						<table class="period-table">
-							<thead><tr><th>Période</th><th>Du lundi</th><th>Au vendredi</th></tr></thead>
-							<tbody>${rows}</tbody>
+							<thead><tr><th></th><th>Semaine</th><th>Du</th><th>Au</th></tr></thead>${rows}
 						</table>
 					</div>
 					<div class="period-preview-actions">
-						<button class="btn btn-primary" id="period-import-button" type="button">Enregistrer toutes les périodes</button>
+						<button class="btn btn-ghost period-select-all" type="button">Tout sélectionner</button><button class="btn btn-ghost period-select-none" type="button">Tout désélectionner</button>
+						<button class="btn btn-primary" id="period-import-button" type="button">Enregistrer les semaines sélectionnées</button>
 						<p class="form-error" id="period-preview-error"></p>
 					</div>
 				</section>
@@ -1121,6 +1191,8 @@ function bouton(label, classes, onClick)
 				previewZone.innerHTML = "";
 			});
 			previewZone.querySelector("#period-import-button").addEventListener("click", importer);
+			previewZone.querySelector(".period-select-all").addEventListener("click", () => previewZone.querySelectorAll(".vacation-week-choice:not(:disabled)").forEach((item) => { item.checked = true; }));
+			previewZone.querySelector(".period-select-none").addEventListener("click", () => previewZone.querySelectorAll(".vacation-week-choice:not(:disabled)").forEach((item) => { item.checked = false; }));
 		}
 
 		async function previsualiser()
@@ -1159,7 +1231,7 @@ function bouton(label, classes, onClick)
 			{
 				const result = await apiFetch("/api/periodes-scolaires/importer/", {
 					method: "POST",
-					body: JSON.stringify(payloadImport()),
+					body: JSON.stringify({ ...payloadImport(), semaine_ids: [...previewZone.querySelectorAll(".vacation-week-choice:checked")].map((item) => item.value) }),
 				});
 				afficherToast(result.cree
 					? `${result.cree} période${result.cree > 1 ? "s" : ""} enregistrée${result.cree > 1 ? "s" : ""}.`
@@ -1228,9 +1300,28 @@ function bouton(label, classes, onClick)
 						const row = document.createElement("div");
 						row.className = "period-saved-row";
 						row.innerHTML = `
-							<div class="period-saved-date"><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><span>${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}</span></div>
+							<div class="period-saved-date"><strong>${escapeHtml(libellePeriodeAvecAnnee(periode))}</strong><span>${escapeHtml(libelleDate(periode.debut))} → ${escapeHtml(libelleDate(periode.fin))}</span><span class="period-type-badge">${escapeHtml(periode.type_accueil_nom || "Type non renseigné")}</span></div>
 							<div class="entity-actions"></div>
 						`;
+						row.querySelector(".entity-actions").appendChild(bouton("Modifier", "btn btn-ghost", () =>
+						{
+							const typeName = `period_edit_type_${periode.id}`;
+							row.innerHTML = `<div class="period-edit-form"><div class="edit-grid">
+								<div class="field"><label>Nom</label><input class="period-edit-name" value="${escapeHtml(periode.nom)}"></div>
+								<div class="field"><label>Année scolaire</label><input class="period-edit-year" value="${escapeHtml(periode.annee_scolaire)}"></div>
+								<div class="field"><label>Zone</label><select class="period-edit-zone"><option ${periode.zone === "A" ? "selected" : ""}>A</option><option ${periode.zone === "B" ? "selected" : ""}>B</option><option ${periode.zone === "C" ? "selected" : ""}>C</option></select></div>
+								<div class="field"><label>Début</label><input class="period-edit-start" type="date" value="${periode.debut}"></div>
+								<div class="field"><label>Fin</label><input class="period-edit-end" type="date" value="${periode.fin}"></div>
+							</div><div class="field"><span class="field-label">Type d'accueil</span>${choixTypes(typeName, periode.type_accueil)}</div><p class="form-error period-edit-error"></p><div class="edit-actions"><button class="btn btn-primary period-edit-save" type="button">Enregistrer</button><button class="btn btn-ghost period-edit-cancel" type="button">Annuler</button></div></div>`;
+							row.querySelector(".period-edit-cancel").addEventListener("click", rendreBibliotheque);
+							row.querySelector(".period-edit-save").addEventListener("click", async () => {
+								try {
+									await apiFetch(`/api/periodes-scolaires/${periode.id}/`, { method: "PATCH", body: JSON.stringify({ nom: row.querySelector(".period-edit-name").value.trim(), annee_scolaire: row.querySelector(".period-edit-year").value.trim(), zone: row.querySelector(".period-edit-zone").value, debut: row.querySelector(".period-edit-start").value, fin: row.querySelector(".period-edit-end").value, type_accueil: typeSelectionne(row, typeName) }) });
+									afficherToast("Période modifiée.");
+									await chargerBibliotheque();
+								} catch (err) { row.querySelector(".period-edit-error").textContent = erreurMessage(err, "Modification impossible."); }
+							});
+						}));
 						row.querySelector(".entity-actions").appendChild(bouton("Supprimer", "btn btn-danger-ghost", async () =>
 						{
 							if (!confirm(`Supprimer la période « ${libellePeriodeAvecAnnee(periode)} » ?`)) return;
@@ -1264,15 +1355,41 @@ function bouton(label, classes, onClick)
 		}
 
 		previewButton.addEventListener("click", previsualiser);
+		container.querySelector(".period-create-submit").addEventListener("click", creerPeriode);
 		filterYear.addEventListener("change", rendreBibliotheque);
 		chargerBibliotheque().catch((err) =>
 		{
 			library.innerHTML = `<p class="form-error">${escapeHtml(erreurMessage(err, "Impossible de charger les périodes."))}</p>`;
 		});
+		chargerSejours().catch(() => {});
 
 		return { charger: chargerBibliotheque };
 	}
 
+	function mountPeriodesScolaires(container)
+	{
+		const maintenant = new Date();
+		const debut = maintenant.getMonth() >= 6 ? maintenant.getFullYear() : maintenant.getFullYear() - 1;
+		container.innerHTML = `<div class="periods-intro"><div><p class="section-title">Périodes scolaires</p><p>Calendrier de référence commun à toutes les modalités du Périscolaire.</p></div><span class="periods-independent-badge">Référence commune</span></div>
+			<div class="gestion-form school-period-form"><div class="period-import-grid"><div class="field"><label>Année scolaire</label><input class="school-year" value="${debut}-${debut + 1}"></div><div class="field"><label>Zone</label><select class="school-zone"><option>A</option><option>B</option><option>C</option></select></div><button class="btn btn-primary school-preview" type="button">Calculer les périodes scolaires</button></div><p class="form-error school-error"></p></div><div class="school-preview-zone"></div>`;
+		const zone = container.querySelector(".school-preview-zone");
+		const payloadBase = () => ({ annee_scolaire: container.querySelector(".school-year").value.trim(), zone: container.querySelector(".school-zone").value });
+		container.querySelector(".school-preview").addEventListener("click", async () => {
+			try {
+				const data = await apiFetch("/api/calendrier-scolaire/previsualiser/", { method: "POST", body: JSON.stringify(payloadBase()) });
+				zone.innerHTML = `<section class="period-preview-card"><span class="field-label">Modalité périscolaire</span><div class="period-type-options"><label class="period-type-option"><input type="radio" name="school_modality" value="mercredi_journee" checked><span>Mercredi journée entière</span></label><label class="period-type-option"><input type="radio" name="school_modality" value="matin"><span>Accueil du matin</span></label><label class="period-type-option"><input type="radio" name="school_modality" value="midi"><span>Pause méridienne</span></label><label class="period-type-option"><input type="radio" name="school_modality" value="soir"><span>Accueil du soir</span></label><label class="period-type-option"><input type="radio" name="school_modality" value="aide_devoirs"><span>Aide aux devoirs</span></label><label class="period-type-option"><input type="radio" name="school_modality" value="autre"><span>Autre créneau configurable</span></label></div><div class="school-reference-list">${data.periodes.map((periode, index) => `<article class="school-reference-card"><label><input class="school-period-choice" type="checkbox" value="${index}" checked><strong>${escapeHtml(periode.nom)}</strong>${periode.deja_enregistree ? '<span class="period-existing">Référence déjà enregistrée — rattachement possible sans duplication</span>' : ""}</label><ul>${periode.semaines.map((semaine) => `<li>Semaine du ${escapeHtml(libelleDate(semaine.debut))} au ${escapeHtml(libelleDate(semaine.fin))}<small>Jours scolaires : ${semaine.jours_scolaires.map(libelleDate).join(", ")}</small></li>`).join("")}</ul></article>`).join("")}</div><div class="period-preview-actions"><button class="btn btn-ghost school-all" type="button">Tout sélectionner</button><button class="btn btn-ghost school-none" type="button">Tout désélectionner</button><button class="btn btn-primary school-save" type="button">Enregistrer les périodes sélectionnées</button></div><p class="form-error school-save-error"></p></section>`;
+				zone.querySelector(".school-all").addEventListener("click", () => zone.querySelectorAll(".school-period-choice:not(:disabled)").forEach((item) => { item.checked = true; }));
+				zone.querySelector(".school-none").addEventListener("click", () => zone.querySelectorAll(".school-period-choice:not(:disabled)").forEach((item) => { item.checked = false; }));
+				zone.querySelector(".school-save").addEventListener("click", async () => {
+					try {
+						await apiFetch("/api/calendrier-scolaire/enregistrer/", { method: "POST", body: JSON.stringify({ ...payloadBase(), type_accueil: "periscolaire", modalite_periscolaire: zone.querySelector('input[name="school_modality"]:checked').value, periode_ids: [...zone.querySelectorAll(".school-period-choice:checked")].map((item) => Number(item.value)) }) });
+						afficherToast("Périodes scolaires enregistrées.");
+					} catch (err) { zone.querySelector(".school-save-error").textContent = erreurMessage(err, "Enregistrement impossible."); }
+				});
+			} catch (err) { container.querySelector(".school-error").textContent = erreurMessage(err, "Calcul impossible."); }
+		});
+	}
+
 	// ------------------------------------------------------------------
-	return { mountCentres, mountGroupes, mountQualifications, mountPeriodes };
+	return { mountCentres, mountGroupes, mountQualifications, mountPeriodes, mountPeriodesScolaires };
 })();

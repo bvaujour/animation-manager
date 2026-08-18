@@ -1,12 +1,14 @@
-import datetime
+﻿import datetime
 import json
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.conf import settings
-from django.test import SimpleTestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -15,6 +17,7 @@ from animateurs.models import (
     Animateur,
     Centre,
     Disponibilite,
+    Document,
     EffectifEnfantsJour,
     Evenement,
     Qualification,
@@ -80,6 +83,62 @@ class SortiesTests(ConnexionTestCase):
             content_type="application/json",
         )
 
+    def test_documents_selectionnables_sont_limites_a_la_semaine_de_la_sortie(self):
+        sortie = Sortie.objects.create(nom="Parc", date=self.jour, destination="Parc")
+        documents = [
+            Document.objects.create(titre=titre, fichier=SimpleUploadedFile(nom, b"pdf"), permanent=False)
+            for titre, nom in (("Autorisation", "autorisation.pdf"), ("Programme", "programme.pdf"))
+        ]
+        for document in documents:
+            document.periodes.add(self.periode)
+        autre_periode = creer_periode(debut=datetime.date(2026, 7, 13), nom="Été 2026 — Semaine 2")
+        hors_semaine = Document.objects.create(
+            titre="Hors semaine", fichier=SimpleUploadedFile("hors.pdf", b"pdf"), permanent=False
+        )
+        hors_semaine.periodes.add(autre_periode)
+
+        url = reverse("api_sortie_detail", args=[sortie.id])
+        catalogue = self.client.get(url).json()["catalogue_documents"]
+        self.assertEqual({item["id"] for item in catalogue}, {item.id for item in documents})
+
+        response = self.client.patch(
+            url,
+            data=json.dumps({"document_ids": [item.id for item in documents]}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(sortie.documents.values_list("id", flat=True)), {item.id for item in documents})
+
+    def test_televersement_depuis_sortie_cree_publie_et_rattache_le_document(self):
+        sortie = Sortie.objects.create(nom="Parc", date=self.jour, destination="Parc")
+        with tempfile.TemporaryDirectory() as media_dir, override_settings(
+            MEDIA_ROOT=media_dir,
+            STORAGES={
+                "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+                "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+            },
+        ):
+            response = self.client.post(
+                reverse("api_sortie_document_upload", args=[sortie.id]),
+                data={
+                    "titre": "Autorisation parentale",
+                    "fichier": SimpleUploadedFile(
+                        "Autorisation été (signée).PDF", b"contenu", content_type="application/pdf"
+                    ),
+                },
+            )
+
+        self.assertEqual(response.status_code, 201)
+        document = Document.objects.get(pk=response.json()["id"])
+        self.assertEqual(document.titre, "Autorisation parentale")
+        self.assertTrue(document.publie)
+        self.assertFalse(document.permanent)
+        self.assertEqual(document.periode_debut, self.periode.debut)
+        self.assertEqual(document.periode_fin, self.periode.fin)
+        self.assertEqual(list(document.periodes.all()), [self.periode])
+        self.assertTrue(sortie.documents.filter(pk=document.id).exists())
+        self.assertRegex(document.fichier.name, r"^documents/autorisation-ete-signee-[0-9a-f]{8}\.pdf$")
+
     def test_page_sorties_presente_creation_avec_participants_et_apercu(self):
         response = self.client.get(reverse("sorties"))
         self.assertEqual(response.status_code, 200)
@@ -127,8 +186,8 @@ class SortiesTests(ConnexionTestCase):
         )
 
     def test_fiche_affiche_la_carte_des_controles_de_completion(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
-        css = Path(settings.BASE_DIR, "static/css/sorties.css").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
+        css = Path(settings.BASE_DIR, "static/css/sorties.css").read_text(encoding="utf-8")
         self.assertIn("completionControlsMarkup", javascript)
         self.assertIn("Contrôle de la sortie", javascript)
         self.assertIn("sortie-summary-completion", javascript)
@@ -136,8 +195,8 @@ class SortiesTests(ConnexionTestCase):
         self.assertIn("clip-path:polygon", css)
 
     def test_repartition_groupes_est_compacte_et_colore_le_ratio_reel(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
-        css = Path(settings.BASE_DIR, "static/css/sorties.css").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
+        css = Path(settings.BASE_DIR, "static/css/sorties.css").read_text(encoding="utf-8")
         self.assertIn("sortie-repartition-name", javascript)
         self.assertIn("sortie-effectifs-text", javascript)
         self.assertIn("sortie-ratio-real-badge", javascript)
@@ -146,7 +205,8 @@ class SortiesTests(ConnexionTestCase):
         self.assertIn("Taux réel ${actual}", javascript)
         self.assertIn("sortie-coverage-badges", javascript)
         self.assertIn("data-label=\"Animateurs affectés\"", javascript)
-        self.assertIn("@media (max-width:720px)", css)
+        self.assertIn(".sortie-repartition-wrap{overflow:visible}", css)
+        self.assertIn(".sortie-repartition-name{display:flex", css)
         self.assertNotIn("sortie-repartition-total", javascript)
         self.assertNotIn("sortie-table-footnotes", javascript)
 
@@ -157,7 +217,7 @@ class SortiesTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["meteo_lieu"]["libelle"], "Paléopolis")
         self.assertEqual(response.json()["meteo_lieu"]["latitude"], 46.18)
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
         self.assertNotIn('name="meteo_adresse"', javascript)
         self.assertNotIn('name="meteo_latitude"', javascript)
 
@@ -807,15 +867,15 @@ class SortiesTests(ConnexionTestCase):
         self.assertEqual([item["code"] for item in totaux["lieux"]], ["CT", "SM"])
 
     def test_colonne_affectes_est_strictement_informative(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
-        gabarit = Path(settings.BASE_DIR, "templates/sortie_detail.html").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
+        gabarit = Path(settings.BASE_DIR, "templates/sortie_detail.html").read_text(encoding="utf-8")
         self.assertNotIn("data-remove-assignment", javascript)
         self.assertNotIn("sortie-removal-dialog", gabarit)
         self.assertNotIn('plural(totalGroups,"groupe")', javascript)
 
     def test_meteo_est_affichee_une_seule_fois_dans_la_synthese(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
-        styles = Path(settings.BASE_DIR, "static/css/sorties.css").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
+        styles = Path(settings.BASE_DIR, "static/css/sorties.css").read_text(encoding="utf-8")
         self.assertNotIn("Météo de la sortie", javascript)
         self.assertEqual(javascript.count('data-block="meteo"'), 1)
         self.assertIn("weatherSummary(true)", javascript)
@@ -824,7 +884,7 @@ class SortiesTests(ConnexionTestCase):
         self.assertIn("repeat(auto-fit,minmax(min(180px,100%),1fr))", styles)
 
     def test_adresse_est_uniquement_dans_le_bandeau_principal(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
         self.assertNotIn("<span>Adresse</span>", javascript)
         self.assertEqual(javascript.count("sortie-sheet-address"), 1)
         self.assertIn("destinationMarkup(data.destination_details)", javascript)
@@ -832,14 +892,14 @@ class SortiesTests(ConnexionTestCase):
         self.assertIn("sortie-sheet-identity", javascript)
 
     def test_synthese_emploie_les_totaux_maternelles_et_elementaires(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
         self.assertNotIn("<span>Enfants</span>", javascript)
         self.assertNotIn("<span>Adultes</span>", javascript)
         self.assertIn("<span>Maternelles</span>", javascript)
         self.assertIn("<span>Élémentaires</span>", javascript)
         self.assertIn("<span>Effectifs</span>", javascript)
-        self.assertIn('plural(maternalTotal.enfants,"enfant")', javascript)
-        self.assertIn('plural(elementaryTotal.animateurs,"animateur")', javascript)
+        self.assertIn('pluraliser(maternalTotal.enfants,"enfant")', javascript)
+        self.assertIn('pluraliser(elementaryTotal.animateurs,"animateur")', javascript)
         self.assertIn("buckets.maternels.length?", javascript)
         self.assertIn("buckets.elementaires.length?", javascript)
         self.assertNotIn("const maternalCard=", javascript)
@@ -848,17 +908,17 @@ class SortiesTests(ConnexionTestCase):
         self.assertIn('categoryBuckets[group.categorie_age]', javascript)
 
     def test_synthese_affiche_lieux_total_global_et_transport(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
         self.assertIn("locationCodes.length?", javascript)
         self.assertIn("locationCodes.map(escapeHtml)", javascript)
         self.assertIn('class="sortie-effectifs-total"', javascript)
         self.assertIn("<span>Total</span>", javascript)
-        self.assertIn('plural(totalChildren,"enfant")', javascript)
-        self.assertIn('plural(totalAnimators,"animateur")', javascript)
+        self.assertIn('pluraliser(totalChildren,"enfant")', javascript)
+        self.assertIn('pluraliser(totalAnimators,"animateur")', javascript)
         self.assertIn("<span>Transport</span>", javascript)
 
     def test_formulaire_transport_propose_quatre_modes_exclusifs(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
         for mode in ("Car", "Minibus", "Ligne régulière", "Transport en commun"):
             self.assertIn(f'"{mode}"', javascript)
         self.assertIn('type="radio" name="mode_transport"', javascript)
@@ -1030,7 +1090,7 @@ class SortiesTests(ConnexionTestCase):
             sum(item["enfants"] for item in data["totaux"]["categories"].values()),
         )
     def test_repartition_affiche_ratio_requis_reel_et_couverture(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
         self.assertIn("Requis 1/", javascript)
         self.assertIn("Taux réel ${actual}", javascript)
         self.assertIn("bindRatioEditors", javascript)
@@ -1108,7 +1168,7 @@ class SortiesTests(ConnexionTestCase):
         self.assertFalse(SortieRenfort.objects.exists())
 
     def test_table_repartition_ne_contient_plus_les_animateurs_supplementaires(self):
-        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text()
+        javascript = Path(settings.BASE_DIR, "static/js/sortie-detail.js").read_text(encoding="utf-8")
         self.assertNotIn("Animateurs supplémentaires</th>", javascript)
         self.assertIn("Renforts animateurs", javascript)
         self.assertIn("Groupe et effectifs</th><th>Taux d’encadrement</th><th>Animateurs affectés", javascript)

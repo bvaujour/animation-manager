@@ -51,7 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!summaryCard || !summaryToggle) return;
         summaryCard.classList.toggle("is-collapsed", collapsed);
         summaryToggle.setAttribute("aria-expanded", String(!collapsed));
-        summaryToggle.title = collapsed ? "Ouvrir le récapitulatif" : "Réduire le récapitulatif";
+        summaryToggle.title = collapsed ? "Ouvrir le résumé" : "Réduire le résumé";
         const label = summaryToggle.querySelector(".sr-only");
         if (label) label.textContent = summaryToggle.title;
         try {
@@ -84,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
         summaryRoot.innerHTML = `
             <div class="worktime-table-wrap">
                 <table class="worktime-summary-table">
-                    <thead><tr><th>Animateur</th><th>Réunions</th><th>Télétravail / préparation</th><th>Jours ajoutés</th><th>Total dans le récapitulatif</th><th>Paie</th></tr></thead>
+                    <thead><tr><th>Animateur</th><th>Réunions</th><th>Télétravail / préparation</th><th>Jours ajoutés</th><th>Total dans la paie</th><th>Paie</th></tr></thead>
                     <tbody>${rows.map((row) => `
                         <tr>
                             <td><strong>${escapeHtml(row.prenom)} ${escapeHtml(row.nom)}</strong></td>

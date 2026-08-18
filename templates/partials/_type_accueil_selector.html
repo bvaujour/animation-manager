@@ -1,0 +1,18 @@
+{% if request.user.is_authenticated %}
+<div class="app-context-selector" aria-label="Contexte de travail">
+    <label>
+        <span>Type d’accueil</span>
+        <select id="app-type-accueil">
+            <option value="">Vue générale</option>
+            {% for type in types_accueil %}<option value="{{ type.code }}"{% if type.code == type_accueil_selectionne %} selected{% endif %}>{{ type.nom }}</option>{% endfor %}
+        </select>
+    </label>
+    <label>
+        <span>Période de travail</span>
+        <select id="app-periode-accueil">
+            <option value="">Toutes les périodes</option>
+            {% for periode in periodes_accueil %}<option value="{{ periode.id }}"{% if periode.id|stringformat:"s" == periode_accueil_selectionnee %} selected{% endif %}>{% firstof periode.libelle_selection periode.libelle_avec_annee %}</option>{% endfor %}
+        </select>
+    </label>
+</div>
+{% endif %}

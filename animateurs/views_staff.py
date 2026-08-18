@@ -17,6 +17,7 @@ from .models import (
     AffiniteGroupeAnimateur,
     Animateur,
     Disponibilite,
+    Formation,
     PeriodeScolaire,
     PreferenceCentre,
     Qualification,
@@ -93,6 +94,15 @@ def api_animateurs(request):
             Prefetch("preferences", queryset=preferences),
             Prefetch("disponibilites", queryset=disponibilites, to_attr="_filtre_disponibilites"),
         )
+        if debut_filtre and fin_filtre:
+            formations_bloquantes = Formation.objects.filter(
+                statut__in=(Formation.STATUT_PREVUE, Formation.STATUT_EN_COURS),
+                date_debut__lt=fin_filtre,
+                date_fin__gte=debut_filtre,
+            ).only("id", "intitule", "date_debut", "date_fin", "statut")
+            animateurs = animateurs.prefetch_related(
+                Prefetch("formations", queryset=formations_bloquantes, to_attr="_filtre_formations")
+            )
         if format_planning:
             animateurs = animateurs.only("id", "prenom", "nom", "telephone", "email")
         else:

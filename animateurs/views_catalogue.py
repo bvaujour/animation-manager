@@ -11,16 +11,27 @@ from django.views.decorators.http import require_http_methods, require_POST
 from .access import est_direction
 from .models import (
     QUALIFICATION_ICON_CHOICES,
+    Animateur,
     Centre,
     Evenement,
     Groupe,
     PeriodeScolaire,
+    PeriodeCalendrier,
+    ModalitePeriscolaire,
     Qualification,
     Sortie,
+    Sejour,
+    ParticipantSejour,
+    TypeAccueil,
     code_postal_francais,
     normaliser_cle_unique,
 )
-from .services.calendrier_scolaire import CalendrierScolaireError, recuperer_semaines
+from .services.calendrier_scolaire import (
+    CalendrierScolaireError,
+    calculer_periodes_scolaires,
+    recuperer_semaines,
+    regrouper_semaines_vacances,
+)
 from .services.centres import prochain_ordre_centre, reordonner_centres
 from .services.dates import parse_to_aware_datetime
 from .services.evenements import (
@@ -33,6 +44,7 @@ from .services.evenements import (
 from .services.flottants import est_groupe_flottants, groupes_partages_visibles, groupes_visibles
 from .services.localisation import LocalisationError, resoudre_localisation
 from .services.serializers import centre_to_dict, evenement_to_dict, qualification_to_dict
+from .services.types_accueil import filtrer_semaines_contexte_travail
 
 
 def _localiser_centre(centre, payload):
@@ -674,7 +686,60 @@ def _periode_scolaire_to_dict(periode):
         "fin": periode.fin.isoformat(),
         "description_source": periode.description_source,
         "ordre": periode.ordre,
+        "type_accueil": periode.type_accueil.code if periode.type_accueil_id else None,
+        "type_accueil_nom": periode.type_accueil.nom if periode.type_accueil_id else None,
+        "types_accueil": list(periode.types_accueil.values_list("code", flat=True)),
+        "periode_calendrier_id": periode.periode_calendrier_id,
     }
+
+
+def _payload_json(request):
+    try:
+        return json.loads(request.body or b"{}")
+    except json.JSONDecodeError as exc:
+        raise ValidationError("Requête invalide.") from exc
+
+
+def _type_accueil_requis(payload):
+    code = str(payload.get("type_accueil", "")).strip()
+    try:
+        return TypeAccueil.objects.get(
+            code=code,
+            actif=True,
+            code__in=("vacances", "mercredis", "periscolaire", "sejours"),
+        )
+    except TypeAccueil.DoesNotExist as exc:
+        raise ValidationError("Le type d'accueil est obligatoire.") from exc
+
+
+def _contexte_periscolaire_requis(payload):
+    code = str(payload.get("type_accueil", "periscolaire")).strip()
+    code_modalite = str(payload.get("modalite_periscolaire", "")).strip()
+    if code == TypeAccueil.MERCREDIS:
+        code = TypeAccueil.PERISCOLAIRE
+        code_modalite = code_modalite or ModalitePeriscolaire.MERCREDI_JOURNEE
+    if code != TypeAccueil.PERISCOLAIRE:
+        raise ValidationError("Le calendrier scolaire est rattaché au Périscolaire.")
+    try:
+        return (
+            TypeAccueil.objects.get(code=TypeAccueil.PERISCOLAIRE, actif=True),
+            ModalitePeriscolaire.objects.get(code=code_modalite, actif=True),
+        )
+    except (TypeAccueil.DoesNotExist, ModalitePeriscolaire.DoesNotExist) as exc:
+        raise ValidationError("Choisis une modalité périscolaire valide.") from exc
+
+
+def _appliquer_payload_periode(periode, payload):
+    periode.nom = str(payload.get("nom", "")).strip()
+    periode.annee_scolaire = str(payload.get("annee_scolaire", "")).strip()
+    periode.zone = str(payload.get("zone", "")).strip().upper()
+    periode.debut = payload.get("debut")
+    periode.fin = payload.get("fin")
+    periode.type_accueil = _type_accueil_requis(payload)
+    periode.full_clean()
+    periode.save()
+    periode.types_accueil.add(periode.type_accueil)
+    return periode
 
 
 def _payload_import_periodes(request):
@@ -685,13 +750,41 @@ def _payload_import_periodes(request):
     return (
         str(payload.get("annee_scolaire", "")).strip(),
         str(payload.get("zone", "")).strip().upper(),
+        payload,
     )
 
 
-@require_http_methods(["GET"])
+@require_http_methods(["GET", "POST"])
 def api_periodes_scolaires(request):
     """Liste les semaines importées, sans effet sur les autres modules."""
-    periodes = PeriodeScolaire.objects.all()
+    if request.method == "POST":
+        try:
+            payload = _payload_json(request)
+            with transaction.atomic():
+                periode = _appliquer_payload_periode(PeriodeScolaire(), payload)
+                if periode.type_accueil.code == TypeAccueil.VACANCES:
+                    reference, _ = PeriodeCalendrier.objects.get_or_create(
+                        categorie=PeriodeCalendrier.VACANCES,
+                        annee_scolaire=periode.annee_scolaire,
+                        zone=periode.zone,
+                        debut=periode.debut,
+                        fin=periode.fin,
+                        defaults={"nom": periode.categorie_vacances},
+                    )
+                    reference.types_accueil.add(periode.type_accueil)
+                    periode.periode_calendrier = reference
+                    periode.save(update_fields=("periode_calendrier",))
+                for groupe in groupes_visibles(Evenement.objects.filter(permanent=True)).only("id"):
+                    groupe.periodes_scolaires.add(periode)
+        except ValidationError as exc:
+            return JsonResponse({"error": _message_validation(exc)}, status=400)
+        except IntegrityError:
+            return JsonResponse({"error": "Cette période existe déjà pour cette zone."}, status=409)
+        return JsonResponse(_periode_scolaire_to_dict(periode), status=201)
+
+    periodes = PeriodeScolaire.objects.select_related("type_accueil").all()
+    if request.GET.get("contexte_travail") == "1":
+        periodes = filtrer_semaines_contexte_travail(periodes, request)
     annee_scolaire = request.GET.get("annee_scolaire", "").strip()
     zone = request.GET.get("zone", "").strip().upper()
     if annee_scolaire:
@@ -708,7 +801,7 @@ def api_periodes_scolaires(request):
 def api_periodes_scolaires_previsualiser(request):
     """Interroge l'API officielle sans rien enregistrer en base."""
     try:
-        annee_scolaire, zone = _payload_import_periodes(request)
+        annee_scolaire, zone, _payload = _payload_import_periodes(request)
         semaines = recuperer_semaines(annee_scolaire, zone)
     except CalendrierScolaireError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
@@ -722,12 +815,25 @@ def api_periodes_scolaires_previsualiser(request):
         item["deja_enregistree"] = (semaine.debut, semaine.fin) in existantes
         resultat.append(item)
 
+    groupes = regrouper_semaines_vacances(semaines)
+    for groupe in groupes:
+        for semaine in groupe["semaines"]:
+            semaine["deja_enregistree"] = (
+                PeriodeScolaire.objects.filter(
+                    annee_scolaire=annee_scolaire,
+                    zone=zone,
+                    debut=semaine["debut"],
+                    fin=semaine["fin"],
+                ).exists()
+            )
+
     return JsonResponse(
         {
             "annee_scolaire": annee_scolaire,
             "zone": zone,
             "periodes": resultat,
             "nombre": len(resultat),
+            "groupes": groupes,
         }
     )
 
@@ -736,15 +842,36 @@ def api_periodes_scolaires_previsualiser(request):
 def api_periodes_scolaires_importer(request):
     """Enregistre toutes les semaines officielles de façon idempotente."""
     try:
-        annee_scolaire, zone = _payload_import_periodes(request)
+        annee_scolaire, zone, payload = _payload_import_periodes(request)
+        type_accueil = _type_accueil_requis(payload)
+        if type_accueil.code != TypeAccueil.VACANCES:
+            raise ValidationError("L'import officiel des vacances utilise toujours le type Vacances.")
         semaines = recuperer_semaines(annee_scolaire, zone)
     except CalendrierScolaireError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
 
+    ids_selectionnes = {str(item) for item in payload.get("semaine_ids", [])}
+    semaines_a_importer = [
+        semaine for semaine in semaines
+        if "semaine_ids" not in payload or semaine.debut.isoformat() in ids_selectionnes
+    ]
+    groupes = regrouper_semaines_vacances(semaines)
     creees = 0
     mises_a_jour = 0
     with transaction.atomic():
-        for ordre, semaine in enumerate(semaines):
+        for ordre, semaine in enumerate(semaines_a_importer):
+            groupe = next(item for item in groupes if any(s["debut"] == semaine.debut.isoformat() for s in item["semaines"]))
+            reference, _ = PeriodeCalendrier.objects.get_or_create(
+                categorie=PeriodeCalendrier.VACANCES,
+                annee_scolaire=annee_scolaire,
+                zone=zone,
+                debut=groupe["semaines"][0]["debut"],
+                fin=groupe["semaines"][-1]["fin"],
+                defaults={"nom": groupe["nom"].rsplit(" ", 1)[0]},
+            )
+            reference.types_accueil.add(type_accueil)
             periode, creee = PeriodeScolaire.objects.get_or_create(
                 annee_scolaire=annee_scolaire,
                 zone=zone,
@@ -754,15 +881,22 @@ def api_periodes_scolaires_importer(request):
                     "nom": semaine.nom,
                     "description_source": semaine.description_source,
                     "ordre": ordre,
+                    "type_accueil": type_accueil,
+                    "periode_calendrier": reference,
                 },
             )
             if creee:
+                periode.types_accueil.add(type_accueil)
                 creees += 1
                 # Toute nouvelle semaine appartient automatiquement aux groupes permanents.
                 for groupe in groupes_visibles(Evenement.objects.filter(permanent=True)).only("id"):
                     groupe.periodes_scolaires.add(periode)
                 continue
             champs = []
+            periode.types_accueil.add(type_accueil)
+            if periode.periode_calendrier_id is None:
+                periode.periode_calendrier = reference
+                champs.append("periode_calendrier")
             if periode.nom != semaine.nom:
                 periode.nom = semaine.nom
                 champs.append("nom")
@@ -788,11 +922,142 @@ def api_periodes_scolaires_importer(request):
     )
 
 
-@require_http_methods(["DELETE"])
+@require_http_methods(["PATCH", "DELETE"])
 def api_periode_scolaire_detail(request, periode_id):
     try:
         periode = PeriodeScolaire.objects.get(pk=periode_id)
     except PeriodeScolaire.DoesNotExist:
         return JsonResponse({"error": "Période introuvable."}, status=404)
-    periode.delete()
-    return JsonResponse({"ok": True})
+    if request.method == "DELETE":
+        periode.delete()
+        return JsonResponse({"ok": True})
+    try:
+        periode = _appliquer_payload_periode(periode, _payload_json(request))
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+    except IntegrityError:
+        return JsonResponse({"error": "Cette période existe déjà pour cette zone."}, status=409)
+    return JsonResponse(_periode_scolaire_to_dict(periode))
+
+
+@require_POST
+def api_calendrier_scolaire_previsualiser(request):
+    """Calcule les périodes entre vacances depuis la même source officielle."""
+    try:
+        annee_scolaire, zone, _payload = _payload_import_periodes(request)
+        semaines_vacances = recuperer_semaines(annee_scolaire, zone)
+        periodes = calculer_periodes_scolaires(annee_scolaire, semaines_vacances)
+    except CalendrierScolaireError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    for periode in periodes:
+        periode["deja_enregistree"] = PeriodeCalendrier.objects.filter(
+            categorie=PeriodeCalendrier.SCOLAIRE,
+            annee_scolaire=annee_scolaire,
+            zone=zone,
+            debut=periode["debut"],
+            fin=periode["fin"],
+        ).exists()
+    return JsonResponse({"annee_scolaire": annee_scolaire, "zone": zone, "periodes": periodes})
+
+
+@require_POST
+def api_calendrier_scolaire_enregistrer(request):
+    try:
+        annee_scolaire, zone, payload = _payload_import_periodes(request)
+        type_accueil, modalite = _contexte_periscolaire_requis(payload)
+        periodes = calculer_periodes_scolaires(annee_scolaire, recuperer_semaines(annee_scolaire, zone))
+        selections = {int(item) for item in payload.get("periode_ids", [])}
+    except (CalendrierScolaireError, ValidationError, TypeError, ValueError) as exc:
+        message = str(exc) if isinstance(exc, CalendrierScolaireError) else _message_validation(exc)
+        return JsonResponse({"error": message}, status=400)
+
+    creees = 0
+    with transaction.atomic():
+        for index, periode_data in enumerate(periodes):
+            if index not in selections:
+                continue
+            reference, _ = PeriodeCalendrier.objects.get_or_create(
+                categorie=PeriodeCalendrier.SCOLAIRE,
+                annee_scolaire=annee_scolaire,
+                zone=zone,
+                debut=periode_data["debut"],
+                fin=periode_data["fin"],
+                defaults={"nom": periode_data["nom"]},
+            )
+            reference.types_accueil.add(type_accueil)
+            for numero, semaine in enumerate(periode_data["semaines"], 1):
+                travail, nouvelle = PeriodeScolaire.objects.get_or_create(
+                    annee_scolaire=annee_scolaire,
+                    zone=zone,
+                    debut=semaine["debut"],
+                    fin=semaine["fin"],
+                    defaults={
+                        "nom": f"{periode_data['nom']} — Semaine {numero}",
+                        "type_accueil": type_accueil,
+                        "periode_calendrier": reference,
+                        "modalite_periscolaire": modalite,
+                    },
+                )
+                if travail.periode_calendrier_id is None:
+                    travail.periode_calendrier = reference
+                    travail.save(update_fields=("periode_calendrier",))
+                if travail.modalite_periscolaire_id is None:
+                    travail.modalite_periscolaire = modalite
+                    travail.save(update_fields=("modalite_periscolaire",))
+                travail.types_accueil.add(type_accueil)
+                travail.modalites_periscolaires.add(modalite)
+                creees += int(nouvelle)
+    return JsonResponse({"ok": True, "cree": creees})
+
+
+def _sejour_to_dict(sejour):
+    return {
+        "id": sejour.pk,
+        "nom": sejour.nom,
+        "date_debut": sejour.date_debut.isoformat() if sejour.date_debut else "",
+        "date_fin": sejour.date_fin.isoformat() if sejour.date_fin else "",
+        "destination": sejour.destination,
+        "periode_vacances_id": sejour.periode_vacances_id,
+        "equipe_ids": list(sejour.equipe.values_list("pk", flat=True)),
+        "responsable_id": sejour.responsable_id,
+        "document_ids": list(sejour.documents.values_list("pk", flat=True)),
+        "participants": list(sejour.participants.values("id", "prenom", "nom", "date_naissance")),
+        "type_accueil": sejour.type_accueil.code,
+        "avertissement": sejour.avertissement_periode_vacances,
+    }
+
+
+@require_http_methods(["GET", "POST"])
+def api_sejours(request):
+    if request.method == "GET":
+        sejours = Sejour.objects.prefetch_related("equipe").select_related("periode_vacances")
+        references = PeriodeCalendrier.objects.filter(categorie=PeriodeCalendrier.VACANCES)
+        return JsonResponse({
+            "sejours": [_sejour_to_dict(item) for item in sejours],
+            "periodes_vacances": [{"id": item.pk, "nom": str(item)} for item in references],
+            "animateurs": list(Animateur.objects.order_by("prenom", "nom").values("id", "prenom", "nom")),
+        })
+    try:
+        payload = _payload_json(request)
+        sejour = Sejour(
+            nom=str(payload.get("nom", "")).strip(),
+            date_debut=payload.get("date_debut") or None,
+            date_fin=payload.get("date_fin") or None,
+            destination=str(payload.get("destination", "")).strip(),
+            periode_vacances_id=payload.get("periode_vacances_id") or None,
+            responsable_id=payload.get("responsable_id") or None,
+        )
+        sejour.full_clean()
+        sejour.save()
+        sejour.equipe.set(Animateur.objects.filter(pk__in=payload.get("equipe_ids", [])))
+        sejour.documents.set(payload.get("document_ids", []))
+        for participant in payload.get("participants", []):
+            ParticipantSejour.objects.create(
+                sejour=sejour,
+                prenom=str(participant.get("prenom", "")).strip(),
+                nom=str(participant.get("nom", "")).strip(),
+                date_naissance=participant.get("date_naissance") or None,
+            )
+    except (ValidationError, ValueError, TypeError) as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+    return JsonResponse(_sejour_to_dict(sejour), status=201)
