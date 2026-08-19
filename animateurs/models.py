@@ -1870,6 +1870,18 @@ class Document(models.Model):
 
     titre = models.CharField(max_length=150)
     fichier = models.FileField(upload_to="documents/")
+    TYPE_CLASSIQUE = "classique"
+    TYPE_PROGRAMME_ACTIVITES = "programme_activites"
+    TYPE_DOCUMENT_CHOICES = (
+        (TYPE_CLASSIQUE, "Document classique"),
+        (TYPE_PROGRAMME_ACTIVITES, "Programme d'activités"),
+    )
+    type_document = models.CharField(
+        max_length=32,
+        choices=TYPE_DOCUMENT_CHOICES,
+        default=TYPE_CLASSIQUE,
+        db_index=True,
+    )
     permanent = models.BooleanField(
         default=True,
         help_text="Cocher si le document n'est lié à aucune période précise.",

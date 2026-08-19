@@ -3900,6 +3900,24 @@ body.page-temps-travail > .worktime-page {
   }
 }
 
+/* ===== ADN visuel partagé du portail animateur ===== */
+body.animator-space-body{
+  --animator-portal-purple:#6547f7;
+  --animator-portal-purple-dark:#4c35fa;
+  --animator-portal-purple-soft:#f1efff;
+  --animator-portal-mint:#16bca8;
+  --animator-portal-coral:#f45a45;
+  --animator-portal-blue:#2369f5;
+  --animator-portal-ink:#14264a;
+  --animator-portal-muted:#697793;
+  --animator-portal-line:#e4e9f3;
+  --animator-portal-bg:#f8f9fd;
+  --animator-portal-surface:#fff;
+  --animator-portal-radius:18px;
+  --animator-portal-radius-sm:12px;
+  --animator-portal-shadow:0 9px 24px rgba(35,48,86,.08);
+}
+
 /* ===== Portail animateur mobile v4 : en-tête semaine intégré + navigation violette ===== */
 @media (max-width:799px){
   /* Une seule ligne en haut : nom de page + navigation de semaine. */
@@ -3946,8 +3964,8 @@ body.page-temps-travail > .worktime-page {
     flex:0 0 22px!important;
     border:0!important;
     border-radius:8px!important;
-    color:#6048ef!important;
-    background:#f1efff!important;
+    color:var(--animator-portal-purple)!important;
+    background:var(--animator-portal-purple-soft)!important;
     font-size:1.3rem!important;
     font-weight:700!important;
     line-height:1!important;
@@ -4022,8 +4040,8 @@ body.page-temps-travail > .worktime-page {
   html body.animator-space-body > aside.app-rail{
     border:0!important;
     border-top:0!important;
-    background:linear-gradient(135deg,#735dff 0%,#4f5cff 55%,#4158f7 100%)!important;
-    background-color:#5456fb!important;
+    background:linear-gradient(135deg,#735dff 0%,var(--animator-portal-purple) 55%,#4158f7 100%)!important;
+    background-color:var(--animator-portal-purple)!important;
     box-shadow:0 -6px 18px rgba(59,62,177,.18)!important;
   }
   html body.animator-space-body > aside.app-rail .app-rail-links{

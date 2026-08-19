@@ -41,6 +41,9 @@ class TableauDeBordAnimateurTests(TestCase):
             utilisateur=self.user,
         )
         self.collegue = Animateur.objects.create(prenom="Ambre", nom="Equipe")
+        self.collegue.telephone = "06 55 66 77 88"
+        self.collegue.email = "ambre@example.com"
+        self.collegue.save(update_fields=["telephone", "email"])
         self.centre = Centre.objects.create(
             nom="Saint-Martin-d'Estréaux",
             code="SM",
@@ -131,6 +134,108 @@ class TableauDeBordAnimateurTests(TestCase):
         self.assertContains(response, "Tableau de bord")
         self.assertContains(response, 'class="app-rail"')
         self.assertNotContains(response, 'class="animator-sidebar"')
+
+    def test_plannings_expose_programmes_collegues_et_sorties_du_contexte(self):
+        autre_centre = Centre.objects.create(nom="Centre annexe", code="CA")
+        autre_groupe = Evenement.objects.create(
+            centre=autre_centre,
+            nom="Groupe annexe",
+            permanent=True,
+            jours_ouverts=[0, 1, 2, 3, 4],
+            ferme_jours_feries=False,
+        )
+        Affectation.objects.create(
+            animateur=self.animateur,
+            centre=autre_centre,
+            evenement=autre_groupe,
+            debut=timezone.make_aware(datetime.datetime.combine(self.lundi + datetime.timedelta(days=1), datetime.time.min)),
+            fin=timezone.make_aware(datetime.datetime.combine(self.lundi + datetime.timedelta(days=2), datetime.time.min)),
+        )
+        Document.objects.create(
+            titre="Programme annexe",
+            fichier="documents/programme-annexe.jpg",
+            type_document=Document.TYPE_PROGRAMME_ACTIVITES,
+            permanent=False,
+            periode_debut=self.lundi,
+            periode_fin=self.lundi + datetime.timedelta(days=4),
+            publie=True,
+            tous_centres=False,
+        ).centres.set([autre_centre])
+        programme_tous = Document.objects.create(
+            titre="Programme commun",
+            fichier="documents/programme-commun.jpg",
+            type_document=Document.TYPE_PROGRAMME_ACTIVITES,
+            permanent=False,
+            periode_debut=self.lundi,
+            periode_fin=self.lundi + datetime.timedelta(days=4),
+            publie=True,
+        )
+        programme_centre = Document.objects.create(
+            titre="Programme centre",
+            fichier="documents/programme-centre.jpg",
+            type_document=Document.TYPE_PROGRAMME_ACTIVITES,
+            permanent=False,
+            periode_debut=self.lundi,
+            periode_fin=self.lundi + datetime.timedelta(days=4),
+            publie=True,
+            tous_centres=False,
+        )
+        programme_centre.centres.set([self.centre])
+        Document.objects.create(
+            titre="Programme brouillon",
+            fichier="documents/programme-brouillon.jpg",
+            type_document=Document.TYPE_PROGRAMME_ACTIVITES,
+            permanent=False,
+            periode_debut=self.lundi,
+            periode_fin=self.lundi + datetime.timedelta(days=4),
+            publie=False,
+        )
+        Affectation.objects.create(
+            animateur=self.collegue,
+            centre=self.centre,
+            evenement=self.groupe,
+            debut=timezone.make_aware(datetime.datetime.combine(self.lundi, datetime.time.min)),
+            fin=timezone.make_aware(datetime.datetime.combine(self.lundi + datetime.timedelta(days=1), datetime.time.min)),
+        )
+
+        response = self.client.get(reverse("plannings_animateur"), {"semaine": self.lundi.isoformat()})
+        programmes = response.context["programmes_activites"]
+        self.assertEqual({item["titre"] for item in programmes}, {"Programme annexe", "Programme commun", "Programme centre"})
+        self.assertEqual(len(programmes), 3)
+
+        collegues = response.context["jours"][0]["collegues_details"]
+        self.assertEqual(
+            collegues,
+            [{
+                "id": self.collegue.id,
+                "prenom": "Ambre",
+                "nom": "Equipe",
+                "telephone": "06 55 66 77 88",
+                "email": "ambre@example.com",
+            }],
+        )
+        sortie = response.context["jours"][0]["sorties"][0]
+        self.assertEqual(sortie["url"], reverse("sorties_animateur") + "?semaine=2026-08-24")
+
+    def test_programme_d_un_autre_centre_et_sortie_d_une_autre_semaine_sont_exclus(self):
+        autre_centre = Centre.objects.create(nom="Autre centre", code="AC")
+        autre_programme = Document.objects.create(
+            titre="Programme autre centre",
+            fichier="documents/programme-autre.jpg",
+            type_document=Document.TYPE_PROGRAMME_ACTIVITES,
+            permanent=False,
+            periode_debut=self.lundi,
+            periode_fin=self.lundi + datetime.timedelta(days=4),
+            publie=True,
+            tous_centres=False,
+        )
+        autre_programme.centres.set([autre_centre])
+        sortie = Sortie.objects.create(nom="Sortie suivante", date=self.lundi + datetime.timedelta(days=7))
+        SortieParticipation.objects.create(sortie=sortie, evenement=self.groupe)
+
+        response = self.client.get(reverse("plannings_animateur"), {"semaine": self.lundi.isoformat()})
+        self.assertEqual(response.context["programmes_activites"], [])
+        self.assertEqual([item["nom"] for item in response.context["sorties"]], ["Piscine"])
 
     @patch("animateurs.services.animateur_dashboard.timezone.localdate")
     def test_navigation_change_la_semaine_affichee(self, localdate):

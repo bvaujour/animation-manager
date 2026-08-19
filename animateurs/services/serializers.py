@@ -480,6 +480,8 @@ def document_to_dict(document):
         "id": document.id,
         "titre": document.titre,
         "url": document.fichier.url,
+        "type_document": document.type_document,
+        "type_document_libelle": document.get_type_document_display(),
         "date_ajout": document.date_ajout.isoformat(),
         "publie": document.publie,
         "permanent": document.permanent,

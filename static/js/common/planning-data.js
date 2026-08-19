@@ -81,7 +81,7 @@
         return sortiesCache.get(key);
     }
 
-    function applySortieMarkers(calendar, groupeId, start, end) {
+    function applySortieMarkers(calendar, groupeId, start, end, options = {}) {
         if (!calendar?.el) return Promise.resolve();
         return fetchWeekSorties(start, end).then((sorties) => {
             calendar.el.querySelectorAll(".calendar-sortie-marker").forEach((marker) => marker.remove());
@@ -97,11 +97,18 @@
                 const cell = calendar.el.querySelector(`.fc-daygrid-day[data-date="${date}"]`);
                 if (!cell) return;
                 const top = cell.querySelector(".fc-daygrid-day-top") || cell;
-                const marker = document.createElement("span");
+                const href = typeof options.markerHrefBuilder === "function"
+                    ? options.markerHrefBuilder(items, date, groupeId)
+                    : "";
+                const marker = document.createElement(href ? "a" : "span");
                 marker.className = "calendar-sortie-marker";
                 marker.textContent = items.length > 1 ? `🚌 ${items.length}` : "🚌";
                 marker.title = items.map((item) => `Sortie : ${item.nom}`).join("\n");
                 marker.setAttribute("aria-label", marker.title);
+                if (href) {
+                    marker.href = href;
+                    marker.classList.add("calendar-sortie-marker--link");
+                }
                 top.appendChild(marker);
                 cell.classList.add("has-calendar-sortie");
             });

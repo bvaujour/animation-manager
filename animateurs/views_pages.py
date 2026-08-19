@@ -151,7 +151,13 @@ def _contexte_portail_animateur(request, active_page):
     contexte = {"active_page": active_page, "animateur": animateur}
     if animateur is not None:
         date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
-        contexte.update(generer_tableau_de_bord_animateur(animateur, date_reference))
+        contexte.update(
+            generer_tableau_de_bord_animateur(
+                animateur,
+                date_reference,
+                inclure_programmes=active_page == "plannings",
+            )
+        )
     return contexte
 
 

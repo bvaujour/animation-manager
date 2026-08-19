@@ -16,7 +16,7 @@
         </nav>
     </header>
     <section class="animator-panel animator-wide-card"><div class="animator-card-list">
-        {% for sortie in sorties %}<article class="animator-list-item animator-list-item--outing"><span class="animator-list-date">{{ sortie.date|date:'D' }}<strong>{{ sortie.date|date:'d' }}</strong></span><div><strong>{{ sortie.nom }}</strong><small>{% if sortie.horaire %}{{ sortie.horaire }}{% endif %}{% if sortie.destination %} · {{ sortie.destination }}{% endif %}</small>{% if sortie.responsabilite %}<em>{{ sortie.responsabilite }}</em>{% endif %}</div></article>{% empty %}<p class="animator-empty-state">Aucune sortie cette semaine.</p>{% endfor %}
+        {% for sortie in sorties %}<article id="sortie-{{ sortie.id }}" class="animator-list-item animator-list-item--outing"><span class="animator-list-date">{{ sortie.date|date:'D' }}<strong>{{ sortie.date|date:'d' }}</strong></span><div><strong>{{ sortie.nom }}</strong><small>{% if sortie.horaire %}{{ sortie.horaire }}{% endif %}{% if sortie.destination %} · {{ sortie.destination }}{% endif %}</small>{% if sortie.responsabilite %}<em>{{ sortie.responsabilite }}</em>{% endif %}</div></article>{% empty %}<p class="animator-empty-state">Aucune sortie cette semaine.</p>{% endfor %}
     </div></section>
 </main>
 {% endblock %}

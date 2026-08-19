@@ -93,6 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
             editor.className = "document-inline-editor";
             editor.innerHTML = `
                 <label>Titre<input type="text" name="titre" value="${escapeHtml(documentItem.titre)}" required></label>
+                <label>Type de document<select name="type_document"><option value="classique" ${documentItem.type_document === "classique" ? "selected" : ""}>Document classique</option><option value="programme_activites" ${documentItem.type_document === "programme_activites" ? "selected" : ""}>Programme d'activités</option></select></label>
                 <div class="document-editor-options">
                     <label class="form-check"><input class="form-check-input" type="checkbox" name="permanent" ${documentItem.permanent ? "checked" : ""}><span class="form-check-label">Document permanent</span></label>
                     <label class="form-check"><input class="form-check-input" type="checkbox" name="publie" ${documentItem.publie ? "checked" : ""}><span class="form-check-label">Visible par les animateurs</span></label>
@@ -149,6 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         method: "PATCH",
                         body: JSON.stringify({
                             titre: editor.elements.titre.value.trim(),
+                            type_document: editor.elements.type_document.value,
                             permanent: editorPermanent.checked,
                             periode_ids: editorPermanent.checked ? [] : ids,
                             publie: editor.elements.publie.checked,
@@ -229,6 +231,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = new FormData();
         data.append("titre", titleInput.value.trim());
         data.append("fichier", file);
+        data.append("type_document", document.getElementById("doc-type-document")?.value || "classique");
         data.append("permanent", permanentInput.checked ? "true" : "false");
         data.append("publie", document.getElementById("doc-publie")?.checked ? "true" : "false");
         data.append("tous_centres", centreSelection.tousCentres() ? "true" : "false");

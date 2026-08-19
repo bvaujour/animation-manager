@@ -252,3 +252,7 @@ body.app-body .shared-calendar .fc-event.calendar-effectif-event .fc-event-title
   text-overflow: clip !important;
   white-space: normal !important;
 }
+
+/* Un repère sortie peut devenir un lien uniquement dans le portail animateur. */
+.calendar-sortie-marker--link{color:inherit;text-decoration:none;cursor:pointer}
+.calendar-sortie-marker--link:focus-visible{outline:2px solid currentColor;outline-offset:1px}

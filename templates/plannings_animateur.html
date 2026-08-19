@@ -1,15 +1,22 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Plannings{% endblock %}
-{% block body_class %}animator-dashboard-body{% endblock %}
+{% block body_class %}animator-dashboard-body animator-planning-body{% endblock %}
 {% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>{% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
-<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-mobile-v4">
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-planning-v1">
 {% endblock %}
 {% block content %}
-<main id="main-content" class="animator-dashboard animator-dashboard--simplified" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
+<main
+    id="main-content"
+    class="animator-dashboard animator-dashboard--portal-page animator-planning-page"
+    data-personal-calendar="true"
+    data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}"
+    data-animator-planning-page="true"
+    data-sorties-url="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}"
+>
     <header class="animator-mobile-header animator-portal-header">
         <div class="animator-portal-title-wrap"><h1>Plannings</h1></div>
         <nav class="animator-week-navigation animator-week-navigation--inline" aria-label="Navigation des semaines">
@@ -18,16 +25,153 @@
             <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
         </nav>
     </header>
-    <section class="ui-card ui-section home-section home-planning-section animator-dashboard-calendar" aria-labelledby="animator-planning-title">
-        <div class="ui-section-heading section-heading"><h2 id="animator-planning-title">Mon planning</h2></div>
-        {% if planning_publie %}<div id="home-calendars" class="home-calendars calendar-sites"></div>{% else %}<p class="animator-empty-state">Le planning de cette semaine n’est pas encore publié par la direction.</p>{% endif %}
-    </section>
-    <section class="animator-panel animator-wide-card" aria-labelledby="animator-meetings-title">
-        <header class="animator-panel-header"><h2 id="animator-meetings-title">Mes réunions de la semaine</h2></header>
-        <div class="animator-card-list">
-            {% for reunion in reunions %}<div class="animator-list-item animator-list-item--meeting"><span>◷</span><div><strong>{{ reunion.titre }}</strong><small>{{ reunion.date_libelle }}{% if reunion.remarque %} · {{ reunion.remarque }}{% endif %}</small></div></div>{% empty %}<p class="animator-empty-state">Aucune réunion renseignée cette semaine.</p>{% endfor %}
+
+    <section class="animator-planning-shell" aria-labelledby="animator-planning-title">
+        <div class="animator-planning-shell-heading">
+            <div class="animator-planning-shell-title">
+                <span class="animator-portal-section-icon animator-portal-section-icon--planning" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V2Zm12 8H5v10h14V10ZM5 8h14V6H5v2Z"/></svg>
+                </span>
+                <div>
+                    <h2 id="animator-planning-title">Mon planning</h2>
+                    <p>Vue semaine</p>
+                </div>
+            </div>
+            <span class="animator-planning-publication{% if planning_publie %} is-published{% endif %}">
+                {% if planning_publie %}<span aria-hidden="true">✓</span> Publié{% else %}Non publié{% endif %}
+            </span>
         </div>
+
+        <div class="animator-planning-stage">
+            {% if planning_publie %}
+            <div id="home-calendars" class="home-calendars calendar-sites"></div>
+            {% else %}
+            <div class="animator-planning-empty">
+                <img src="{% static 'img/animateur/planning-empty.webp' %}" alt="" aria-hidden="true">
+                <strong>Planning pas encore publié</strong>
+                <span>La direction n’a pas encore publié cette semaine.</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <footer class="animator-planning-utilities{% if not programmes_activites %} animator-planning-utilities--without-program{% endif %}" aria-label="Compléments du planning">
+            {% if programmes_activites %}
+            <div class="animator-planning-utility-group animator-planning-utility-group--programmes">
+                {% if programmes_activites|length == 1 %}
+                    {% with programme=programmes_activites.0 %}
+                    <a class="animator-portal-pill animator-portal-pill--program" href="{{ programme.url }}" target="_blank" rel="noopener">
+                        <span aria-hidden="true">▣</span>
+                        <strong>Programme de la semaine</strong>
+                    </a>
+                    {% endwith %}
+                {% else %}
+                    <button class="animator-portal-pill animator-portal-pill--program" type="button" data-open-dialog="planning-programs-dialog">
+                        <span aria-hidden="true">▣</span>
+                        <strong>{{ programmes_activites|length }} programmes</strong>
+                        <b aria-hidden="true">›</b>
+                    </button>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="animator-planning-utility-group animator-planning-utility-group--meetings">
+                {% if reunions %}
+                    <button class="animator-portal-pill animator-portal-pill--meeting" type="button" data-open-dialog="planning-meetings-dialog">
+                        <span aria-hidden="true">◷</span>
+                        {% if reunions|length == 1 %}
+                            <strong>Réunion · {{ reunions.0.date_libelle }}</strong>
+                        {% else %}
+                            <strong>{{ reunions|length }} réunions cette semaine</strong>
+                        {% endif %}
+                        <b aria-hidden="true">›</b>
+                    </button>
+                {% else %}
+                    <span class="animator-portal-pill animator-portal-pill--muted">
+                        <span aria-hidden="true">◷</span>
+                        <strong>Réunions · aucune</strong>
+                    </span>
+                {% endif %}
+            </div>
+        </footer>
     </section>
+
+    <div id="planning-sorties-directory" hidden aria-hidden="true">
+        {% for sortie in sorties %}<span data-planning-sortie-id="{{ sortie.id }}"></span>{% endfor %}
+    </div>
+
+    <div id="planning-contact-directory" hidden aria-hidden="true">
+        {% for jour in jours %}
+            {% for collegue in jour.collegues_details %}
+            <span
+                data-planning-contact-id="{{ collegue.id }}"
+                data-contact-prenom="{{ collegue.prenom }}"
+                data-contact-nom="{{ collegue.nom }}"
+                data-contact-telephone="{{ collegue.telephone|default:'' }}"
+                data-contact-email="{{ collegue.email|default:'' }}"
+            ></span>
+            {% endfor %}
+        {% endfor %}
+    </div>
+
+    <dialog id="planning-contact-dialog" class="animator-portal-dialog" aria-labelledby="planning-contact-name">
+        <div class="animator-portal-dialog-card">
+            <header>
+                <div class="animator-portal-dialog-avatar" data-contact-initials aria-hidden="true"></div>
+                <div>
+                    <span>Contact équipe</span>
+                    <h2 id="planning-contact-name" data-contact-name>Collègue</h2>
+                </div>
+                <button type="button" class="animator-portal-dialog-close" data-close-dialog aria-label="Fermer">×</button>
+            </header>
+            <div class="animator-portal-contact-actions">
+                <a href="#" data-contact-phone-link hidden><span aria-hidden="true">☎</span><span><small>Téléphone</small><strong data-contact-phone></strong></span></a>
+                <a href="#" data-contact-email-link hidden><span aria-hidden="true">✉</span><span><small>E-mail</small><strong data-contact-email></strong></span></a>
+                <p data-contact-empty hidden>Aucune coordonnée renseignée.</p>
+            </div>
+        </div>
+    </dialog>
+
+    {% if programmes_activites|length > 1 %}
+    <dialog id="planning-programs-dialog" class="animator-portal-dialog" aria-labelledby="planning-programs-title">
+        <div class="animator-portal-dialog-card">
+            <header>
+                <div class="animator-portal-dialog-avatar animator-portal-dialog-avatar--program" aria-hidden="true">▣</div>
+                <div><span>Cette semaine</span><h2 id="planning-programs-title">Programmes d’activités</h2></div>
+                <button type="button" class="animator-portal-dialog-close" data-close-dialog aria-label="Fermer">×</button>
+            </header>
+            <div class="animator-portal-dialog-list">
+                {% for programme in programmes_activites %}
+                <a href="{{ programme.url }}" target="_blank" rel="noopener">
+                    <span><strong>{{ programme.titre }}</strong><small>{% if programme.tous_centres %}Tous les centres{% else %}{% for centre in programme.centres %}{{ centre.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</small></span>
+                    <b aria-hidden="true">›</b>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </dialog>
+    {% endif %}
+
+    {% if reunions %}
+    <dialog id="planning-meetings-dialog" class="animator-portal-dialog" aria-labelledby="planning-meetings-title">
+        <div class="animator-portal-dialog-card">
+            <header>
+                <div class="animator-portal-dialog-avatar animator-portal-dialog-avatar--meeting" aria-hidden="true">◷</div>
+                <div><span>Cette semaine</span><h2 id="planning-meetings-title">Mes réunions</h2></div>
+                <button type="button" class="animator-portal-dialog-close" data-close-dialog aria-label="Fermer">×</button>
+            </header>
+            <div class="animator-portal-dialog-list">
+                {% for reunion in reunions %}
+                <article>
+                    <span><strong>{{ reunion.titre }}</strong><small>{{ reunion.date_libelle }}{% if reunion.remarque %} · {{ reunion.remarque }}{% endif %}</small></span>
+                </article>
+                {% endfor %}
+            </div>
+        </div>
+    </dialog>
+    {% endif %}
 </main>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}"></script>{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/animateur-planning.js' %}?v={{ asset_version }}-1"></script>
+<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}-planning-portal-1"></script>
+{% endblock %}

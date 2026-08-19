@@ -1895,3 +1895,279 @@ body.animator-dashboard-body .animator-home-outing-smile {
     overflow:hidden!important;
   }
 }
+
+/* ========================================================================== */
+/* Portail animateur — ADN visuel commun issu de l'Accueil                    */
+/* ========================================================================== */
+body.animator-dashboard-body .animator-portal-section-icon{
+  width:34px;
+  height:34px;
+  flex:0 0 34px;
+  display:grid;
+  place-items:center;
+  border-radius:11px;
+  color:#fff;
+  box-shadow:0 6px 14px rgba(60,72,120,.13);
+}
+body.animator-dashboard-body .animator-portal-section-icon svg{width:19px;height:19px;fill:currentColor}
+body.animator-dashboard-body .animator-portal-section-icon--planning{background:linear-gradient(145deg,#8064ff,#5935ef)}
+
+body.animator-dashboard-body .animator-portal-pill{
+  min-width:0;
+  min-height:34px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:6px 10px;
+  border:0;
+  border-radius:999px;
+  text-decoration:none;
+  font:inherit;
+  font-size:.7rem;
+  font-weight:800;
+  line-height:1;
+  white-space:nowrap;
+  cursor:pointer;
+}
+body.animator-dashboard-body .animator-portal-pill>strong{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+body.animator-dashboard-body .animator-portal-pill>b{font-size:1rem;line-height:.7}
+body.animator-dashboard-body .animator-portal-pill--program{
+  color:#fff;
+  background:linear-gradient(90deg,var(--animator-portal-purple),var(--animator-portal-purple-dark));
+  box-shadow:0 6px 14px rgba(101,71,247,.18);
+}
+body.animator-dashboard-body .animator-portal-pill--meeting{
+  color:#1357c9;
+  background:#edf4ff;
+  box-shadow:inset 0 0 0 1px #d4e3ff;
+}
+body.animator-dashboard-body .animator-portal-pill--muted{
+  color:#707b91;
+  background:#f3f5f9;
+  box-shadow:inset 0 0 0 1px #e6eaf1;
+  cursor:default;
+}
+
+/* Dialogues communs : interaction secondaire sans agrandir la page. */
+body.animator-dashboard-body .animator-portal-dialog{
+  width:min(92vw,390px);
+  max-width:390px;
+  margin:auto;
+  padding:0;
+  border:0;
+  border-radius:22px;
+  background:transparent;
+  color:var(--animator-portal-ink);
+  box-shadow:0 24px 70px rgba(24,31,70,.26);
+}
+body.animator-dashboard-body .animator-portal-dialog::backdrop{background:rgba(19,29,58,.46);backdrop-filter:blur(2px)}
+body.animator-dashboard-body .animator-portal-dialog-card{overflow:hidden;border-radius:22px;background:#fff}
+body.animator-dashboard-body .animator-portal-dialog-card>header{
+  display:grid;
+  grid-template-columns:44px minmax(0,1fr) 34px;
+  align-items:center;
+  gap:10px;
+  padding:14px;
+  background:linear-gradient(135deg,#f5f2ff,#eef4ff);
+}
+body.animator-dashboard-body .animator-portal-dialog-card>header>div:nth-child(2){min-width:0}
+body.animator-dashboard-body .animator-portal-dialog-card>header span{display:block;color:#7b739a;font-size:.62rem;font-weight:750}
+body.animator-dashboard-body .animator-portal-dialog-card>header h2{margin:2px 0 0;overflow:hidden;color:var(--animator-portal-ink);font-size:1rem;font-weight:900;text-overflow:ellipsis;white-space:nowrap}
+body.animator-dashboard-body .animator-portal-dialog-avatar{
+  width:44px;height:44px;display:grid;place-items:center;border-radius:14px;
+  color:#fff;background:linear-gradient(145deg,#8064ff,#5935ef);font-size:.82rem;font-weight:900;
+}
+body.animator-dashboard-body .animator-portal-dialog-avatar--program{font-size:1.1rem}
+body.animator-dashboard-body .animator-portal-dialog-avatar--meeting{color:#1557c8;background:#e8f1ff;font-size:1.4rem}
+body.animator-dashboard-body .animator-portal-dialog-close{
+  width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:50%;
+  color:#58647e;background:rgba(255,255,255,.9);font-size:1.35rem;line-height:1;cursor:pointer;
+}
+body.animator-dashboard-body .animator-portal-contact-actions,
+body.animator-dashboard-body .animator-portal-dialog-list{display:grid;gap:8px;padding:12px 14px 14px}
+body.animator-dashboard-body .animator-portal-contact-actions>a,
+body.animator-dashboard-body .animator-portal-dialog-list>a,
+body.animator-dashboard-body .animator-portal-dialog-list>article{
+  min-width:0;display:flex;align-items:center;gap:10px;padding:10px 11px;border:1px solid var(--animator-portal-line);
+  border-radius:13px;color:var(--animator-portal-ink);background:#fff;text-decoration:none;
+}
+body.animator-dashboard-body .animator-portal-contact-actions>a>span:first-child{width:28px;flex:0 0 28px;color:var(--animator-portal-purple);font-size:1.1rem;text-align:center}
+body.animator-dashboard-body .animator-portal-contact-actions>a>span:last-child,
+body.animator-dashboard-body .animator-portal-dialog-list :is(a,article)>span{min-width:0;display:grid;gap:2px;flex:1}
+body.animator-dashboard-body .animator-portal-contact-actions small,
+body.animator-dashboard-body .animator-portal-dialog-list small{overflow:hidden;color:var(--animator-portal-muted);font-size:.64rem;text-overflow:ellipsis;white-space:nowrap}
+body.animator-dashboard-body .animator-portal-contact-actions strong,
+body.animator-dashboard-body .animator-portal-dialog-list strong{overflow:hidden;color:var(--animator-portal-ink);font-size:.76rem;text-overflow:ellipsis;white-space:nowrap}
+body.animator-dashboard-body .animator-portal-contact-actions>p{margin:4px 0;padding:12px;color:var(--animator-portal-muted);font-size:.72rem;text-align:center}
+body.animator-dashboard-body .animator-portal-dialog-list>b{color:var(--animator-portal-purple)}
+
+/* ========================================================================== */
+/* Plannings animateur — vue semaine conservée, compactée sur un écran        */
+/* ========================================================================== */
+body.animator-planning-body{background:var(--animator-portal-bg)}
+body.animator-planning-body .animator-planning-page{
+  box-sizing:border-box;
+  width:100%;
+  max-width:760px;
+  margin:0 auto;
+  padding:8px 10px 10px!important;
+  background:var(--animator-portal-bg);
+}
+body.animator-planning-body .animator-planning-shell{
+  min-height:0;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  overflow:hidden;
+  border:1px solid var(--animator-portal-line);
+  border-radius:var(--animator-portal-radius);
+  background:var(--animator-portal-surface);
+  box-shadow:var(--animator-portal-shadow);
+}
+body.animator-planning-body .animator-planning-shell-heading{
+  min-height:46px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:9px;
+  padding:6px 9px;
+  border-bottom:1px solid #edf0f6;
+}
+body.animator-planning-body .animator-planning-shell-title{min-width:0;display:flex;align-items:center;gap:8px}
+body.animator-planning-body .animator-planning-shell-title>div{min-width:0}
+body.animator-planning-body .animator-planning-shell-title h2{margin:0;color:var(--animator-portal-ink);font-size:.86rem;font-weight:900;line-height:1.05}
+body.animator-planning-body .animator-planning-shell-title p{margin:2px 0 0;color:var(--animator-portal-muted);font-size:.57rem;font-weight:700}
+body.animator-planning-body .animator-planning-publication{
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;padding:5px 8px;border-radius:999px;
+  color:#7a6a38;background:#fff7de;font-size:.59rem;font-weight:850;white-space:nowrap;
+}
+body.animator-planning-body .animator-planning-publication.is-published{color:#21815d;background:#e9f9f1}
+body.animator-planning-body .animator-planning-stage{min-height:0;overflow:auto;overscroll-behavior:contain;padding:5px}
+body.animator-planning-body .animator-planning-stage::-webkit-scrollbar{width:4px;height:4px}
+body.animator-planning-body .animator-planning-stage::-webkit-scrollbar-thumb{border-radius:99px;background:#d5dbeb}
+body.animator-planning-body .animator-planning-empty{height:100%;min-height:180px;display:grid;place-items:center;align-content:center;gap:5px;padding:16px;text-align:center}
+body.animator-planning-body .animator-planning-empty img{width:min(42%,150px);height:auto}
+body.animator-planning-body .animator-planning-empty strong{color:var(--animator-portal-ink);font-size:.82rem}
+body.animator-planning-body .animator-planning-empty span{color:var(--animator-portal-muted);font-size:.65rem}
+
+body.animator-planning-body .animator-planning-utilities{
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:6px;
+  padding:6px;
+  border-top:1px solid #edf0f6;
+  background:#fbfcff;
+}
+body.animator-planning-body .animator-planning-utility-group{min-width:0}
+body.animator-planning-body .animator-planning-utilities--without-program{grid-template-columns:minmax(0,1fr)}
+body.animator-planning-body .animator-planning-utility-group>.animator-portal-pill{width:100%;max-width:100%}
+
+/* La grille métier reste celle du module Direction, seulement densifiée. */
+body.animator-planning-body .animator-planning-stage .home-calendars.calendar-sites{display:grid;grid-template-columns:1fr;gap:5px}
+body.animator-planning-body .animator-planning-stage .calendar-site-card{
+  border-radius:12px;
+  box-shadow:none;
+}
+body.animator-planning-body .animator-planning-stage .calendar-site-header{
+  min-height:28px;
+  padding:3px 6px;
+  border-left-width:4px;
+}
+body.animator-planning-body .animator-planning-stage .calendar-site-name{font-size:.72rem}
+body.animator-planning-body .animator-planning-stage .calendar-site-count{padding:2px 5px;font-size:.52rem}
+body.animator-planning-body .animator-planning-stage .home-calendar-toggle-icon{font-size:.8rem}
+body.animator-planning-body .animator-planning-stage .calendar-group-list{gap:4px;padding:4px}
+body.animator-planning-body .animator-planning-stage .calendar-group-card{border-radius:9px}
+body.animator-planning-body .animator-planning-stage .calendar-group-header{min-height:24px;padding:2px 5px}
+body.animator-planning-body .animator-planning-stage .calendar-group-name{font-size:.65rem}
+body.animator-planning-body .animator-planning-stage .calendar-group-meta{font-size:.5rem}
+body.animator-planning-body .animator-planning-stage .shared-calendar{padding:0 3px 3px}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc{font-size:.56rem!important}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell-cushion,
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-number{padding:1px!important;font-size:.52rem!important}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-frame{min-height:48px!important;padding-bottom:1px!important}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-event-harness{margin-top:0}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event,
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{
+  margin:0!important;
+  padding:0 1px!important;
+  border-radius:3px!important;
+  font-size:.51rem!important;
+  line-height:1.13!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event-title{line-height:1.13!important}
+body.animator-planning-body .animator-planning-stage .calendar-sortie-marker{
+  min-width:15px!important;height:15px!important;margin:0 1px!important;padding:0 2px!important;border-radius:999px!important;font-size:.53rem!important;text-decoration:none;cursor:pointer;
+}
+body.animator-planning-body .animator-planning-stage .calendar-sortie-marker--link:active{transform:scale(.94)}
+body.animator-planning-body .animator-planning-contact-event{cursor:pointer!important;box-shadow:0 0 0 1px rgba(101,71,247,.08)}
+body.animator-planning-body .animator-planning-contact-event:active{filter:brightness(.96)}
+
+@media (max-width:799px){
+  body.animator-planning-body.animator-space-body{overflow:hidden!important}
+  html body.animator-planning-body > main.animator-planning-page{
+    height:calc(100dvh - var(--app-fixed-header-height,48px) - var(--site-mobile-nav-size,58px) - env(safe-area-inset-bottom,0px))!important;
+    min-height:0!important;
+    padding:6px 7px!important;
+  }
+  body.animator-planning-body .animator-planning-shell{height:100%;border-radius:16px}
+  body.animator-planning-body .animator-planning-shell-heading{min-height:42px;padding:5px 7px}
+  body.animator-planning-body .animator-portal-section-icon{width:30px;height:30px;flex-basis:30px;border-radius:10px}
+  body.animator-planning-body .animator-portal-section-icon svg{width:17px;height:17px}
+  body.animator-planning-body .animator-planning-shell-title{gap:6px}
+  body.animator-planning-body .animator-planning-shell-title h2{font-size:.78rem}
+  body.animator-planning-body .animator-planning-shell-title p{font-size:.52rem}
+  body.animator-planning-body .animator-planning-publication{padding:4px 6px;font-size:.53rem}
+  body.animator-planning-body .animator-planning-stage{padding:4px}
+  body.animator-planning-body .animator-planning-utilities{gap:5px;padding:5px}
+  body.animator-planning-body .animator-portal-pill{min-height:31px;padding:5px 7px;font-size:clamp(.54rem,2.1vw,.66rem)}
+
+  body.animator-planning-body .animator-planning-stage .calendar-site-header{min-height:26px;padding:2px 5px}
+  body.animator-planning-body .animator-planning-stage .calendar-site-name{font-size:.67rem}
+  body.animator-planning-body .animator-planning-stage .calendar-site-count{font-size:.49rem}
+  body.animator-planning-body .animator-planning-stage .calendar-group-list{gap:3px;padding:3px}
+  body.animator-planning-body .animator-planning-stage .calendar-group-header{min-height:22px;padding:2px 4px}
+  body.animator-planning-body .animator-planning-stage .calendar-group-name{font-size:.6rem}
+  body.animator-planning-body .animator-planning-stage .calendar-group-meta{font-size:.46rem}
+  body.animator-planning-body .animator-planning-stage .shared-calendar{padding:0 2px 2px}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc{font-size:.52rem!important}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell-cushion,
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-number{padding:1px!important;font-size:.48rem!important}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-frame{min-height:43px!important}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event,
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{font-size:.47rem!important;line-height:1.08!important}
+}
+
+@media (max-width:370px){
+  html body.animator-planning-body > main.animator-planning-page{padding-inline:5px!important}
+  body.animator-planning-body .animator-planning-shell-heading{min-height:39px}
+  body.animator-planning-body .animator-planning-publication{padding-inline:5px}
+  body.animator-planning-body .animator-planning-stage .calendar-site-name{font-size:.62rem}
+  body.animator-planning-body .animator-planning-stage .calendar-group-name{font-size:.56rem}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc{font-size:.48rem!important}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event,
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{font-size:.43rem!important}
+  body.animator-planning-body .animator-planning-utilities{grid-template-columns:1fr 1fr}
+}
+
+@media (max-width:799px) and (max-height:670px){
+  html body.animator-planning-body > main.animator-planning-page{padding-top:4px!important;padding-bottom:4px!important}
+  body.animator-planning-body .animator-planning-shell-heading{min-height:36px;padding-block:3px}
+  body.animator-planning-body .animator-portal-section-icon{width:27px;height:27px;flex-basis:27px}
+  body.animator-planning-body .animator-planning-shell-title p{display:none}
+  body.animator-planning-body .animator-planning-stage{padding:3px}
+  body.animator-planning-body .animator-planning-utilities{padding:4px}
+  body.animator-planning-body .animator-portal-pill{min-height:28px;font-size:.54rem}
+  body.animator-planning-body .animator-planning-stage .calendar-site-header{min-height:24px}
+  body.animator-planning-body .animator-planning-stage .calendar-group-list{gap:2px;padding:2px}
+  body.animator-planning-body .animator-planning-stage .calendar-group-header{min-height:20px}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-frame{min-height:37px!important}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event,
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{font-size:.44rem!important;line-height:1.04!important}
+}

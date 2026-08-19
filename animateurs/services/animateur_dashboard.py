@@ -13,6 +13,7 @@ import datetime
 from collections import defaultdict
 
 from django.db.models import Prefetch, Q
+from django.urls import reverse
 from django.utils import timezone
 
 from animateurs.models import (
@@ -145,6 +146,57 @@ def _documents_semaine(lundi: datetime.date, vendredi: datetime.date):
     return documents
 
 
+def _programmes_activites_semaine(
+    animateur: Animateur,
+    lundi: datetime.date,
+    vendredi: datetime.date,
+):
+    """Retourne les programmes publiés pertinents pour les centres travaillés."""
+
+    debut_dt = _borne_jour(lundi)
+    fin_dt = _borne_jour(vendredi + datetime.timedelta(days=1))
+    centre_ids = set(
+        Affectation.objects.filter(
+            animateur=animateur,
+            debut__lt=fin_dt,
+            fin__gt=debut_dt,
+        ).values_list("centre_id", flat=True)
+    )
+    documents = (
+        Document.objects.filter(
+            type_document=Document.TYPE_PROGRAMME_ACTIVITES,
+            publie=True,
+        )
+        .filter(
+            Q(permanent=True)
+            | Q(periodes__debut__lte=vendredi, periodes__fin__gte=lundi)
+            | Q(periode_debut__lte=vendredi, periode_fin__gte=lundi)
+        )
+        .filter(Q(tous_centres=True) | Q(centres__id__in=centre_ids))
+        .prefetch_related("periodes", "centres")
+        .distinct()
+        .order_by("titre", "id")
+    )
+    return [
+        {
+            "id": document.id,
+            "titre": document.titre,
+            "url": document.fichier.url,
+            "tous_centres": document.tous_centres,
+            "centres": [
+                {"id": centre.id, "nom": centre.nom, "code": centre.code}
+                for centre in document.centres.all()
+            ],
+            "periode": {
+                "debut": document.periode_debut.isoformat() if document.periode_debut else None,
+                "fin": document.periode_fin.isoformat() if document.periode_fin else None,
+            },
+            "periode_ids": [periode.id for periode in document.periodes.all()],
+        }
+        for document in documents
+    ]
+
+
 
 def _informations_semaine(animateur: Animateur, lundi: datetime.date, vendredi: datetime.date):
     """Informations publiées par la direction et destinées à l'animateur."""
@@ -241,6 +293,7 @@ def _sorties_concernees(
                 "destination": sortie.destination or sortie.destination_commune,
                 "horaire": horaire,
                 "responsabilite": responsabilite,
+                "url": f"{reverse('sorties_animateur')}?semaine={lundi.isoformat()}",
                 "depart": _format_heure(heure_depart),
                 "retour": _format_heure(heure_retour),
             }
@@ -296,6 +349,8 @@ def _contexte_jour(
 def generer_tableau_de_bord_animateur(
     animateur: Animateur,
     date_reference: datetime.date | None = None,
+    *,
+    inclure_programmes: bool = False,
 ):
     """Construit le tableau de bord personnel d'un animateur."""
 
@@ -421,6 +476,16 @@ def generer_tableau_de_bord_animateur(
                 "animateurs_libelle": ", ".join(item.prenom for item in equipe),
                 "collegues": [item.prenom for item in collegues],
                 "collegues_libelle": ", ".join(item.prenom for item in collegues),
+                "collegues_details": [
+                    {
+                        "id": item.id,
+                        "prenom": item.prenom,
+                        "nom": item.nom,
+                        "telephone": item.telephone,
+                        "email": item.email,
+                    }
+                    for item in collegues
+                ],
                 "sorties": sorties_jour,
                 "sortie": sorties_jour[0] if sorties_jour else None,
                 "responsabilite": responsabilite,
@@ -457,7 +522,7 @@ def generer_tableau_de_bord_animateur(
     else:
         contexte_aujourdhui = _contexte_jour(animateur, aujourd_hui)
 
-    return {
+    contexte = {
         "animateur": animateur,
         "planning_publie": planning_publie,
         "aujourdhui": contexte_aujourdhui,
@@ -483,3 +548,6 @@ def generer_tableau_de_bord_animateur(
             "detail": [item for item in jours if item["disponible"]],
         },
     }
+    if inclure_programmes:
+        contexte["programmes_activites"] = _programmes_activites_semaine(animateur, lundi, vendredi)
+    return contexte

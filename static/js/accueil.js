@@ -310,6 +310,12 @@ document.addEventListener("DOMContentLoaded", () =>
             dayCellClassNames: (info) => evenementCouvreJour(evenement, info.date)
                 ? []
                 : ["home-evenement-hors-periode"],
+            eventDidMount: (info) => {
+                window.AnimatorPlanningPortal?.decorateCalendarEvent?.(info);
+            },
+            eventClick: (info) => {
+                window.AnimatorPlanningPortal?.handleCalendarEventClick?.(info);
+            },
             datesSet: (info) => {
                 mettreAJourVisibilite(info);
                 mettreAJourPeriodeVisible();
@@ -317,7 +323,8 @@ document.addEventListener("DOMContentLoaded", () =>
                     info.view.calendar,
                     evenement.id,
                     info.startStr,
-                    info.endStr
+                    info.endStr,
+                    window.AnimatorPlanningPortal?.markerOptions || {}
                 );
             },
         });

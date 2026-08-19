@@ -940,6 +940,9 @@ def api_documents(request):
         return JsonResponse([document_to_dict(d) for d in documents_qs], safe=False)
 
     titre = request.POST.get("titre", "").strip()
+    type_document = request.POST.get("type_document", Document.TYPE_CLASSIQUE).strip()
+    if type_document not in dict(Document.TYPE_DOCUMENT_CHOICES):
+        return JsonResponse({"error": "Le type de document est invalide."}, status=400)
     fichier = request.FILES.get("fichier")
     permanent = str(request.POST.get("permanent", "")).lower() in {"1", "true", "on", "yes"}
     periode_ids_bruts = request.POST.getlist("periode_ids") or request.POST.getlist("periode_ids[]")
@@ -990,6 +993,7 @@ def api_documents(request):
         with transaction.atomic():
             document = Document.objects.create(
                 titre=titre,
+                type_document=type_document,
                 publie=publie,
                 fichier=fichier,
                 permanent=permanent,
@@ -1043,6 +1047,7 @@ def api_document_detail(request, document_id):
         return JsonResponse({"error": "JSON invalide."}, status=400)
 
     titre = str(payload.get("titre", document.titre)).strip()
+    type_document = str(payload.get("type_document", document.type_document)).strip()
     publie = bool(payload.get("publie", document.publie))
     permanent = bool(payload.get("permanent", document.permanent))
     tous_centres = bool(payload.get("tous_centres", document.tous_centres))
@@ -1060,6 +1065,8 @@ def api_document_detail(request, document_id):
 
     if not titre:
         return JsonResponse({"error": "Le titre est obligatoire."}, status=400)
+    if type_document not in dict(Document.TYPE_DOCUMENT_CHOICES):
+        return JsonResponse({"error": "Le type de document est invalide."}, status=400)
 
     periodes = []
     periode_debut = None
@@ -1074,12 +1081,13 @@ def api_document_detail(request, document_id):
         periode_fin = max(periode.fin for periode in periodes)
 
     document.titre = titre
+    document.type_document = type_document
     document.publie = publie
     document.permanent = permanent
     document.periode_debut = periode_debut
     document.periode_fin = periode_fin
     document.tous_centres = tous_centres
-    document.save(update_fields=["titre", "publie", "permanent", "periode_debut", "periode_fin", "tous_centres"])
+    document.save(update_fields=["titre", "type_document", "publie", "permanent", "periode_debut", "periode_fin", "tous_centres"])
     document.periodes.set(periodes)
     document.centres.set(centres)
 

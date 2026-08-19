@@ -79,6 +79,32 @@ class ApiAjoutDocumentTests(ConnexionTestCase):
         document = Document.objects.get()
         self.assertEqual(document.titre, "Informations santé des enfants")
         self.assertEqual(document.fichier.name, "documents/enf-infos-sante-ete-a3f82c1d.pdf")
+        self.assertEqual(document.type_document, Document.TYPE_CLASSIQUE)
+
+    def test_cree_et_modifie_explicitement_un_programme_activites(self):
+        response = self.client.post(
+            reverse("api_documents"),
+            data={
+                "titre": "Programme semaine 1",
+                "type_document": Document.TYPE_PROGRAMME_ACTIVITES,
+                "permanent": "true",
+                "fichier": SimpleUploadedFile("programme.jpg", b"image", content_type="image/jpeg"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        document = Document.objects.get()
+        self.assertEqual(document.type_document, Document.TYPE_PROGRAMME_ACTIVITES)
+        self.assertEqual(response.json()["type_document"], Document.TYPE_PROGRAMME_ACTIVITES)
+
+        response = self.client.patch(
+            reverse("api_document_detail", args=[document.id]),
+            data={"type_document": Document.TYPE_CLASSIQUE},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        document.refresh_from_db()
+        self.assertEqual(document.type_document, Document.TYPE_CLASSIQUE)
 
     @patch("animateurs.views_reporting.Document.objects.create", side_effect=RuntimeError("bucket indisponible"))
     @patch("animateurs.views_reporting.logger.exception")
