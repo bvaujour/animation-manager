@@ -71,13 +71,5 @@
             <span class="animator-nav-label">Profil</span>
         </a>
     </nav>
-    <div class="app-rail-account animator-nav-logout-placeholder" hidden>
-        <form method="post" action="{% url 'logout' %}" class="app-rail-logout-form">
-            {% csrf_token %}
-            <button type="submit" class="app-rail-link app-rail-logout" aria-label="Déconnexion" title="Déconnexion">
-                <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3Zm4.6 4.6L13.2 9l2 2H8v2h7.2l-2 2 1.4 1.4L19 12l-4.4-4.4Z"/></svg>
-            </button>
-        </form>
-    </div>
 </aside>
 {% endif %}

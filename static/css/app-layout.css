@@ -3719,3 +3719,80 @@ body.page-temps-travail > .worktime-page {
   body.animator-space-body .app-rail-link.active .animator-nav-label{font-weight:750!important}
   body.animator-space-body .animator-nav-logout-placeholder,body.animator-space-body .app-rail-account{display:none!important}
 }
+
+/* Portail animateur mobile : barre basse finale, blanche, compacte, 5 entrées uniquement. */
+@media (max-width:799px){
+  body.animator-space-body{--site-mobile-nav-size:58px!important}
+  body.animator-space-body:not(.login-body){padding-bottom:calc(58px + env(safe-area-inset-bottom,0px))!important}
+  body.animator-space-body > .app-rail{
+    z-index:1200!important;
+    height:calc(58px + env(safe-area-inset-bottom,0px))!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    padding:0 5px env(safe-area-inset-bottom,0px)!important;
+    border-top:1px solid #e8ebf2!important;
+    background:#fff!important;
+    box-shadow:0 -5px 15px rgba(26,39,75,.05)!important;
+  }
+  body.animator-space-body .app-rail-links{
+    display:grid!important;
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    gap:0!important;
+    width:100%!important;
+    height:58px!important;
+    overflow:hidden!important;
+  }
+  body.animator-space-body .app-rail-link{
+    position:relative!important;
+    width:auto!important;
+    min-width:0!important;
+    height:58px!important;
+    min-height:58px!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:2px!important;
+    padding:4px 1px 3px!important;
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    color:#17294d!important;
+  }
+  body.animator-space-body .app-rail-link:hover,
+  body.animator-space-body .app-rail-link.active{
+    background:transparent!important;
+    color:#684cf5!important;
+  }
+  body.animator-space-body .app-rail-link.active::before{
+    content:""!important;
+    position:absolute!important;
+    top:0!important;
+    left:28%!important;
+    right:28%!important;
+    height:3px!important;
+    border-radius:0 0 999px 999px!important;
+    background:#684cf5!important;
+  }
+  body.animator-space-body .app-rail-icon{
+    width:21px!important;
+    height:21px!important;
+    flex:0 0 21px!important;
+    fill:currentColor!important;
+  }
+  body.animator-space-body .animator-nav-label{
+    display:block!important;
+    max-width:100%!important;
+    overflow:hidden!important;
+    color:currentColor!important;
+    font-size:9.7px!important;
+    font-weight:520!important;
+    line-height:11px!important;
+    text-overflow:clip!important;
+    white-space:nowrap!important;
+  }
+  body.animator-space-body .app-rail-link.active .animator-nav-label{font-weight:760!important}
+  body.animator-space-body .app-rail-account,
+  body.animator-space-body .animator-nav-logout-placeholder,
+  body.animator-space-body .app-rail-logout-form,
+  body.animator-space-body .app-rail-logout{display:none!important}
+}

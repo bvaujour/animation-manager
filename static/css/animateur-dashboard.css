@@ -999,3 +999,405 @@ body.animator-dashboard-body .animator-home-outing-smile {
   .animator-home-outing-smile::before{left:13px;top:15px;width:4px;height:4px;box-shadow:15px 0 0 currentColor}
   .animator-home-outing-smile::after{left:13px;top:21px;width:19px;height:11px;border-bottom-width:3px}
 }
+
+/* ===== Accueil animateur — passe téléphone compact / objectif sans scroll ===== */
+@media (max-width:799px){
+  body.animator-dashboard-body.animator-space-body{
+    overflow:hidden!important;
+  }
+  body.animator-dashboard-body .animator-dashboard--mobile-showcase{
+    box-sizing:border-box;
+    display:grid;
+    grid-template-rows:auto auto auto minmax(0,1fr);
+    gap:7px;
+    width:100%;
+    max-width:none;
+    height:calc(100dvh - var(--site-mobile-nav-size,58px) - env(safe-area-inset-bottom,0px));
+    min-height:0;
+    margin:0;
+    padding:7px 8px 7px!important;
+    overflow:hidden;
+    background:#f7f8fc;
+  }
+  body.animator-dashboard-body .animator-mobile-header--showcase{
+    min-height:34px;
+    margin:0;
+    padding:0 2px;
+  }
+  body.animator-dashboard-body .animator-mobile-header--showcase h1{
+    font-size:1.55rem;
+    line-height:1;
+  }
+  body.animator-dashboard-body .animator-mobile-title-wrap{gap:5px}
+  body.animator-dashboard-body .animator-mobile-title-spark{
+    width:22px;
+    height:19px;
+    transform:scale(.78);
+    transform-origin:left top;
+  }
+  body.animator-dashboard-body .animator-mobile-profile--showcase{
+    width:36px;
+    height:36px;
+    font-size:.78rem;
+    box-shadow:0 5px 12px rgba(97,73,247,.16);
+  }
+  body.animator-dashboard-body .animator-week-navigation--showcase{
+    grid-template-columns:38px minmax(0,1fr) 38px;
+    gap:5px;
+    min-height:43px;
+    margin:0;
+    padding:4px 6px;
+    border-radius:17px;
+    box-shadow:0 5px 14px rgba(24,41,80,.045);
+  }
+  body.animator-dashboard-body .animator-week-navigation--showcase>a{
+    width:32px;
+    height:32px;
+    font-size:1.32rem;
+  }
+  body.animator-dashboard-body .animator-week-navigation--showcase strong{
+    font-size:.78rem;
+    line-height:1.1;
+  }
+
+  /* Bandeau volontairement très court : prénom + mascotte uniquement. */
+  body.animator-dashboard-body .animator-welcome-card--showcase{
+    display:block;
+    min-height:0;
+    height:82px;
+    margin:0;
+    padding:0 10px 0 15px;
+    border-radius:19px;
+    box-shadow:0 8px 19px rgba(72,84,245,.15);
+  }
+  body.animator-dashboard-body .animator-welcome-copy{
+    position:relative;
+    z-index:3;
+    display:flex;
+    align-items:center;
+    height:100%;
+    max-width:63%;
+    padding:0;
+  }
+  body.animator-dashboard-body .animator-welcome-kicker{
+    margin:0;
+    color:#fff;
+    font-size:1.55rem;
+    line-height:1;
+    white-space:nowrap;
+  }
+  body.animator-dashboard-body .animator-welcome-mascot-img{
+    position:absolute;
+    z-index:2;
+    right:14px;
+    bottom:-31px;
+    width:126px;
+    height:130px;
+    max-height:none;
+    object-fit:contain;
+    object-position:center bottom;
+    filter:drop-shadow(0 5px 7px rgba(33,25,99,.16));
+  }
+  body.animator-dashboard-body .animator-welcome-heart{
+    right:10px;
+    top:6px;
+    font-size:1.35rem;
+  }
+  body.animator-dashboard-body .animator-welcome-card--showcase::before{
+    left:-52px;
+    top:-86px;
+    width:150px;
+    height:150px;
+  }
+  body.animator-dashboard-body .animator-welcome-card--showcase::after{
+    right:-36px;
+    bottom:-8px;
+    width:122px;
+    height:62px;
+  }
+
+  /* Les trois niveaux de l'accueil se partagent strictement l'espace restant. */
+  body.animator-dashboard-body .animator-home-cards--showcase{
+    display:grid;
+    grid-template-rows:minmax(116px,1.02fr) minmax(142px,1.25fr) minmax(78px,.72fr);
+    gap:7px;
+    min-height:0;
+    overflow:hidden;
+  }
+  body.animator-dashboard-body .animator-home-card{
+    min-height:0;
+    padding:8px 10px;
+    border-radius:17px;
+    overflow:hidden;
+    box-shadow:0 5px 14px rgba(29,44,83,.045);
+  }
+  body.animator-dashboard-body .animator-home-card-header{
+    min-height:30px;
+    margin-bottom:2px;
+    gap:5px;
+  }
+  body.animator-dashboard-body .animator-home-card-title{gap:7px}
+  body.animator-dashboard-body .animator-home-card-title h2{
+    font-size:.9rem;
+    line-height:1;
+  }
+  body.animator-dashboard-body .animator-home-card-icon{
+    width:31px;
+    height:31px;
+    flex:0 0 31px;
+    border-radius:10px;
+    box-shadow:0 4px 9px rgba(113,76,255,.13);
+  }
+  body.animator-dashboard-body .animator-home-card-icon svg{
+    width:17px;
+    height:17px;
+  }
+  body.animator-dashboard-body .animator-home-status,
+  body.animator-dashboard-body .animator-home-side-badge{
+    min-height:24px;
+    padding:4px 7px;
+    font-size:.55rem;
+    gap:3px;
+  }
+  body.animator-dashboard-body .animator-home-status.is-published>span{
+    width:14px;
+    height:14px;
+    border-width:1.5px;
+    font-size:.5rem;
+  }
+
+  /* Planning */
+  body.animator-dashboard-body .animator-home-card--featured{
+    display:grid;
+    grid-template-rows:auto minmax(0,1fr);
+    padding-bottom:8px;
+  }
+  body.animator-dashboard-body .animator-home-planning-content{
+    display:grid;
+    grid-template-columns:88px minmax(0,1fr);
+    gap:7px;
+    min-height:0;
+    align-items:center;
+  }
+  body.animator-dashboard-body .animator-home-planning-illustration{
+    width:88px;
+    height:82px;
+    justify-self:center;
+  }
+  body.animator-dashboard-body .animator-home-planning-illustration img{
+    width:100%;
+    height:100%;
+    max-width:88px;
+    max-height:82px;
+    object-fit:contain;
+  }
+  body.animator-dashboard-body .animator-home-planning-copy{
+    gap:6px;
+    min-width:0;
+  }
+  body.animator-dashboard-body .animator-home-planning-copy p{
+    margin:0;
+    font-size:.67rem;
+    line-height:1.22;
+  }
+  body.animator-dashboard-body .animator-home-card-action,
+  body.animator-dashboard-body .animator-home-card-link{
+    min-height:31px;
+    gap:5px;
+    padding:0 9px;
+    font-size:.63rem;
+    line-height:1;
+  }
+  body.animator-dashboard-body .animator-home-card-action{
+    color:#fff!important;
+    background:linear-gradient(90deg,#7049ff,#4c35fa)!important;
+    box-shadow:0 5px 12px rgba(91,61,245,.15)!important;
+  }
+
+  /* Documents + Infos */
+  body.animator-dashboard-body .animator-home-mini-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:7px;
+    min-height:0;
+  }
+  body.animator-dashboard-body .animator-home-card--mini{
+    position:relative;
+    display:grid;
+    grid-template-rows:31px minmax(0,1fr) auto 29px;
+    min-height:0;
+    height:100%;
+    padding:7px;
+  }
+  body.animator-dashboard-body .animator-home-card--mini .animator-home-card-header{
+    position:relative;
+    min-height:31px;
+    margin:0;
+    padding:0;
+  }
+  body.animator-dashboard-body .animator-home-card--mini .animator-home-card-title{
+    gap:5px;
+    min-width:0;
+  }
+  body.animator-dashboard-body .animator-home-card--mini .animator-home-card-title h2{
+    font-size:.69rem;
+    letter-spacing:-.02em;
+  }
+  body.animator-dashboard-body .animator-home-card--mini .animator-home-card-icon{
+    width:28px;
+    height:28px;
+    flex-basis:28px;
+    border-radius:9px;
+  }
+  body.animator-dashboard-body .animator-home-card--mini .animator-home-card-icon svg{
+    width:15px;
+    height:15px;
+  }
+  body.animator-dashboard-body .animator-home-card--mini .animator-home-side-badge{
+    position:absolute;
+    z-index:3;
+    top:1px;
+    right:0;
+    min-height:19px;
+    max-width:54px;
+    padding:3px 5px;
+    overflow:hidden;
+    font-size:.47rem;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  body.animator-dashboard-body .animator-home-mini-illustration{
+    align-self:center;
+    width:100%;
+    height:68px;
+    min-height:0;
+    margin:0;
+  }
+  body.animator-dashboard-body .animator-home-mini-illustration img{
+    width:min(92px,100%);
+    height:68px;
+    max-width:100%;
+    max-height:68px;
+    object-fit:contain;
+  }
+  body.animator-dashboard-body .animator-home-count-badge{
+    right:13%;
+    top:2px;
+    min-width:23px;
+    height:23px;
+    padding:0 4px;
+    border-width:2px;
+    font-size:.62rem;
+  }
+  body.animator-dashboard-body .animator-home-card--mini p{
+    margin:0 0 3px;
+    font-size:.57rem;
+    line-height:1.14;
+    text-align:center;
+  }
+  body.animator-dashboard-body .animator-home-card--mini .animator-home-card-link{
+    min-height:29px;
+    padding:0 4px;
+    font-size:.54rem;
+  }
+
+  /* Sorties */
+  body.animator-dashboard-body .animator-home-card--wide{
+    height:100%;
+    padding:6px 8px;
+  }
+  body.animator-dashboard-body .animator-home-outing-content{
+    display:grid;
+    grid-template-columns:92px minmax(0,1fr) 34px;
+    gap:6px;
+    height:100%;
+    min-height:0;
+    align-items:center;
+  }
+  body.animator-dashboard-body .animator-home-outing-left{
+    display:grid;
+    grid-template-rows:28px minmax(0,1fr);
+    gap:0;
+    min-height:0;
+  }
+  body.animator-dashboard-body .animator-home-card-title--sorties{gap:5px}
+  body.animator-dashboard-body .animator-home-card-title--sorties .animator-home-card-icon{
+    width:28px;
+    height:28px;
+    flex-basis:28px;
+    border-radius:9px;
+  }
+  body.animator-dashboard-body .animator-home-card-title--sorties h2{font-size:.7rem}
+  body.animator-dashboard-body .animator-home-outing-illustration{
+    width:90px;
+    height:48px;
+    max-width:90px;
+    max-height:48px;
+    object-fit:contain;
+    object-position:center bottom;
+  }
+  body.animator-dashboard-body .animator-home-outing-copy{
+    gap:2px;
+    min-width:0;
+  }
+  body.animator-dashboard-body .animator-home-outing-copy p{
+    font-size:.59rem;
+    line-height:1.12;
+  }
+  body.animator-dashboard-body .animator-home-outing-copy>span{
+    font-size:.54rem;
+    line-height:1.1;
+  }
+  body.animator-dashboard-body .animator-home-card-link--sorties{
+    width:100%;
+    min-width:0;
+    min-height:27px;
+    padding:0 6px;
+    font-size:.54rem;
+  }
+  body.animator-dashboard-body .animator-home-outing-smile{
+    width:32px;
+    height:32px;
+  }
+  body.animator-dashboard-body .animator-home-outing-smile::before{
+    left:9px;
+    top:10px;
+    width:3px;
+    height:3px;
+    box-shadow:11px 0 0 currentColor;
+  }
+  body.animator-dashboard-body .animator-home-outing-smile::after{
+    left:9px;
+    top:15px;
+    width:14px;
+    height:8px;
+    border-bottom-width:2px;
+  }
+}
+
+/* Téléphones très courts : une dernière compression sans masquer d'information. */
+@media (max-width:799px) and (max-height:650px){
+  body.animator-dashboard-body .animator-dashboard--mobile-showcase{
+    gap:5px;
+    padding-top:5px!important;
+    padding-bottom:5px!important;
+  }
+  body.animator-dashboard-body .animator-mobile-header--showcase{min-height:30px}
+  body.animator-dashboard-body .animator-mobile-header--showcase h1{font-size:1.4rem}
+  body.animator-dashboard-body .animator-mobile-profile--showcase{width:32px;height:32px;font-size:.7rem}
+  body.animator-dashboard-body .animator-week-navigation--showcase{min-height:38px;padding:3px 5px}
+  body.animator-dashboard-body .animator-week-navigation--showcase>a{width:29px;height:29px;font-size:1.18rem}
+  body.animator-dashboard-body .animator-week-navigation--showcase strong{font-size:.7rem}
+  body.animator-dashboard-body .animator-welcome-card--showcase{height:70px}
+  body.animator-dashboard-body .animator-welcome-kicker{font-size:1.35rem}
+  body.animator-dashboard-body .animator-welcome-mascot-img{right:12px;bottom:-32px;width:112px;height:116px}
+  body.animator-dashboard-body .animator-home-cards--showcase{
+    grid-template-rows:minmax(104px,1fr) minmax(126px,1.2fr) minmax(70px,.68fr);
+    gap:5px;
+  }
+  body.animator-dashboard-body .animator-home-planning-illustration{height:70px;width:78px}
+  body.animator-dashboard-body .animator-home-planning-illustration img{max-height:70px;max-width:78px}
+  body.animator-dashboard-body .animator-home-mini-illustration,
+  body.animator-dashboard-body .animator-home-mini-illustration img{height:58px;max-height:58px}
+  body.animator-dashboard-body .animator-home-outing-illustration{height:41px;max-height:41px}
+}
