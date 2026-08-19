@@ -1628,3 +1628,138 @@ body.animator-dashboard-body .animator-home-outing-smile {
   }
   body.animator-dashboard-body .animator-home-card--tile .animator-home-card-link{min-height:27px}
 }
+
+/* ===== Accueil animateur mobile — ajustement téléphone réel v3 ===== */
+@media (max-width:799px){
+  /* Bandeau d'accueil encore plus discret : il garde l'identité sans manger l'écran. */
+  body.animator-dashboard-body .animator-welcome-card--showcase{
+    height:64px!important;
+    min-height:64px!important;
+    padding:0 10px 0 14px!important;
+    border-radius:17px!important;
+  }
+  body.animator-dashboard-body .animator-welcome-copy{
+    height:64px!important;
+    max-width:64%!important;
+  }
+  body.animator-dashboard-body .animator-welcome-kicker{
+    font-size:clamp(1.1rem,5vw,1.35rem)!important;
+    line-height:1!important;
+    letter-spacing:-.025em!important;
+  }
+  body.animator-dashboard-body .animator-welcome-mascot-img{
+    right:12px!important;
+    bottom:-38px!important;
+    width:108px!important;
+    height:116px!important;
+    max-height:none!important;
+  }
+  body.animator-dashboard-body .animator-welcome-heart{
+    right:8px!important;
+    top:4px!important;
+    font-size:1.12rem!important;
+  }
+
+  /* Les 4 cartes utilisent exactement la même architecture verticale. */
+  body.animator-dashboard-body .animator-home-card--tile{
+    grid-template-rows:32px minmax(0,1fr) auto 34px!important;
+    padding:7px 8px 8px!important;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-header{
+    min-height:32px!important;
+  }
+
+  /* Illustration vraiment fluide : plus grande, mais elle se réduit avec la hauteur d'écran. */
+  body.animator-dashboard-body .animator-home-tile-illustration{
+    min-height:0!important;
+    padding:1px 0 0!important;
+    overflow:visible!important;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration img,
+  body.animator-dashboard-body .animator-home-tile-illustration--sorties img{
+    width:clamp(108px,32vw,158px)!important;
+    height:clamp(88px,14dvh,148px)!important;
+    max-width:96%!important;
+    max-height:100%!important;
+    object-fit:contain!important;
+    object-position:center bottom!important;
+  }
+
+  /* La phrase d'état est collée au bouton : aucune zone vide entre les deux. */
+  body.animator-dashboard-body .animator-home-tile-state{
+    align-self:end!important;
+    min-height:0!important;
+    margin:0 0 4px!important;
+    padding:0!important;
+    font-size:clamp(.55rem,2.15vw,.7rem)!important;
+    line-height:1.12!important;
+  }
+  body.animator-dashboard-body .animator-home-tile-state span{
+    font-size:.92em!important;
+  }
+
+  /* Tous les liens sont de vrais boutons homogènes, avec la couleur de leur rubrique. */
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-link{
+    align-self:end!important;
+    width:100%!important;
+    min-width:0!important;
+    min-height:34px!important;
+    height:34px!important;
+    margin:0!important;
+    padding:0 8px!important;
+    border-radius:999px!important;
+    color:#fff!important;
+    font-size:clamp(.56rem,2.1vw,.69rem)!important;
+    font-weight:850!important;
+    box-shadow:0 6px 14px rgba(35,48,86,.12)!important;
+  }
+  body.animator-dashboard-body .animator-home-card-link--planning{
+    background:linear-gradient(90deg,#7049ff,#4c35fa)!important;
+  }
+  body.animator-dashboard-body .animator-home-card-link--documents{
+    background:linear-gradient(90deg,#22cdbd,#0aa997)!important;
+  }
+  body.animator-dashboard-body .animator-home-card-link--infos{
+    background:linear-gradient(90deg,#ff7657,#f34d38)!important;
+  }
+  body.animator-dashboard-body .animator-home-card-link--sorties{
+    justify-content:center!important;
+    background:linear-gradient(90deg,#3379ff,#1558ec)!important;
+  }
+
+  /* Compteurs légèrement agrandis pour rester lisibles avec les nouveaux pictos. */
+  body.animator-dashboard-body .animator-home-count-badge{
+    right:8%!important;
+    top:3%!important;
+    min-width:26px!important;
+    height:26px!important;
+    font-size:.68rem!important;
+  }
+}
+
+@media (max-width:799px) and (max-height:650px){
+  body.animator-dashboard-body .animator-welcome-card--showcase{
+    height:56px!important;
+    min-height:56px!important;
+  }
+  body.animator-dashboard-body .animator-welcome-copy{height:56px!important}
+  body.animator-dashboard-body .animator-welcome-kicker{font-size:1.08rem!important}
+  body.animator-dashboard-body .animator-welcome-mascot-img{
+    bottom:-40px!important;
+    width:96px!important;
+    height:104px!important;
+  }
+  body.animator-dashboard-body .animator-home-card--tile{
+    grid-template-rows:29px minmax(0,1fr) auto 30px!important;
+    padding:5px 6px 6px!important;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration img,
+  body.animator-dashboard-body .animator-home-tile-illustration--sorties img{
+    width:clamp(88px,29vw,125px)!important;
+    height:clamp(68px,12dvh,106px)!important;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-link{
+    min-height:30px!important;
+    height:30px!important;
+  }
+}

@@ -3796,3 +3796,106 @@ body.page-temps-travail > .worktime-page {
   body.animator-space-body .app-rail-logout-form,
   body.animator-space-body .app-rail-logout{display:none!important}
 }
+
+/* ===== Barre basse portail animateur — correction finale téléphone réel v3 ===== */
+@media (max-width:799px){
+  html body.animator-space-body{
+    --site-mobile-nav-size:58px!important;
+  }
+  html body.animator-space-body:not(.login-body){
+    padding-bottom:calc(58px + env(safe-area-inset-bottom,0px))!important;
+  }
+  html body.animator-space-body > aside.app-rail{
+    position:fixed!important;
+    left:0!important;
+    right:0!important;
+    bottom:0!important;
+    top:auto!important;
+    width:100vw!important;
+    max-width:none!important;
+    height:calc(58px + env(safe-area-inset-bottom,0px))!important;
+    min-height:0!important;
+    margin:0!important;
+    padding:0 6px env(safe-area-inset-bottom,0px)!important;
+    display:block!important;
+    border:0!important;
+    border-top:1px solid #e8ebf2!important;
+    border-radius:0!important;
+    background:#fff!important;
+    background-color:#fff!important;
+    box-shadow:0 -4px 16px rgba(25,39,75,.08)!important;
+    overflow:hidden!important;
+    opacity:1!important;
+    z-index:5000!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-links{
+    display:grid!important;
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    align-items:stretch!important;
+    width:100%!important;
+    height:58px!important;
+    margin:0!important;
+    padding:0!important;
+    background:#fff!important;
+    overflow:visible!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-link{
+    position:relative!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:2px!important;
+    width:100%!important;
+    height:58px!important;
+    min-height:58px!important;
+    margin:0!important;
+    padding:4px 0 3px!important;
+    border:0!important;
+    border-radius:0!important;
+    outline:0!important;
+    background:#fff!important;
+    box-shadow:none!important;
+    color:#17294d!important;
+    opacity:1!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-link:hover,
+  html body.animator-space-body > aside.app-rail .app-rail-link.active{
+    background:#fff!important;
+    color:#684cf5!important;
+    box-shadow:none!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-link.active::before{
+    content:""!important;
+    position:absolute!important;
+    top:0!important;
+    left:30%!important;
+    right:30%!important;
+    height:3px!important;
+    border-radius:0 0 999px 999px!important;
+    background:#684cf5!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-icon{
+    width:23px!important;
+    height:23px!important;
+    flex:0 0 23px!important;
+    fill:currentColor!important;
+  }
+  html body.animator-space-body > aside.app-rail .animator-nav-label{
+    display:block!important;
+    color:currentColor!important;
+    font-size:10px!important;
+    font-weight:560!important;
+    line-height:11px!important;
+    white-space:nowrap!important;
+    overflow:visible!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-link.active .animator-nav-label{
+    font-weight:800!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-account,
+  html body.animator-space-body > aside.app-rail .app-rail-logout,
+  html body.animator-space-body > aside.app-rail .app-rail-logout-form{
+    display:none!important;
+  }
+}
