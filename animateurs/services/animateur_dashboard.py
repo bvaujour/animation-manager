@@ -2,8 +2,9 @@
 
 La page reste volontairement en lecture seule : elle rassemble les informations
 qui existent déjà dans Animation Manager sans créer de doublon métier. Le
-planning, les effectifs, les sorties, les réunions, les disponibilités et les
-documents restent donc pilotés par leurs modules d'origine.
+planning, les effectifs, les sorties, les réunions, les disponibilités, les
+documents et les informations publiées par la direction restent pilotés par
+leurs modules d’origine.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from animateurs.models import (
     Animateur,
     Disponibilite,
     Document,
+    InformationAnimateur,
     PublicationPlanning,
     EffectifEnfantsJour,
     HoraireAffectationJour,
@@ -142,6 +144,22 @@ def _documents_semaine(lundi: datetime.date, vendredi: datetime.date):
             document.libelle_dashboard = document.libelle_periode
     return documents
 
+
+
+def _informations_semaine(animateur: Animateur, lundi: datetime.date, vendredi: datetime.date):
+    """Informations publiées par la direction et destinées à l'animateur."""
+
+    return list(
+        InformationAnimateur.objects.filter(
+            publie=True,
+            date_debut__lte=vendredi,
+            date_fin__gte=lundi,
+        )
+        .filter(Q(tous_animateurs=True) | Q(animateurs=animateur))
+        .select_related("auteur")
+        .distinct()
+        .order_by("importance", "-date_debut", "-date_creation")
+    )
 
 def _sorties_concernees(
     animateur: Animateur,
@@ -428,16 +446,7 @@ def generer_tableau_de_bord_animateur(
         for item in reunions
     ]
 
-    infos = []
-    for reunion in reunions_dashboard:
-        infos.append(f"{reunion['titre']} — {reunion['date_libelle']}")
-    for sortie in sorties:
-        detail = f" — départ {sortie['depart']}" if sortie["depart"] else ""
-        infos.append(f"Sortie {sortie['nom']} {sortie['date_libelle']}{detail}")
-    jours_sans_horaires = [item for item in jours if item.get("travaille") and not item.get("horaires_renseignes")]
-    if jours_sans_horaires:
-        libelles = ", ".join(item["jour"].lower() for item in jours_sans_horaires)
-        infos.append(f"Horaires encore à confirmer : {libelles}")
+    informations = _informations_semaine(animateur, lundi, vendredi)
     contexte_aujourdhui = None
     if lundi <= aujourd_hui <= vendredi:
         contexte_aujourdhui = _contexte_jour(
@@ -462,7 +471,8 @@ def generer_tableau_de_bord_animateur(
             "est_courante": lundi == debut_semaine(aujourd_hui),
         },
         "jours": jours,
-        "infos_semaine": infos[:4],
+        "infos_semaine": informations,
+        "informations": informations,
         "sorties": sorties,
         "reunions": reunions_dashboard,
         "documents": _documents_semaine(lundi, vendredi),

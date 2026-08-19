@@ -3,6 +3,7 @@
 import datetime
 import json
 
+from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -13,7 +14,15 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.cache import never_cache
 
 from .access import est_direction
-from .models import Affectation, Centre, DemandeMateriel, PeriodeScolaire, StatutPreparationSemaine
+from .models import (
+    Affectation,
+    Animateur,
+    Centre,
+    DemandeMateriel,
+    InformationAnimateur,
+    PeriodeScolaire,
+    StatutPreparationSemaine,
+)
 from .services.animateur_dashboard import generer_tableau_de_bord_animateur
 from .services.comptes import valider_mot_de_passe
 from .services.dashboard import generer_tableau_de_bord
@@ -122,6 +131,10 @@ def accueil(request):
                 "infos_sorties_count": len(contexte["sorties"]),
                 "infos_documents_count": len(contexte["documents"]),
                 "infos_reunions_count": len(contexte["reunions"]),
+                "infos_infos_count": len(contexte.get("informations", [])),
+                "infos_infos_important_count": sum(
+                    1 for information in contexte.get("informations", []) if information.est_importante
+                ),
             })
             contexte.update({
                 "centres_materiel": Centre.objects.all(),
@@ -396,15 +409,119 @@ def temps_travail(request):
     return redirect("/recapitulatif/?onglet=temps-travail")
 
 def gestion(request):
-    """Gestion des lieux, groupes, qualifications, périodes et documents."""
+    """Gestion des référentiels, documents et informations du portail animateur."""
     onglet = request.GET.get("onglet", "lieux")
-    active_page = "documents" if onglet == "documents" else "gestion"
+
+    if request.method == "POST" and request.POST.get("module") == "informations-animateurs":
+        action = request.POST.get("action", "enregistrer")
+        information_id = request.POST.get("information_id")
+        information = None
+        if information_id:
+            try:
+                information = InformationAnimateur.objects.get(pk=information_id)
+            except (InformationAnimateur.DoesNotExist, TypeError, ValueError):
+                messages.error(request, "Cette information n’existe plus.")
+                return redirect("/gestion/?onglet=informations")
+
+        if action == "supprimer":
+            if information is None:
+                messages.error(request, "Information introuvable.")
+            else:
+                information.delete()
+                messages.success(request, "L’information a été supprimée.")
+            return redirect("/gestion/?onglet=informations")
+
+        if action in {"publier", "depublier"}:
+            if information is None:
+                messages.error(request, "Information introuvable.")
+            else:
+                information.publie = action == "publier"
+                information.save(update_fields=["publie", "date_modification"])
+                messages.success(
+                    request,
+                    "L’information est maintenant publiée." if information.publie else "L’information a été remise en brouillon.",
+                )
+            return redirect("/gestion/?onglet=informations")
+
+        titre = request.POST.get("titre", "").strip()
+        message = request.POST.get("message", "").strip()
+        date_debut = parse_date(request.POST.get("date_debut", ""))
+        date_fin = parse_date(request.POST.get("date_fin", ""))
+        importance = request.POST.get("importance", InformationAnimateur.IMPORTANCE_NORMALE)
+        cible = request.POST.get("cible", "tous")
+        tous_animateurs = cible != "selection"
+        animateur_ids = request.POST.getlist("animateur_ids")
+        publie = request.POST.get("publie") == "on"
+
+        erreurs = []
+        if not titre:
+            erreurs.append("Le titre est obligatoire.")
+        if not message:
+            erreurs.append("Le message est obligatoire.")
+        if date_debut is None or date_fin is None:
+            erreurs.append("La période d’affichage doit être renseignée.")
+        elif date_fin < date_debut:
+            erreurs.append("La date de fin doit être postérieure ou égale à la date de début.")
+        if importance not in dict(InformationAnimateur.IMPORTANCE_CHOICES):
+            erreurs.append("Le niveau d’importance est invalide.")
+        if not tous_animateurs and not animateur_ids:
+            erreurs.append("Sélectionne au moins un animateur ou choisis Toute l’équipe.")
+
+        animateurs_cibles = list(Animateur.objects.filter(pk__in=animateur_ids)) if animateur_ids else []
+        if not tous_animateurs and len(animateurs_cibles) != len(set(animateur_ids)):
+            erreurs.append("Une partie des animateurs sélectionnés n’existe plus.")
+
+        if erreurs:
+            for erreur in erreurs:
+                messages.error(request, erreur)
+            query = "?onglet=informations"
+            if information is not None:
+                query += f"&information={information.pk}"
+            return redirect(f"/gestion/{query}")
+
+        if information is None:
+            information = InformationAnimateur(auteur=request.user)
+        information.titre = titre
+        information.message = message
+        information.date_debut = date_debut
+        information.date_fin = date_fin
+        information.importance = importance
+        information.tous_animateurs = tous_animateurs
+        information.publie = publie
+        try:
+            information.full_clean()
+        except ValidationError as exc:
+            for messages_champ in exc.message_dict.values():
+                for erreur in messages_champ:
+                    messages.error(request, erreur)
+            query = "?onglet=informations"
+            if information.pk:
+                query += f"&information={information.pk}"
+            return redirect(f"/gestion/{query}")
+        information.save()
+        information.animateurs.set([] if tous_animateurs else animateurs_cibles)
+        messages.success(request, "L’information a été enregistrée.")
+        return redirect("/gestion/?onglet=informations")
+
+    information_editee = None
+    if onglet == "informations" and request.GET.get("information"):
+        try:
+            information_editee = InformationAnimateur.objects.prefetch_related("animateurs").get(
+                pk=request.GET.get("information")
+            )
+        except (InformationAnimateur.DoesNotExist, TypeError, ValueError):
+            messages.error(request, "Cette information n’existe plus.")
+
     return render(
         request,
         "gestion.html",
         {
-            "active_page": active_page,
+            "active_page": "gestion",
             "gestion_onglet": onglet,
+            "informations_animateurs": InformationAnimateur.objects.select_related("auteur").prefetch_related("animateurs"),
+            "information_editee": information_editee,
+            "information_editee_ids": [item.pk for item in information_editee.animateurs.all()] if information_editee else [],
+            "animateurs_informations": Animateur.objects.order_by("nom", "prenom"),
         },
     )
 

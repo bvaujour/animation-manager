@@ -3692,3 +3692,30 @@ body.page-temps-travail > .worktime-page {
   min-width: 0 !important;
   margin: 0 !important;
 }
+
+/* Navigation basse dédiée au portail animateur — mobile first */
+@media (max-width:799px){
+  body.animator-space-body{--site-mobile-nav-size:72px}
+  body.animator-space-body:not(.login-body){padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))!important}
+  body.animator-space-body > .app-rail{
+    height:calc(72px + env(safe-area-inset-bottom,0px))!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    padding:3px 8px env(safe-area-inset-bottom,0px)!important;
+    border-top:1px solid #e8ebf2!important;
+    background:rgba(255,255,255,.98)!important;
+    box-shadow:0 -8px 24px rgba(26,39,75,.055)!important;
+  }
+  body.animator-space-body .app-rail-links{height:66px!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:0!important;overflow:hidden!important}
+  body.animator-space-body .app-rail-link{
+    position:relative;width:auto!important;min-width:0!important;height:66px!important;min-height:66px!important;
+    display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:4px!important;
+    padding:5px 2px 4px!important;border-radius:0!important;background:transparent!important;color:#14264a!important;
+  }
+  body.animator-space-body .app-rail-link:hover{background:transparent!important;color:#684cf5!important}
+  body.animator-space-body .app-rail-link.active{background:transparent!important;color:#684cf5!important}
+  body.animator-space-body .app-rail-link.active::before{content:"";position:absolute;top:0;left:27%;right:27%;height:3px;border-radius:0 0 999px 999px;background:#684cf5}
+  body.animator-space-body .app-rail-icon{width:25px!important;height:25px!important;flex:0 0 25px!important;fill:currentColor!important}
+  body.animator-space-body .animator-nav-label{display:block!important;max-width:100%;overflow:visible!important;text-overflow:clip!important;white-space:nowrap!important;color:currentColor;font-size:11.5px!important;font-weight:500!important;line-height:13px!important}
+  body.animator-space-body .app-rail-link.active .animator-nav-label{font-weight:750!important}
+  body.animator-space-body .animator-nav-logout-placeholder,body.animator-space-body .app-rail-account{display:none!important}
+}

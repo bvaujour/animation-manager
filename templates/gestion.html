@@ -16,6 +16,7 @@
         <button class="tab-btn" data-tab="periodes" type="button" role="tab">Périodes vacances</button>
         <button class="tab-btn" data-tab="periodes-scolaires" type="button" role="tab">Périodes scolaires</button>
         <button class="tab-btn" data-tab="documents" type="button" role="tab">Documents</button>
+        <button class="tab-btn" data-tab="informations" type="button" role="tab">Informations animateurs</button>
     </div>
 
     <div class="tab-panel" data-panel="lieux">
@@ -63,6 +64,132 @@
             <div id="documents-grid" class="ui-grid documents-grid"></div>
         </section>
     </div>
+    <div class="tab-panel" data-panel="informations" hidden>
+        <section class="ui-card gestion-informations" id="informations-animateurs-management">
+            <div class="ui-section-heading gestion-section-heading">
+                <div>
+                    <h2>Informations du portail animateur</h2>
+                    <p>Publiez des consignes visibles dans la carte « Infos » du portail animateur.</p>
+                </div>
+            </div>
+
+            {% if messages %}
+            <div class="gestion-info-messages" aria-live="polite">
+                {% for message in messages %}<p class="gestion-info-message gestion-info-message--{{ message.tags|default:'info' }}">{{ message }}</p>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="gestion-informations-layout">
+                <form class="ui-form gestion-information-form" method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="module" value="informations-animateurs">
+                    <input type="hidden" name="action" value="enregistrer">
+                    {% if information_editee %}<input type="hidden" name="information_id" value="{{ information_editee.pk }}">{% endif %}
+
+                    <div class="gestion-information-form-heading">
+                        <div>
+                            <h3>{% if information_editee %}Modifier l’information{% else %}Nouvelle information{% endif %}</h3>
+                            <p>Le message apparaîtra seulement sur la période choisie et pour les animateurs ciblés.</p>
+                        </div>
+                        {% if information_editee %}<a class="btn btn-ghost btn-small" href="{% url 'gestion' %}?onglet=informations">Annuler</a>{% endif %}
+                    </div>
+
+                    <label class="field">
+                        <span>Titre</span>
+                        <input name="titre" maxlength="140" required value="{{ information_editee.titre|default:'' }}" placeholder="Ex. Pensez aux casquettes vendredi">
+                    </label>
+                    <label class="field">
+                        <span>Message / consigne</span>
+                        <textarea name="message" rows="5" required placeholder="Écrivez l’information à transmettre à l’équipe…">{{ information_editee.message|default:'' }}</textarea>
+                    </label>
+
+                    <div class="gestion-information-form-grid">
+                        <label class="field">
+                            <span>Du</span>
+                            <input type="date" name="date_debut" required value="{% if information_editee %}{{ information_editee.date_debut|date:'Y-m-d' }}{% endif %}">
+                        </label>
+                        <label class="field">
+                            <span>Au</span>
+                            <input type="date" name="date_fin" required value="{% if information_editee %}{{ information_editee.date_fin|date:'Y-m-d' }}{% endif %}">
+                        </label>
+                        <label class="field">
+                            <span>Importance</span>
+                            <select name="importance">
+                                <option value="normale"{% if not information_editee or information_editee.importance == 'normale' %} selected{% endif %}>Normale</option>
+                                <option value="importante"{% if information_editee.importance == 'importante' %} selected{% endif %}>Importante</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <fieldset class="gestion-information-target">
+                        <legend>Destinataires</legend>
+                        <label class="form-check">
+                            <input class="form-check-input" type="radio" name="cible" value="tous"{% if not information_editee or information_editee.tous_animateurs %} checked{% endif %} data-info-target-mode>
+                            <span class="form-check-label">Toute l’équipe</span>
+                        </label>
+                        <label class="form-check">
+                            <input class="form-check-input" type="radio" name="cible" value="selection"{% if information_editee and not information_editee.tous_animateurs %} checked{% endif %} data-info-target-mode>
+                            <span class="form-check-label">Une sélection d’animateurs</span>
+                        </label>
+                        <div class="gestion-information-animateurs" data-info-target-list{% if not information_editee or information_editee.tous_animateurs %} hidden{% endif %}>
+                            {% for animateur in animateurs_informations %}
+                            <label class="gestion-information-animateur">
+                                <input type="checkbox" name="animateur_ids" value="{{ animateur.pk }}"{% if animateur.pk in information_editee_ids %} checked{% endif %}>
+                                <span><strong>{{ animateur.nom }} {{ animateur.prenom }}</strong></span>
+                            </label>
+                            {% empty %}<p>Aucun animateur enregistré.</p>{% endfor %}
+                        </div>
+                    </fieldset>
+
+                    <label class="form-check gestion-information-published">
+                        <input class="form-check-input" type="checkbox" name="publie"{% if not information_editee or information_editee.publie %} checked{% endif %}>
+                        <span class="form-check-label">Publié dans le portail animateur</span>
+                    </label>
+                    <button class="btn btn-primary" type="submit">{% if information_editee %}Enregistrer les modifications{% else %}Publier l’information{% endif %}</button>
+                </form>
+
+                <div class="gestion-information-list-wrap">
+                    <div class="gestion-information-list-heading">
+                        <h3>Informations existantes</h3>
+                        <span>{{ informations_animateurs|length }} information{{ informations_animateurs|length|pluralize }}</span>
+                    </div>
+                    <div class="gestion-information-list">
+                        {% for information in informations_animateurs %}
+                        <article class="gestion-information-card{% if information.est_importante %} is-important{% endif %}{% if not information.publie %} is-draft{% endif %}">
+                            <div class="gestion-information-card-top">
+                                <div>
+                                    <div class="gestion-information-badges">
+                                        {% if information.est_importante %}<span class="gestion-info-badge gestion-info-badge--important">Important</span>{% else %}<span class="gestion-info-badge">Normal</span>{% endif %}
+                                        {% if information.publie %}<span class="gestion-info-badge gestion-info-badge--published">Publié</span>{% else %}<span class="gestion-info-badge gestion-info-badge--draft">Brouillon</span>{% endif %}
+                                    </div>
+                                    <h4>{{ information.titre }}</h4>
+                                </div>
+                                <a class="btn btn-ghost btn-small" href="{% url 'gestion' %}?onglet=informations&information={{ information.pk }}">Modifier</a>
+                            </div>
+                            <p class="gestion-information-card-message">{{ information.message|linebreaksbr }}</p>
+                            <dl class="gestion-information-meta">
+                                <div><dt>Période</dt><dd>{{ information.date_debut|date:'d/m/Y' }} → {{ information.date_fin|date:'d/m/Y' }}</dd></div>
+                                <div><dt>Cible</dt><dd>{% if information.tous_animateurs %}Toute l’équipe{% else %}{{ information.animateurs.count }} animateur{{ information.animateurs.count|pluralize }}{% endif %}</dd></div>
+                            </dl>
+                            <div class="gestion-information-actions">
+                                <form method="post">
+                                    {% csrf_token %}<input type="hidden" name="module" value="informations-animateurs"><input type="hidden" name="information_id" value="{{ information.pk }}"><input type="hidden" name="action" value="{% if information.publie %}depublier{% else %}publier{% endif %}">
+                                    <button class="btn btn-secondary btn-small" type="submit">{% if information.publie %}Mettre en brouillon{% else %}Publier{% endif %}</button>
+                                </form>
+                                <form method="post" onsubmit="return confirm('Supprimer cette information ?');">
+                                    {% csrf_token %}<input type="hidden" name="module" value="informations-animateurs"><input type="hidden" name="information_id" value="{{ information.pk }}"><input type="hidden" name="action" value="supprimer">
+                                    <button class="btn btn-danger btn-small" type="submit">Supprimer</button>
+                                </form>
+                            </div>
+                        </article>
+                        {% empty %}
+                        <div class="gestion-information-empty">Aucune information créée pour le moment.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
 </main>
 {% endblock %}
 {% block scripts %}
@@ -91,6 +218,14 @@ document.addEventListener("DOMContentLoaded", () => {
             window.history.replaceState({}, "", url);
         });
     });
+
+    const targetList = document.querySelector("[data-info-target-list]");
+    const updateTargetList = () => {
+        const selected = document.querySelector('[data-info-target-mode][value="selection"]')?.checked;
+        if (targetList) targetList.hidden = !selected;
+    };
+    document.querySelectorAll("[data-info-target-mode]").forEach((radio) => radio.addEventListener("change", updateTargetList));
+    updateTargetList();
 });
 </script>
 {% endblock %}

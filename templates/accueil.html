@@ -113,58 +113,124 @@
     <div id="dashboard-loading" class="dashboard-loading" role="status" aria-live="polite">Mise à jour du tableau de bord…</div>
 </main>
 {% else %}
-<main id="main-content" class="animator-dashboard animator-dashboard--simplified" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
-    <header class="animator-mobile-header animator-dashboard-header">
-        <h1>Accueil</h1>
-        <nav class="animator-week-navigation animator-week-navigation--header" aria-label="Navigation des semaines">
-            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
-            <div>
-                <strong>{{ semaine.libelle }}</strong>
-                {% if not semaine.est_courante %}<a href="?semaine={{ semaine.courante|date:'Y-m-d' }}">Cette semaine</a>{% endif %}
-            </div>
-            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
-        </nav>
-        <a class="animator-mobile-profile" href="{% url 'mon_profil' %}" aria-label="Ouvrir mon profil">
+<main id="main-content" class="animator-dashboard animator-dashboard--mobile-showcase" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
+    <header class="animator-mobile-header animator-mobile-header--showcase">
+        <div class="animator-mobile-title-wrap">
+            <h1>Accueil</h1>
+            <span class="animator-mobile-title-spark" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
+        <a class="animator-mobile-profile animator-mobile-profile--showcase" href="{% url 'mon_profil' %}" aria-label="Ouvrir mon profil">
             <span>{{ animateur.prenom|first }}{{ animateur.nom|first }}</span>
         </a>
     </header>
 
-    <section class="animator-home-cards" aria-label="Synthèse de la semaine sélectionnée">
-        <article class="animator-home-card animator-home-card--planning">
-            <div class="animator-home-card-icon" aria-hidden="true">▦</div>
-            <div class="animator-home-card-body">
-                <h2>Mes plannings</h2>
-                {% if planning_publie %}<p>{{ planning_jours_affectes }} jour{{ planning_jours_affectes|pluralize }} affecté{{ planning_jours_affectes|pluralize }} cette semaine.</p>{% else %}<p>Le planning de cette semaine n'est pas encore publié.</p>{% endif %}
-                <a class="animator-home-card-link" href="{% url 'plannings_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir mes plannings <span aria-hidden="true">›</span></a>
+    <nav class="animator-week-navigation animator-week-navigation--showcase" aria-label="Navigation des semaines">
+        <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+        <div><strong>{{ semaine.libelle }}</strong></div>
+        <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+    </nav>
+
+    <section class="animator-welcome-card animator-welcome-card--showcase" aria-label="Bienvenue">
+        <div class="animator-welcome-copy">
+            <p class="animator-welcome-kicker">Salut {{ animateur.prenom }} !</p>
+            <p>Voici ce qui t’attend cette semaine.</p>
+            <span class="animator-welcome-scribble" aria-hidden="true"></span>
+        </div>
+        <img class="animator-welcome-mascot-img" src="{% static 'img/animateur/welcome-mascot.webp' %}" alt="" aria-hidden="true">
+        <span class="animator-welcome-heart" aria-hidden="true">♡</span>
+    </section>
+
+    <section class="animator-home-cards animator-home-cards--showcase" aria-label="Synthèse de la semaine sélectionnée">
+        <article class="animator-home-card animator-home-card--planning animator-home-card--featured {% if planning_publie %}is-active{% else %}is-empty{% endif %}">
+            <header class="animator-home-card-header">
+                <div class="animator-home-card-title">
+                    <span class="animator-home-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24"><path d="M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V2Zm12 8H5v10h14V10ZM5 8h14V6H5v2Z"/></svg>
+                    </span>
+                    <h2>Mes plannings</h2>
+                </div>
+                <span class="animator-home-status{% if planning_publie %} is-published{% endif %}">
+                    {% if planning_publie %}<span aria-hidden="true">✓</span> Publié{% else %}<span aria-hidden="true">▣</span> Non publié{% endif %}
+                </span>
+            </header>
+            <div class="animator-home-planning-content">
+                <div class="animator-home-planning-illustration">
+                    <img src="{% if planning_publie %}{% static 'img/animateur/planning-active.webp' %}{% else %}{% static 'img/animateur/planning-empty.webp' %}{% endif %}" alt="" aria-hidden="true">
+                </div>
+                <div class="animator-home-planning-copy">
+                    {% if planning_publie %}
+                    <p>Le planning de cette semaine est disponible.</p>
+                    {% else %}
+                    <p>Le planning de cette semaine n’est pas encore publié.</p>
+                    {% endif %}
+                    <a class="animator-home-card-action" href="{% url 'plannings_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir mes plannings <span aria-hidden="true">›</span></a>
+                </div>
             </div>
         </article>
-        <article class="animator-home-card animator-home-card--sorties">
-            <div class="animator-home-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h12a4 4 0 0 1 4 4v9h-2a3 3 0 0 1-6 0H9a3 3 0 0 1-6 0H2V7a4 4 0 0 1 3-4Zm0 2a2 2 0 0 0-1 2v3h15V7a2 2 0 0 0-2-2H5Zm1 3h4V6H6v2Zm7 0h4V6h-4v2Zm-7 7a1 1 0 1 0 0 2 1 1 0 0 0-0-2Zm10 0a1 1 0 1 0 0 2 1 1 0 0 0-1-2Z"/></svg></div>
-            <div class="animator-home-card-body">
-                <h2>Sorties</h2>
-                {% if sorties %}<p>{{ sorties.0.date_libelle }} · {{ sorties.0.nom }}{% if sorties.0.horaire %}<br>{{ sorties.0.horaire }}{% endif %}</p>{% else %}<p>Aucune sortie cette semaine.</p>{% endif %}
-                <a class="animator-home-card-link" href="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir {% if sorties|length > 1 %}les sorties{% else %}la sortie{% endif %} <span aria-hidden="true">›</span></a>
-            </div>
-        </article>
-        <article class="animator-home-card animator-home-card--documents">
-            <div class="animator-home-card-icon" aria-hidden="true">▤</div>
-            <div class="animator-home-card-body">
-                <h2>Documents</h2>
-                <p>{% if infos_documents_count %}{{ infos_documents_count }} document{{ infos_documents_count|pluralize }} à consulter.{% else %}Aucun document à consulter.{% endif %}</p>
-                <a class="animator-home-card-link" href="{% url 'documents_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir les documents <span aria-hidden="true">›</span></a>
-            </div>
-        </article>
-        <article class="animator-home-card animator-home-card--infos">
-            <div class="animator-home-card-icon" aria-hidden="true">ⓘ</div>
-            <div class="animator-home-card-body">
-                <h2>Infos</h2>
-                <p>Aucune information pour cette période.</p>
-                <a class="animator-home-card-link" href="{% url 'infos_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir les infos <span aria-hidden="true">›</span></a>
+
+        <div class="animator-home-mini-grid">
+            <article class="animator-home-card animator-home-card--documents animator-home-card--mini {% if infos_documents_count %}is-active{% else %}is-empty{% endif %}">
+                <header class="animator-home-card-header">
+                    <div class="animator-home-card-title">
+                        <span class="animator-home-card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M3 6.5A3.5 3.5 0 0 1 6.5 3H10l1.7 2H17.5A3.5 3.5 0 0 1 21 8.5v7A3.5 3.5 0 0 1 17.5 19h-11A3.5 3.5 0 0 1 3 15.5v-9Z"/></svg>
+                        </span>
+                        <h2>Documents</h2>
+                    </div>
+                    {% if infos_documents_count %}<span class="animator-home-side-badge animator-home-side-badge--documents">Nouveau ✨</span>{% endif %}
+                </header>
+                <div class="animator-home-mini-illustration">
+                    <img src="{% if infos_documents_count %}{% static 'img/animateur/documents-active.webp' %}{% else %}{% static 'img/animateur/documents-empty.webp' %}{% endif %}" alt="" aria-hidden="true">
+                    {% if infos_documents_count %}<span class="animator-home-count-badge animator-home-count-badge--documents">{{ infos_documents_count }}</span>{% endif %}
+                </div>
+                <p>{% if infos_documents_count %}<strong>{{ infos_documents_count }}</strong> document{{ infos_documents_count|pluralize }} à consulter.{% else %}Aucun document à consulter.{% endif %}</p>
+                <a class="animator-home-card-link animator-home-card-link--documents" href="{% url 'documents_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir les documents <span aria-hidden="true">›</span></a>
+            </article>
+
+            <article class="animator-home-card animator-home-card--infos animator-home-card--mini {% if infos_infos_count %}is-active{% else %}is-empty{% endif %}">
+                <header class="animator-home-card-header">
+                    <div class="animator-home-card-title">
+                        <span class="animator-home-card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg>
+                        </span>
+                        <h2>Infos</h2>
+                    </div>
+                    {% if infos_infos_important_count %}<span class="animator-home-side-badge animator-home-side-badge--infos">Important</span>{% endif %}
+                </header>
+                <div class="animator-home-mini-illustration">
+                    <img src="{% if infos_infos_count %}{% static 'img/animateur/infos-active.webp' %}{% else %}{% static 'img/animateur/infos-empty.webp' %}{% endif %}" alt="" aria-hidden="true">
+                    {% if infos_infos_count %}<span class="animator-home-count-badge animator-home-count-badge--infos">{{ infos_infos_count }}</span>{% endif %}
+                </div>
+                <p>{% if infos_infos_important_count == 1 and infos_infos_count == 1 %}<strong>1</strong> information importante.{% elif infos_infos_count %}<strong>{{ infos_infos_count }}</strong> information{{ infos_infos_count|pluralize }} à consulter.{% else %}Aucune information pour cette période.{% endif %}</p>
+                <a class="animator-home-card-link animator-home-card-link--infos" href="{% url 'infos_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir les infos <span aria-hidden="true">›</span></a>
+            </article>
+        </div>
+
+        <article class="animator-home-card animator-home-card--sorties animator-home-card--wide {% if infos_sorties_count %}is-active{% else %}is-empty{% endif %}">
+            <div class="animator-home-outing-content">
+                <div class="animator-home-outing-left">
+                    <div class="animator-home-card-title animator-home-card-title--sorties">
+                        <span class="animator-home-card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M8 4h8a4 4 0 0 1 4 4v10h-3a3 3 0 1 1-6 0h-2a3 3 0 1 1-6 0H0V8a4 4 0 0 1 4-4h1c.6 0 1 .4 1 1v2h2V4Zm1 9h6V9H9v4Z"/></svg>
+                        </span>
+                        <h2>Sorties</h2>
+                    </div>
+                    <img class="animator-home-outing-illustration" src="{% if infos_sorties_count %}{% static 'img/animateur/sorties-active.webp' %}{% else %}{% static 'img/animateur/sorties-empty.webp' %}{% endif %}" alt="" aria-hidden="true">
+                </div>
+                <div class="animator-home-outing-copy">
+                    {% if infos_sorties_count %}
+                        <p><strong>{{ infos_sorties_count }} sortie{{ infos_sorties_count|pluralize }} cette semaine.</strong></p>
+                        <span>{{ sorties.0.nom }} · {{ sorties.0.date_libelle }}</span>
+                        <a class="animator-home-card-link animator-home-card-link--sorties" href="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir {% if infos_sorties_count > 1 %}les sorties{% else %}la sortie{% endif %} <span aria-hidden="true">›</span></a>
+                    {% else %}
+                        <p>Aucune sortie<br>cette semaine.</p>
+                    {% endif %}
+                </div>
+                <div class="animator-home-outing-smile" aria-hidden="true"></div>
             </div>
         </article>
     </section>
-
-    {% comment %}Les blocs historiques sont désormais répartis dans les espaces dédiés.{% endcomment %}
+{% comment %}Les blocs historiques sont désormais répartis dans les espaces dédiés.{% endcomment %}
     {% if False %}
 
     <section class="ui-card ui-section home-section home-planning-section animator-dashboard-calendar" aria-labelledby="animator-planning-title">

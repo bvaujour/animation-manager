@@ -31,6 +31,7 @@ from .models import (
     Disponibilite,
     DemandeMateriel,
     Document,
+    InformationAnimateur,
     Evenement,
     Groupe,
     ModeleEmail,
@@ -415,6 +416,15 @@ class DisponibiliteAdmin(admin.ModelAdmin):
     list_filter = ("animateur",)
     date_hierarchy = "debut"
 
+
+
+
+@admin.register(InformationAnimateur)
+class InformationAnimateurAdmin(admin.ModelAdmin):
+    list_display = ("titre", "importance", "date_debut", "date_fin", "publie", "tous_animateurs")
+    list_filter = ("publie", "importance", "tous_animateurs", "date_debut")
+    search_fields = ("titre", "message", "animateurs__prenom", "animateurs__nom")
+    filter_horizontal = ("animateurs",)
 
 @admin.register(ContactEmailExterne)
 class ContactEmailExterneAdmin(admin.ModelAdmin):

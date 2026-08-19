@@ -2026,6 +2026,72 @@ class ParticipantSejour(models.Model):
         return f"{self.prenom} {self.nom}"
 
 
+class InformationAnimateur(models.Model):
+    """Information ou consigne publiée par la direction dans le portail animateur.
+
+    Le message est visible lorsqu'il est publié, que sa période recouvre la
+    semaine consultée et que l'animateur fait partie de sa cible.
+    """
+
+    IMPORTANCE_NORMALE = "normale"
+    IMPORTANCE_IMPORTANTE = "importante"
+    IMPORTANCE_CHOICES = [
+        (IMPORTANCE_NORMALE, "Normale"),
+        (IMPORTANCE_IMPORTANTE, "Importante"),
+    ]
+
+    titre = models.CharField(max_length=140)
+    message = models.TextField()
+    date_debut = models.DateField(verbose_name="début d'affichage")
+    date_fin = models.DateField(verbose_name="fin d'affichage")
+    importance = models.CharField(
+        max_length=20,
+        choices=IMPORTANCE_CHOICES,
+        default=IMPORTANCE_NORMALE,
+        db_index=True,
+    )
+    publie = models.BooleanField(default=True, db_index=True)
+    tous_animateurs = models.BooleanField(
+        default=True,
+        help_text="Si coché, l'information est visible par tous les animateurs.",
+    )
+    animateurs = models.ManyToManyField(
+        Animateur,
+        related_name="informations_portail",
+        blank=True,
+        help_text="Animateurs ciblés lorsque l'information n'est pas destinée à toute l'équipe.",
+    )
+    auteur = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="informations_animateurs_creees",
+    )
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["importance", "-date_debut", "-date_creation"]
+        verbose_name = "information animateur"
+        verbose_name_plural = "informations animateurs"
+        indexes = [
+            models.Index(fields=["publie", "date_debut", "date_fin"], name="info_anim_periode_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+            raise ValidationError({"date_fin": "La date de fin doit être postérieure ou égale à la date de début."})
+
+    @property
+    def est_importante(self):
+        return self.importance == self.IMPORTANCE_IMPORTANTE
+
+    def __str__(self):
+        return self.titre
+
+
 class Sortie(models.Model):
     """Préparation d'une sortie ; les effectifs restent calculés depuis le Planning."""
 

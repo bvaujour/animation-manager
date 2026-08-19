@@ -1,23 +1,51 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Infos{% endblock %}
+{% block body_class %}animator-dashboard-body{% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
-<main id="main-content" class="animator-dashboard animator-dashboard--simplified">
-    <header class="animator-mobile-header animator-dashboard-header">
+<main id="main-content" class="animator-dashboard animator-dashboard--portal-page">
+    <header class="animator-portal-page-header">
         <h1>Infos</h1>
-        <nav class="animator-week-navigation animator-week-navigation--header" aria-label="Navigation des semaines">
+        <nav class="animator-week-navigation animator-week-navigation--portal" aria-label="Navigation des semaines">
             <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
             <div><strong>{{ semaine.libelle }}</strong>{% if not semaine.est_courante %}<a href="?semaine={{ semaine.courante|date:'Y-m-d' }}">Cette semaine</a>{% endif %}</div>
             <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
         </nav>
     </header>
-    <section class="animator-panel animator-wide-card animator-info-empty" aria-labelledby="animator-info-title">
-        <header class="animator-panel-header"><h2 id="animator-info-title">Informations / consignes</h2></header>
-        <p class="animator-empty-state">Aucune information pour cette période.</p>
+
+    <section class="animator-infos-page" aria-labelledby="animator-info-title">
+        <div class="animator-infos-page-heading">
+            <span class="animator-infos-page-icon" aria-hidden="true">i</span>
+            <div>
+                <h2 id="animator-info-title">Informations / consignes</h2>
+                <p>Les messages publiés par la direction pour cette période.</p>
+            </div>
+        </div>
+
+        <div class="animator-infos-list">
+            {% for information in informations %}
+            <article class="animator-info-message-card{% if information.est_importante %} is-important{% endif %}">
+                <div class="animator-info-message-top">
+                    <div class="animator-info-message-title">
+                        {% if information.est_importante %}<span class="animator-info-important-badge">Important</span>{% endif %}
+                        <h3>{{ information.titre }}</h3>
+                    </div>
+                    <span class="animator-info-period">{{ information.date_debut|date:'d/m' }} → {{ information.date_fin|date:'d/m' }}</span>
+                </div>
+                <p>{{ information.message|linebreaksbr }}</p>
+            </article>
+            {% empty %}
+            <div class="animator-info-empty-card">
+                <img src="{% static 'img/animateur/infos-empty.webp' %}" alt="" aria-hidden="true">
+                <strong>Aucune information pour cette période.</strong>
+                <span>Tu retrouveras ici les consignes publiées par la direction.</span>
+            </div>
+            {% endfor %}
+        </div>
     </section>
 </main>
 {% endblock %}
