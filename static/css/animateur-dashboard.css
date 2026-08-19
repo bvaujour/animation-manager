@@ -1401,3 +1401,230 @@ body.animator-dashboard-body .animator-home-outing-smile {
   body.animator-dashboard-body .animator-home-mini-illustration img{height:58px;max-height:58px}
   body.animator-dashboard-body .animator-home-outing-illustration{height:41px;max-height:41px}
 }
+
+/* ===== Accueil animateur — grille 4 cartes homogènes / pictos fluides ===== */
+.animator-home-cards--four-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+}
+.animator-home-card--tile{
+  min-width:0;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto auto;
+  align-items:stretch;
+}
+.animator-home-card--tile .animator-home-card-header{
+  min-width:0;
+}
+.animator-home-card--tile .animator-home-card-title{
+  min-width:0;
+}
+.animator-home-card--tile .animator-home-card-title h2{
+  min-width:0;
+}
+.animator-home-tile-illustration{
+  position:relative;
+  min-width:0;
+  min-height:0;
+  display:grid;
+  place-items:center;
+  overflow:visible;
+}
+.animator-home-tile-illustration img{
+  display:block;
+  width:clamp(94px,18vw,150px);
+  max-width:92%;
+  height:auto;
+  max-height:100%;
+  object-fit:contain;
+  object-position:center;
+}
+.animator-home-tile-illustration--sorties img{
+  width:clamp(104px,20vw,165px);
+}
+.animator-home-tile-state{
+  margin:4px 0 8px;
+  color:#273658;
+  font-size:.82rem;
+  line-height:1.25;
+  text-align:center;
+}
+.animator-home-tile-state strong{font-weight:900}
+.animator-home-tile-state span{color:#4f5b78;font-size:.92em}
+.animator-home-card-link--planning{
+  color:#fff;
+  background:linear-gradient(90deg,#7049ff,#4c35fa);
+  box-shadow:0 8px 18px rgba(91,61,245,.15);
+}
+.animator-home-card--tile .animator-home-card-link{
+  width:100%;
+}
+
+@media (max-width:799px){
+  /* L'espace restant sous le bandeau est partagé en 2 x 2 : les quatre cartes ont la même taille. */
+  body.animator-dashboard-body .animator-home-cards--showcase.animator-home-cards--four-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-rows:repeat(2,minmax(0,1fr));
+    gap:7px;
+    min-height:0;
+    overflow:hidden;
+  }
+  body.animator-dashboard-body .animator-home-card--tile{
+    position:relative;
+    display:grid;
+    grid-template-rows:34px minmax(0,1fr) auto 30px;
+    min-width:0;
+    min-height:0;
+    height:100%;
+    padding:7px 8px 8px;
+    overflow:hidden;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-header{
+    min-height:34px;
+    margin:0;
+    padding:0;
+    gap:4px;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-title{
+    gap:5px;
+    min-width:0;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-title h2{
+    font-size:clamp(.69rem,2.65vw,.9rem);
+    line-height:1.02;
+    letter-spacing:-.025em;
+    white-space:normal;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-icon{
+    width:30px;
+    height:30px;
+    flex:0 0 30px;
+    border-radius:9px;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-icon svg{
+    width:16px;
+    height:16px;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-status,
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-side-badge{
+    flex:0 0 auto;
+    min-height:20px;
+    max-width:58px;
+    padding:3px 5px;
+    font-size:clamp(.43rem,1.7vw,.55rem);
+    line-height:1;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-status.is-published>span{
+    width:13px;
+    height:13px;
+    border-width:1.5px;
+    font-size:.48rem;
+  }
+
+  /* Le picto remplit l'espace réellement disponible et reste lisible quelle que soit la taille du téléphone. */
+  body.animator-dashboard-body .animator-home-tile-illustration{
+    align-self:stretch;
+    width:100%;
+    height:100%;
+    min-height:0;
+    padding:2px 0;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration img{
+    width:clamp(82px,27vw,132px);
+    height:100%;
+    max-width:94%;
+    max-height:100%;
+    object-fit:contain;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration--sorties img{
+    width:clamp(92px,30vw,145px);
+  }
+  body.animator-dashboard-body .animator-home-count-badge{
+    right:10%;
+    top:5%;
+    min-width:24px;
+    height:24px;
+    padding:0 4px;
+    border-width:2px;
+    font-size:.64rem;
+  }
+
+  /* L'information d'état est toujours collée au bouton ; le centre de la carte reste réservé au picto. */
+  body.animator-dashboard-body .animator-home-tile-state{
+    align-self:end;
+    margin:0 0 4px;
+    min-height:24px;
+    color:#263653;
+    font-size:clamp(.56rem,2.15vw,.7rem);
+    line-height:1.14;
+    text-align:center;
+  }
+  body.animator-dashboard-body .animator-home-tile-state span{
+    display:inline-block;
+    max-width:100%;
+    overflow:hidden;
+    font-size:.94em;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-link{
+    align-self:end;
+    min-height:30px;
+    padding:0 5px;
+    font-size:clamp(.55rem,2.05vw,.67rem);
+    line-height:1;
+  }
+  body.animator-dashboard-body .animator-home-card-link--planning{
+    color:#fff!important;
+    background:linear-gradient(90deg,#7049ff,#4c35fa)!important;
+  }
+}
+
+@media (max-width:370px){
+  body.animator-dashboard-body .animator-home-card--tile{
+    padding-inline:6px;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-title{gap:4px}
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-icon{
+    width:28px;height:28px;flex-basis:28px;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-status,
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-side-badge{
+    max-width:52px;
+    padding-inline:4px;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration img{
+    width:clamp(76px,26vw,108px);
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration--sorties img{
+    width:clamp(84px,29vw,118px);
+  }
+}
+
+@media (max-width:799px) and (max-height:650px){
+  body.animator-dashboard-body .animator-home-card--tile{
+    grid-template-rows:30px minmax(0,1fr) auto 27px;
+    padding-top:5px;
+    padding-bottom:6px;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-header{min-height:30px}
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-icon{
+    width:27px;height:27px;flex-basis:27px;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration img{
+    width:clamp(72px,24vw,102px);
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration--sorties img{
+    width:clamp(80px,27vw,112px);
+  }
+  body.animator-dashboard-body .animator-home-tile-state{
+    min-height:20px;
+    margin-bottom:3px;
+  }
+  body.animator-dashboard-body .animator-home-card--tile .animator-home-card-link{min-height:27px}
+}
