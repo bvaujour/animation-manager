@@ -126,7 +126,7 @@ def enrichir_recapitulatif_paie(recap, debut, fin, periodes=()):
         date_debut__lte=fin, date_fin__gte=debut
     ).values_list("animateur_id", flat=True))
     ids_existants = {item["id"] for item in recap["animateurs"]}
-    for animateur in Animateur.objects.filter(pk__in=ids - ids_existants).order_by("prenom", "nom"):
+    for animateur in Animateur.objects.filter(pk__in=ids - ids_existants).order_by("nom", "prenom"):
         recap["animateurs"].append({
             "id": animateur.id, "prenom": animateur.prenom, "nom": animateur.nom,
             "paie_jour": None,
@@ -137,7 +137,7 @@ def enrichir_recapitulatif_paie(recap, debut, fin, periodes=()):
             "total_jour_avec_prime": None, "montant_primes": "0.00",
             "primes_detail": [], "prime_modifiable": False, "total_paie_estime": None,
         })
-    recap["animateurs"].sort(key=lambda item: (item["prenom"].casefold(), item["nom"].casefold()))
+    recap["animateurs"].sort(key=lambda item: (item["nom"].casefold(), item["prenom"].casefold()))
     animateurs = _charger_animateurs(ids, fin)
     anciennes_primes = {
         (item.animateur_id, item.periode_id): item
@@ -254,6 +254,7 @@ def enrichir_recapitulatif_paie(recap, debut, fin, periodes=()):
                     code = "reference_contractuelle"
                     if "SMIC manquante" in message:
                         code = "smic_manquant"
+                        message = "Référence SMIC manquante pour cette période."
                     elif "Barème apprentissage" in message:
                         code = "bareme_apprentissage_manquant"
                     elif "naissance" in message:
@@ -368,9 +369,11 @@ def enrichir_recapitulatif_paie(recap, debut, fin, periodes=()):
             })
 
         cp_cee = (base_cee * structure.taux_indemnite_cp_cee / Decimal("100")).quantize(Decimal("0.01"))
+        # La référence mensuelle reste une donnée de base et ne devient pas
+        # automatiquement un salaire préparé : le calcul mensuel complet
+        # (absences, temps réellement travaillé, proratas, règles futures)
+        # sera ajouté séparément lorsque le moteur correspondant existera.
         calculable = base_cee + cp_cee + montant_primes
-        if base_mensuelle is not None:
-            calculable += base_mensuelle
         etat = ETAT_PRET
         if any(item["niveau"] == "incomplet" for item in alertes):
             etat = ETAT_INCOMPLET
@@ -441,8 +444,8 @@ def enrichir_recapitulatif_paie(recap, debut, fin, periodes=()):
                 (valeur["montant"] for valeur in details_centres[centre_id].values()), Decimal("0.00")
             ).quantize(Decimal("0.01")))
 
-        remuneration_calculee = bool(jours_cee_calcules) or base_mensuelle is not None
-        base_preparee = base_cee + (base_mensuelle or Decimal("0.00"))
+        remuneration_calculee = bool(jours_cee_calcules)
+        base_preparee = base_cee
         ligne.update({
             "types_contrat": types,
             "type_contrat": types[0] if len(types) == 1 else "mixte",
@@ -463,6 +466,7 @@ def enrichir_recapitulatif_paie(recap, debut, fin, periodes=()):
             "base_mensuelle_reference": str(base_mensuelle) if base_mensuelle is not None else None,
             "minimum_mensuel_calcule": str(minimum_mensuel) if minimum_mensuel is not None else None,
             "source_reference_mensuelle": source_reference_mensuelle,
+            "salaire_mensuel_calcule": None,
             "paie_habituelle": paie_habituelle,
             "montant_primes_preparees": str(montant_primes.quantize(Decimal("0.01"))),
             "attributions_primes": primes,
@@ -470,12 +474,16 @@ def enrichir_recapitulatif_paie(recap, debut, fin, periodes=()):
             "formations_detail": formations_detail,
             "alertes_paie": alertes,
             "etat_preparation": etat,
-            "total_prepare": str(calculable.quantize(Decimal("0.01"))) if etat != ETAT_INCOMPLET else None,
+            "total_prepare": (
+                str(calculable.quantize(Decimal("0.01")))
+                if etat != ETAT_INCOMPLET and reference_mensuelle is None else None
+            ),
             "base_preparee": str(base_preparee.quantize(Decimal("0.01"))) if remuneration_calculee else None,
             "reference_mensuelle_a_ajuster": reference_mensuelle is not None and base_mensuelle is None,
+            "salaire_mensuel_a_calculer": reference_mensuelle is not None,
         })
         total_primes += montant_primes
-        if etat != ETAT_INCOMPLET:
+        if etat != ETAT_INCOMPLET and reference_mensuelle is None:
             total_calcule += calculable
 
     recap["total_prepare"] = str(total_calcule.quantize(Decimal("0.01")))

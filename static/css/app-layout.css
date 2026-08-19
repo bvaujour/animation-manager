@@ -196,6 +196,11 @@ body.app-body .app-context-selector select {
   fill: currentColor !important;
 }
 
+/* Navigation principale compacte du portail animateur. */
+body.animator-space-body .animator-nav-label {
+  display: none;
+}
+
 .app-rail-avatar {
   display: grid;
   place-items: center;
@@ -1507,6 +1512,40 @@ body.login-body .login-intro {
     height: 44px !important;
     min-height: 44px !important;
     flex: 0 0 44px !important;
+  }
+
+  body.animator-space-body .app-rail-links {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    overflow: hidden !important;
+  }
+
+  body.animator-space-body > .app-rail {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body.animator-space-body .animator-nav-logout-placeholder {
+    display: none !important;
+  }
+
+  body.animator-space-body .app-rail-link {
+    width: auto !important;
+    min-width: 0 !important;
+    height: 44px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 1px !important;
+  }
+
+  body.animator-space-body .animator-nav-label {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 9px;
+    line-height: 12px;
   }
 
   body.app-body:not(.login-body) .app-rail-account {

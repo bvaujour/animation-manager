@@ -201,7 +201,8 @@ class PreparationPaieTests(TestCase):
         self.affecter(DEBUT + datetime.timedelta(days=1), self.autre_groupe)
         ligne = self.preparer()
         self.assertEqual(ligne["base_mensuelle_reference"], "1850.00")
-        self.assertEqual(ligne["total_prepare"], "1850.00")
+        self.assertIsNone(ligne["total_prepare"])
+        self.assertTrue(ligne["salaire_mensuel_a_calculer"])
         self.assertEqual(ligne["base_cee"], "0.00")
         self.assertEqual(len(ligne["centres"]), 2)
 

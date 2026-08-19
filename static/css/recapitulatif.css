@@ -25,6 +25,11 @@
 .recap-table thead th,.recap-table tfoot th{background:var(--color-surface-sunken)}
 .recap-table thead th{color:var(--color-text-muted);font-size:.88rem}
 .recap-table tbody td:first-child{font-weight:650}
+.recap-table .payroll-employee-column{width:22%;text-align:left}
+.recap-table .payroll-contract-column{width:9%;text-align:center;white-space:nowrap}
+.recap-table tbody tr.contract-row>th,.recap-table tbody tr.contract-row>td{background:var(--contract-row-color)}
+.recap-table tbody tr.contract-row>td:first-child{font-weight:400}
+.recap-table tbody tr.contract-row>td:first-child strong{font-weight:800}
 .recap-table .jours-cell{text-align:right;font-variant-numeric:tabular-nums}
 .recap-table tfoot th{border-bottom:0;font-size:1rem}
 .loading-note,.empty-state{padding:28px;text-align:center;color:var(--color-text-muted)}
@@ -40,6 +45,7 @@ body.app-body .recap-page .recap-tabs .tab-label-short{display:none}
 .recap-legend{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px;max-width:50%}
 .place-badge{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:5px 9px;border-radius:999px;background:var(--place-color);color:var(--place-text);font-size:.78rem;font-weight:750;line-height:1.1;box-shadow:inset 0 0 0 1px rgb(0 0 0 / 8%);white-space:nowrap}
 .place-badge--compact{min-width:38px;padding-inline:7px;border-radius:7px;font-size:.75rem}
+.contract-type-badge{display:inline-flex;align-items:center;max-width:100%;padding:3px 7px;border-radius:999px;background:var(--contract-color);color:var(--contract-text);box-shadow:inset 0 0 0 1px rgb(0 0 0 / 8%);font-size:.72rem;font-weight:750;line-height:1.15;white-space:normal}
 .recap-place-table{width:max-content;min-width:100%;table-layout:fixed}
 .recap-place-table th,.recap-place-table td{border-right:1px solid var(--color-border)}
 .recap-place-table .employee-cell{position:sticky;left:0;z-index:2;min-width:190px;max-width:240px;background:var(--color-surface);text-align:left;white-space:nowrap}
@@ -138,13 +144,38 @@ body.app-body .recap-page .recap-tabs .tab-label-short{display:none}
 .recap-page .worktime-page{padding:0;gap:14px}
 .payroll-alert {
     display: block;
-    margin-top: 3px;
-    font-size: 0.75rem;
-    color: #64748b;
+    max-width: 100%;
+    margin-top: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #8a5a00;
+    font-size: 0.7rem;
+    line-height: 1.25;
+    font-weight: 550;
+    overflow-wrap: anywhere;
 }
 
-.payroll-alert--verification { color: #9a6700; }
+.payroll-alert--verification { color: #9a5b00; }
 .payroll-alert--incomplet { color: #b42318; font-weight: 700; }
+
+@media (min-width:800px) and (max-width:1199px){
+  #recap-salaries .recap-table{table-layout:fixed}
+  #recap-salaries .recap-table th,#recap-salaries .recap-table td{padding:7px 5px;font-size:.74rem;line-height:1.15}
+  #recap-salaries .recap-table thead th{font-size:.66rem;line-height:1.1;white-space:normal;overflow-wrap:anywhere}
+  #recap-salaries .recap-table .payroll-employee-column{width:19%;white-space:normal}
+  #recap-salaries .recap-table .payroll-contract-column{width:8%;white-space:normal}
+  #recap-salaries .recap-table th:nth-child(3){width:7%}
+  #recap-salaries .recap-table th:nth-child(4){width:6%}
+  #recap-salaries .recap-table th:nth-child(5){width:10%}
+  #recap-salaries .recap-table th:nth-child(6){width:7%}
+  #recap-salaries .recap-table th:nth-child(7),#recap-salaries .recap-table th:nth-child(8){width:7%}
+  #recap-salaries .recap-table th:nth-child(9){width:12%}
+  #recap-salaries .recap-table th:nth-child(10),#recap-salaries .recap-table th:nth-child(11){width:8.5%}
+  #recap-salaries .payroll-alert{font-size:.62rem;line-height:1.15}
+  #recap-salaries .contract-type-badge{padding:2px 5px;font-size:.62rem}
+}
 .payroll-prime-list span { display: block; margin-block: 2px; }
 .payroll-table input,
 .payroll-table select { min-width: 0; max-width: 150px; }

@@ -124,7 +124,55 @@ document.addEventListener("DOMContentLoaded", () => {
         if (type === "apprentissage") return "Apprentissage";
         if (type === "cdd") return "CDD";
         if (type === "permanent") return "Permanent";
-        return "CEE";
+        return type || "CEE";
+    }
+
+    const contractBadgePalette = ["#c7e5dc", "#dfccef", "#f4dfaa", "#c9dff1", "#eccdd6", "#d9e8bc", "#e5d8ca"];
+    const contractRowPalette = ["#ffffff", "#eee3f5", "#fff1cf", "#e0edf7", "#f5e1e6", "#e8f1d9", "#f1e9e0"];
+
+    function contractTypePaletteIndex(type) {
+        const value = String(type || "cee").toLowerCase();
+        const principal = {cee: 0, cdd: 1, apprentissage: 2, permanent: 3};
+        if (Object.prototype.hasOwnProperty.call(principal, value)) return principal[value];
+        let hash = 0;
+        for (let index = 0; index < value.length; index += 1) hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+        return Math.abs(hash) % contractBadgePalette.length;
+    }
+
+    function contractTypeColor(type) {
+        return contractBadgePalette[contractTypePaletteIndex(type)];
+    }
+
+    function contractTypeRowColor(type) {
+        return contractRowPalette[contractTypePaletteIndex(type)];
+    }
+
+    function contractBadge(type, label) {
+        const background = contractTypeColor(type);
+        return `<span class="contract-type-badge" style="--contract-color:${background};--contract-text:${textColorFor(background)}">${escapeHtml(label || contractTypeLabel(type))}</span>`;
+    }
+
+    function summaryContractLabel(animateur) {
+        if (!animateur.type_contrat || animateur.type_contrat === "cee") return "CEE";
+        return (animateur.type_contrat_libelle || contractTypeLabel(animateur.type_contrat))
+            .replace("Apprentissage / alternance", "Apprentissage");
+    }
+
+    function payrollAlerts(animateur) {
+        const alerts = [];
+        (animateur.alertes_paie || []).forEach((item) => {
+            const message = item.code === "smic_manquant" || item.message.startsWith("Référence SMIC manquante au ")
+                ? "Référence SMIC manquante pour cette période."
+                : item.message;
+            if (!alerts.some((alert) => alert.message === message)) alerts.push({message, niveau: item.niveau});
+        });
+        return alerts;
+    }
+
+    function totalPrepareLabel(animateur) {
+        if (animateur.salaire_mensuel_a_calculer || animateur.salaire_mensuel_reference !== null && animateur.salaire_mensuel_reference !== undefined) return "À calculer";
+        if (animateur.paie_habituelle && Number(animateur.total_prepare || 0) === 0) return "Paie habituelle";
+        return formatMoney(animateur.total_prepare) || escapeHtml(animateur.etat_preparation);
     }
 
     function contractCell(animateur) {
@@ -139,15 +187,15 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         if (!segments.length) {
             if ((animateur.alertes_paie || []).some((item) => item.code === "contrat_implicite")) {
-                return '<span class="paie-contract-segment paie-contract-segment--implicit"><span class="paie-cell-main">CEE par défaut</span><span class="paie-cell-detail">Contrat non renseigné</span></span>';
+                return `<span class="paie-contract-segment paie-contract-segment--implicit"><span class="paie-cell-main">${contractBadge("cee", "CEE par défaut")}</span><span class="paie-cell-detail">Contrat non renseigné</span></span>`;
             }
             const fallbackLabel = (animateur.type_contrat_libelle || "CEE")
                 .replace("Apprentissage / alternance", "Apprentissage");
-            return `<span class="paie-cell-main">${escapeHtml(fallbackLabel)}</span>`;
+            return `<span class="paie-cell-main">${contractBadge(animateur.type_contrat, fallbackLabel)}</span>`;
         }
         return segments.map((segment) => {
             if (!segment.explicite) {
-                return '<span class="paie-contract-segment paie-contract-segment--implicit"><span class="paie-cell-main">CEE par défaut</span><span class="paie-cell-detail">Contrat non renseigné</span></span>';
+                return `<span class="paie-contract-segment paie-contract-segment--implicit"><span class="paie-cell-main">${contractBadge("cee", "CEE par défaut")}</span><span class="paie-cell-detail">Contrat non renseigné</span></span>`;
             }
             const dateDebut = segment.contrat_date_debut || segment.date_debut;
             const dateFin = segment.contrat_date_fin || segment.date_fin;
@@ -158,7 +206,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     : !segment.contrat_date_fin
                         ? `Depuis le ${formatContractDate(segment.contrat_date_debut)}`
                         : `${formatContractDate(dateDebut)} → ${formatContractDate(dateFin)}`;
-            return `<span class="paie-contract-segment"><span class="paie-cell-main">${escapeHtml(segment.type_contrat_libelle || contractTypeLabel(segment.type_contrat))}</span><span class="paie-cell-detail">${escapeHtml(dates)}</span></span>`;
+            return `<span class="paie-contract-segment"><span class="paie-cell-main">${contractBadge(segment.type_contrat, segment.type_contrat_libelle || contractTypeLabel(segment.type_contrat))}</span><span class="paie-cell-detail">${escapeHtml(dates)}</span></span>`;
         }).join("");
     }
 
@@ -200,6 +248,9 @@ document.addEventListener("DOMContentLoaded", () => {
     function payrollBaseCell(animateur) {
         if (animateur.etat_preparation === "incomplet") {
             return incompletePayrollCell(animateur);
+        }
+        if (animateur.salaire_mensuel_a_calculer || animateur.salaire_mensuel_reference !== null && animateur.salaire_mensuel_reference !== undefined) {
+            return '<span class="paie-pay-block paie-pay-block--reference"><span class="paie-cell-main">À calculer</span><span class="paie-cell-detail">Salaire mensuel de référence non calculé</span></span>';
         }
         const elements = [];
         if (animateur.paie_habituelle) {
@@ -277,8 +328,9 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         const rows = data.animateurs.map((animateur) => `
-            <tr data-total-animateur="${animateur.id}">
-                <td><strong>${escapeHtml(animateur.prenom)} ${escapeHtml(animateur.nom)}</strong><small>${escapeHtml(animateur.type_contrat_libelle || "CEE")}</small>${(animateur.alertes_paie || []).map((item) => `<span class="payroll-alert payroll-alert--${escapeHtml(item.niveau)}">${escapeHtml(item.message)}</span>`).join("")}</td>
+            <tr class="contract-row" data-total-animateur="${animateur.id}" style="--contract-row-color:${contractTypeRowColor(animateur.type_contrat)}">
+                <td class="payroll-employee-column"><strong>${escapeHtml(animateur.nom)}</strong> ${escapeHtml(animateur.prenom)}${payrollAlerts(animateur).map((alert) => `<span class="payroll-alert payroll-alert--${escapeHtml(alert.niveau || "information")}">${escapeHtml(alert.message)}</span>`).join("")}</td>
+                <td class="payroll-contract-column">${contractBadge(animateur.type_contrat, summaryContractLabel(animateur))}</td>
                 <td class="jours-cell">${animateur.jours_affectation}</td>
                 <td class="jours-cell">${animateur.jours_reunion}</td>
                 <td class="jours-cell">${animateur.jours_preparation}</td>
@@ -287,13 +339,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 <td class="jours-cell">${formatMoney(animateur.indemnite_cp_cee) || "—"}</td>
                 <td class="jours-cell">${formatMoney(animateur.salaire_mensuel_reference) || "—"}</td>
                 <td class="jours-cell" data-total-primes-animateur>${formatMoney(animateur.montant_primes_preparees)}</td>
-                <td class="jours-cell" data-total-prepare-animateur>${formatMoney(animateur.total_prepare) || escapeHtml(animateur.etat_preparation)}</td>
+                <td class="jours-cell" data-total-prepare-animateur>${totalPrepareLabel(animateur)}</td>
             </tr>`).join("");
         employeesRoot.innerHTML = `
             <table class="recap-table">
-                <thead><tr><th>Animateur</th><th>Affectations</th><th>Réunions</th><th>Télétravail / préparation</th><th>Total jours</th><th>Base CEE</th><th>CP CEE</th><th>Salaire mensuel de référence</th><th>Primes</th><th>Total préparé</th></tr></thead>
+                <thead><tr><th class="payroll-employee-column">Animateur</th><th class="payroll-contract-column">Contrat</th><th>Affectations</th><th>Réunions</th><th>Télétravail / préparation</th><th>Total jours</th><th>Base CEE</th><th>CP CEE</th><th>Salaire mensuel de référence</th><th>Primes</th><th>Total préparé</th></tr></thead>
                 <tbody>${rows}</tbody>
-                <tfoot><tr><th>Total</th><th></th><th></th><th></th><th class="jours-cell">${data.total_jours}</th><th></th><th></th><th></th><th class="jours-cell" data-total-all-primes>${formatMoney(data.total_primes_preparees)}</th><th class="jours-cell" data-total-all-prepare>${formatMoney(data.total_prepare)}</th></tr></tfoot>
+                <tfoot><tr><th>Total</th><th></th><th></th><th></th><th></th><th class="jours-cell">${data.total_jours}</th><th></th><th></th><th></th><th class="jours-cell" data-total-all-primes>${formatMoney(data.total_primes_preparees)}</th><th class="jours-cell" data-total-all-prepare>${formatMoney(data.total_prepare)}</th></tr></tfoot>
             </table>`;
     }
 

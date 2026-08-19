@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Plannings{% endblock %}
+{% block body_class %}animator-dashboard-body{% endblock %}
+{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>{% endblock %}
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}">
+{% endblock %}
+{% block content %}
+<main id="main-content" class="animator-dashboard animator-dashboard--simplified" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
+    <header class="animator-mobile-header animator-dashboard-header">
+        <h1>Plannings</h1>
+        <nav class="animator-week-navigation animator-week-navigation--header" aria-label="Navigation des semaines">
+            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+            <div><strong>{{ semaine.libelle }}</strong>{% if not semaine.est_courante %}<a href="?semaine={{ semaine.courante|date:'Y-m-d' }}">Cette semaine</a>{% endif %}</div>
+            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+        </nav>
+    </header>
+    <section class="ui-card ui-section home-section home-planning-section animator-dashboard-calendar" aria-labelledby="animator-planning-title">
+        <div class="ui-section-heading section-heading"><h2 id="animator-planning-title">Mon planning</h2></div>
+        {% if planning_publie %}<div id="home-calendars" class="home-calendars calendar-sites"></div>{% else %}<p class="animator-empty-state">Le planning de cette semaine n’est pas encore publié par la direction.</p>{% endif %}
+    </section>
+    <section class="animator-panel animator-wide-card" aria-labelledby="animator-meetings-title">
+        <header class="animator-panel-header"><h2 id="animator-meetings-title">Mes réunions de la semaine</h2></header>
+        <div class="animator-card-list">
+            {% for reunion in reunions %}<div class="animator-list-item animator-list-item--meeting"><span>◷</span><div><strong>{{ reunion.titre }}</strong><small>{{ reunion.date_libelle }}{% if reunion.remarque %} · {{ reunion.remarque }}{% endif %}</small></div></div>{% empty %}<p class="animator-empty-state">Aucune réunion renseignée cette semaine.</p>{% endfor %}
+        </div>
+    </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}"></script>{% endblock %}

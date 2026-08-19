@@ -118,12 +118,52 @@ def accueil(request):
             date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
             contexte.update(generer_tableau_de_bord_animateur(animateur, date_reference))
             contexte.update({
+                "planning_jours_affectes": sum(1 for jour in contexte["jours"] if jour.get("travaille")),
+                "infos_sorties_count": len(contexte["sorties"]),
+                "infos_documents_count": len(contexte["documents"]),
+                "infos_reunions_count": len(contexte["reunions"]),
+            })
+            contexte.update({
                 "centres_materiel": Centre.objects.all(),
                 "demandes_materiel": DemandeMateriel.objects.filter(animateur=animateur).select_related("centre"),
                 "message_materiel": message_materiel,
                 "erreur_materiel": erreur_materiel,
             })
     return render(request, "accueil.html", contexte)
+
+
+def _contexte_portail_animateur(request, active_page):
+    """Contexte partagé par les espaces animateur dépendant d'une semaine."""
+    animateur = getattr(request.user, "profil_animateur", None)
+    contexte = {"active_page": active_page, "animateur": animateur}
+    if animateur is not None:
+        date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
+        contexte.update(generer_tableau_de_bord_animateur(animateur, date_reference))
+    return contexte
+
+
+def plannings_animateur(request):
+    if est_direction(request.user):
+        return redirect("planning")
+    return render(request, "plannings_animateur.html", _contexte_portail_animateur(request, "plannings"))
+
+
+def infos_animateur(request):
+    if est_direction(request.user):
+        return redirect("documents")
+    return render(request, "infos_animateur.html", _contexte_portail_animateur(request, "infos"))
+
+
+def sorties_animateur(request):
+    if est_direction(request.user):
+        return redirect("sorties")
+    return render(request, "sorties_animateur.html", _contexte_portail_animateur(request, "sorties_animateur"))
+
+
+def documents_animateur(request):
+    if est_direction(request.user):
+        return redirect("documents")
+    return render(request, "documents_animateur.html", _contexte_portail_animateur(request, "documents_animateur"))
 
 
 @never_cache
@@ -140,8 +180,6 @@ def demandes_materiel(request):
     """Traitement des demandes côté direction; côté animateur tout est sur le tableau de bord."""
     direction = est_direction(request.user)
     animateur = getattr(request.user, "profil_animateur", None)
-    if not direction:
-        return redirect("accueil")
     message = ""
     erreur = ""
 
@@ -193,6 +231,10 @@ def demandes_materiel(request):
                     quantite = int(request.POST.get("quantite", "1"))
                 except (TypeError, ValueError):
                     quantite = 0
+                try:
+                    centre = Centre.objects.get(pk=int(request.POST.get("centre_id", "")))
+                except (TypeError, ValueError, Centre.DoesNotExist):
+                    centre = None
 
                 if not materiel:
                     erreur = "Indique le matériel demandé."
@@ -200,9 +242,12 @@ def demandes_materiel(request):
                     erreur = "La quantité doit être au moins égale à 1."
                 elif date_besoin is None:
                     erreur = "Indique une date précise pour cette demande."
+                elif centre is None:
+                    erreur = "Choisis le centre concerné."
                 else:
                     DemandeMateriel.objects.create(
                         animateur=animateur,
+                        centre=centre,
                         materiel=materiel,
                         quantite=quantite,
                         date_besoin=date_besoin,
@@ -225,6 +270,7 @@ def demandes_materiel(request):
             "active_page": "materiel",
             "direction": direction,
             "animateur": animateur,
+            "centres_materiel": Centre.objects.all() if not direction else None,
             "demandes": demandes,
             "message": message,
             "erreur": erreur,
@@ -396,17 +442,7 @@ def mes_disponibilites(request):
     """Espace personnel permettant à un animateur de déclarer ses jours disponibles."""
     if est_direction(request.user):
         return redirect("employes")
-    return redirect("accueil")
-    animateur = getattr(request.user, "profil_animateur", None)
-    return render(
-        request,
-        "mes_disponibilites.html",
-        {
-            "active_page": "disponibilites",
-            "animateur": animateur,
-            "erreur_profil": animateur is None,
-        },
-    )
+    return redirect("mon_profil")
 
 
 def emails(request):

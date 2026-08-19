@@ -6,6 +6,7 @@ import datetime
 from collections import defaultdict
 from decimal import Decimal
 from io import BytesIO
+from xml.sax.saxutils import escape as escape_xml
 
 from django.utils import timezone
 
@@ -59,7 +60,7 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
     affectations = (
         Affectation.objects.select_related("animateur", "centre", "evenement")
         .filter(debut__lt=fin, fin__gt=debut)
-        .order_by("animateur__prenom", "animateur__nom", "debut")
+        .order_by("animateur__nom", "animateur__prenom", "debut")
     )
 
     jours_par_animateur = defaultdict(set)
@@ -158,7 +159,7 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
             ],
         })
 
-    lignes.sort(key=lambda ligne: (ligne["prenom"].casefold(), ligne["nom"].casefold()))
+    lignes.sort(key=lambda ligne: (ligne["nom"].casefold(), ligne["prenom"].casefold()))
     total_paie = sum(
         (Decimal(ligne["paie_totale"]) for ligne in lignes if ligne["paie_totale"] is not None),
         Decimal("0.00"),
@@ -188,6 +189,11 @@ ENTETES_PREPARATION_PAIE = [
 
 
 def _total_prepare_affiche(animateur):
+    if animateur.get("salaire_mensuel_a_calculer") or (
+        animateur.get("salaire_mensuel_reference") is not None
+        and animateur.get("salaire_mensuel_calcule") is not True
+    ):
+        return "À calculer"
     if animateur.get("total_prepare") is not None:
         if (
             animateur.get("paie_habituelle")
@@ -201,9 +207,13 @@ def _total_prepare_affiche(animateur):
 def lignes_recapitulatif_paie(recap):
     """Construit le même tableau agrégé que l'onglet Totaux par animateur."""
     lignes = [ENTETES_PREPARATION_PAIE]
-    for animateur in recap["animateurs"]:
+    animateurs = sorted(
+        recap["animateurs"],
+        key=lambda item: (item["nom"].casefold(), item["prenom"].casefold()),
+    )
+    for animateur in animateurs:
         lignes.append([
-            f'{animateur["prenom"]} {animateur["nom"]}',
+            f'{animateur["nom"]} {animateur["prenom"]}',
             str(animateur["jours_affectation"]), str(animateur["jours_reunion"]),
             str(animateur["jours_preparation"]), str(animateur["jours_travailles"]),
             _euros_pdf(animateur.get("base_cee", 0)),
@@ -214,7 +224,7 @@ def lignes_recapitulatif_paie(recap):
             _total_prepare_affiche(animateur),
         ])
     references_mensuelles = [
-        item for item in recap["animateurs"] if item.get("salaire_mensuel_reference") is not None
+        item for item in animateurs if item.get("salaire_mensuel_reference") is not None
     ]
     total_mensuel = (
         sum((Decimal(item["base_mensuelle_reference"]) for item in references_mensuelles), Decimal("0"))
@@ -222,30 +232,97 @@ def lignes_recapitulatif_paie(recap):
         and all(item.get("base_mensuelle_reference") is not None for item in references_mensuelles)
         else None
     )
+    total_prepare_export = sum(
+        (Decimal(item["total_prepare"]) for item in animateurs
+         if item.get("total_prepare") is not None
+         and _total_prepare_affiche(item) not in {"À calculer", "Paie habituelle", "Incomplet", "—"}),
+        Decimal("0"),
+    )
     lignes.append([
         "TOTAL",
-        str(sum(Decimal(str(item["jours_affectation"])) for item in recap["animateurs"])),
-        str(sum(Decimal(str(item["jours_reunion"])) for item in recap["animateurs"])),
-        str(sum(Decimal(str(item["jours_preparation"])) for item in recap["animateurs"])),
+        str(sum(Decimal(str(item["jours_affectation"])) for item in animateurs)),
+        str(sum(Decimal(str(item["jours_reunion"])) for item in animateurs)),
+        str(sum(Decimal(str(item["jours_preparation"])) for item in animateurs)),
         str(recap["total_jours"]),
-        _euros_pdf(sum((Decimal(item.get("base_cee", "0")) for item in recap["animateurs"]), Decimal("0"))),
-        _euros_pdf(sum((Decimal(item.get("indemnite_cp_cee", "0")) for item in recap["animateurs"]), Decimal("0"))),
+        _euros_pdf(sum((Decimal(item.get("base_cee", "0")) for item in animateurs), Decimal("0"))),
+        _euros_pdf(sum((Decimal(item.get("indemnite_cp_cee", "0")) for item in animateurs), Decimal("0"))),
         _euros_pdf(total_mensuel) if total_mensuel is not None else "—",
         _euros_pdf(recap.get("total_primes_preparees", 0)),
-        _euros_pdf(recap.get("total_prepare", 0)),
+        _euros_pdf(total_prepare_export),
     ])
     return lignes
 
 
+def _messages_alertes_paie(animateur):
+    messages = []
+    for alerte in animateur.get("alertes_paie", []):
+        message = alerte["message"]
+        if alerte.get("code") == "smic_manquant" or "Référence SMIC manquante au " in message:
+            message = "Référence SMIC manquante pour cette période."
+        if message not in messages:
+            messages.append(message)
+    return messages
+
+
 def alertes_recapitulatif_paie(recap):
     """Expose uniquement les alertes utiles, sans répéter les montants du tableau."""
-    return [
-        {
-            "animateur": f'{item["prenom"]} {item["nom"]}',
-            "messages": [alerte["message"] for alerte in item.get("alertes_paie", [])],
-        }
-        for item in recap["animateurs"] if item.get("alertes_paie")
-    ]
+    resultat = []
+    for item in sorted(
+        recap["animateurs"],
+        key=lambda ligne: (ligne["nom"].casefold(), ligne["prenom"].casefold()),
+    ):
+        messages = _messages_alertes_paie(item)
+        if messages:
+            resultat.append({
+                "animateur": f'{item["nom"]} {item["prenom"]}',
+                "messages": messages,
+            })
+    return resultat
+
+
+PDF_CONTRACT_ROW_PALETTE = (
+    "#ffffff", "#eee3f5", "#fff1cf", "#e0edf7", "#f5e1e6", "#e8f1d9", "#f1e9e0",
+)
+PDF_CONTRACT_PALETTE_INDEX = {"cee": 0, "cdd": 1, "apprentissage": 2, "permanent": 3}
+
+
+def _contract_palette_index(type_contrat):
+    value = str(type_contrat or "cee").lower()
+    if value in PDF_CONTRACT_PALETTE_INDEX:
+        return PDF_CONTRACT_PALETTE_INDEX[value]
+    hash_value = 0
+    for caractere in value:
+        hash_value = ((hash_value << 5) - hash_value + ord(caractere)) & 0xFFFFFFFF
+        if hash_value >= 0x80000000:
+            hash_value -= 0x100000000
+    return abs(hash_value) % len(PDF_CONTRACT_ROW_PALETTE)
+
+
+def _contract_label_pdf(animateur):
+    if not animateur.get("type_contrat") or animateur.get("type_contrat") == "cee":
+        return "CEE"
+    return (animateur.get("type_contrat_libelle") or animateur.get("type_contrat", "CEE")).replace(
+        "Apprentissage / alternance", "Apprentissage"
+    )
+
+
+def _identite_pdf(animateur):
+    identite = f'<b>{escape_xml(str(animateur["nom"]))}</b> {escape_xml(str(animateur["prenom"]))}'
+    alertes = []
+    for alerte in animateur.get("alertes_paie", []):
+        message = alerte.get("message", "")
+        if alerte.get("code") == "smic_manquant" or message.startswith("Référence SMIC manquante au "):
+            message = "Référence SMIC manquante pour cette période."
+        if any(item[0] == message for item in alertes):
+            continue
+        couleur = "#b42318" if alerte.get("niveau") == "incomplet" else "#9a5b00"
+        alertes.append((message, couleur))
+    if alertes:
+        identite += "<br/>" + "<br/>".join(
+            f'<font size="6" color="{couleur}">{escape_xml(message)}</font>'
+            for message, couleur in alertes
+        )
+    return identite
 
 
 def generer_recapitulatif_paie_pdf(recap, debut: datetime.date, fin: datetime.date) -> bytes:
@@ -269,6 +346,13 @@ def generer_recapitulatif_paie_pdf(recap, debut: datetime.date, fin: datetime.da
         title=f"Récapitulatif de paie du {debut:%d/%m/%Y} au {fin:%d/%m/%Y}",
     )
     styles = getSampleStyleSheet()
+    pdf_cell_style = ParagraphStyle(
+        "RecapPaiePdfCell", parent=styles["Normal"], fontSize=6.5, leading=7.2,
+    )
+    pdf_header_style = ParagraphStyle(
+        "RecapPaiePdfHeader", parent=styles["Normal"], fontSize=6.5, leading=7,
+        textColor=colors.white, alignment=TA_CENTER,
+    )
     titre = ParagraphStyle(
         "RecapPaieTitle",
         parent=styles["Title"],
@@ -279,24 +363,53 @@ def generer_recapitulatif_paie_pdf(recap, debut: datetime.date, fin: datetime.da
         spaceAfter=5 * mm,
     )
 
-    lignes = lignes_recapitulatif_paie(recap)
-    lignes[0] = [Paragraph(item, styles["Normal"]) for item in lignes[0]]
+    lignes_source = lignes_recapitulatif_paie(recap)
+    animateurs = sorted(
+        recap["animateurs"],
+        key=lambda item: (item["nom"].casefold(), item["prenom"].casefold()),
+    )
+    entetes_pdf = [
+        "Animateur", "Contrat", "Affectations", "Réunions", "Télétravail /<br/>préparation",
+        "Total jours", "Base CEE", "CP CEE", "Salaire mensuel<br/>de référence", "Primes", "Total préparé",
+    ]
+    lignes = [[Paragraph(item, pdf_header_style) for item in entetes_pdf]]
+    for index, animateur in enumerate(animateurs, start=1):
+        source = lignes_source[index]
+        lignes.append([
+            Paragraph(_identite_pdf(animateur), pdf_cell_style),
+            Paragraph(escape_xml(_contract_label_pdf(animateur)), pdf_cell_style),
+            *source[1:],
+        ])
+    total_source = lignes_source[-1]
+    lignes.append([total_source[0], "", *total_source[1:]])
 
-    tableau = Table(lignes, colWidths=[35 * mm, 15 * mm, 15 * mm, 28 * mm, 16 * mm, 21 * mm, 18 * mm, 31 * mm, 20 * mm, 27 * mm], repeatRows=1)
-    tableau.setStyle(TableStyle([
+    tableau = Table(
+        lignes,
+        colWidths=[39 * mm, 17 * mm, 14 * mm, 14 * mm, 23 * mm, 15 * mm, 19 * mm, 17 * mm, 29 * mm, 18 * mm, 25 * mm],
+        repeatRows=1,
+    )
+    style_tableau = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F6F54")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
         ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#E8F3EE")),
         ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+        ("ALIGN", (1, 1), (1, -1), "CENTER"),
         ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D7E2DC")),
         ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F7FAF8")]),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-    ]))
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("FONTSIZE", (0, 0), (-1, -1), 6.5),
+    ]
+    for ligne_index, animateur in enumerate(animateurs, start=1):
+        style_tableau.append(
+            ("BACKGROUND", (0, ligne_index), (-1, ligne_index), colors.HexColor(
+                PDF_CONTRACT_ROW_PALETTE[_contract_palette_index(animateur.get("type_contrat"))]
+            ))
+        )
+    tableau.setStyle(TableStyle(style_tableau))
 
     contenu = [
         Paragraph("Récapitulatif de paie", titre),
@@ -335,9 +448,13 @@ def generer_recapitulatif_excel(recap, debut: datetime.date, fin: datetime.date)
     feuille.append([f"Récapitulatif du {debut:%d/%m/%Y} au {fin:%d/%m/%Y}"])
     feuille.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(entetes))
     feuille.append(entetes)
-    for animateur in recap["animateurs"]:
+    animateurs = sorted(
+        recap["animateurs"],
+        key=lambda item: (item["nom"].casefold(), item["prenom"].casefold()),
+    )
+    for animateur in animateurs:
         feuille.append([
-            f'{animateur["prenom"]} {animateur["nom"]}',
+            f'{animateur["nom"]} {animateur["prenom"]}',
             animateur["jours_affectation"], animateur["jours_reunion"],
             animateur["jours_preparation"], animateur["jours_travailles"],
             float(Decimal(animateur.get("base_cee", "0"))),
@@ -345,10 +462,7 @@ def generer_recapitulatif_excel(recap, debut: datetime.date, fin: datetime.date)
             float(Decimal(animateur["salaire_mensuel_reference"]))
             if animateur.get("salaire_mensuel_reference") is not None else None,
             float(Decimal(animateur.get("montant_primes_preparees", "0"))),
-            float(Decimal(animateur["total_prepare"]))
-            if animateur.get("total_prepare") is not None else (
-                "Paie habituelle" if animateur.get("paie_habituelle") else "Incomplet"
-            ),
+            _total_prepare_affiche(animateur),
         ])
     total_export = lignes_recapitulatif_paie(recap)[-1]
     feuille.append([total_export[0], *[
@@ -359,10 +473,10 @@ def generer_recapitulatif_excel(recap, debut: datetime.date, fin: datetime.date)
 
     centres = classeur.create_sheet("Détail par centre")
     centres.append(["Animateur", *[centre["nom"] for centre in recap["centres"]], "Total jours"])
-    for animateur in recap["animateurs"]:
+    for animateur in animateurs:
         jours_par_centre = {item["centre_id"]: item["jours_travailles"] for item in animateur["centres"]}
         centres.append([
-            f'{animateur["prenom"]} {animateur["nom"]}',
+            f'{animateur["nom"]} {animateur["prenom"]}',
             *[jours_par_centre.get(centre["id"], 0) for centre in recap["centres"]],
             animateur["jours_travailles"],
         ])
@@ -375,16 +489,16 @@ def generer_recapitulatif_excel(recap, debut: datetime.date, fin: datetime.date)
     ])
     for animateur in recap["animateurs"]:
         preparation.append([
-            f'{animateur["prenom"]} {animateur["nom"]}',
+            f'{animateur["nom"]} {animateur["prenom"]}',
             animateur.get("type_contrat_libelle", ""),
             float(Decimal(animateur.get("base_cee", "0"))),
             float(Decimal(animateur.get("indemnite_cp_cee", "0"))),
             float(Decimal(animateur["salaire_mensuel_reference"]))
             if animateur.get("salaire_mensuel_reference") is not None else None,
             float(Decimal(animateur.get("montant_primes_preparees", "0"))),
-            float(Decimal(animateur["total_prepare"])) if animateur.get("total_prepare") is not None else None,
+            _total_prepare_affiche(animateur),
             animateur.get("etat_preparation", ""),
-            " | ".join(item["message"] for item in animateur.get("alertes_paie", [])),
+            " | ".join(_messages_alertes_paie(animateur)),
         ])
 
     vert = "1F6F54"

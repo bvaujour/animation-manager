@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Sorties{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}"><link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main id="main-content" class="animator-dashboard animator-dashboard--simplified">
+    <header class="animator-mobile-header animator-dashboard-header"><a class="animator-secondary-back" href="{% url 'accueil' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">← Retour à l'accueil</a><h1>Sorties</h1></header>
+    <section class="animator-panel animator-wide-card"><div class="animator-card-list">
+        {% for sortie in sorties %}<article class="animator-list-item animator-list-item--outing"><span class="animator-list-date">{{ sortie.date|date:'D' }}<strong>{{ sortie.date|date:'d' }}</strong></span><div><strong>{{ sortie.nom }}</strong><small>{% if sortie.horaire %}{{ sortie.horaire }}{% endif %}{% if sortie.destination %} · {{ sortie.destination }}{% endif %}</small>{% if sortie.responsabilite %}<em>{{ sortie.responsabilite }}</em>{% endif %}</div></article>{% empty %}<p class="animator-empty-state">Aucune sortie cette semaine.</p>{% endfor %}
+    </div></section>
+</main>
+{% endblock %}

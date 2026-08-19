@@ -195,6 +195,16 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
         self.assertIn('if (type === "apprentissage") return "Apprentissage";', javascript)
         self.assertNotIn('if (type === "apprentissage") return "Apprentissage / alternance";', javascript)
         self.assertIn("paie-pay-block paie-pay-block--reference", javascript)
+        self.assertIn("const contractBadgePalette =", javascript)
+        self.assertIn("function contractTypeColor(type)", javascript)
+        self.assertIn("const principal = {cee: 0, cdd: 1, apprentissage: 2, permanent: 3};", javascript)
+        self.assertIn("function contractTypeRowColor(type)", javascript)
+        self.assertIn('class="contract-row"', javascript)
+        self.assertIn('class="contract-type-badge"', javascript)
+        self.assertIn('<strong>${escapeHtml(animateur.nom)}</strong> ${escapeHtml(animateur.prenom)}', javascript)
+        self.assertIn("function totalPrepareLabel(animateur)", javascript)
+        self.assertIn('return "Paie habituelle";', javascript)
+        self.assertIn(".payroll-alert--verification", css)
         self.assertIn(".paie-pay-block--reference .paie-cell-main{color:var(--color-danger", css)
         self.assertIn("@media (max-width:799px)", css)
         self.assertIn(".recap-centres-table colgroup,.recap-centres-table thead{display:none}", css)
@@ -619,6 +629,14 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
                     }, {
                         "message": "Statut historique incertain pour cette période.",
                         "niveau": "a_verifier",
+                    }, {
+                        "code": "smic_manquant",
+                        "message": "Référence SMIC manquante au 04/07/2026",
+                        "niveau": "incomplet",
+                    }, {
+                        "code": "smic_manquant",
+                        "message": "Référence SMIC manquante au 06/07/2026",
+                        "niveau": "incomplet",
                     }],
                 ),
                 ligne(
@@ -637,17 +655,20 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
         )
         lignes = lignes_recapitulatif_paie(recap)
         self.assertTrue(pdf.startswith(b"%PDF"))
-        self.assertEqual(lignes[1][5:], [
+        self.assertEqual(lignes[1][0], "BAIN Ambre")
+        self.assertEqual(lignes[1][7:], ["900,00 €", "0,00 €", "À calculer"])
+        self.assertEqual(lignes[2][5:], [
             "600,00 €", "60,00 €", "—", "80,00 €", "740,00 €",
         ])
-        self.assertEqual(lignes[2][7:], ["900,00 €", "0,00 €", "900,00 €"])
         self.assertEqual(lignes[3][-1], "Paie habituelle")
+        self.assertEqual(lignes[-1][-1], "740,00 €")
         self.assertNotIn("Paie par jour", lignes[0])
         self.assertEqual(alertes_recapitulatif_paie(recap), [{
-            "animateur": "Ange DUMONT",
+            "animateur": "DUMONT Ange",
             "messages": [
                 "Contrat non renseigné — CEE appliqué par défaut",
                 "Statut historique incertain pour cette période.",
+                "Référence SMIC manquante pour cette période.",
             ],
         }])
 
@@ -667,7 +688,7 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
         self.assertIn("recapitulatif_20260706_20260710.xlsx", response["Content-Disposition"])
         classeur = load_workbook(BytesIO(response.content), data_only=True)
         self.assertEqual(classeur.sheetnames, ["Totaux paie", "Détail par centre", "Préparation contrats"])
-        self.assertEqual(classeur["Totaux paie"]["A3"].value, "Julie Martin")
+        self.assertEqual(classeur["Totaux paie"]["A3"].value, "Martin Julie")
         self.assertEqual(classeur["Totaux paie"]["F2"].value, "Base CEE")
         self.assertEqual(classeur["Totaux paie"]["H2"].value, "Salaire mensuel de référence")
         self.assertNotIn("Paie par jour", [cell.value for cell in classeur["Totaux paie"][2]])
@@ -704,7 +725,7 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
 
         self.assertEqual(len(lignes), 3)  # en-tête, un animateur, total général
         self.assertEqual(lignes[1], [
-            "Julie Martin", "9", "1", "0", "10", "0,00 €",
+            "Martin Julie", "9", "1", "0", "10", "0,00 €",
             "0,00 €", "—", "34,00 €", "Incomplet",
         ])
         self.assertEqual(lignes[0], [

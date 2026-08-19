@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Documents{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}"><link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main id="main-content" class="animator-dashboard animator-dashboard--simplified">
+    <header class="animator-mobile-header animator-dashboard-header"><a class="animator-secondary-back" href="{% url 'accueil' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">← Retour à l'accueil</a><h1>Documents</h1></header>
+    <section class="animator-panel animator-wide-card"><div class="animator-card-list">
+        {% for document in documents %}<a class="animator-list-item animator-list-item--document" href="{{ document.fichier.url }}" target="_blank" rel="noopener"><div><strong>{{ document.titre }}</strong><small>{{ document.libelle_dashboard|default:document.libelle_periode }}</small></div><b aria-hidden="true">›</b></a>{% empty %}<p class="animator-empty-state">Aucun document pour cette période.</p>{% endfor %}
+    </div></section>
+</main>
+{% endblock %}

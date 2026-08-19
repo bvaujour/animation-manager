@@ -112,6 +112,21 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertNotIn("nav-overlay", navigation)
         self.assertNotIn("initNavigationLaterale", script)
 
+    def test_navigation_direction_suit_l_ordre_metier_et_des_icones_distinctes(self):
+        navigation = (Path(settings.BASE_DIR) / "templates/partials/_nav.html").read_text(encoding="utf-8")
+        navigation_direction = navigation.split("{% elif request.user.is_authenticated %}", 1)[0]
+        libelles = [
+            "Tableau de bord", "Animateurs", "Planning", "Sorties",
+            "Demandes de matériel", "Formations", "Paie", "Gestion",
+            "Paramètres", "Administration",
+        ]
+        positions = [navigation_direction.index(f'aria-label="{libelle}"') for libelle in libelles]
+        self.assertEqual(positions, sorted(positions))
+        liens_direction = navigation_direction.split("</nav>", 1)[0]
+        self.assertEqual(liens_direction.count('class="app-rail-icon"'), len(libelles))
+        self.assertNotIn('aria-label="Salariés"', navigation_direction)
+        self.assertNotIn("M4 19h16v2H2V3h2v16", navigation_direction)
+
     def test_les_onglets_de_page_sont_places_sous_l_entete(self):
         attentes = {
             "templates/planning.html": "planning-tabs app-page-tabs app-page-tabs-row",

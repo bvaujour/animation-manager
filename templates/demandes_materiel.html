@@ -28,6 +28,13 @@
                 <span>Date souhaitée</span>
                 <input type="date" name="date_besoin" required>
             </label>
+            <label class="material-field">
+                <span>Centre concerné</span>
+                <select name="centre_id" required>
+                    <option value="">Choisir un centre</option>
+                    {% for centre in centres_materiel %}<option value="{{ centre.id }}">{{ centre.nom }}</option>{% endfor %}
+                </select>
+            </label>
             <button class="btn btn-primary material-submit" type="submit">Envoyer la demande</button>
         </form>
         {% else %}

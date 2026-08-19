@@ -341,3 +341,40 @@ body.animator-dashboard-body{
 .animator-inline-editor[open] > summary { margin-bottom: 7px; }
 .animator-inline-editor #mes-disponibilites-root { display: grid; gap: 5px; }
 .animator-inline-editor #enregistrer-disponibilites { width: 100%; margin-top: 7px; }
+.animator-home-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 auto;
+  max-width: 760px;
+}
+
+.animator-home-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(53, 83, 96, .12);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 5px 16px rgba(35, 63, 76, .08);
+}
+
+.animator-home-card--planning { border-top: 3px solid #76a9c6; }
+.animator-home-card--sorties { border-top: 3px solid #82b69f; }
+.animator-home-card--documents { border-top: 3px solid #9b9ed0; }
+.animator-home-card--infos { border-top: 3px solid #d5a36d; }
+.animator-home-card-icon { display: grid; place-items: center; width: 26px; height: 26px; color: #315b6f; font-size: 22px; line-height: 1; flex: 0 0 26px; }
+.animator-home-card-icon svg { width: 24px; height: 24px; fill: currentColor; }
+.animator-home-card-body { min-width: 0; }
+.animator-home-card h2 { margin: 0 0 5px; font-size: 1rem; }
+.animator-home-card p { margin: 0 0 10px; color: #536771; font-size: .86rem; line-height: 1.35; }
+.animator-home-card-link { color: #245e79; font-size: .84rem; font-weight: 700; text-decoration: none; }
+.animator-home-card-link span { font-size: 1.1em; }
+.animator-secondary-back { display: inline-block; margin-bottom: 4px; color: #245e79; font-size: .84rem; font-weight: 700; text-decoration: none; }
+
+@media (max-width: 799px) {
+  .animator-home-cards { grid-template-columns: 1fr; gap: 9px; }
+  .animator-home-card { padding: 12px; border-radius: 13px; }
+}

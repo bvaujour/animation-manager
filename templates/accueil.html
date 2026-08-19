@@ -115,7 +115,7 @@
 {% else %}
 <main id="main-content" class="animator-dashboard animator-dashboard--simplified" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
     <header class="animator-mobile-header animator-dashboard-header">
-        <h1>Tableau de bord</h1>
+        <h1>Accueil</h1>
         <nav class="animator-week-navigation animator-week-navigation--header" aria-label="Navigation des semaines">
             <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
             <div>
@@ -128,6 +128,44 @@
             <span>{{ animateur.prenom|first }}{{ animateur.nom|first }}</span>
         </a>
     </header>
+
+    <section class="animator-home-cards" aria-label="Synthèse de la semaine sélectionnée">
+        <article class="animator-home-card animator-home-card--planning">
+            <div class="animator-home-card-icon" aria-hidden="true">▦</div>
+            <div class="animator-home-card-body">
+                <h2>Mes plannings</h2>
+                {% if planning_publie %}<p>{{ planning_jours_affectes }} jour{{ planning_jours_affectes|pluralize }} affecté{{ planning_jours_affectes|pluralize }} cette semaine.</p>{% else %}<p>Le planning de cette semaine n'est pas encore publié.</p>{% endif %}
+                <a class="animator-home-card-link" href="{% url 'plannings_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir mes plannings <span aria-hidden="true">›</span></a>
+            </div>
+        </article>
+        <article class="animator-home-card animator-home-card--sorties">
+            <div class="animator-home-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3h12a4 4 0 0 1 4 4v9h-2a3 3 0 0 1-6 0H9a3 3 0 0 1-6 0H2V7a4 4 0 0 1 3-4Zm0 2a2 2 0 0 0-1 2v3h15V7a2 2 0 0 0-2-2H5Zm1 3h4V6H6v2Zm7 0h4V6h-4v2Zm-7 7a1 1 0 1 0 0 2 1 1 0 0 0-0-2Zm10 0a1 1 0 1 0 0 2 1 1 0 0 0-1-2Z"/></svg></div>
+            <div class="animator-home-card-body">
+                <h2>Sorties</h2>
+                {% if sorties %}<p>{{ sorties.0.date_libelle }} · {{ sorties.0.nom }}{% if sorties.0.horaire %}<br>{{ sorties.0.horaire }}{% endif %}</p>{% else %}<p>Aucune sortie cette semaine.</p>{% endif %}
+                <a class="animator-home-card-link" href="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir {% if sorties|length > 1 %}les sorties{% else %}la sortie{% endif %} <span aria-hidden="true">›</span></a>
+            </div>
+        </article>
+        <article class="animator-home-card animator-home-card--documents">
+            <div class="animator-home-card-icon" aria-hidden="true">▤</div>
+            <div class="animator-home-card-body">
+                <h2>Documents</h2>
+                <p>{% if infos_documents_count %}{{ infos_documents_count }} document{{ infos_documents_count|pluralize }} à consulter.{% else %}Aucun document à consulter.{% endif %}</p>
+                <a class="animator-home-card-link" href="{% url 'documents_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir les documents <span aria-hidden="true">›</span></a>
+            </div>
+        </article>
+        <article class="animator-home-card animator-home-card--infos">
+            <div class="animator-home-card-icon" aria-hidden="true">ⓘ</div>
+            <div class="animator-home-card-body">
+                <h2>Infos</h2>
+                <p>Aucune information pour cette période.</p>
+                <a class="animator-home-card-link" href="{% url 'infos_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir les infos <span aria-hidden="true">›</span></a>
+            </div>
+        </article>
+    </section>
+
+    {% comment %}Les blocs historiques sont désormais répartis dans les espaces dédiés.{% endcomment %}
+    {% if False %}
 
     <section class="ui-card ui-section home-section home-planning-section animator-dashboard-calendar" aria-labelledby="animator-planning-title">
         <div class="ui-section-heading section-heading">
@@ -265,6 +303,7 @@
         <span aria-hidden="true">ⓘ</span>
         <p>Les informations affichées proviennent du planning, des sorties et des documents renseignés par la direction.</p>
     </footer>
+    {% endif %}
 </main>
 {% endif %}
 {% endblock %}
@@ -272,7 +311,6 @@
 {% if utilisateur_est_direction %}
 <script src="{% static 'js/dashboard.js' %}?v={{ asset_version }}-vacances-period-4"></script>
 {% else %}
-<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}"></script>
-<script src="{% static 'js/mes-disponibilites.js' %}?v={{ asset_version }}"></script>
+{# L'accueil ne contient plus de calendrier ni d'éditeur de disponibilités. #}
 {% endif %}
 {% endblock %}
