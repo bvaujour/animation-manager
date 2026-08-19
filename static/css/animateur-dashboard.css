@@ -1763,3 +1763,135 @@ body.animator-dashboard-body .animator-home-outing-smile {
     height:30px!important;
   }
 }
+
+/* ===== Accueil animateur mobile v4 : espace récupéré + pictos plus présents ===== */
+@media (max-width:799px){
+  /* L'en-tête fixe contient désormais la semaine : seuls le bandeau et les 4 cartes occupent la page. */
+  body.animator-dashboard-body .animator-dashboard--mobile-showcase{
+    grid-template-rows:auto minmax(0,1fr)!important;
+    gap:6px!important;
+    height:calc(100dvh - var(--app-fixed-header-height,48px) - var(--site-mobile-nav-size,58px) - env(safe-area-inset-bottom,0px))!important;
+    padding:6px 8px 6px!important;
+  }
+
+  /* Bandeau bienvenue encore plus compact : identité visuelle conservée, hauteur minimisée. */
+  body.animator-dashboard-body .animator-welcome-card--showcase{
+    height:52px!important;
+    min-height:52px!important;
+    margin:0!important;
+    padding:0 9px 0 13px!important;
+    border-radius:15px!important;
+  }
+  body.animator-dashboard-body .animator-welcome-copy{
+    height:52px!important;
+    max-width:64%!important;
+    padding:0!important;
+    display:flex!important;
+    align-items:center!important;
+  }
+  body.animator-dashboard-body .animator-welcome-kicker{
+    margin:0!important;
+    font-size:clamp(.98rem,4.35vw,1.16rem)!important;
+    line-height:1!important;
+    letter-spacing:-.02em!important;
+  }
+  body.animator-dashboard-body .animator-welcome-mascot-img{
+    right:10px!important;
+    bottom:-37px!important;
+    width:94px!important;
+    height:102px!important;
+    max-height:none!important;
+  }
+  body.animator-dashboard-body .animator-welcome-heart{
+    right:7px!important;
+    top:3px!important;
+    font-size:1rem!important;
+  }
+
+  /* Les quatre cartes se partagent tout l'espace restant, sans ligne perdue. */
+  body.animator-dashboard-body .animator-home-cards--showcase.animator-home-cards--four-grid{
+    grid-template-rows:repeat(2,minmax(0,1fr))!important;
+    gap:7px!important;
+    height:100%!important;
+    min-height:0!important;
+  }
+  body.animator-dashboard-body .animator-home-card--tile{
+    grid-template-rows:32px minmax(0,1fr) auto 34px!important;
+    min-height:0!important;
+    padding:6px 7px 7px!important;
+  }
+
+  /* Les illustrations 3D occupent maintenant l'essentiel de la zone centrale. */
+  body.animator-dashboard-body .animator-home-tile-illustration{
+    width:100%!important;
+    height:100%!important;
+    min-height:0!important;
+    padding:0!important;
+    overflow:visible!important;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration img{
+    width:clamp(122px,39vw,178px)!important;
+    height:clamp(102px,18dvh,170px)!important;
+    max-width:99%!important;
+    max-height:100%!important;
+    object-fit:contain!important;
+    object-position:center center!important;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration--sorties img{
+    width:clamp(130px,41vw,186px)!important;
+  }
+
+  /* La phrase d'état est véritablement rattachée au bouton. */
+  body.animator-dashboard-body .animator-home-tile-state{
+    align-self:end!important;
+    min-height:0!important;
+    margin:0 0 3px!important;
+    padding:0!important;
+    font-size:clamp(.55rem,2.05vw,.68rem)!important;
+    line-height:1.1!important;
+  }
+  body.animator-dashboard-body .animator-home-tile-state span{
+    line-height:1.05!important;
+  }
+}
+
+@media (max-width:370px){
+  body.animator-dashboard-body .animator-home-tile-illustration img{
+    width:clamp(112px,38vw,150px)!important;
+    height:clamp(94px,17dvh,148px)!important;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration--sorties img{
+    width:clamp(118px,40vw,158px)!important;
+  }
+}
+
+@media (max-width:799px) and (max-height:650px){
+  body.animator-dashboard-body .animator-welcome-card--showcase{
+    height:46px!important;
+    min-height:46px!important;
+  }
+  body.animator-dashboard-body .animator-welcome-copy{height:46px!important}
+  body.animator-dashboard-body .animator-welcome-kicker{font-size:.94rem!important}
+  body.animator-dashboard-body .animator-welcome-mascot-img{
+    bottom:-38px!important;
+    width:84px!important;
+    height:92px!important;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration img{
+    width:clamp(98px,34vw,138px)!important;
+    height:clamp(82px,15dvh,124px)!important;
+  }
+  body.animator-dashboard-body .animator-home-tile-illustration--sorties img{
+    width:clamp(104px,36vw,146px)!important;
+  }
+}
+
+/* Le verrouillage sans scroll concerne uniquement l'accueil compact, pas les autres pages du portail. */
+@media (max-width:799px){
+  body.animator-dashboard-body.animator-space-body:not(.animator-home-body){
+    overflow:auto!important;
+  }
+  body.animator-dashboard-body.animator-space-body.animator-home-body{
+    overflow:hidden!important;
+  }
+}

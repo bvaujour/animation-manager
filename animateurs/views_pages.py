@@ -276,6 +276,11 @@ def demandes_materiel(request):
     else:
         demandes = DemandeMateriel.objects.none()
 
+    semaine_portail = None
+    if not direction and animateur is not None:
+        date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
+        semaine_portail = generer_tableau_de_bord_animateur(animateur, date_reference)["semaine"]
+
     return render(
         request,
         "demandes_materiel.html",
@@ -287,6 +292,7 @@ def demandes_materiel(request):
             "demandes": demandes,
             "message": message,
             "erreur": erreur,
+            "semaine": semaine_portail,
         },
     )
 

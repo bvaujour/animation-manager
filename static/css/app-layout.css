@@ -3899,3 +3899,185 @@ body.page-temps-travail > .worktime-page {
     display:none!important;
   }
 }
+
+/* ===== Portail animateur mobile v4 : en-tête semaine intégré + navigation violette ===== */
+@media (max-width:799px){
+  /* Une seule ligne en haut : nom de page + navigation de semaine. */
+  html body.animator-space-body .animator-mobile-header.animator-portal-header{
+    left:0!important;
+    right:0!important;
+    min-height:48px!important;
+    height:48px!important;
+    display:grid!important;
+    grid-template-columns:max-content minmax(0,1fr)!important;
+    align-items:center!important;
+    gap:7px!important;
+    padding:5px 8px!important;
+    background:#fff!important;
+    border-bottom:1px solid #e7ebf3!important;
+  }
+  html body.animator-space-body .animator-portal-title-wrap{
+    min-width:0!important;
+    display:flex!important;
+    align-items:center!important;
+    gap:5px!important;
+    white-space:nowrap!important;
+  }
+  html body.animator-space-body .animator-portal-title-wrap h1{
+    margin:0!important;
+    color:#14264a!important;
+    font-size:clamp(.94rem,3.8vw,1.22rem)!important;
+    font-weight:850!important;
+    line-height:1!important;
+    letter-spacing:-.025em!important;
+    white-space:nowrap!important;
+  }
+  html body.animator-space-body .animator-portal-title-wrap--secondary{
+    gap:3px!important;
+  }
+  html body.animator-space-body .animator-portal-title-wrap--secondary h1{
+    font-size:clamp(.85rem,3.35vw,1.08rem)!important;
+  }
+  html body.animator-space-body .animator-portal-back{
+    width:22px!important;
+    height:30px!important;
+    display:grid!important;
+    place-items:center!important;
+    flex:0 0 22px!important;
+    border:0!important;
+    border-radius:8px!important;
+    color:#6048ef!important;
+    background:#f1efff!important;
+    font-size:1.3rem!important;
+    font-weight:700!important;
+    line-height:1!important;
+    text-decoration:none!important;
+  }
+
+  html body.animator-space-body .animator-week-navigation.animator-week-navigation--inline{
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    height:36px!important;
+    min-height:36px!important;
+    display:grid!important;
+    grid-template-columns:30px minmax(0,1fr) 30px!important;
+    align-items:center!important;
+    gap:3px!important;
+    margin:0!important;
+    padding:2px 3px!important;
+    border:1px solid #dde4f2!important;
+    border-radius:12px!important;
+    background:#f1f5fd!important;
+    box-shadow:none!important;
+  }
+  html body.animator-space-body .animator-week-navigation--inline > a{
+    width:28px!important;
+    min-width:28px!important;
+    height:28px!important;
+    min-height:28px!important;
+    display:grid!important;
+    place-items:center!important;
+    justify-self:center!important;
+    margin:0!important;
+    padding:0!important;
+    border:1px solid #dce3f1!important;
+    border-radius:9px!important;
+    color:#17294d!important;
+    background:#fff!important;
+    box-shadow:none!important;
+    font-size:1.25rem!important;
+    line-height:1!important;
+  }
+  html body.animator-space-body .animator-week-navigation--inline > div{
+    min-width:0!important;
+    display:grid!important;
+    place-items:center!important;
+    margin:0!important;
+    padding:0!important;
+    text-align:center!important;
+  }
+  html body.animator-space-body .animator-week-navigation--inline strong{
+    display:block!important;
+    width:100%!important;
+    overflow:hidden!important;
+    color:#14264a!important;
+    font-size:clamp(.58rem,2.35vw,.72rem)!important;
+    font-weight:850!important;
+    line-height:1.1!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+
+  /* Le titre Accueil conserve son petit signe décoratif, en version compacte. */
+  html body.animator-space-body .animator-portal-header--accueil .animator-mobile-title-spark{
+    width:18px!important;
+    height:17px!important;
+    margin:0!important;
+    transform:scale(.72)!important;
+    transform-origin:left center!important;
+  }
+
+  /* Navigation basse : un seul bandeau violet, cinq pictos blancs. */
+  html body.animator-space-body > aside.app-rail{
+    border:0!important;
+    border-top:0!important;
+    background:linear-gradient(135deg,#735dff 0%,#4f5cff 55%,#4158f7 100%)!important;
+    background-color:#5456fb!important;
+    box-shadow:0 -6px 18px rgba(59,62,177,.18)!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-links{
+    background:transparent!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-link,
+  html body.animator-space-body > aside.app-rail .app-rail-link:hover,
+  html body.animator-space-body > aside.app-rail .app-rail-link.active{
+    background:transparent!important;
+    color:#fff!important;
+    box-shadow:none!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-link:not(.active){
+    opacity:.78!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-link.active{
+    opacity:1!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-link.active::before{
+    top:2px!important;
+    left:31%!important;
+    right:31%!important;
+    height:3px!important;
+    border-radius:999px!important;
+    background:#fff!important;
+  }
+  html body.animator-space-body > aside.app-rail .app-rail-icon{
+    fill:currentColor!important;
+    color:#fff!important;
+  }
+  html body.animator-space-body > aside.app-rail .animator-nav-label{
+    color:#fff!important;
+  }
+}
+
+@media (max-width:360px){
+  html body.animator-space-body .animator-mobile-header.animator-portal-header{
+    grid-template-columns:max-content minmax(0,1fr)!important;
+    gap:5px!important;
+    padding-inline:6px!important;
+  }
+  html body.animator-space-body .animator-portal-title-wrap h1{
+    font-size:.91rem!important;
+  }
+  html body.animator-space-body .animator-week-navigation.animator-week-navigation--inline{
+    grid-template-columns:27px minmax(0,1fr) 27px!important;
+  }
+  html body.animator-space-body .animator-week-navigation--inline > a{
+    width:25px!important;
+    min-width:25px!important;
+    height:25px!important;
+    min-height:25px!important;
+  }
+  html body.animator-space-body .animator-week-navigation--inline strong{
+    font-size:.57rem!important;
+  }
+}

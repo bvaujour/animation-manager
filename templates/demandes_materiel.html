@@ -4,7 +4,18 @@
 {% block page_styles %}<link rel="stylesheet" href="{% static 'css/demandes-materiel.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide material-page">
+    {% if direction %}
     {% include "partials/_page_header.html" with title="Demandes de matériel" header_class="material-header" picker_mode="none" context_selector=True %}
+    {% else %}
+    <header class="animator-mobile-header animator-portal-header">
+        <div class="animator-portal-title-wrap"><h1>Matériel</h1></div>
+        <nav class="animator-week-navigation animator-week-navigation--inline" aria-label="Navigation des semaines">
+            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+            <div><strong>{{ semaine.libelle }}</strong></div>
+            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+        </nav>
+    </header>
+    {% endif %}
 
     {% if message %}<p class="material-feedback material-feedback--success" role="status">{{ message }}</p>{% endif %}
     {% if erreur %}<p class="material-feedback material-feedback--error" role="alert">{{ erreur }}</p>{% endif %}

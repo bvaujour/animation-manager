@@ -6,15 +6,15 @@
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
-<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-mobile-v4">
 {% endblock %}
 {% block content %}
 <main id="main-content" class="animator-dashboard animator-dashboard--simplified" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
-    <header class="animator-mobile-header animator-dashboard-header">
-        <h1>Plannings</h1>
-        <nav class="animator-week-navigation animator-week-navigation--header" aria-label="Navigation des semaines">
+    <header class="animator-mobile-header animator-portal-header">
+        <div class="animator-portal-title-wrap"><h1>Plannings</h1></div>
+        <nav class="animator-week-navigation animator-week-navigation--inline" aria-label="Navigation des semaines">
             <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
-            <div><strong>{{ semaine.libelle }}</strong>{% if not semaine.est_courante %}<a href="?semaine={{ semaine.courante|date:'Y-m-d' }}">Cette semaine</a>{% endif %}</div>
+            <div><strong>{{ semaine.libelle }}</strong></div>
             <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
         </nav>
     </header>

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Tableau de bord{% endblock %}
-{% block body_class %}{% if utilisateur_est_direction %}dashboard-body{% else %}animator-dashboard-body{% endif %}{% endblock %}
+{% block body_class %}{% if utilisateur_est_direction %}dashboard-body{% else %}animator-dashboard-body animator-home-body{% endif %}{% endblock %}
 {% block extra_head %}{% if not utilisateur_est_direction %}<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>{% endif %}{% endblock %}
 {% block page_styles %}
 {% if utilisateur_est_direction %}
@@ -9,7 +9,7 @@
 {% else %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
-<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-home-mobile-v3">
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-home-mobile-v4">
 <link rel="stylesheet" href="{% static 'css/demandes-materiel.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v={{ asset_version }}">
 {% endif %}
@@ -114,21 +114,17 @@
 </main>
 {% else %}
 <main id="main-content" class="animator-dashboard animator-dashboard--mobile-showcase" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
-    <header class="animator-mobile-header animator-mobile-header--showcase">
-        <div class="animator-mobile-title-wrap">
+    <header class="animator-mobile-header animator-portal-header animator-portal-header--accueil">
+        <div class="animator-mobile-title-wrap animator-portal-title-wrap">
             <h1>Accueil</h1>
             <span class="animator-mobile-title-spark" aria-hidden="true"><i></i><i></i><i></i></span>
         </div>
-        <a class="animator-mobile-profile animator-mobile-profile--showcase" href="{% url 'mon_profil' %}" aria-label="Ouvrir mon profil">
-            <span>{{ animateur.prenom|first }}{{ animateur.nom|first }}</span>
-        </a>
+        <nav class="animator-week-navigation animator-week-navigation--inline" aria-label="Navigation des semaines">
+            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+            <div><strong>{{ semaine.libelle }}</strong></div>
+            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+        </nav>
     </header>
-
-    <nav class="animator-week-navigation animator-week-navigation--showcase" aria-label="Navigation des semaines">
-        <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
-        <div><strong>{{ semaine.libelle }}</strong></div>
-        <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
-    </nav>
 
     <section class="animator-welcome-card animator-welcome-card--showcase" aria-label="Bienvenue">
         <div class="animator-welcome-copy">
