@@ -69,19 +69,20 @@ def creer_compte_animateur(animateur):
     if animateur.utilisateur_id:
         return None
     user_model = get_user_model()
-    mot_de_passe = mot_de_passe_provisoire()
     utilisateur = user_model.objects.create_user(
         username=nom_utilisateur_disponible(animateur.prenom, animateur.nom),
         email=animateur.email,
-        password=mot_de_passe,
         first_name=animateur.prenom,
         last_name=animateur.nom,
     )
+    utilisateur.set_unusable_password()
+    utilisateur.is_active = False
+    utilisateur.save(update_fields=["password", "is_active"])
     animateur.utilisateur = utilisateur
     animateur.doit_changer_mot_de_passe = True
     animateur.save(update_fields=["utilisateur", "doit_changer_mot_de_passe"])
     synchroniser_droits_compte(animateur)
-    return {"username": utilisateur.username, "temporary_password": mot_de_passe}
+    return {"username": utilisateur.username}
 
 
 def traiter_acces_compte(animateur, payload):
@@ -108,10 +109,10 @@ def traiter_acces_compte(animateur, payload):
             utilisateur.save(update_fields=["is_active"])
         synchroniser_droits_compte(animateur)
         if payload.get("reset_password"):
-            mot_de_passe = mot_de_passe_provisoire()
-            utilisateur.set_password(mot_de_passe)
-            utilisateur.save(update_fields=["password"])
+            utilisateur.set_unusable_password()
+            utilisateur.is_active = False
+            utilisateur.save(update_fields=["password", "is_active"])
             animateur.doit_changer_mot_de_passe = True
             animateur.save(update_fields=["doit_changer_mot_de_passe"])
-            identifiants = {"username": utilisateur.username, "temporary_password": mot_de_passe}
+            identifiants = {"username": utilisateur.username}
     return identifiants

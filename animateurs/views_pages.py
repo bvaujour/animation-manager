@@ -2,10 +2,14 @@
 
 import datetime
 import json
+from base64 import urlsafe_b64decode
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.contrib.auth import get_user_model, login, update_session_auth_hash
+from django.contrib.auth.forms import SetPasswordForm
+from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import validate_email
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -19,9 +23,11 @@ from .models import (
     Animateur,
     Centre,
     DemandeMateriel,
+    Evenement,
     InformationAnimateur,
     PeriodeScolaire,
     StatutPreparationSemaine,
+    TypeAccueil,
 )
 from .services.animateur_dashboard import generer_tableau_de_bord_animateur
 from .services.comptes import valider_mot_de_passe
@@ -34,14 +40,93 @@ PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY = "portail_animateur_semaine"
 
 def _semaine_portail_animateur(request):
     """Résout la semaine du portail et mémorise toute sélection explicite valide."""
+    semaines_ouvertes = _semaines_vacances_ouvertes(request)
     valeur = request.GET.get("semaine")
     if valeur is not None:
         date_reference = parse_date(valeur)
         if date_reference is not None:
+            date_reference -= datetime.timedelta(days=date_reference.weekday())
+            if semaines_ouvertes:
+                date_reference = _fallback_semaine_ouverte(date_reference, semaines_ouvertes)
             request.session[PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY] = date_reference.isoformat()
             return date_reference
     memorisee = parse_date(request.session.get(PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY, ""))
-    return memorisee or timezone.localdate()
+    if memorisee is not None:
+        memorisee -= datetime.timedelta(days=memorisee.weekday())
+        if semaines_ouvertes:
+            memorisee = _fallback_semaine_ouverte(memorisee, semaines_ouvertes)
+        request.session[PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY] = memorisee.isoformat()
+        return memorisee
+    actuelle = _semaine_initiale_animateur(request)
+    if semaines_ouvertes:
+        actuelle = _fallback_semaine_ouverte(actuelle, semaines_ouvertes)
+        request.session[PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY] = actuelle.isoformat()
+    return actuelle
+
+
+def _semaine_initiale_animateur(request):
+    """Choisit la semaine courante, ou la prochaine semaine travaillée."""
+    actuelle = timezone.localdate()
+    lundi = actuelle - datetime.timedelta(days=actuelle.weekday())
+    animateur = getattr(request.user, "profil_animateur", None)
+    if animateur is None:
+        return actuelle
+    debut = timezone.make_aware(datetime.datetime.combine(lundi, datetime.time.min))
+    fin = debut + datetime.timedelta(days=7)
+    if Affectation.objects.filter(animateur=animateur, debut__lt=fin, fin__gt=debut).exists():
+        return lundi
+    maintenant = timezone.now()
+    future = (
+        Affectation.objects.filter(animateur=animateur, fin__gt=maintenant)
+        .order_by("debut")
+        .values_list("debut", flat=True)
+    )
+    for debut_affectation in future:
+        semaine = timezone.localtime(debut_affectation).date()
+        semaine -= datetime.timedelta(days=semaine.weekday())
+        if semaine > lundi:
+            return semaine
+    return actuelle
+
+
+def _semaines_vacances_ouvertes(request):
+    """Retourne les lundis Vacances où au moins un centre est ouvert."""
+    if request.GET.get("type_accueil", request.session.get("type_accueil")) != TypeAccueil.VACANCES:
+        return []
+    periodes = list(
+        PeriodeScolaire.objects.filter(type_accueil__code=TypeAccueil.VACANCES).order_by("debut", "id")
+    )
+    groupes = list(
+        Evenement.objects.filter(centre__isnull=False)
+        .prefetch_related("periodes_scolaires", "dates_exclues")
+    )
+    ouvertes = []
+    for periode in periodes:
+        jours = [
+            periode.debut + datetime.timedelta(days=decalage)
+            for decalage in range((periode.fin - periode.debut).days + 1)
+        ]
+        if any(groupe.est_ouvert_le(jour) for groupe in groupes for jour in jours):
+            ouvertes.append(periode.debut - datetime.timedelta(days=periode.debut.weekday()))
+    return sorted(set(ouvertes))
+
+
+def _fallback_semaine_ouverte(reference, semaines_ouvertes):
+    return (
+        next((semaine for semaine in semaines_ouvertes if semaine >= reference), None)
+        or semaines_ouvertes[-1]
+    )
+
+
+def _navigation_semaine_portail(request, semaine):
+    """Remplace les flèches Vacances par les semaines réellement ouvertes."""
+    semaines = _semaines_vacances_ouvertes(request)
+    if not semaines:
+        return
+    debut = semaine["debut"]
+    index = semaines.index(debut) if debut in semaines else 0
+    semaine["precedente"] = semaines[index - 1] if index else semaines[-1]
+    semaine["suivante"] = semaines[index + 1] if index + 1 < len(semaines) else semaines[0]
 
 # ---------------------------------------------------------------------------
 # Pages HTML
@@ -72,6 +157,38 @@ def changer_mot_de_passe(request):
             update_session_auth_hash(request, request.user)
             return redirect("accueil")
     return render(request, "registration/changer_mot_de_passe.html", {"erreur": erreur})
+
+
+def activation_compte(request, uidb64, token):
+    """Permet à un nouvel animateur de choisir son premier mot de passe."""
+    try:
+        uidb64 += "=" * (-len(uidb64) % 4)
+        uid = urlsafe_b64decode(uidb64).decode()
+        utilisateur = get_user_model().objects.get(pk=uid)
+    except (ValueError, TypeError, OverflowError, UnicodeDecodeError, get_user_model().DoesNotExist):
+        utilisateur = None
+    try:
+        animateur = utilisateur.profil_animateur if utilisateur else None
+    except ObjectDoesNotExist:
+        animateur = None
+    valide = bool(
+        utilisateur
+        and animateur
+        and not utilisateur.has_usable_password()
+        and default_token_generator.check_token(utilisateur, token)
+    )
+    if not valide:
+        return render(request, "registration/activation_invalide.html", status=400)
+    form = SetPasswordForm(utilisateur, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        utilisateur.is_active = True
+        utilisateur.save(update_fields=["password", "is_active"])
+        animateur.doit_changer_mot_de_passe = False
+        animateur.save(update_fields=["doit_changer_mot_de_passe"])
+        login(request, utilisateur)
+        return redirect("accueil")
+    return render(request, "registration/activation_compte.html", {"form": form, "username": utilisateur.username})
 
 
 def _centre_affectation_animateur(animateur, jour):
@@ -141,6 +258,7 @@ def accueil(request):
         if animateur is not None:
             date_reference = _semaine_portail_animateur(request)
             contexte.update(generer_tableau_de_bord_animateur(animateur, date_reference))
+            _navigation_semaine_portail(request, contexte["semaine"])
             contexte["semaine_active"] = contexte["semaine"]["debut"]
             contexte.update({
                 "planning_jours_affectes": sum(1 for jour in contexte["jours"] if jour.get("travaille")),
@@ -174,6 +292,7 @@ def _contexte_portail_animateur(request, active_page):
                 inclure_programmes=active_page == "plannings",
             )
         )
+        _navigation_semaine_portail(request, contexte["semaine"])
         contexte["semaine_active"] = contexte["semaine"]["debut"]
     return contexte
 
@@ -303,6 +422,7 @@ def demandes_materiel(request):
     if not direction and animateur is not None:
         date_reference = _semaine_portail_animateur(request)
         semaine_portail = generer_tableau_de_bord_animateur(animateur, date_reference)["semaine"]
+        _navigation_semaine_portail(request, semaine_portail)
 
     return render(
         request,
@@ -728,7 +848,7 @@ def administration(request):
     )
 
     active_tab = request.POST.get("onglet") or request.GET.get("onglet") or "export"
-    if active_tab not in {"export", "emails", "superusers", "mot-de-passe"}:
+    if active_tab not in {"export", "emails", "superusers", "comptes-animateurs", "mot-de-passe"}:
         active_tab = "export"
 
     return render(

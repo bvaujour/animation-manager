@@ -15,6 +15,8 @@ class ConnexionObligatoireMiddleware:
 
     CHEMINS_PUBLICS = (
         "/connexion/",
+        "/activation/",
+        "/mot-de-passe-oublie/",
         "/admin/login/",
         "/static/",
         "/media/",

@@ -2,15 +2,19 @@
 
 import datetime
 import json
+from base64 import urlsafe_b64encode
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Prefetch
 from django.http import JsonResponse
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.encoding import force_bytes
 
 from .models import (
     Affectation,
@@ -38,6 +42,16 @@ from .services.statuts import prefetch_historiques_statuts
 # ---------------------------------------------------------------------------
 # API - Animateurs (lecture, création, suppression)
 # ---------------------------------------------------------------------------
+
+
+def _activation_url(request, animateur):
+    utilisateur = animateur.utilisateur if animateur.utilisateur_id else None
+    if not utilisateur or utilisateur.has_usable_password():
+        return None
+    uid = urlsafe_b64encode(force_bytes(utilisateur.pk)).decode().rstrip("=")
+    return request.build_absolute_uri(
+        reverse("activation_compte", kwargs={"uidb64": uid, "token": default_token_generator.make_token(utilisateur)})
+    )
 
 
 @require_http_methods(["GET", "POST"])
@@ -163,7 +177,7 @@ def api_animateurs(request):
                 for animateur in animateurs
             ]
         else:
-            resultat = [animateur_to_dict(animateur) for animateur in animateurs]
+            resultat = [animateur_to_dict(animateur, activation_url=_activation_url(request, animateur)) for animateur in animateurs]
         return JsonResponse(resultat, safe=False)
 
     try:
@@ -254,8 +268,9 @@ def api_animateurs(request):
         .get(pk=animateur.id)
     )
 
-    resultat = animateur_to_dict(animateur)
+    resultat = animateur_to_dict(animateur, activation_url=_activation_url(request, animateur))
     if identifiants:
+        identifiants["activation_url"] = _activation_url(request, animateur)
         resultat["temporary_credentials"] = identifiants
     return JsonResponse(resultat, status=201)
 
@@ -299,7 +314,7 @@ def api_animateur_detail(request, animateur_id):
             )
             .get(pk=animateur.id)
         )
-        return JsonResponse(animateur_to_dict(animateur))
+        return JsonResponse(animateur_to_dict(animateur, activation_url=_activation_url(request, animateur)))
 
     if request.method == "DELETE":
         utilisateur = animateur.utilisateur
@@ -414,8 +429,9 @@ def api_animateur_detail(request, animateur_id):
         .get(pk=animateur.id)
     )
 
-    resultat = animateur_to_dict(animateur)
+    resultat = animateur_to_dict(animateur, activation_url=_activation_url(request, animateur))
     if identifiants:
+        identifiants["activation_url"] = _activation_url(request, animateur)
         resultat["temporary_credentials"] = identifiants
     return JsonResponse(resultat)
 

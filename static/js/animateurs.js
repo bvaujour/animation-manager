@@ -860,11 +860,13 @@ document.addEventListener("DOMContentLoaded", () => {
     function afficherIdentifiants(credentials) {
         if (!credentials) return;
         if (selectedId) identifiantsProvisoires.set(Number(selectedId), credentials);
-        const texte = `Identifiant : ${credentials.username}\nMot de passe provisoire : ${credentials.temporary_password}`;
+        const texte = credentials.activation_url
+            ? `Identifiant : ${credentials.username}\nLien d’activation : ${credentials.activation_url}`
+            : `Identifiant : ${credentials.username}`;
         const zone = detailEl.querySelector("#temporary-credentials");
         if (zone) {
             zone.hidden = false;
-            zone.innerHTML = `<strong>Accès créé</strong><p>Identifiant : <code>${escapeHtml(credentials.username)}</code></p><p>Mot de passe provisoire : <code>${escapeHtml(credentials.temporary_password)}</code></p><div class="communication-actions"><button type="button" class="btn btn-ghost btn-small" id="copy-credentials">Copier les accès</button></div>`;
+            zone.innerHTML = `<strong>Accès créé</strong><p>Identifiant : <code>${escapeHtml(credentials.username)}</code></p>${credentials.activation_url ? `<p>Lien d’activation : <a href="${escapeHtml(credentials.activation_url)}">ouvrir</a></p>` : ""}<div class="communication-actions"><button type="button" class="btn btn-ghost btn-small" id="copy-credentials">Copier les accès</button></div>`;
             zone.querySelector("#copy-credentials")?.addEventListener("click", async () => {
                 await navigator.clipboard.writeText(texte);
                 afficherToast("Accès copiés.");

@@ -70,6 +70,7 @@ from .views import (
     api_tableau_de_bord,
     api_statut_preparation_semaine,
     api_verification_export_planning,
+    activation_compte,
     api_temps_travail,
     changer_mot_de_passe,
     demandes_materiel,
@@ -128,6 +129,11 @@ from .views_sorties import (
 
 urlpatterns = [
     path("connexion/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
+    path("mot-de-passe-oublie/", auth_views.PasswordResetView.as_view(template_name="registration/password_reset_form.html", email_template_name="registration/password_reset_email.txt", subject_template_name="registration/password_reset_subject.txt"), name="password_reset"),
+    path("mot-de-passe-oublie/envoye/", auth_views.PasswordResetDoneView.as_view(template_name="registration/password_reset_done.html"), name="password_reset_done"),
+    path("mot-de-passe-oublie/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(template_name="registration/password_reset_confirm.html"), name="password_reset_confirm"),
+    path("mot-de-passe-oublie/termine/", auth_views.PasswordResetCompleteView.as_view(template_name="registration/password_reset_complete.html"), name="password_reset_complete"),
+    path("activation/<uidb64>/<token>/", activation_compte, name="activation_compte"),
     path("deconnexion/", auth_views.LogoutView.as_view(), name="logout"),
     path("changer-mot-de-passe/", connexion_requise_page(changer_mot_de_passe), name="changer_mot_de_passe"),
     # --- Pages ---

@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block title %}Lien invalide{% endblock %}
+{% block body_class %}login-body{% endblock %}
+{% block content %}<main class="login-page"><section class="login-card"><h1>Lien invalide</h1><p class="login-intro">Ce lien d’activation est invalide ou a déjà été utilisé.</p><a class="btn btn-primary" href="{% url 'login' %}">Retour à la connexion</a></section></main>{% endblock %}

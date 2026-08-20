@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Activer mon compte{% endblock %}
+{% block body_class %}login-body{% endblock %}
+{% block content %}
+<main class="login-page"><section class="login-card">
+    <p class="eyebrow">Portail animateur</p><h1>Activer mon compte</h1>
+    <p class="login-intro">Choisis ton mot de passe pour le compte <strong>{{ username }}</strong>.</p>
+    <form method="post" class="login-form">{% csrf_token %}
+        {{ form.non_field_errors }}
+        <label for="id_new_password1">Nouveau mot de passe</label>{{ form.new_password1 }}{{ form.new_password1.errors }}
+        <label for="id_new_password2">Confirmation</label>{{ form.new_password2 }}{{ form.new_password2.errors }}
+        <button class="btn btn-primary" type="submit">Activer mon compte</button>
+    </form>
+</section></main>
+{% endblock %}

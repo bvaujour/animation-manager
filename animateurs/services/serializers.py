@@ -183,7 +183,7 @@ def affectation_to_event(affectation):
     }
 
 
-def animateur_to_dict(animateur, *, date_reference=None):
+def animateur_to_dict(animateur, *, date_reference=None, activation_url=None):
     qualifications = list(animateur.qualifications.all())
     statut_date = statut_pour_date(animateur, date_reference) if date_reference else statut_actuel(animateur)
     statut = statut_payload(qualifications, statut_resolu=statut_date)
@@ -296,6 +296,10 @@ def animateur_to_dict(animateur, *, date_reference=None):
             "exists": bool(animateur.utilisateur_id),
             "username": animateur.utilisateur.username if animateur.utilisateur_id else None,
             "active": animateur.utilisateur.is_active if animateur.utilisateur_id else False,
+            "activation_pending": bool(
+                animateur.utilisateur_id and not animateur.utilisateur.has_usable_password()
+            ),
+            "activation_url": activation_url,
             "last_login": (
                 animateur.utilisateur.last_login.isoformat()
                 if animateur.utilisateur_id and animateur.utilisateur.last_login else None

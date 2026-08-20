@@ -26,6 +26,7 @@ from .views_catalogue import (
 )
 from .views_pages import (
     accueil,
+    activation_compte,
     administration,
     api_mon_centre_affectation,
     api_tableau_de_bord,

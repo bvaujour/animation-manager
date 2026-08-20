@@ -1,6 +1,10 @@
+from base64 import urlsafe_b64encode
+
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.encoding import force_bytes
 
 from animateurs.models import Animateur
 from animateurs.services.comptes import creer_compte_animateur, nom_utilisateur_disponible, valider_mot_de_passe
@@ -24,6 +28,21 @@ class ComptesAnimateursTests(TestCase):
         self.assertEqual(identifiants["username"], "bvaujour")
         self.assertEqual(animateur.utilisateur.username, "bvaujour")
         self.assertTrue(animateur.doit_changer_mot_de_passe)
+
+    def test_lien_activation_permet_de_choisir_un_mot_de_passe_une_fois(self):
+        animateur = Animateur.objects.create(prenom="Bruno", nom="Vaujour")
+        creer_compte_animateur(animateur)
+        utilisateur = animateur.utilisateur
+        uid = urlsafe_b64encode(force_bytes(utilisateur.pk)).decode().rstrip("=")
+        url = reverse("activation_compte", kwargs={"uidb64": uid, "token": default_token_generator.make_token(utilisateur)})
+
+        response = self.client.post(url, {"new_password1": "NouveauMot!123", "new_password2": "NouveauMot!123"})
+
+        self.assertEqual(response.status_code, 302)
+        utilisateur.refresh_from_db()
+        self.assertTrue(utilisateur.is_active)
+        self.assertTrue(utilisateur.check_password("NouveauMot!123"))
+        self.assertEqual(self.client.get(url).status_code, 400)
 
     def test_seule_la_longueur_minimale_est_verifiee(self):
         self.assertTrue(valider_mot_de_passe("1234"))

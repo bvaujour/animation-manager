@@ -17,7 +17,6 @@
         <button class="tab-btn" data-tab="periodes-scolaires" type="button" role="tab">Périodes scolaires</button>
         <button class="tab-btn" data-tab="documents" type="button" role="tab">Documents</button>
         <button class="tab-btn" data-tab="informations" type="button" role="tab">Informations animateurs</button>
-        <button class="tab-btn{% if gestion_onglet == 'comptes-animateurs' %} active{% endif %}" data-tab="comptes-animateurs" type="button" role="tab">Comptes animateurs</button>
     </div>
 
     <div class="tab-panel" data-panel="lieux">
@@ -192,21 +191,12 @@
             </div>
         </section>
     </div>
-    <div class="tab-panel" data-panel="comptes-animateurs"{% if gestion_onglet != 'comptes-animateurs' %} hidden{% endif %}>
-        <section class="ui-card gestion-comptes" id="comptes-animateurs-management" data-api-url="{% url 'api_animateurs' %}">
-            <div class="ui-section-heading gestion-section-heading"><div><h2>Comptes animateurs</h2><p>Gérez les accès au portail animateur depuis un seul endroit.</p></div></div>
-            <div class="comptes-toolbar"><input type="search" data-comptes-search placeholder="Rechercher un animateur…" aria-label="Rechercher un animateur"><select data-comptes-filter aria-label="Filtrer les comptes"><option value="all">Tous</option><option value="none">Non activés</option><option value="never">Jamais connectés</option><option value="used">Compte utilisé</option><option value="disabled">Accès désactivé</option></select><button type="button" class="btn btn-primary" data-comptes-bulk disabled>Activer les accès sélectionnés</button></div>
-            <p class="comptes-feedback" data-comptes-feedback role="status" aria-live="polite"></p>
-            <div class="comptes-list" data-comptes-list></div>
-        </section>
-    </div>
 </main>
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/common/location-autocomplete.js' %}?v={{ asset_version }}"></script>
 <script src="{% static 'js/gestion.js' %}?v={{ asset_version }}"></script>
 <script src="{% static 'js/documents-management.js' %}?v={{ asset_version }}"></script>
-<script src="{% static 'js/comptes-animateurs.js' %}?v={{ asset_version }}"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     GestionApp.mountCentres(document.getElementById("panel-centres"));

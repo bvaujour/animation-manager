@@ -1,8 +1,10 @@
 from django.contrib.auth import get_user_model
+import datetime
+
 from django.test import TestCase
 from django.urls import reverse
 
-from animateurs.models import Animateur, InformationAnimateur
+from animateurs.models import Animateur, Centre, Evenement, Groupe, InformationAnimateur, PeriodeScolaire, TypeAccueil
 
 
 class PortailAnimateurEtape1Tests(TestCase):
@@ -70,6 +72,44 @@ class PortailAnimateurEtape1Tests(TestCase):
     def test_sans_semaine_memorisee_le_fallback_reste_la_date_du_jour(self):
         response = self.client.get(reverse("infos_animateur"))
         self.assertEqual(response.context["semaine"]["debut"], response.context["semaine"]["courante"])
+
+
+class PortailAnimateurSemainesOuvertesTests(TestCase):
+    def setUp(self):
+        user = get_user_model().objects.create_user(username="vacances", password="secret")
+        Animateur.objects.create(prenom="Alice", nom="Martin", utilisateur=user)
+        self.client.force_login(user)
+        vacances = TypeAccueil.objects.get(code=TypeAccueil.VACANCES)
+        self.fermee = PeriodeScolaire.objects.create(
+            nom="Hiver fermé", annee_scolaire="2026-2027", zone="A",
+            debut=datetime.date(2027, 2, 15), fin=datetime.date(2027, 2, 19), type_accueil=vacances,
+        )
+        self.ouverte = PeriodeScolaire.objects.create(
+            nom="Hiver ouvert", annee_scolaire="2026-2027", zone="A",
+            debut=datetime.date(2027, 2, 22), fin=datetime.date(2027, 2, 26), type_accueil=vacances,
+        )
+        centre = Centre.objects.create(nom="Pacaudière", code="PAC")
+        groupe = Groupe.objects.create(nom="Maternelles")
+        evenement = Evenement.objects.create(centre=centre, groupe=groupe, nom="Maternelles", jours_ouverts=[0, 1, 2, 3, 4])
+        evenement.periodes_scolaires.add(self.ouverte)
+        session = self.client.session
+        session["type_accueil"] = TypeAccueil.VACANCES
+        session.save()
+
+    def test_seules_les_semaines_avec_un_centre_ouvert_sont_navigables(self):
+        response = self.client.get(reverse("accueil"), {"semaine": "2027-02-15"})
+        self.assertEqual(response.context["semaine"]["debut"], self.ouverte.debut)
+        self.assertNotContains(response, "semaine=2027-02-15")
+        self.assertContains(response, "semaine=2027-02-22")
+
+    def test_semaine_memorisee_invalide_revient_a_une_semaine_ouverte(self):
+        self.client.get(reverse("accueil"), {"semaine": "2027-02-15"})
+        self.assertEqual(self.client.session["portail_animateur_semaine"], "2027-02-22")
+
+    def test_semaine_ouverte_memorisee_reste_selectionnee_sans_affectation(self):
+        self.client.get(reverse("accueil"), {"semaine": "2027-02-22"})
+        response = self.client.get(reverse("infos_animateur"))
+        self.assertEqual(response.context["semaine"]["debut"], self.ouverte.debut)
 
 
 class InformationsPortailAnimateurTests(TestCase):

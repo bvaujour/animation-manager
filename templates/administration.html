@@ -4,6 +4,7 @@
 {% block title %}{% if active_tab == "emails" %}E-mails{% else %}Administration{% endif %} - Gestion animation{% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/administration.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/documents.css' %}?v={{ asset_version }}">
 {% endblock %}
 
@@ -14,6 +15,7 @@
         <button class="tab-btn{% if active_tab == 'export' %} active{% endif %}" data-admin-tab="export" type="button" role="tab" aria-selected="{% if active_tab == 'export' %}true{% else %}false{% endif %}">Exports</button>
         <button class="tab-btn{% if active_tab == 'emails' %} active{% endif %}" data-admin-tab="emails" type="button" role="tab" aria-selected="{% if active_tab == 'emails' %}true{% else %}false{% endif %}">E-mails</button>
         <button class="tab-btn{% if active_tab == 'superusers' %} active{% endif %}" data-admin-tab="superusers" type="button" role="tab" aria-selected="{% if active_tab == 'superusers' %}true{% else %}false{% endif %}">Superusers</button>
+        <button class="tab-btn{% if active_tab == 'comptes-animateurs' %} active{% endif %}" data-admin-tab="comptes-animateurs" type="button" role="tab" aria-selected="{% if active_tab == 'comptes-animateurs' %}true{% else %}false{% endif %}">Comptes animateurs</button>
         <button class="tab-btn{% if active_tab == 'mot-de-passe' %} active{% endif %}" data-admin-tab="mot-de-passe" type="button" role="tab" aria-selected="{% if active_tab == 'mot-de-passe' %}true{% else %}false{% endif %}">Mot de passe</button>
     </div>
     {% if message_admin %}<div class="admin-message success" role="status">{{ message_admin }}</div>{% endif %}
@@ -96,6 +98,15 @@
         </section>
     </div>
 
+    <div class="admin-tab-panel" data-admin-panel="comptes-animateurs"{% if active_tab != 'comptes-animateurs' %} hidden{% endif %}>
+        <section class="ui-card administration-section gestion-comptes" id="comptes-animateurs-management" data-api-url="{% url 'api_animateurs' %}">
+            <div class="admin-compact-heading"><div><h1>Comptes animateurs</h1><p>Gérez les accès au portail animateur depuis un seul endroit.</p></div></div>
+            <div class="comptes-toolbar"><input type="search" data-comptes-search placeholder="Rechercher un animateur…" aria-label="Rechercher un animateur"><select data-comptes-filter aria-label="Filtrer les comptes"><option value="all">Tous</option><option value="none">Non activés</option><option value="never">Jamais connectés</option><option value="used">Compte utilisé</option><option value="disabled">Accès désactivé</option></select><button type="button" class="btn btn-primary" data-comptes-bulk disabled>Activer les accès sélectionnés</button></div>
+            <p class="comptes-feedback" data-comptes-feedback role="status" aria-live="polite"></p>
+            <div class="comptes-list" data-comptes-list></div>
+        </section>
+    </div>
+
     <div class="admin-tab-panel" data-admin-panel="mot-de-passe"{% if active_tab != 'mot-de-passe' %} hidden{% endif %}>
         <section class="ui-card administration-section" aria-labelledby="password-title">
             <div class="admin-compact-heading"><div><h1 id="password-title">Modifier mon mot de passe</h1><p>Compte connecté : <strong>{{ request.user.username }}</strong></p></div></div>
@@ -114,4 +125,5 @@
 {% block scripts %}
 <script src="{% static 'js/administration.js' %}?v={{ asset_version }}"></script>
 <script src="{% static 'js/emails.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'js/comptes-animateurs.js' %}?v={{ asset_version }}"></script>
 {% endblock %}
