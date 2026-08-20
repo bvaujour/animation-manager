@@ -284,15 +284,101 @@ document.addEventListener("DOMContentLoaded", () =>
                     PlanningData.fetchWeekEffectifs(fetchInfo.startStr, fetchInfo.endStr),
                 ])
                     .then(([events, effectifs]) => {
-                        const affectations = (events || []).filter(
+                        let affectations = (events || []).filter(
                             (item) => Number(item.extendedProps?.evenement_id || item.extendedProps?.groupe_id)
                                 === Number(evenement.id)
                         );
+                        let espacesLignesPortail = [];
+                        if (window.AnimatorPlanningPortal) {
+                            const joursParAnimateur = new Map();
+                            const libellesAnimateurs = new Map();
+
+                            affectations.forEach((item) => {
+                                const animateurId = Number(item.extendedProps?.animateur_id);
+                                if (!animateurId) return;
+                                libellesAnimateurs.set(
+                                    animateurId,
+                                    String(item.extendedProps?.animateur_nom || item.title || "")
+                                );
+                                const jours = joursParAnimateur.get(animateurId) || new Set();
+                                let courant = parseLocalDate(item.start);
+                                let fin = item.end ? parseLocalDate(item.end) : new Date(courant);
+                                if (!item.end) fin.setDate(fin.getDate() + 1);
+                                while (courant < fin) {
+                                    jours.add(formatDateLocal(courant));
+                                    courant.setDate(courant.getDate() + 1);
+                                }
+                                joursParAnimateur.set(animateurId, jours);
+                            });
+
+                            // Une ligne fixe par animateur sur la semaine. Deux animateurs
+                            // qui ne travaillent jamais le même jour peuvent partager la
+                            // même ligne : on garde ainsi la grille la plus compacte possible.
+                            const animateursOrdonnes = Array.from(joursParAnimateur.keys()).sort((a, b) =>
+                                String(libellesAnimateurs.get(a) || "").localeCompare(
+                                    String(libellesAnimateurs.get(b) || ""),
+                                    "fr",
+                                    { sensitivity: "base" }
+                                )
+                            );
+                            const joursParLigne = [];
+                            const ligneParAnimateur = new Map();
+                            animateursOrdonnes.forEach((animateurId) => {
+                                const jours = joursParAnimateur.get(animateurId) || new Set();
+                                let ligne = joursParLigne.findIndex((joursOccupes) =>
+                                    !Array.from(jours).some((date) => joursOccupes.has(date))
+                                );
+                                if (ligne < 0) {
+                                    ligne = joursParLigne.length;
+                                    joursParLigne.push(new Set());
+                                }
+                                jours.forEach((date) => joursParLigne[ligne].add(date));
+                                ligneParAnimateur.set(animateurId, ligne);
+                            });
+
+                            affectations = affectations.map((item) => ({
+                                ...item,
+                                title: String(item.title || "").split(" · ")[0],
+                                extendedProps: {
+                                    ...(item.extendedProps || {}),
+                                    portail_order: ligneParAnimateur.get(Number(item.extendedProps?.animateur_id)) ?? 999,
+                                },
+                            }));
+
+                            const datesVisibles = [];
+                            let dateVisible = parseLocalDate(fetchInfo.startStr);
+                            const dateFinVisible = parseLocalDate(fetchInfo.endStr);
+                            while (dateVisible < dateFinVisible) {
+                                datesVisibles.push(formatDateLocal(dateVisible));
+                                dateVisible.setDate(dateVisible.getDate() + 1);
+                            }
+                            joursParLigne.forEach((joursOccupes, ligne) => {
+                                datesVisibles.forEach((date) => {
+                                    if (joursOccupes.has(date)) return;
+                                    espacesLignesPortail.push({
+                                        id: `portail-spacer-${evenement.id}-${ligne}-${date}`,
+                                        title: "",
+                                        start: date,
+                                        allDay: true,
+                                        backgroundColor: "transparent",
+                                        borderColor: "transparent",
+                                        textColor: "transparent",
+                                        classNames: ["animator-planning-row-spacer"],
+                                        extendedProps: {
+                                            type_affichage: "portail_spacer",
+                                            portail_order: ligne,
+                                        },
+                                    });
+                                });
+                            });
+                        }
                         const nombresEnfants = (effectifs || [])
                             .filter((item) => Number(item.groupe_id) === Number(evenement.id))
                             .map((item) => ({
                                 id: `effectif-${evenement.id}-${item.date}`,
-                                title: `${item.nombre} enfant${Number(item.nombre) > 1 ? "s" : ""}`,
+                                title: window.AnimatorPlanningPortal
+                                    ? `${item.nombre} ENF`
+                                    : `${item.nombre} enfant${Number(item.nombre) > 1 ? "s" : ""}`,
                                 start: item.date,
                                 allDay: true,
                                 backgroundColor: "#fff2c7",
@@ -301,12 +387,21 @@ document.addEventListener("DOMContentLoaded", () =>
                                 classNames: ["calendar-effectif-event"],
                                 extendedProps: { type_affichage: "effectif_enfants" },
                             }));
-                        successCallback([...nombresEnfants, ...affectations]);
+                        successCallback([...nombresEnfants, ...affectations, ...espacesLignesPortail]);
                     })
                     .catch(failureCallback);
             },
-            eventOrder: (a, b) => (a.extendedProps.type_affichage === "effectif_enfants" ? -1 : 1)
-                - (b.extendedProps.type_affichage === "effectif_enfants" ? -1 : 1),
+            eventOrder: (a, b) => {
+                const rangTypeA = a.extendedProps.type_affichage === "effectif_enfants" ? -1 : 0;
+                const rangTypeB = b.extendedProps.type_affichage === "effectif_enfants" ? -1 : 0;
+                if (rangTypeA !== rangTypeB) return rangTypeA - rangTypeB;
+                if (window.AnimatorPlanningPortal) {
+                    return Number(a.extendedProps?.portail_order ?? 999)
+                        - Number(b.extendedProps?.portail_order ?? 999);
+                }
+                return 0;
+            },
+            eventOrderStrict: Boolean(window.AnimatorPlanningPortal),
             dayCellClassNames: (info) => evenementCouvreJour(evenement, info.date)
                 ? []
                 : ["home-evenement-hors-periode"],

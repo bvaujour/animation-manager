@@ -198,6 +198,27 @@ class TableauDeBordAnimateurTests(TestCase):
             fin=timezone.make_aware(datetime.datetime.combine(self.lundi + datetime.timedelta(days=1), datetime.time.min)),
         )
 
+        autre_groupe_meme_centre = Evenement.objects.create(
+            centre=self.centre,
+            nom="Groupe 6/10 ans",
+            permanent=True,
+            jours_ouverts=[0, 1, 2, 3, 4],
+            ferme_jours_feries=False,
+        )
+        collegue_autre_groupe = Animateur.objects.create(
+            prenom="Louise",
+            nom="AutreGroupe",
+            telephone="06 10 20 30 40",
+            email="louise@example.com",
+        )
+        Affectation.objects.create(
+            animateur=collegue_autre_groupe,
+            centre=self.centre,
+            evenement=autre_groupe_meme_centre,
+            debut=timezone.make_aware(datetime.datetime.combine(self.lundi, datetime.time.min)),
+            fin=timezone.make_aware(datetime.datetime.combine(self.lundi + datetime.timedelta(days=1), datetime.time.min)),
+        )
+
         response = self.client.get(reverse("plannings_animateur"), {"semaine": self.lundi.isoformat()})
         programmes = response.context["programmes_activites"]
         self.assertEqual({item["titre"] for item in programmes}, {"Programme annexe", "Programme commun", "Programme centre"})
@@ -213,6 +234,15 @@ class TableauDeBordAnimateurTests(TestCase):
                 "telephone": "06 55 66 77 88",
                 "email": "ambre@example.com",
             }],
+        )
+        collegues_centre = response.context["jours"][0]["collegues_centre_details"]
+        self.assertEqual(
+            {item["prenom"] for item in collegues_centre},
+            {"Ambre", "Louise"},
+        )
+        self.assertEqual(
+            next(item for item in collegues_centre if item["prenom"] == "Louise")["telephone"],
+            "06 10 20 30 40",
         )
         sortie = response.context["jours"][0]["sorties"][0]
         self.assertEqual(sortie["url"], reverse("sorties_animateur") + "?semaine=2026-08-24")

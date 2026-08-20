@@ -6,7 +6,7 @@
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
-<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-planning-v2">
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-planning-v3">
 {% endblock %}
 {% block content %}
 <main
@@ -18,7 +18,10 @@
     data-sorties-url="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}"
 >
     <header class="animator-mobile-header animator-portal-header">
-        <div class="animator-portal-title-wrap"><h1>Plannings</h1></div>
+        <div class="animator-mobile-title-wrap animator-portal-title-wrap">
+            <h1>Plannings</h1>
+            <span class="animator-mobile-title-spark" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
         <nav class="animator-week-navigation animator-week-navigation--inline" aria-label="Navigation des semaines">
             <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
             <div><strong>{{ semaine.libelle }}</strong></div>
@@ -69,10 +72,6 @@
 
         <footer class="animator-planning-programme" aria-label="Programme d’activités">
             {% if programmes_activites %}
-                <div class="animator-programme-kicker animator-programme-kicker--available">
-                    <span aria-hidden="true">✓</span>
-                    <strong>Clique pour voir le programme d’activités !</strong>
-                </div>
                 {% if programmes_activites|length == 1 %}
                     {% with programme=programmes_activites.0 %}
                     <a class="animator-programme-banner animator-programme-banner--available" href="{{ programme.url }}" target="_blank" rel="noopener" aria-label="Ouvrir le programme d’activités">
@@ -86,10 +85,6 @@
                     </button>
                 {% endif %}
             {% else %}
-                <div class="animator-programme-kicker animator-programme-kicker--pending">
-                    <span aria-hidden="true">◷</span>
-                    <strong>Programme prochainement disponible…</strong>
-                </div>
                 <div class="animator-programme-banner animator-programme-banner--pending" aria-label="Programme d’activités bientôt disponible" aria-disabled="true">
                     <img src="{% static 'img/animateur/programme-activites-attente.webp' %}" alt="" aria-hidden="true">
                 </div>
@@ -103,7 +98,7 @@
 
     <div id="planning-contact-directory" hidden aria-hidden="true">
         {% for jour in jours %}
-            {% for collegue in jour.collegues_details %}
+            {% for collegue in jour.collegues_centre_details %}
             <span
                 data-planning-contact-id="{{ collegue.id }}"
                 data-contact-prenom="{{ collegue.prenom }}"
@@ -175,5 +170,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/animateur-planning.js' %}?v={{ asset_version }}-2"></script>
-<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}-planning-portal-2"></script>
+<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}-planning-portal-3"></script>
 {% endblock %}

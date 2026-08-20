@@ -411,6 +411,31 @@ def generer_tableau_de_bord_animateur(
                 ids_deja_ajoutes[cle].add(affectation.animateur_id)
                 equipe_par_jour[cle].append(affectation.animateur)
 
+    # Pour le portail animateur, les contacts utiles ne se limitent pas au
+    # groupe d'âge : on expose aussi les collègues présents dans le même
+    # centre, le même jour. La liste d'équipe du groupe ci-dessus reste
+    # inchangée pour les autres usages du tableau de bord.
+    ids_centres = {item.centre_id for item in affectations}
+    equipe_centre_par_jour: dict[tuple[int, datetime.date], list[Animateur]] = defaultdict(list)
+    if ids_centres:
+        affectations_centre = list(
+            Affectation.objects.filter(
+                centre_id__in=ids_centres,
+                debut__lt=fin_dt,
+                fin__gt=debut_dt,
+            )
+            .select_related("animateur", "centre")
+            .order_by("animateur__prenom", "animateur__nom", "id")
+        )
+        ids_centre_deja_ajoutes: dict[tuple[int, datetime.date], set[int]] = defaultdict(set)
+        for affectation_centre in affectations_centre:
+            for jour in _jours_couverts(affectation_centre, lundi, vendredi):
+                cle = (affectation_centre.centre_id, jour)
+                if affectation_centre.animateur_id in ids_centre_deja_ajoutes[cle]:
+                    continue
+                ids_centre_deja_ajoutes[cle].add(affectation_centre.animateur_id)
+                equipe_centre_par_jour[cle].append(affectation_centre.animateur)
+
     sorties = _sorties_concernees(animateur, lundi, vendredi, evenements_par_jour)
     sorties_par_jour = defaultdict(list)
     for sortie in sorties:
@@ -444,6 +469,8 @@ def generer_tableau_de_bord_animateur(
         horaire = next((item for item in affectation.horaires_journaliers.all() if item.date == jour), None)
         equipe = equipe_par_jour[(affectation.evenement_id, jour)]
         collegues = [item for item in equipe if item.id != animateur.id]
+        equipe_centre = equipe_centre_par_jour[(affectation.centre_id, jour)]
+        collegues_centre = [item for item in equipe_centre if item.id != animateur.id]
         effectif = effectifs.get((affectation.evenement_id, jour))
         sorties_jour = sorties_par_jour[jour]
         responsabilite = next(
@@ -485,6 +512,16 @@ def generer_tableau_de_bord_animateur(
                         "email": item.email,
                     }
                     for item in collegues
+                ],
+                "collegues_centre_details": [
+                    {
+                        "id": item.id,
+                        "prenom": item.prenom,
+                        "nom": item.nom,
+                        "telephone": item.telephone,
+                        "email": item.email,
+                    }
+                    for item in collegues_centre
                 ],
                 "sorties": sorties_jour,
                 "sortie": sorties_jour[0] if sorties_jour else None,

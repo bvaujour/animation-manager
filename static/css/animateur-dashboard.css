@@ -2567,3 +2567,136 @@ body.animator-planning-body .animator-programme-count{
   body.animator-planning-body .animator-planning-programme{padding-top:3px}
   body.animator-planning-body .animator-programme-kicker{min-height:18px}
 }
+
+
+/* ========================================================================== */
+/* Plannings animateur v3 — compact sans réduire la lisibilité               */
+/* ========================================================================== */
+/* Même petit éclat violet que sur l'Accueil, adapté au header compact. */
+body.animator-planning-body .animator-portal-header .animator-mobile-title-spark{
+  width:18px!important;
+  height:17px!important;
+  margin:0!important;
+  transform:scale(.72)!important;
+  transform-origin:left center!important;
+}
+
+/* "Objectif" relève de la préparation Direction, pas de la lecture animateur. */
+body.animator-planning-body .animator-planning-stage .calendar-group-meta{display:none!important}
+
+/* On conserve le lieu tel qu'il a été validé et on gagne la hauteur ailleurs. */
+body.animator-planning-body .animator-planning-stage .calendar-group-list{
+  gap:4px;
+  padding:4px;
+}
+body.animator-planning-body .animator-planning-stage .calendar-group-header{
+  min-height:26px;
+  padding:2px 6px;
+}
+body.animator-planning-body .animator-planning-stage .calendar-group-name{
+  min-height:22px;
+  padding:3px 10px;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar{
+  padding:0 4px 3px;
+}
+
+/* Ligne des dates : texte inchangé, marges verticales fortement réduites. */
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell{
+  height:25px!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell-cushion{
+  display:block!important;
+  padding:1px 0!important;
+  line-height:1!important;
+  letter-spacing:-.025em;
+  white-space:nowrap!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-frame{
+  padding:2px 2px 2px!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-event-harness{
+  margin-top:1px!important;
+}
+
+/* Les effectifs sont une ligne métier distincte des noms d'animateurs. */
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event{
+  padding:1px 1px!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{
+  border:1px solid #7b68f6!important;
+  background:#efedff!important;
+  color:#4b38b8!important;
+  font-weight:900!important;
+  letter-spacing:.01em;
+  text-transform:uppercase;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event-title{
+  padding-inline:0!important;
+  letter-spacing:-.025em;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.animator-planning-row-spacer{
+  min-height:14px!important;
+  border-color:transparent!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+
+/* Le bandeau est le bouton : pas de phrase redondante au-dessus. */
+body.animator-planning-body .animator-planning-programme{
+  gap:0;
+  padding:4px 6px 5px;
+}
+body.animator-planning-body .animator-programme-kicker{display:none!important}
+body.animator-planning-body .animator-programme-banner img{
+  width:100%;
+  height:clamp(56px,17vw,76px);
+  aspect-ratio:auto!important;
+  object-fit:cover;
+  object-position:center;
+}
+body.animator-planning-body .animator-programme-banner--pending img{
+  aspect-ratio:auto!important;
+}
+
+@media (max-width:799px){
+  body.animator-planning-body .animator-planning-stage{
+    padding:4px 5px 2px;
+  }
+  body.animator-planning-body .animator-planning-stage .calendar-group-list{
+    gap:3px;
+    padding:3px;
+  }
+  body.animator-planning-body .animator-planning-stage .calendar-group-header{
+    min-height:24px;
+    padding:1px 5px;
+  }
+  body.animator-planning-body .animator-planning-stage .calendar-group-name{
+    min-height:21px;
+    padding:3px 9px;
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar{
+    padding:0 3px 2px;
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell{
+    height:23px!important;
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell-cushion{
+    padding:1px 0!important;
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-frame{
+    padding:1px 2px 2px!important;
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event,
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{
+    padding:1px 1px!important;
+  }
+  body.animator-planning-body .animator-planning-programme{
+    padding:3px 5px 4px;
+  }
+  body.animator-planning-body .animator-programme-banner img{
+    height:clamp(54px,16.5vw,68px);
+  }
+}
