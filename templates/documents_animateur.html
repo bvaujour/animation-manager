@@ -15,7 +15,7 @@
             <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
         </nav>
     </header>
-    <section class="animator-panel animator-wide-card"><div class="animator-card-list">
+    <section class="animator-panel animator-wide-card animator-documents-card"><div class="animator-card-list">
         {% for document in documents %}<a class="animator-list-item animator-list-item--document" href="{{ document.fichier.url }}" target="_blank" rel="noopener"><div><strong>{{ document.titre }}</strong><small>{{ document.libelle_dashboard|default:document.libelle_periode }}</small></div><b aria-hidden="true">›</b></a>{% empty %}<p class="animator-empty-state">Aucun document pour cette période.</p>{% endfor %}
     </div></section>
 </main>
