@@ -6,7 +6,7 @@
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/calendars.css' %}?v={{ asset_version }}">
-<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-planning-v1">
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-planning-v2">
 {% endblock %}
 {% block content %}
 <main
@@ -32,14 +32,27 @@
                 <span class="animator-portal-section-icon animator-portal-section-icon--planning" aria-hidden="true">
                     <svg viewBox="0 0 24 24"><path d="M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V2Zm12 8H5v10h14V10ZM5 8h14V6H5v2Z"/></svg>
                 </span>
-                <div>
-                    <h2 id="animator-planning-title">Mon planning</h2>
-                    <p>Vue semaine</p>
-                </div>
+                <h2 id="animator-planning-title">Mon planning</h2>
             </div>
-            <span class="animator-planning-publication{% if planning_publie %} is-published{% endif %}">
-                {% if planning_publie %}<span aria-hidden="true">✓</span> Publié{% else %}Non publié{% endif %}
-            </span>
+
+            <div class="animator-planning-heading-meetings">
+                {% if reunions %}
+                    <button class="animator-planning-meeting-chip is-active" type="button" data-open-dialog="planning-meetings-dialog">
+                        <span aria-hidden="true">◷</span>
+                        {% if reunions|length == 1 %}
+                            <strong>1 réunion</strong>
+                        {% else %}
+                            <strong>{{ reunions|length }} réunions</strong>
+                        {% endif %}
+                        <b aria-hidden="true">›</b>
+                    </button>
+                {% else %}
+                    <span class="animator-planning-meeting-chip">
+                        <span aria-hidden="true">◷</span>
+                        <strong>Réunions · aucune</strong>
+                    </span>
+                {% endif %}
+            </div>
         </div>
 
         <div class="animator-planning-stage">
@@ -54,44 +67,33 @@
             {% endif %}
         </div>
 
-        <footer class="animator-planning-utilities{% if not programmes_activites %} animator-planning-utilities--without-program{% endif %}" aria-label="Compléments du planning">
+        <footer class="animator-planning-programme" aria-label="Programme d’activités">
             {% if programmes_activites %}
-            <div class="animator-planning-utility-group animator-planning-utility-group--programmes">
+                <div class="animator-programme-kicker animator-programme-kicker--available">
+                    <span aria-hidden="true">✓</span>
+                    <strong>Clique pour voir le programme d’activités !</strong>
+                </div>
                 {% if programmes_activites|length == 1 %}
                     {% with programme=programmes_activites.0 %}
-                    <a class="animator-portal-pill animator-portal-pill--program" href="{{ programme.url }}" target="_blank" rel="noopener">
-                        <span aria-hidden="true">▣</span>
-                        <strong>Programme de la semaine</strong>
+                    <a class="animator-programme-banner animator-programme-banner--available" href="{{ programme.url }}" target="_blank" rel="noopener" aria-label="Ouvrir le programme d’activités">
+                        <img src="{% static 'img/animateur/programme-activites-disponible.webp' %}" alt="" aria-hidden="true">
                     </a>
                     {% endwith %}
                 {% else %}
-                    <button class="animator-portal-pill animator-portal-pill--program" type="button" data-open-dialog="planning-programs-dialog">
-                        <span aria-hidden="true">▣</span>
-                        <strong>{{ programmes_activites|length }} programmes</strong>
-                        <b aria-hidden="true">›</b>
+                    <button class="animator-programme-banner animator-programme-banner--available" type="button" data-open-dialog="planning-programs-dialog" aria-label="Choisir un programme d’activités">
+                        <img src="{% static 'img/animateur/programme-activites-disponible.webp' %}" alt="" aria-hidden="true">
+                        <span class="animator-programme-count">{{ programmes_activites|length }} programmes</span>
                     </button>
                 {% endif %}
-            </div>
+            {% else %}
+                <div class="animator-programme-kicker animator-programme-kicker--pending">
+                    <span aria-hidden="true">◷</span>
+                    <strong>Programme prochainement disponible…</strong>
+                </div>
+                <div class="animator-programme-banner animator-programme-banner--pending" aria-label="Programme d’activités bientôt disponible" aria-disabled="true">
+                    <img src="{% static 'img/animateur/programme-activites-attente.webp' %}" alt="" aria-hidden="true">
+                </div>
             {% endif %}
-
-            <div class="animator-planning-utility-group animator-planning-utility-group--meetings">
-                {% if reunions %}
-                    <button class="animator-portal-pill animator-portal-pill--meeting" type="button" data-open-dialog="planning-meetings-dialog">
-                        <span aria-hidden="true">◷</span>
-                        {% if reunions|length == 1 %}
-                            <strong>Réunion · {{ reunions.0.date_libelle }}</strong>
-                        {% else %}
-                            <strong>{{ reunions|length }} réunions cette semaine</strong>
-                        {% endif %}
-                        <b aria-hidden="true">›</b>
-                    </button>
-                {% else %}
-                    <span class="animator-portal-pill animator-portal-pill--muted">
-                        <span aria-hidden="true">◷</span>
-                        <strong>Réunions · aucune</strong>
-                    </span>
-                {% endif %}
-            </div>
         </footer>
     </section>
 
@@ -172,6 +174,6 @@
 </main>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/animateur-planning.js' %}?v={{ asset_version }}-1"></script>
-<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}-planning-portal-1"></script>
+<script src="{% static 'js/animateur-planning.js' %}?v={{ asset_version }}-2"></script>
+<script src="{% static 'js/accueil.js' %}?v={{ asset_version }}-planning-portal-2"></script>
 {% endblock %}

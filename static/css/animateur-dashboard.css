@@ -2171,3 +2171,399 @@ body.animator-planning-body .animator-planning-contact-event:active{filter:brigh
   body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event,
   body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{font-size:.44rem!important;line-height:1.04!important}
 }
+
+/* ========================================================================== */
+/* Plannings animateur v2 — lisibilité + ADN de l'Accueil                     */
+/* ========================================================================== */
+body.animator-planning-body .animator-planning-shell{
+  grid-template-rows:auto minmax(0,1fr) auto;
+  border-color:#e8e9f2;
+  border-radius:20px;
+  background:#fff;
+  box-shadow:0 10px 28px rgba(47,58,102,.08);
+}
+
+body.animator-planning-body .animator-planning-shell-heading{
+  min-height:48px;
+  padding:7px 10px;
+  border-bottom:1px solid #eeeff5;
+}
+body.animator-planning-body .animator-planning-shell-title{
+  display:flex;
+  align-items:center;
+  gap:9px;
+}
+body.animator-planning-body .animator-planning-shell-title h2{
+  margin:0;
+  color:#16264a;
+  font-size:1rem;
+  font-weight:900;
+  line-height:1;
+  letter-spacing:-.015em;
+}
+body.animator-planning-body .animator-planning-heading-meetings{
+  min-width:0;
+  display:flex;
+  justify-content:flex-end;
+}
+body.animator-planning-body .animator-planning-meeting-chip{
+  min-width:0;
+  min-height:30px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  padding:5px 9px;
+  border:0;
+  border-radius:999px;
+  color:#778198;
+  background:#f4f5f8;
+  box-shadow:inset 0 0 0 1px #e8eaf0;
+  font:inherit;
+  font-size:.66rem;
+  font-weight:800;
+  line-height:1;
+  white-space:nowrap;
+}
+body.animator-planning-body button.animator-planning-meeting-chip{cursor:pointer}
+body.animator-planning-body .animator-planning-meeting-chip.is-active{
+  color:#4f3bcb;
+  background:#f1efff;
+  box-shadow:inset 0 0 0 1px #ded8ff;
+}
+body.animator-planning-body .animator-planning-meeting-chip b{font-size:.9rem;line-height:.7}
+
+/* Le lieu est une information de premier niveau. */
+body.animator-planning-body .animator-planning-stage{
+  padding:6px 7px 4px;
+  background:linear-gradient(180deg,#fff 0%,#fcfcff 100%);
+}
+body.animator-planning-body .animator-planning-stage .home-calendars.calendar-sites{gap:6px}
+body.animator-planning-body .animator-planning-stage .calendar-site-card{
+  overflow:hidden;
+  border:1px solid color-mix(in srgb,var(--centre-color,var(--color-primary)) 20%,#e6e9f1);
+  border-radius:15px;
+  background:#fff;
+  box-shadow:0 4px 12px rgba(41,55,96,.045);
+}
+body.animator-planning-body .animator-planning-stage .calendar-site-header{
+  min-height:36px;
+  padding:5px 9px;
+  border-left-width:6px;
+  background:linear-gradient(90deg,
+    color-mix(in srgb,var(--centre-color,var(--color-primary)) 17%,white),
+    color-mix(in srgb,var(--centre-color,var(--color-primary)) 6%,white));
+}
+body.animator-planning-body .animator-planning-stage .calendar-site-name{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  margin:0;
+  color:color-mix(in srgb,var(--centre-color,var(--color-primary)) 80%,#132449);
+  font-size:.95rem;
+  font-weight:900;
+  line-height:1.05;
+  letter-spacing:-.012em;
+}
+body.animator-planning-body .animator-planning-stage .calendar-site-name::before{
+  content:"📍";
+  font-size:.88em;
+  filter:saturate(.9);
+}
+body.animator-planning-body .animator-planning-stage .calendar-site-count{display:none!important}
+body.animator-planning-body .animator-planning-stage .home-calendar-toggle-icon{
+  color:color-mix(in srgb,var(--centre-color,var(--color-primary)) 72%,#132449);
+  font-size:1rem;
+  font-weight:900;
+}
+
+/* Les groupes restent très lisibles mais les doubles cadres sont allégés. */
+body.animator-planning-body .animator-planning-stage .calendar-group-list{
+  gap:6px;
+  padding:6px;
+}
+body.animator-planning-body .animator-planning-stage .calendar-group-card{
+  border:1px solid #e8ebf2;
+  border-radius:13px;
+  background:#fff;
+  box-shadow:none;
+}
+body.animator-planning-body .animator-planning-stage .calendar-group-header{
+  min-height:32px;
+  padding:4px 7px;
+  border-bottom:0;
+  background:#fafbfe;
+}
+body.animator-planning-body .animator-planning-stage .calendar-group-name{
+  display:inline-flex;
+  align-items:center;
+  min-height:26px;
+  padding:4px 11px;
+  border-radius:999px;
+  color:#153f38;
+  background:color-mix(in srgb,var(--centre-color,var(--color-primary)) 28%,#eafff8);
+  font-size:.79rem;
+  font-weight:850;
+  line-height:1;
+}
+body.animator-planning-body .animator-planning-stage .calendar-group-meta{
+  color:#78849a;
+  font-size:.58rem;
+  font-weight:750;
+}
+
+/* La place gagnée est réinvestie dans la taille du contenu métier. */
+body.animator-planning-body .animator-planning-stage .shared-calendar{
+  padding:0 5px 5px;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc{
+  font-size:.68rem!important;
+  color:#38445d;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-scrollgrid{
+  border-radius:10px;
+  overflow:hidden;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell{
+  background:#f3f6fb;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell-cushion,
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-number{
+  padding:5px 1px!important;
+  color:#59667d;
+  font-size:.64rem!important;
+  font-weight:800!important;
+  line-height:1!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-frame{
+  min-height:0!important;
+  padding:4px 3px 5px!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-body-unbalanced .fc-daygrid-day-events{
+  min-height:0!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-events{
+  margin-top:0!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-event-harness{
+  margin-top:1px!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event,
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{
+  margin:0!important;
+  padding:1px 3px!important;
+  border-radius:5px!important;
+  font-size:.64rem!important;
+  font-weight:650!important;
+  line-height:1.12!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{
+  font-weight:800!important;
+}
+body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event-title{
+  overflow:hidden!important;
+  line-height:1.12!important;
+  text-overflow:ellipsis;
+  white-space:nowrap!important;
+}
+body.animator-planning-body .animator-planning-stage .calendar-sortie-marker{
+  min-width:18px!important;
+  height:18px!important;
+  margin:1px!important;
+  padding:0 3px!important;
+  font-size:.62rem!important;
+}
+
+/* Programme d'activités : action principale, pleine largeur et très visuelle. */
+body.animator-planning-body .animator-planning-programme{
+  display:grid;
+  gap:4px;
+  padding:5px 7px 7px;
+  border-top:1px solid #eff0f5;
+  background:#fff;
+}
+body.animator-planning-body .animator-programme-kicker{
+  min-height:22px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  margin:0 auto;
+  padding:3px 10px;
+  border-radius:999px;
+  font-size:.65rem;
+  font-weight:850;
+  line-height:1;
+  text-align:center;
+}
+body.animator-planning-body .animator-programme-kicker>span{
+  width:18px;
+  height:18px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  color:#fff;
+  font-size:.68rem;
+  font-weight:900;
+}
+body.animator-planning-body .animator-programme-kicker--available{
+  color:#173f69;
+  background:#f2f7ff;
+  box-shadow:inset 0 0 0 1px #dce8ff;
+}
+body.animator-planning-body .animator-programme-kicker--available>span{background:#16b978}
+body.animator-planning-body .animator-programme-kicker--pending{
+  color:#5f6590;
+  background:#f7f5ff;
+  box-shadow:inset 0 0 0 1px #e8e3ff;
+}
+body.animator-planning-body .animator-programme-kicker--pending>span{background:#8064ff}
+body.animator-planning-body .animator-programme-banner{
+  position:relative;
+  width:100%;
+  min-width:0;
+  display:block;
+  overflow:hidden;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:16px;
+  background:transparent;
+  box-shadow:0 8px 18px rgba(69,72,145,.12);
+  text-decoration:none;
+}
+body.animator-planning-body button.animator-programme-banner{cursor:pointer}
+body.animator-planning-body .animator-programme-banner--available:active{transform:scale(.992)}
+body.animator-planning-body .animator-programme-banner--pending{
+  cursor:default;
+  box-shadow:0 5px 14px rgba(69,72,145,.07);
+}
+body.animator-planning-body .animator-programme-banner img{
+  display:block;
+  width:100%;
+  height:auto;
+  aspect-ratio:1200/303;
+  object-fit:cover;
+}
+body.animator-planning-body .animator-programme-banner--pending img{aspect-ratio:1200/311}
+body.animator-planning-body .animator-programme-count{
+  position:absolute;
+  right:12px;
+  bottom:9px;
+  display:inline-flex;
+  align-items:center;
+  min-height:24px;
+  padding:4px 9px;
+  border-radius:999px;
+  color:#fff;
+  background:rgba(35,31,103,.84);
+  box-shadow:0 4px 10px rgba(21,28,78,.16);
+  font-size:.61rem;
+  font-weight:850;
+}
+
+@media (max-width:799px){
+  body.animator-planning-body .animator-planning-page{
+    padding:6px 7px 5px!important;
+  }
+  body.animator-planning-body .animator-planning-shell{
+    height:100%;
+    border-radius:18px;
+  }
+  body.animator-planning-body .animator-planning-shell-heading{
+    min-height:44px;
+    padding:5px 7px;
+  }
+  body.animator-planning-body .animator-portal-section-icon{
+    width:31px;
+    height:31px;
+    flex-basis:31px;
+  }
+  body.animator-planning-body .animator-planning-shell-title h2{font-size:.92rem}
+  body.animator-planning-body .animator-planning-meeting-chip{
+    min-height:28px;
+    padding:4px 7px;
+    font-size:clamp(.58rem,2.35vw,.67rem);
+  }
+  body.animator-planning-body .animator-planning-stage{
+    min-height:0;
+    padding:4px 5px 3px;
+  }
+  body.animator-planning-body .animator-planning-stage .calendar-site-header{
+    min-height:33px;
+    padding:4px 7px;
+  }
+  body.animator-planning-body .animator-planning-stage .calendar-site-name{
+    font-size:clamp(.86rem,3.7vw,.98rem);
+  }
+  body.animator-planning-body .animator-planning-stage .calendar-group-list{
+    gap:4px;
+    padding:4px;
+  }
+  body.animator-planning-body .animator-planning-stage .calendar-group-header{
+    min-height:29px;
+    padding:3px 5px;
+  }
+  body.animator-planning-body .animator-planning-stage .calendar-group-name{
+    min-height:24px;
+    padding:4px 10px;
+    font-size:clamp(.72rem,3vw,.8rem);
+  }
+  body.animator-planning-body .animator-planning-stage .calendar-group-meta{
+    font-size:clamp(.52rem,2vw,.59rem);
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar{
+    padding:0 3px 3px;
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc{
+    font-size:clamp(.62rem,2.45vw,.7rem)!important;
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell-cushion,
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-number{
+    padding:4px 0!important;
+    font-size:clamp(.58rem,2.25vw,.66rem)!important;
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-frame{
+    min-height:0!important;
+    padding:3px 2px 4px!important;
+  }
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event,
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{
+    padding:1px 2px!important;
+    font-size:clamp(.59rem,2.3vw,.67rem)!important;
+    line-height:1.08!important;
+  }
+  body.animator-planning-body .animator-planning-programme{
+    gap:3px;
+    padding:4px 5px 5px;
+  }
+  body.animator-planning-body .animator-programme-kicker{
+    min-height:20px;
+    padding:2px 8px;
+    font-size:clamp(.56rem,2.2vw,.64rem);
+  }
+  body.animator-planning-body .animator-programme-kicker>span{width:17px;height:17px}
+  body.animator-planning-body .animator-programme-banner{border-radius:14px}
+}
+
+@media (max-width:370px){
+  body.animator-planning-body .animator-planning-shell-title h2{font-size:.84rem}
+  body.animator-planning-body .animator-planning-meeting-chip{padding-inline:6px}
+  body.animator-planning-body .animator-planning-stage .calendar-site-name{font-size:.84rem}
+  body.animator-planning-body .animator-planning-stage .calendar-group-name{font-size:.7rem}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event,
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-event.calendar-effectif-event{font-size:.57rem!important}
+}
+
+@media (max-width:799px) and (max-height:670px){
+  body.animator-planning-body .animator-planning-shell-heading{min-height:39px;padding-block:4px}
+  body.animator-planning-body .animator-portal-section-icon{width:28px;height:28px;flex-basis:28px}
+  body.animator-planning-body .animator-planning-stage .calendar-site-header{min-height:30px}
+  body.animator-planning-body .animator-planning-stage .calendar-group-list{gap:3px;padding:3px}
+  body.animator-planning-body .animator-planning-stage .calendar-group-header{min-height:26px}
+  body.animator-planning-body .animator-planning-stage .calendar-group-name{min-height:22px;padding-block:3px}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-col-header-cell-cushion{padding:3px 0!important}
+  body.animator-planning-body .animator-planning-stage .shared-calendar .fc-daygrid-day-frame{padding-block:2px 3px!important}
+  body.animator-planning-body .animator-planning-programme{padding-top:3px}
+  body.animator-planning-body .animator-programme-kicker{min-height:18px}
+}
