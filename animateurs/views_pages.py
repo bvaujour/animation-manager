@@ -28,6 +28,21 @@ from .services.comptes import valider_mot_de_passe
 from .services.dashboard import generer_tableau_de_bord
 from .services.planning_exports import generer_planning_excel, generer_planning_pdf, horaires_manquants_export
 
+
+PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY = "portail_animateur_semaine"
+
+
+def _semaine_portail_animateur(request):
+    """Résout la semaine du portail et mémorise toute sélection explicite valide."""
+    valeur = request.GET.get("semaine")
+    if valeur is not None:
+        date_reference = parse_date(valeur)
+        if date_reference is not None:
+            request.session[PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY] = date_reference.isoformat()
+            return date_reference
+    memorisee = parse_date(request.session.get(PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY, ""))
+    return memorisee or timezone.localdate()
+
 # ---------------------------------------------------------------------------
 # Pages HTML
 # ---------------------------------------------------------------------------
@@ -124,8 +139,9 @@ def accueil(request):
                     message_materiel = "Ta demande de matériel a été enregistrée."
 
         if animateur is not None:
-            date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
+            date_reference = _semaine_portail_animateur(request)
             contexte.update(generer_tableau_de_bord_animateur(animateur, date_reference))
+            contexte["semaine_active"] = contexte["semaine"]["debut"]
             contexte.update({
                 "planning_jours_affectes": sum(1 for jour in contexte["jours"] if jour.get("travaille")),
                 "infos_sorties_count": len(contexte["sorties"]),
@@ -150,7 +166,7 @@ def _contexte_portail_animateur(request, active_page):
     animateur = getattr(request.user, "profil_animateur", None)
     contexte = {"active_page": active_page, "animateur": animateur}
     if animateur is not None:
-        date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
+        date_reference = _semaine_portail_animateur(request)
         contexte.update(
             generer_tableau_de_bord_animateur(
                 animateur,
@@ -158,6 +174,7 @@ def _contexte_portail_animateur(request, active_page):
                 inclure_programmes=active_page == "plannings",
             )
         )
+        contexte["semaine_active"] = contexte["semaine"]["debut"]
     return contexte
 
 
@@ -284,7 +301,7 @@ def demandes_materiel(request):
 
     semaine_portail = None
     if not direction and animateur is not None:
-        date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
+        date_reference = _semaine_portail_animateur(request)
         semaine_portail = generer_tableau_de_bord_animateur(animateur, date_reference)["semaine"]
 
     return render(
@@ -299,6 +316,7 @@ def demandes_materiel(request):
             "message": message,
             "erreur": erreur,
             "semaine": semaine_portail,
+            "semaine_active": semaine_portail["debut"] if semaine_portail else None,
         },
     )
 
@@ -309,6 +327,7 @@ def mon_profil(request):
         return redirect("employes")
 
     animateur = getattr(request.user, "profil_animateur", None)
+    semaine_active = parse_date(request.session.get(PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY, ""))
     message = ""
     erreur = ""
     action = ""
@@ -363,6 +382,7 @@ def mon_profil(request):
             "message": message,
             "erreur": erreur,
             "action": action,
+            "semaine_active": semaine_active,
         },
     )
 

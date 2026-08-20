@@ -52,6 +52,25 @@ class PortailAnimateurEtape1Tests(TestCase):
         self.assertNotContains(response, "Documents")
         self.assertNotContains(response, "Réunions")
 
+    def test_la_semaine_du_portail_est_memorisee_et_reutilisee_sans_parametre(self):
+        self.client.get(reverse("accueil"), {"semaine": "2026-08-24"})
+        for route in ("plannings_animateur", "infos_animateur", "demandes_materiel", "documents_animateur", "sorties_animateur"):
+            with self.subTest(route=route):
+                response = self.client.get(reverse(route))
+                self.assertEqual(response.context["semaine"]["debut"].isoformat(), "2026-08-24")
+
+    def test_une_nouvelle_semaine_remplace_l_ancienne_et_profil_ne_la_modifie_pas(self):
+        self.client.get(reverse("accueil"), {"semaine": "2026-08-24"})
+        self.client.get(reverse("accueil"), {"semaine": "2026-08-31"})
+        profil = self.client.get(reverse("mon_profil"))
+        self.assertContains(profil, "semaine=2026-08-31")
+        retour = self.client.get(reverse("accueil"))
+        self.assertEqual(retour.context["semaine"]["debut"].isoformat(), "2026-08-31")
+
+    def test_sans_semaine_memorisee_le_fallback_reste_la_date_du_jour(self):
+        response = self.client.get(reverse("infos_animateur"))
+        self.assertEqual(response.context["semaine"]["debut"], response.context["semaine"]["courante"])
+
 
 class InformationsPortailAnimateurTests(TestCase):
     def setUp(self):

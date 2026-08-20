@@ -50,19 +50,19 @@
 {% elif request.user.is_authenticated %}
 <aside class="app-rail" aria-label="Navigation de l’espace animateur">
     <nav class="app-rail-links">
-        <a href="{% url 'accueil' %}" class="app-rail-link{% if active == 'accueil' %} active{% endif %}" aria-label="Accueil" title="Accueil"{% if active == 'accueil' %} aria-current="page"{% endif %}>
+        <a href="{% url 'accueil' %}{% if semaine_active %}?semaine={{ semaine_active|date:'Y-m-d' }}{% endif %}" class="app-rail-link{% if active == 'accueil' %} active{% endif %}" aria-label="Accueil" title="Accueil"{% if active == 'accueil' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2h-5v-6h-4v6H5a2 2 0 0 1-2-2V10Z"/></svg>
             <span class="animator-nav-label">Accueil</span>
         </a>
-        <a href="{% url 'plannings_animateur' %}{% if request.GET.semaine %}?semaine={{ request.GET.semaine }}{% endif %}" class="app-rail-link{% if active == 'plannings' %} active{% endif %}" aria-label="Plannings" title="Plannings"{% if active == 'plannings' %} aria-current="page"{% endif %}>
+        <a href="{% url 'plannings_animateur' %}{% if semaine_active %}?semaine={{ semaine_active|date:'Y-m-d' }}{% endif %}" class="app-rail-link{% if active == 'plannings' %} active{% endif %}" aria-label="Plannings" title="Plannings"{% if active == 'plannings' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V2Zm12 8H5v10h14V10ZM5 8h14V6H5v2Z"/></svg>
             <span class="animator-nav-label">Plannings</span>
         </a>
-        <a href="{% url 'infos_animateur' %}{% if request.GET.semaine %}?semaine={{ request.GET.semaine }}{% endif %}" class="app-rail-link{% if active == 'infos' %} active{% endif %}" aria-label="Infos" title="Infos"{% if active == 'infos' %} aria-current="page"{% endif %}>
+        <a href="{% url 'infos_animateur' %}{% if semaine_active %}?semaine={{ semaine_active|date:'Y-m-d' }}{% endif %}" class="app-rail-link{% if active == 'infos' %} active{% endif %}" aria-label="Infos" title="Infos"{% if active == 'infos' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.35-1.65h-4.7A2.5 2.5 0 0 0 12 22Zm7-6v-5a7 7 0 0 0-5.5-6.84V3a1.5 1.5 0 0 0-3 0v1.16A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Zm-2 1H7v-6a5 5 0 0 1 10 0v6Z"/></svg>
             <span class="animator-nav-label">Infos</span>
         </a>
-        <a href="{% url 'demandes_materiel' %}{% if request.GET.semaine %}?semaine={{ request.GET.semaine }}{% endif %}" class="app-rail-link{% if active == 'materiel' %} active{% endif %}" aria-label="Matériel" title="Matériel"{% if active == 'materiel' %} aria-current="page"{% endif %}>
+        <a href="{% url 'demandes_materiel' %}{% if semaine_active %}?semaine={{ semaine_active|date:'Y-m-d' }}{% endif %}" class="app-rail-link{% if active == 'materiel' %} active{% endif %}" aria-label="Matériel" title="Matériel"{% if active == 'materiel' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 9 4.5v11L12 22l-9-4.5v-11L12 2Zm0 2.2L6.1 7.1 12 10l5.9-2.9L12 4.2ZM5 8.7v7.6l6 3v-7.6l-5-3Zm8 10.6 6-3V8.7l-6 3v7.6Z"/></svg>
             <span class="animator-nav-label">Matériel</span>
         </a>
