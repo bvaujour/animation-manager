@@ -296,6 +296,10 @@ def animateur_to_dict(animateur, *, date_reference=None):
             "exists": bool(animateur.utilisateur_id),
             "username": animateur.utilisateur.username if animateur.utilisateur_id else None,
             "active": animateur.utilisateur.is_active if animateur.utilisateur_id else False,
+            "last_login": (
+                animateur.utilisateur.last_login.isoformat()
+                if animateur.utilisateur_id and animateur.utilisateur.last_login else None
+            ),
         },
     }
 
