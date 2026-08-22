@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 from django.conf import settings
 
@@ -116,9 +116,8 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         navigation = (Path(settings.BASE_DIR) / "templates/partials/_nav.html").read_text(encoding="utf-8")
         navigation_direction = navigation.split("{% elif request.user.is_authenticated %}", 1)[0]
         libelles = [
-            "Tableau de bord", "Animateurs", "Planning", "Sorties",
-            "Demandes de matériel", "Formations", "Paie", "Gestion",
-            "Paramètres", "Administration",
+            "Tableau de bord", "Équipe", "Planning", "Sorties", "Matériel",
+            "Communication", "Temps et paie", "Configuration", "Administration",
         ]
         positions = [navigation_direction.index(f'aria-label="{libelle}"') for libelle in libelles]
         self.assertEqual(positions, sorted(positions))

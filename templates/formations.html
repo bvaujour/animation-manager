@@ -3,7 +3,8 @@
 {% block page_styles %}<link rel="stylesheet" href="{% static 'css/formations.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main class="page-shell formations-page">
-  {% include "partials/_page_header.html" with title="Formations" picker_mode="none" header_class="formations-header" actions_class="formations-header-actions" action_id="formation-add" action_label="+ Ajouter une formation" action_class="btn-primary" %}
+  {% include "partials/_page_header.html" with title="Équipe" picker_mode="none" header_class="formations-header" actions_class="formations-header-actions" action_id="formation-add" action_label="+ Ajouter une formation" action_class="btn-primary" %}
+  {% include "partials/_direction_section_nav.html" with section="equipe" active_item="formations" %}
 
   <section class="formations-filters ui-card" aria-label="Filtres des formations">
     <div class="formations-status-filters" role="group" aria-label="Filtrer par statut">

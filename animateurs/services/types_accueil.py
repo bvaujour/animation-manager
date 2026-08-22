@@ -23,6 +23,41 @@ def regrouper_periodes_vacances(periodes):
         groupe["semaine_ids"].append(periode.pk)
     return sorted(groupes.values(), key=lambda groupe: groupe["debut"], reverse=True)
 
+def regrouper_periodes_scolaires(periodes):
+    """Regroupe les semaines périscolaires par référence scolaire commune.
+
+    Le sélecteur global manipule ainsi « Rentrée → Toussaint » plutôt qu'une
+    modalité ou une semaine isolée. Les écrans métier continuent à recevoir
+    les identifiants des semaines qui composent la référence.
+    """
+
+    groupes = {}
+    sans_reference = []
+    for periode in periodes:
+        reference = getattr(periode, "periode_calendrier", None)
+        if reference is None:
+            sans_reference.append({
+                "id": f"semaine-{periode.pk}",
+                "libelle_selection": periode.libelle_avec_annee,
+                "debut": periode.debut,
+                "fin": periode.fin,
+                "semaine_ids": [periode.pk],
+                "periode_calendrier_id": None,
+            })
+            continue
+        cle = f"scolaire-{reference.pk}"
+        groupe = groupes.setdefault(cle, {
+            "id": cle,
+            "libelle_selection": f"{reference.nom} · {reference.annee_scolaire}",
+            "debut": reference.debut,
+            "fin": reference.fin,
+            "semaine_ids": [],
+            "periode_calendrier_id": reference.pk,
+        })
+        groupe["semaine_ids"].append(periode.pk)
+    resultat = list(groupes.values()) + sans_reference
+    return sorted(resultat, key=lambda groupe: groupe["debut"], reverse=True)
+
 
 def filtrer_relation_type(queryset, code_type, *, champ="type_accueil", inclure_generaux=True):
     """Filtre une FK de type d'accueil ; une sélection vide est la vue générale."""

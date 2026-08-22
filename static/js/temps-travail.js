@@ -105,7 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const doubles = meeting.participants.filter((item) => item.autoriser_double_comptage).length;
             return `
                 <article class="worktime-meeting-row" data-meeting-id="${meeting.id}">
-                    <div><strong>${escapeHtml(meeting.intitule)}</strong><small>${escapeHtml(formatDate(meeting.date))} · ${meeting.participants.length} participant${meeting.participants.length > 1 ? "s" : ""}${doubles ? ` · ${doubles} double comptage explicite` : ""}</small>${meeting.remarque ? `<small>${escapeHtml(meeting.remarque)}</small>` : ""}</div>
+                    <div><strong>${escapeHtml(meeting.intitule)}</strong><small>${escapeHtml(formatDate(meeting.date))}${meeting.heure_debut ? ` · ${escapeHtml(meeting.heure_debut)}${meeting.heure_fin ? `–${escapeHtml(meeting.heure_fin)}` : ""}` : ""} · ${meeting.participants.length} participant${meeting.participants.length > 1 ? "s" : ""}${doubles ? ` · ${doubles} double comptage explicite` : ""}</small>${meeting.lieu ? `<small>${escapeHtml(meeting.lieu)}</small>` : ""}${meeting.remarque ? `<small>${escapeHtml(meeting.remarque)}</small>` : ""}</div>
                     <div class="worktime-meeting-actions"><button class="btn btn-secondary btn-small" type="button" data-edit-meeting>Modifier</button><button class="btn btn-danger-ghost btn-small" type="button" data-delete-meeting>Supprimer</button></div>
                 </article>`;
         }).join("") : '<p class="empty-note">Aucune réunion enregistrée pour cette période.</p>';
@@ -284,6 +284,9 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("worktime-meeting-title").textContent = meeting ? "Modifier la réunion" : "Ajouter une réunion";
         form.elements.intitule.value = meeting?.intitule || "";
         form.elements.date.value = meeting?.date || data.periodes[0]?.debut || "";
+        form.elements.heure_debut.value = meeting?.heure_debut || "";
+        form.elements.heure_fin.value = meeting?.heure_fin || "";
+        form.elements.lieu.value = meeting?.lieu || "";
         form.elements.remarque.value = meeting?.remarque || "";
         renderParticipants(meeting);
         ouvrirModal(modal);
@@ -313,6 +316,9 @@ document.addEventListener("DOMContentLoaded", () => {
             periode_ids: selectedIds,
             intitule: form.elements.intitule.value,
             date: form.elements.date.value,
+            heure_debut: form.elements.heure_debut.value,
+            heure_fin: form.elements.heure_fin.value,
+            lieu: form.elements.lieu.value,
             remarque: form.elements.remarque.value,
             participant_ids: participantIds,
             double_comptage_ids: doubleIds,

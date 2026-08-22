@@ -95,4 +95,4 @@ class PlanningJavascriptConfigurationTests(SimpleTestCase):
         self.assertIn("diplômes précis couverts ensuite", script)
         self.assertIn("postes restants attribués selon l’affinité", script)
         self.assertIn("lieux interdits exclus et préférences de lieu respectées", script)
-        self.assertIn('body: JSON.stringify({ debut })', script)
+        self.assertIn('body: JSON.stringify({ debut, ...contextePlanningPayload() })', script)

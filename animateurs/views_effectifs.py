@@ -3,7 +3,9 @@
 import json
 from datetime import datetime, timedelta
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
@@ -11,10 +13,67 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
 from .access import est_direction
-from .models import EffectifEnfantsJour, Evenement
-from .services.effectifs import enregistrer_nombre_effectif
+from .models import EffectifEnfantsJour, Evenement, ModalitePeriscolaire, TypeAccueil
+from .services.accueils import valider_contexte_accueil
+from .services.effectifs import enregistrer_nombre_effectif, ratio_encadrement_contexte
+from .services.affectations import _ouverture_periscolaire_pour_date
 from .services.flottants import est_groupe_flottants, groupes_partages_visibles, groupes_visibles
 
+
+def _contexte_effectifs(request, payload=None, *, exiger_modalite=False):
+    payload = payload or {}
+    code = str(
+        payload.get("type_accueil")
+        or request.GET.get("type_accueil")
+        or request.session.get("type_accueil", "")
+    ).strip()
+    if code == TypeAccueil.MERCREDIS:
+        code = TypeAccueil.PERISCOLAIRE
+    type_accueil = None
+    if code in (TypeAccueil.VACANCES, TypeAccueil.PERISCOLAIRE):
+        type_accueil = TypeAccueil.objects.filter(code=code, actif=True).first()
+
+    code_modalite = str(
+        payload.get("modalite_periscolaire")
+        or request.GET.get("modalite_periscolaire")
+        or ""
+    ).strip()
+    modalite = None
+    if code_modalite:
+        modalite = ModalitePeriscolaire.objects.filter(code=code_modalite, actif=True).first()
+        if modalite is None:
+            raise ValueError("Créneau périscolaire invalide.")
+    if exiger_modalite and type_accueil and type_accueil.code == TypeAccueil.PERISCOLAIRE and modalite is None:
+        raise ValueError("Choisissez un créneau périscolaire avant de saisir les effectifs.")
+    if type_accueil is None or type_accueil.code != TypeAccueil.PERISCOLAIRE:
+        modalite = None
+    return type_accueil, modalite
+
+
+
+
+def _filtrer_effectifs_contexte(queryset, type_accueil, modalite):
+    """Applique un contexte sans confondre les anciennes lignes journalières.
+
+    Les enregistrements historiques sans ``type_accueil`` et sans modalité
+    restent assimilés aux Vacances. En Périscolaire, une ligne générique sans
+    modalité ne doit jamais apparaître comme un effectif du matin/midi/soir.
+    """
+
+    if type_accueil is None:
+        return queryset
+    if type_accueil.code == TypeAccueil.PERISCOLAIRE:
+        queryset = queryset.filter(
+            Q(type_accueil=type_accueil)
+            | Q(type_accueil__isnull=True, modalite_periscolaire__isnull=False)
+        )
+        if modalite is not None:
+            queryset = queryset.filter(modalite_periscolaire=modalite)
+        return queryset
+    return queryset.filter(
+        Q(type_accueil=type_accueil) | Q(type_accueil__isnull=True),
+        modalite_periscolaire__isnull=True,
+    )
 
 def _effectif_to_dict(item, *, inclure_groupe=False):
     data = {
@@ -24,6 +83,9 @@ def _effectif_to_dict(item, *, inclure_groupe=False):
         "ratio_encadrement_exceptionnel": item.ratio_encadrement_exceptionnel,
         "heure_arrivee": item.heure_arrivee.strftime("%H:%M") if item.heure_arrivee else "",
         "heure_depart": item.heure_depart.strftime("%H:%M") if item.heure_depart else "",
+        "type_accueil": item.type_accueil.code if item.type_accueil_id else None,
+        "modalite_periscolaire": item.modalite_periscolaire.code if item.modalite_periscolaire_id else None,
+        "modalite_periscolaire_nom": item.modalite_periscolaire.nom if item.modalite_periscolaire_id else None,
     }
     if inclure_groupe:
         data["groupe_id"] = item.evenement_id
@@ -41,7 +103,7 @@ def api_effectifs_enfants_plage(request):
         return JsonResponse({"error": "La plage debut/fin est invalide."}, status=400)
 
     queryset = (
-        EffectifEnfantsJour.objects.select_related("evenement")
+        EffectifEnfantsJour.objects.select_related("evenement", "type_accueil", "modalite_periscolaire")
         .filter(date__gte=debut, date__lt=fin)
         .only(
             "evenement_id",
@@ -52,10 +114,21 @@ def api_effectifs_enfants_plage(request):
             "ratio_encadrement_exceptionnel",
             "heure_arrivee",
             "heure_depart",
+            "type_accueil_id",
+            "type_accueil__code",
+            "modalite_periscolaire_id",
+            "modalite_periscolaire__code",
+            "modalite_periscolaire__nom",
         )
-        .order_by("evenement_id", "date")
+        .order_by("evenement_id", "date", "modalite_periscolaire_id")
     )
-    if not est_direction(request.user):
+    try:
+        type_accueil, modalite = _contexte_effectifs(request)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    queryset = _filtrer_effectifs_contexte(queryset, type_accueil, modalite)
+    direction = est_direction(request.user)
+    if not direction:
         animateur = getattr(request.user, "profil_animateur", None)
         if animateur is None:
             queryset = queryset.none()
@@ -69,10 +142,71 @@ def api_effectifs_enfants_plage(request):
                 fin__gt=debut_dt,
             ).values_list("centre_id", flat=True).distinct()
             queryset = queryset.filter(evenement__centre_id__in=centre_ids)
-    return JsonResponse(
-        [_effectif_to_dict(item, inclure_groupe=True) for item in queryset],
-        safe=False,
-    )
+
+    lignes = [_effectif_to_dict(item, inclure_groupe=True) for item in queryset]
+
+    # Le Planning Direction a besoin du ratio de référence même avant la
+    # première saisie d'enfants. Cet enrichissement est volontairement opt-in
+    # afin de ne pas modifier le contrat historique de l'API pour les autres
+    # écrans : les lignes virtuelles ne sont jamais enregistrées en base.
+    inclure_references = direction and request.GET.get("inclure_references") == "1"
+    if inclure_references:
+        existantes = {(int(item["groupe_id"]), item["date"]) for item in lignes}
+        groupes = list(
+            groupes_visibles(
+                Evenement.objects.select_related(
+                    "centre", "groupe", "accueil_centre", "accueil_centre__type_accueil"
+                ).prefetch_related("periodes_scolaires", "dates_exclues", "types_accueil")
+            )
+        )
+        if type_accueil is not None:
+            groupes = [
+                groupe for groupe in groupes
+                if not groupe.types_accueil.all() or type_accueil in groupe.types_accueil.all()
+            ]
+        jour = debut
+        while jour < fin:
+            date_iso = jour.isoformat()
+            for groupe in groupes:
+                cle = (groupe.id, date_iso)
+                if cle in existantes or not groupe.est_ouvert_le(jour):
+                    continue
+                if (
+                    type_accueil is not None
+                    and type_accueil.code == TypeAccueil.PERISCOLAIRE
+                    and modalite is not None
+                ):
+                    ouvert, _debut, _fin = _ouverture_periscolaire_pour_date(
+                        groupe.centre,
+                        jour,
+                        modalite,
+                        groupe.accueil_centre,
+                    )
+                    if not ouvert:
+                        continue
+                ratio = ratio_encadrement_contexte(
+                    groupe,
+                    jour,
+                    type_accueil=type_accueil,
+                    modalite_periscolaire=modalite,
+                )
+                lignes.append({
+                    "groupe_id": groupe.id,
+                    "date": date_iso,
+                    "nombre": 0,
+                    "enfants_par_animateur": ratio,
+                    "ratio_encadrement_exceptionnel": None,
+                    "heure_arrivee": "",
+                    "heure_depart": "",
+                    "type_accueil": type_accueil.code if type_accueil else None,
+                    "modalite_periscolaire": modalite.code if modalite else None,
+                    "modalite_periscolaire_nom": modalite.nom if modalite else None,
+                    "virtuel": True,
+                })
+            jour += timedelta(days=1)
+        lignes.sort(key=lambda item: (int(item["groupe_id"]), item["date"], item.get("modalite_periscolaire") or ""))
+
+    return JsonResponse(lignes, safe=False)
 
 
 @never_cache
@@ -80,7 +214,9 @@ def api_effectifs_enfants_plage(request):
 def api_effectifs_enfants_groupe(request, evenement_id):
     """Lit ou enregistre les effectifs et exceptions d’encadrement d’un groupe."""
     try:
-        evenement = Evenement.objects.select_related("groupe").get(pk=evenement_id)
+        evenement = Evenement.objects.select_related(
+            "groupe", "centre", "accueil_centre", "accueil_centre__type_accueil"
+        ).get(pk=evenement_id)
         if est_groupe_flottants(evenement):
             raise Evenement.DoesNotExist
     except Evenement.DoesNotExist:
@@ -89,7 +225,12 @@ def api_effectifs_enfants_groupe(request, evenement_id):
     if request.method == "GET":
         debut = parse_date(request.GET.get("debut", ""))
         fin = parse_date(request.GET.get("fin", ""))
-        queryset = evenement.effectifs_enfants.select_related("evenement")
+        queryset = evenement.effectifs_enfants.select_related("evenement", "type_accueil", "modalite_periscolaire")
+        try:
+            type_accueil, modalite = _contexte_effectifs(request)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        queryset = _filtrer_effectifs_contexte(queryset, type_accueil, modalite)
         if debut:
             queryset = queryset.filter(date__gte=debut)
         if fin:
@@ -101,6 +242,7 @@ def api_effectifs_enfants_groupe(request, evenement_id):
 
     try:
         payload = json.loads(request.body)
+        type_accueil, modalite = _contexte_effectifs(request, payload, exiger_modalite=True)
         effectifs = payload.get("effectifs")
         ratios = payload.get("ratios_encadrement")
         horaires = payload.get("horaires")
@@ -152,19 +294,45 @@ def api_effectifs_enfants_groupe(request, evenement_id):
 
         if effectifs is None and ratios is None and horaires is None:
             raise ValueError
-    except (TypeError, ValueError, AttributeError, json.JSONDecodeError):
-        return JsonResponse({"error": "Les données transmises sont invalides."}, status=400)
+
+        # Validation centrale : AccueilCentre est la source de vérité pour les
+        # nouvelles instances. Un type contradictoire est refusé côté serveur.
+        type_accueil = valider_contexte_accueil(evenement, type_accueil, modalite)
+
+        dates_modifiees = {jour for jour, _nombre in normalises_effectifs}
+        dates_modifiees.update(jour for jour, _ratio in normalises_ratios)
+        dates_modifiees.update(jour for jour, _arrivee, _depart in normalises_horaires)
+        dates_exclues = set(evenement.dates_exclues.values_list("date", flat=True))
+        for jour in dates_modifiees:
+            if not evenement.est_ouvert_le(jour, dates_exclues):
+                raise ValueError
+            if type_accueil and type_accueil.code == TypeAccueil.PERISCOLAIRE:
+                ouvert, _heure_debut, _heure_fin = _ouverture_periscolaire_pour_date(
+                    evenement.centre,
+                    jour,
+                    modalite,
+                    evenement.accueil_centre,
+                )
+                if not ouvert:
+                    raise ValueError
+    except (TypeError, ValueError, AttributeError, ValidationError, json.JSONDecodeError):
+        return JsonResponse({"error": "Les données transmises sont invalides ou le groupe est fermé dans cet accueil à cette date."}, status=400)
 
     with transaction.atomic():
         for jour, nombre in normalises_effectifs:
-            enregistrer_nombre_effectif(evenement, jour, nombre)
+            enregistrer_nombre_effectif(evenement, jour, nombre, type_accueil=type_accueil, modalite_periscolaire=modalite)
 
         for jour, ratio in normalises_ratios:
-            ligne = EffectifEnfantsJour.objects.filter(evenement=evenement, date=jour).first()
+            ligne = EffectifEnfantsJour.objects.filter(evenement=evenement, date=jour, modalite_periscolaire=modalite).first()
             if ratio is None:
                 if ligne:
                     ligne.ratio_encadrement_exceptionnel = None
-                    ligne.enfants_par_animateur = evenement.enfants_par_animateur_defaut
+                    ligne.enfants_par_animateur = ratio_encadrement_contexte(
+                        evenement,
+                        jour,
+                        type_accueil=type_accueil,
+                        modalite_periscolaire=modalite,
+                    )
                     if ligne.nombre == 0 and not ligne.heure_arrivee:
                         ligne.delete()
                     else:
@@ -179,15 +347,17 @@ def api_effectifs_enfants_groupe(request, evenement_id):
                 EffectifEnfantsJour.objects.update_or_create(
                     evenement=evenement,
                     date=jour,
+                    modalite_periscolaire=modalite,
                     defaults={
                         "nombre": ligne.nombre if ligne else 0,
                         "enfants_par_animateur": ratio,
                         "ratio_encadrement_exceptionnel": ratio,
+                        "type_accueil": type_accueil,
                     },
                 )
 
         for jour, arrivee, depart in normalises_horaires:
-            ligne = EffectifEnfantsJour.objects.filter(evenement=evenement, date=jour).first()
+            ligne = EffectifEnfantsJour.objects.filter(evenement=evenement, date=jour, modalite_periscolaire=modalite).first()
             if arrivee is None:
                 if ligne:
                     ligne.heure_arrivee = None
@@ -200,17 +370,54 @@ def api_effectifs_enfants_groupe(request, evenement_id):
                 EffectifEnfantsJour.objects.update_or_create(
                     evenement=evenement,
                     date=jour,
+                    modalite_periscolaire=modalite,
                     defaults={
                         "nombre": ligne.nombre if ligne else 0,
                         "enfants_par_animateur": (
-                            ligne.ratio_encadrement_effectif if ligne else evenement.enfants_par_animateur_defaut
+                            ligne.ratio_encadrement_effectif
+                            if ligne and ligne.ratio_encadrement_exceptionnel
+                            else ratio_encadrement_contexte(
+                                evenement,
+                                jour,
+                                type_accueil=type_accueil,
+                                modalite_periscolaire=modalite,
+                            )
                         ),
                         "ratio_encadrement_exceptionnel": (ligne.ratio_encadrement_exceptionnel if ligne else None),
                         "heure_arrivee": arrivee,
                         "heure_depart": depart,
+                        "type_accueil": type_accueil,
                     },
                 )
     return JsonResponse({"ok": True})
+
+
+def _excel_indisponible_en_periscolaire(request):
+    """Protège l'import historique tant qu'il n'est pas ventilé par créneau.
+
+    Le classeur Vacances est indexé par groupe + date. En Périscolaire, cette
+    clé est insuffisante puisqu'un même groupe peut avoir matin, midi et soir
+    le même jour. On préfère donc bloquer explicitement cette fonction plutôt
+    que d'écraser ou mélanger des effectifs entre créneaux.
+    """
+    code = str(
+        request.GET.get("type_accueil")
+        or request.POST.get("type_accueil")
+        or request.session.get("type_accueil", "")
+    ).strip()
+    return code in (TypeAccueil.PERISCOLAIRE, TypeAccueil.MERCREDIS)
+
+
+def _reponse_excel_periscolaire():
+    return JsonResponse(
+        {
+            "error": (
+                "L’import Excel des effectifs reste disponible pour les Vacances. "
+                "En Périscolaire, saisissez les effectifs directement par créneau."
+            )
+        },
+        status=400,
+    )
 
 
 def _catalogue_import_excel(request):
@@ -236,6 +443,8 @@ def _catalogue_import_excel(request):
 @require_http_methods(["GET"])
 def api_effectifs_excel_gabarit(request):
     """Génère un gabarit .xlsx multi-lieux pour une plage de dates."""
+    if _excel_indisponible_en_periscolaire(request):
+        return _reponse_excel_periscolaire()
     from django.http import HttpResponse
 
     from .services.effectifs_excel import ErreurExcel, generer_gabarit_excel
@@ -265,6 +474,8 @@ def api_effectifs_excel_gabarit(request):
 @require_http_methods(["POST"])
 def api_effectifs_excel_analyser(request):
     """Détecte feuilles, en-têtes et valeurs d'un fichier Excel externe."""
+    if _excel_indisponible_en_periscolaire(request):
+        return _reponse_excel_periscolaire()
     from .services.effectifs_excel import ErreurExcel, analyser_classeur
 
     fichier = request.FILES.get("fichier")
@@ -282,6 +493,8 @@ def api_effectifs_excel_analyser(request):
 @require_http_methods(["POST"])
 def api_effectifs_excel_previsualiser(request):
     """Normalise un classeur sans modifier la base et renvoie l'aperçu."""
+    if _excel_indisponible_en_periscolaire(request):
+        return _reponse_excel_periscolaire()
     from .services.effectifs_excel import ErreurExcel, previsualiser_classeur
 
     fichier = request.FILES.get("fichier")
@@ -305,6 +518,8 @@ def api_effectifs_excel_previsualiser(request):
 @require_http_methods(["POST"])
 def api_effectifs_excel_importer(request):
     """Valide l'aperçu sélectionné et enregistre les effectifs."""
+    if _excel_indisponible_en_periscolaire(request):
+        return _reponse_excel_periscolaire()
     try:
         payload = json.loads(request.body)
         lignes = payload.get("rows")
@@ -320,7 +535,7 @@ def api_effectifs_excel_importer(request):
                 raise ValueError
             cles.add((evenement_id, jour))
             normalisees.append((evenement_id, jour, nombre))
-    except (TypeError, ValueError, AttributeError, json.JSONDecodeError):
+    except (TypeError, ValueError, AttributeError, ValidationError, json.JSONDecodeError):
         return JsonResponse({"error": "Les lignes à importer sont invalides."}, status=400)
 
     evenements = {
@@ -388,7 +603,7 @@ def api_profils_import_effectifs(request):
         return JsonResponse({"error": "Profil introuvable."}, status=404)
     except IntegrityError:
         return JsonResponse({"error": "Un profil porte déjà ce nom."}, status=409)
-    except (TypeError, ValueError, AttributeError, json.JSONDecodeError):
+    except (TypeError, ValueError, AttributeError, ValidationError, json.JSONDecodeError):
         return JsonResponse({"error": "Le nom et la configuration du profil sont obligatoires."}, status=400)
     return JsonResponse({"id": profil.id, "nom": profil.nom, "configuration": profil.configuration}, status=statut)
 

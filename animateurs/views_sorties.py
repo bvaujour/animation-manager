@@ -470,6 +470,8 @@ def _supprimer_affectations_responsables(sortie, valeurs, anciennes_affectations
                 evenement=affectation.evenement,
                 debut=fin,
                 fin=ancienne_fin,
+                type_accueil=affectation.type_accueil,
+                modalite_periscolaire=affectation.modalite_periscolaire,
             )
             affectation.horaires_journaliers.filter(date__gt=sortie.date).update(
                 affectation=segment

@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse
-from django.utils.dateparse import parse_date
+from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods
 
 from .models import Affectation, ActiviteTravailComplementaire, ParticipationTravailComplementaire
@@ -51,6 +51,9 @@ def _reunion_json(activite, ids_en_conflit):
         "id": activite.id,
         "intitule": activite.intitule,
         "date": activite.date.isoformat(),
+        "heure_debut": activite.heure_debut.isoformat() if activite.heure_debut else None,
+        "heure_fin": activite.heure_fin.isoformat() if activite.heure_fin else None,
+        "lieu": activite.lieu,
         "remarque": activite.remarque,
         "periode_ids": [periode.id for periode in activite.periodes_chargees],
         "participants": participants,
@@ -221,6 +224,17 @@ def _enregistrer_reunion(request, reunion=None):
     periodes, jours, debut, fin = _selection(request, payload)
     intitule = str(payload.get("intitule", "")).strip()
     date = parse_date(str(payload.get("date", "")))
+    heure_debut_brut = str(payload.get("heure_debut", "")).strip()
+    heure_fin_brut = str(payload.get("heure_fin", "")).strip()
+    heure_debut = parse_time(heure_debut_brut) if heure_debut_brut else None
+    heure_fin = parse_time(heure_fin_brut) if heure_fin_brut else None
+    if heure_debut_brut and heure_debut is None:
+        raise ValueError("L’heure de début est invalide.")
+    if heure_fin_brut and heure_fin is None:
+        raise ValueError("L’heure de fin est invalide.")
+    if heure_debut and heure_fin and heure_fin < heure_debut:
+        raise ValueError("L’heure de fin doit être postérieure à l’heure de début.")
+    lieu = str(payload.get("lieu", "")).strip()
     remarque = str(payload.get("remarque", "")).strip()
     if not intitule:
         raise ValueError("L’intitulé de la réunion est obligatoire.")
@@ -242,6 +256,9 @@ def _enregistrer_reunion(request, reunion=None):
             reunion = ActiviteTravailComplementaire(type=ActiviteTravailComplementaire.TYPE_REUNION)
         reunion.intitule = intitule
         reunion.date = date
+        reunion.heure_debut = heure_debut
+        reunion.heure_fin = heure_fin
+        reunion.lieu = lieu
         reunion.remarque = remarque
         reunion.full_clean(exclude=("periodes",))
         reunion.save()

@@ -1,8 +1,8 @@
 from django.conf import settings
 
 from .access import est_direction
-from .models import Document, PeriodeScolaire, TypeAccueil
-from .services.types_accueil import regrouper_periodes_vacances
+from .models import Document, ModalitePeriscolaire, PeriodeScolaire, TypeAccueil
+from .services.types_accueil import regrouper_periodes_scolaires, regrouper_periodes_vacances
 
 
 def droits_application(request):
@@ -25,15 +25,16 @@ def droits_application(request):
         if not any(item.code == code_selectionne for item in types_accueil):
             code_selectionne = ""
 
-    periodes_qs = PeriodeScolaire.objects.select_related("type_accueil").all()
+    periodes_qs = PeriodeScolaire.objects.select_related("type_accueil", "periode_calendrier").all()
     if code_selectionne:
         periodes_qs = periodes_qs.filter(type_accueil__code=code_selectionne)
     semaines_accueil = list(periodes_qs.order_by("-debut", "ordre", "nom"))
-    periodes_accueil = (
-        regrouper_periodes_vacances(semaines_accueil)
-        if code_selectionne == TypeAccueil.VACANCES
-        else semaines_accueil
-    )
+    if code_selectionne == TypeAccueil.VACANCES:
+        periodes_accueil = regrouper_periodes_vacances(semaines_accueil)
+    elif code_selectionne == TypeAccueil.PERISCOLAIRE:
+        periodes_accueil = regrouper_periodes_scolaires(semaines_accueil)
+    else:
+        periodes_accueil = semaines_accueil
     periode_demandee = request.GET.get("periode_accueil")
     ids_periodes = {
         str(periode["id"] if isinstance(periode, dict) else periode.pk)
@@ -66,6 +67,15 @@ def droits_application(request):
             else [periode_accueil_active.pk]
         )
     request.session["semaines_contexte_travail"] = semaine_ids_contexte
+    request.session["periode_calendrier_contexte"] = (
+        periode_accueil_active.get("periode_calendrier_id")
+        if isinstance(periode_accueil_active, dict) else None
+    )
+
+    modalites_periscolaires = (
+        list(ModalitePeriscolaire.objects.filter(actif=True).order_by("ordre", "nom"))
+        if code_selectionne == TypeAccueil.PERISCOLAIRE else []
+    )
 
     return {
         "utilisateur_est_direction": utilisateur_direction,
@@ -77,4 +87,5 @@ def droits_application(request):
         "periodes_accueil": periodes_accueil,
         "periode_accueil_selectionnee": periode_selectionnee,
         "periode_accueil_active": periode_accueil_active,
+        "modalites_periscolaires": modalites_periscolaires,
     }

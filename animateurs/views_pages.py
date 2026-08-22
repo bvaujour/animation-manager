@@ -90,9 +90,13 @@ def _semaine_initiale_animateur(request):
 
 
 def _semaines_vacances_ouvertes(request):
-    """Retourne les lundis Vacances où au moins un centre est ouvert."""
-    if request.GET.get("type_accueil", request.session.get("type_accueil")) != TypeAccueil.VACANCES:
-        return []
+    """Retourne les lundis de vacances où au moins un groupe est ouvert.
+
+    Le portail animateur ne possède pas de sélecteur ``type_accueil`` : les
+    flèches visibles sont rendues directement par les templates du portail.
+    La liste doit donc être calculée ici sans dépendre d'un paramètre de
+    session ou de requête qui n'est jamais transmis par cette interface.
+    """
     periodes = list(
         PeriodeScolaire.objects.filter(type_accueil__code=TypeAccueil.VACANCES).order_by("debut", "id")
     )
@@ -102,12 +106,17 @@ def _semaines_vacances_ouvertes(request):
     )
     ouvertes = []
     for periode in periodes:
-        jours = [
-            periode.debut + datetime.timedelta(days=decalage)
-            for decalage in range((periode.fin - periode.debut).days + 1)
-        ]
-        if any(groupe.est_ouvert_le(jour) for groupe in groupes for jour in jours):
-            ouvertes.append(periode.debut - datetime.timedelta(days=periode.debut.weekday()))
+        lundi = periode.debut - datetime.timedelta(days=periode.debut.weekday())
+        dernier_lundi = periode.fin - datetime.timedelta(days=periode.fin.weekday())
+        while lundi <= dernier_lundi:
+            jours = [
+                lundi + datetime.timedelta(days=decalage)
+                for decalage in range(7)
+                if periode.debut <= lundi + datetime.timedelta(days=decalage) <= periode.fin
+            ]
+            if any(groupe.est_ouvert_le(jour) for groupe in groupes for jour in jours):
+                ouvertes.append(lundi)
+            lundi += datetime.timedelta(days=7)
     return sorted(set(ouvertes))
 
 
@@ -670,6 +679,7 @@ def gestion(request):
         {
             "active_page": "gestion",
             "gestion_onglet": onglet,
+            "masquer_selecteurs_configuration": onglet not in {"documents", "informations"},
             "informations_animateurs": InformationAnimateur.objects.select_related("auteur").prefetch_related("animateurs"),
             "information_editee": information_editee,
             "information_editee_ids": [item.pk for item in information_editee.animateurs.all()] if information_editee else [],

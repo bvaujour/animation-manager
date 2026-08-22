@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from animateurs.models import jours_feries_france
 from animateurs.services.flottants import est_groupe_flottants, type_affectation
+from animateurs.services.besoins_encadrement import besoin_encadrement_effectif, besoins_contextuels_payload
 from animateurs.services.disponibilites import formation_bloquante
 from animateurs.services.status_colors import (
     couleur_pour_statut,
@@ -179,6 +180,13 @@ def affectation_to_event(affectation):
             "evenement_nom": affectation.evenement.nom,
             "horaires": horaires,
             "type_affectation": type_affectation_valeur,
+            "type_accueil": affectation.type_accueil.code if affectation.type_accueil_id else None,
+            "modalite_periscolaire": (
+                affectation.modalite_periscolaire.code if affectation.modalite_periscolaire_id else None
+            ),
+            "modalite_periscolaire_nom": (
+                affectation.modalite_periscolaire.nom if affectation.modalite_periscolaire_id else None
+            ),
         },
     }
 
@@ -376,7 +384,71 @@ def animateur_planning_to_dict(animateur, *, date_reference=None, dates_referenc
     }
 
 
+def _accueils_centre_payload(centre):
+    cache = getattr(centre, "_prefetched_objects_cache", {}).get("accueils")
+    accueils = list(cache) if cache is not None else list(centre.accueils.select_related("type_accueil").all())
+    resultats = []
+    for accueil in accueils:
+        groupes = list(
+            accueil.groupes.select_related("groupe")
+            .prefetch_related("periodes_scolaires", "besoins_encadrement", "types_accueil")
+            .order_by("ordre", "nom")
+        )
+        periodes = {}
+        jours = set()
+        modes = set()
+        for groupe in groupes:
+            jours.update(int(numero) for numero in (groupe.jours_ouverts or []))
+            for periode in groupe.periodes_scolaires.all():
+                periodes[periode.id] = periode.libelle_avec_annee
+            for besoin in groupe.besoins_encadrement.all():
+                modes.add(besoin.mode_calcul)
+        ouvertures = list(
+            accueil.ouvertures_periodes.select_related("modalite_periscolaire", "periode_calendrier")
+            .filter(actif=True)
+            .order_by("periode_calendrier__debut", "modalite_periscolaire__ordre", "jour_semaine")
+        )
+        modalites = []
+        vus = set()
+        for ouverture in ouvertures:
+            cle = ouverture.modalite_periscolaire_id
+            if cle in vus:
+                continue
+            vus.add(cle)
+            modalites.append(ouverture.modalite_periscolaire.nom)
+        if not modes:
+            encadrement = "À configurer"
+        elif modes == {"reglementaire"}:
+            encadrement = "Calcul réglementaire"
+        elif modes == {"manuel"}:
+            encadrement = "Postes définis manuellement"
+        else:
+            encadrement = "Configuration mixte"
+        resultats.append({
+            "id": accueil.id,
+            "type_accueil_id": accueil.type_accueil_id,
+            "type_accueil_code": accueil.type_accueil.code,
+            "type_accueil_nom": accueil.type_accueil.nom,
+            "libelle": accueil.libelle,
+            "nom_affichage": accueil.nom_affichage,
+            "date_debut": accueil.date_debut.isoformat() if accueil.date_debut else "",
+            "date_fin": accueil.date_fin.isoformat() if accueil.date_fin else "",
+            "pedt_applicable": bool(accueil.pedt_applicable),
+            "statut": accueil.statut,
+            "libelle_analytique": accueil.libelle_analytique,
+            "groupes": [{"id": groupe.id, "groupe_id": groupe.groupe_id, "nom": groupe.nom} for groupe in groupes],
+            "groupes_noms": [groupe.nom for groupe in groupes],
+            "nb_groupes": len(groupes),
+            "jours_ouverts": sorted(jours),
+            "periodes_noms": list(periodes.values()),
+            "modalites_noms": modalites,
+            "encadrement_resume": encadrement,
+        })
+    return resultats
+
+
 def centre_to_dict(centre):
+    types = [type_accueil for type_accueil in centre.types_accueil.all() if type_accueil.actif]
     return {
         "id": centre.id,
         "nom": centre.nom,
@@ -390,11 +462,21 @@ def centre_to_dict(centre):
         "precision_localisation": centre.precision_localisation,
         "couleur": centre.couleur,
         "effectif_cible": centre.effectif_cible,
+        "type_accueil_codes": [type_accueil.code for type_accueil in types],
+        "types_accueil": [{"code": type_accueil.code, "nom": type_accueil.nom} for type_accueil in types],
+        "accueils": _accueils_centre_payload(centre),
         "ordre": centre.ordre,
     }
 
 
-def evenement_to_dict(evenement, *, include_effectifs=True):
+def evenement_to_dict(
+    evenement,
+    *,
+    include_effectifs=True,
+    type_accueil=None,
+    modalite_periscolaire=None,
+    periode_calendrier=None,
+):
     besoins_prefetches = getattr(evenement, "_prefetched_objects_cache", {}).get("besoins_qualifications")
     besoins = (
         list(besoins_prefetches)
@@ -408,12 +490,46 @@ def evenement_to_dict(evenement, *, include_effectifs=True):
     )
     periodes = list(evenement.periodes_scolaires.all())
     effectifs_enfants = list(evenement.effectifs_enfants.all()) if include_effectifs else []
+    besoin_effectif = besoin_encadrement_effectif(
+        evenement,
+        type_accueil=type_accueil,
+        modalite=modalite_periscolaire,
+        periode_calendrier=periode_calendrier,
+    )
+    besoins_effectifs = list(besoin_effectif.qualifications)
+    besoins_generiques = [
+        besoin for besoin in besoins
+        if besoin.type_accueil_id is None
+        and besoin.modalite_periscolaire_id is None
+        and getattr(besoin, "periode_calendrier_id", None) is None
+    ]
     return {
         "id": evenement.id,
         "groupe_id": evenement.groupe_id,
+        "accueil_centre_id": evenement.accueil_centre_id,
+        "accueil_nom": evenement.accueil_centre.nom_affichage if evenement.accueil_centre_id else "",
+        "type_accueil_code": (
+            evenement.accueil_centre.type_accueil.code
+            if evenement.accueil_centre_id
+            else None
+        ),
+        "groupe_type": evenement.groupe.type_groupe if evenement.groupe_id else "structure",
+        "groupe_date_debut_validite": (
+            evenement.groupe.date_debut_validite.isoformat()
+            if evenement.groupe_id and evenement.groupe.date_debut_validite else ""
+        ),
+        "groupe_date_fin_validite": (
+            evenement.groupe.date_fin_validite.isoformat()
+            if evenement.groupe_id and evenement.groupe.date_fin_validite else ""
+        ),
         "centre_id": evenement.centre_id,
         "nom": evenement.nom,
         "permanent": evenement.permanent,
+        "type_accueil_codes": [
+            type_accueil.code for type_accueil in evenement.types_accueil.all() if type_accueil.actif
+        ],
+        "modalite_periscolaire": (evenement.modalite_periscolaire.code if evenement.modalite_periscolaire_id else None),
+        "modalite_periscolaire_nom": (evenement.modalite_periscolaire.nom if evenement.modalite_periscolaire_id else None),
         "periode_ids": [periode.id for periode in periodes],
         "periodes": [
             {
@@ -438,7 +554,9 @@ def evenement_to_dict(evenement, *, include_effectifs=True):
                 if evenement.ferme_jours_feries and periode.debut <= jour <= evenement.fin_ouverture_periode(periode)
             }
         ),
-        "effectif_cible": evenement.effectif_cible,
+        "effectif_cible": besoin_effectif.effectif_cible,
+        "effectif_cible_base": evenement.effectif_cible,
+        "besoin_encadrement_personnalise": besoin_effectif.personnalise,
         "enfants_par_animateur_defaut": evenement.enfants_par_animateur_defaut,
         # Les écrans de gestion conservent la liste complète. Le chargement
         # groupé du Planning passe ``include_effectifs=False`` puis récupère
@@ -451,14 +569,22 @@ def evenement_to_dict(evenement, *, include_effectifs=True):
                 "ratio_encadrement_exceptionnel": effectif.ratio_encadrement_exceptionnel,
                 "heure_arrivee": effectif.heure_arrivee.strftime("%H:%M") if effectif.heure_arrivee else "",
                 "heure_depart": effectif.heure_depart.strftime("%H:%M") if effectif.heure_depart else "",
+                "type_accueil": effectif.type_accueil.code if effectif.type_accueil_id else None,
+                "modalite_periscolaire": (
+                    effectif.modalite_periscolaire.code if effectif.modalite_periscolaire_id else None
+                ),
             }
             for effectif in effectifs_enfants
         ],
         "jours_ouverts": [int(numero) for numero in (evenement.jours_ouverts or [])],
         "dates_exclues": [fermeture.date.isoformat() for fermeture in evenement.dates_exclues.all()],
         "ordre": evenement.ordre,
-        "qualifications_requises": {str(b.qualification_id): b.nombre_minimum for b in besoins},
-        "qualifications_libelle": [f"{b.nombre_minimum} × {b.qualification.nom}" for b in besoins],
+        "qualifications_requises": {str(b.qualification_id): b.nombre_minimum for b in besoins_generiques},
+        "qualifications_libelle": [f"{b.nombre_minimum} × {b.qualification.nom}" for b in besoins_effectifs],
+        "qualifications_requises_effectives": {
+            str(b.qualification_id): b.nombre_minimum for b in besoins_effectifs
+        },
+        "besoins_encadrement": besoins_contextuels_payload(evenement),
         "nb_affectations": nb_affectations,
         "peut_supprimer": nb_affectations == 0,
         "a_des_periodes": evenement.permanent or bool(periodes),

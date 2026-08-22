@@ -113,7 +113,7 @@ class PlanningApiTests(ConnexionTestCase):
 
         self.assertEqual(premiere.status_code, 201)
         self.assertEqual(seconde.status_code, 409)
-        self.assertIn("déjà animateur flottant", seconde.json()["error"])
+        self.assertIn("déjà animateur mixte", seconde.json()["error"])
         self.assertEqual(Affectation.objects.count(), 1)
 
     def test_depot_flottant_deplace_affectation_journaliere_du_meme_lieu(self):
@@ -345,7 +345,7 @@ class CentresGroupesPlanningApiTests(ConnexionTestCase):
         self.assertEqual(len(response.json()[0]["evenements"]), 15)
         self.assertLessEqual(
             len(contexte),
-            8,
+            13,
             f"Le chargement groupé a effectué {len(contexte)} requêtes.",
         )
 

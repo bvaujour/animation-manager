@@ -602,6 +602,31 @@ class ParametresStructure(models.Model):
         default=True,
         verbose_name="adapter automatiquement le taux CEE au changement de statut",
     )
+
+    # Référentiel d'encadrement ACM. Ces valeurs sont configurables afin de
+    # garder le moteur adaptable si la réglementation ou le cadre local évolue.
+    pedt_actif = models.BooleanField(
+        default=False,
+        verbose_name="PEDT applicable au périscolaire",
+    )
+    ratio_vacances_moins_6 = models.PositiveSmallIntegerField(default=8)
+    ratio_vacances_6_plus = models.PositiveSmallIntegerField(default=12)
+    ratio_periscolaire_court_moins_6 = models.PositiveSmallIntegerField(default=10)
+    ratio_periscolaire_court_6_plus = models.PositiveSmallIntegerField(default=14)
+    ratio_periscolaire_long_moins_6 = models.PositiveSmallIntegerField(default=8)
+    ratio_periscolaire_long_6_plus = models.PositiveSmallIntegerField(default=12)
+    ratio_periscolaire_pedt_court_moins_6 = models.PositiveSmallIntegerField(default=14)
+    ratio_periscolaire_pedt_court_6_plus = models.PositiveSmallIntegerField(default=18)
+    ratio_periscolaire_pedt_long_moins_6 = models.PositiveSmallIntegerField(default=10)
+    ratio_periscolaire_pedt_long_6_plus = models.PositiveSmallIntegerField(default=14)
+    pourcentage_qualifies_minimum = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    pourcentage_non_qualifies_maximum = models.PositiveSmallIntegerField(
+        default=20,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
     cree_le = models.DateTimeField(auto_now_add=True)
     modifie_le = models.DateTimeField(auto_now=True)
 
@@ -987,10 +1012,195 @@ class Centre(models.Model):
         return self.nom
 
 
+class AccueilCentre(models.Model):
+    """Décline un lieu physique en accueils métier datés.
+
+    Un même bâtiment peut héberger des vacances et du périscolaire sans être
+    dupliqué. Les dates bornent l'existence fonctionnelle de l'accueil afin
+    qu'un accueil créé plus tard ne fasse pas apparaître de plannings vides
+    dans les années antérieures.
+    """
+
+    centre = models.ForeignKey(
+        Centre,
+        on_delete=models.CASCADE,
+        related_name="accueils",
+    )
+    type_accueil = models.ForeignKey(
+        TypeAccueil,
+        on_delete=models.PROTECT,
+        related_name="accueils_centres",
+    )
+    libelle = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        verbose_name="nom complémentaire",
+        help_text=(
+            "Facultatif pour un accueil unique ; utile pour distinguer plusieurs "
+            "accueils Périscolaire (ex. Mercredi, Semaine)."
+        ),
+    )
+    date_debut = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="début d'activité",
+        help_text="Les accueils historiques migrés peuvent rester sans date.",
+    )
+    date_fin = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="fin d'activité",
+    )
+    pedt_applicable = models.BooleanField(
+        default=False,
+        verbose_name="PEDT applicable au périscolaire",
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = (
+            "centre__ordre", "centre__nom", "type_accueil__ordre", "type_accueil__nom", "libelle"
+        )
+        constraints = [
+            models.UniqueConstraint(
+                fields=("centre", "type_accueil", "libelle"),
+                name="unique_accueil_type_libelle_par_centre",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(date_debut__isnull=True)
+                    | models.Q(date_fin__isnull=True)
+                    | models.Q(date_fin__gte=models.F("date_debut"))
+                ),
+                name="accueil_centre_fin_apres_debut",
+            ),
+        ]
+        verbose_name = "accueil d'un lieu"
+        verbose_name_plural = "accueils des lieux"
+
+    def clean(self):
+        erreurs = {}
+        self.libelle = (self.libelle or "").strip()
+        if self.type_accueil_id and self.type_accueil.code not in (TypeAccueil.VACANCES, TypeAccueil.PERISCOLAIRE):
+            erreurs["type_accueil"] = "Seuls Vacances et Périscolaire sont des accueils de lieu."
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+            erreurs["date_fin"] = "La date de fin doit suivre la date de début."
+        if self.type_accueil_id and self.type_accueil.code != TypeAccueil.PERISCOLAIRE:
+            self.pedt_applicable = False
+            if AccueilCentre.objects.filter(
+                centre_id=self.centre_id,
+                type_accueil_id=self.type_accueil_id,
+            ).exclude(pk=self.pk).exists():
+                erreurs["type_accueil"] = "Un seul accueil Vacances peut être rattaché à un même lieu."
+        if self.centre_id and self.type_accueil_id:
+            if AccueilCentre.objects.filter(
+                centre_id=self.centre_id,
+                type_accueil_id=self.type_accueil_id,
+                libelle__iexact=self.libelle,
+            ).exclude(pk=self.pk).exists():
+                erreurs["libelle"] = "Un accueil du même type porte déjà ce nom dans ce lieu."
+        if erreurs:
+            raise ValidationError(erreurs)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def est_actif_le(self, jour):
+        if jour is None:
+            return True
+        if self.date_debut and jour < self.date_debut:
+            return False
+        if self.date_fin and jour > self.date_fin:
+            return False
+        return True
+
+    def chevauche(self, debut=None, fin=None):
+        """Vrai si l'accueil existe au moins un jour dans l'intervalle inclusif."""
+        if debut and self.date_fin and self.date_fin < debut:
+            return False
+        if fin and self.date_debut and self.date_debut > fin:
+            return False
+        return True
+
+    @property
+    def statut(self):
+        aujourd_hui = timezone.localdate()
+        if self.date_debut and aujourd_hui < self.date_debut:
+            return "a_venir"
+        if self.date_fin and aujourd_hui > self.date_fin:
+            return "termine"
+        return "actif"
+
+    @property
+    def nom_affichage(self):
+        if self.libelle:
+            return f"{self.type_accueil.nom} — {self.libelle}"
+        return self.type_accueil.nom
+
+    @property
+    def libelle_analytique(self):
+        if self.libelle:
+            return f"{self.centre.code} — {self.type_accueil.nom} · {self.libelle}"
+        return f"{self.centre.code} — {self.type_accueil.nom}"
+
+    def __str__(self):
+        return self.libelle_analytique
+
+
 class Groupe(models.Model):
-    """Définition partagée d'un groupe, instanciable dans plusieurs lieux."""
+    """Définition partagée d'un groupe, instanciable dans plusieurs lieux.
+
+    Les groupes structurels (Maternelle, Élémentaire...) restent disponibles
+    durablement. Les groupes créés pour une session de séjour peuvent être
+    datés : leur période de validité borne leur apparition dans le planning
+    sans supprimer l'historique une fois le séjour terminé.
+    """
+
+    TYPE_STRUCTURE = "structure"
+    TYPE_SEJOUR = "sejour"
+    TYPES_GROUPE = (
+        (TYPE_STRUCTURE, "Groupe structurel"),
+        (TYPE_SEJOUR, "Séjour temporaire"),
+    )
+
+    AGE_MOINS_6 = "moins_6"
+    AGE_6_PLUS = "six_plus"
+    AGE_AUTRE = "autre"
+    CATEGORIES_AGE_REGLEMENTAIRE = (
+        (AGE_MOINS_6, "Moins de 6 ans"),
+        (AGE_6_PLUS, "6 ans et plus"),
+        (AGE_AUTRE, "Autre / non réglementaire"),
+    )
 
     nom = models.CharField(max_length=100)
+    type_groupe = models.CharField(
+        max_length=20,
+        choices=TYPES_GROUPE,
+        default=TYPE_STRUCTURE,
+        verbose_name="type de groupe",
+    )
+    date_debut_validite = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="début de validité",
+        help_text="Obligatoire pour un groupe de séjour temporaire.",
+    )
+    date_fin_validite = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="fin de validité",
+        help_text="Obligatoire pour un groupe de séjour temporaire.",
+    )
+    categorie_age_reglementaire = models.CharField(
+        max_length=20,
+        choices=CATEGORIES_AGE_REGLEMENTAIRE,
+        default=AGE_AUTRE,
+        verbose_name="catégorie d'âge réglementaire",
+        help_text="Utilisée pour calculer automatiquement les taux d'encadrement.",
+    )
     cle_unique = models.CharField(max_length=120, unique=True, editable=False, default="")
     enfants_par_animateur_defaut = models.PositiveSmallIntegerField(
         default=8,
@@ -1008,10 +1218,54 @@ class Groupe(models.Model):
         verbose_name = "groupe partagé"
         verbose_name_plural = "groupes partagés"
 
+    def clean(self):
+        super().clean()
+        if self.type_groupe == self.TYPE_SEJOUR:
+            erreurs = {}
+            if not self.date_debut_validite:
+                erreurs["date_debut_validite"] = "La date de début est obligatoire pour un groupe de séjour."
+            if not self.date_fin_validite:
+                erreurs["date_fin_validite"] = "La date de fin est obligatoire pour un groupe de séjour."
+            if (
+                self.date_debut_validite
+                and self.date_fin_validite
+                and self.date_fin_validite < self.date_debut_validite
+            ):
+                erreurs["date_fin_validite"] = "La date de fin doit suivre la date de début."
+            if erreurs:
+                raise ValidationError(erreurs)
+
     def save(self, *args, **kwargs):
         self.nom = self.nom.strip()
         self.cle_unique = normaliser_cle_unique(self.nom)
+        if self.type_groupe != self.TYPE_SEJOUR:
+            # Les dates appartiennent uniquement aux groupes temporaires.
+            # Les effacer évite qu'un ancien réglage de séjour borne par
+            # inadvertance un groupe redevenu structurel.
+            self.date_debut_validite = None
+            self.date_fin_validite = None
         super().save(*args, **kwargs)
+
+    def est_valide_le(self, jour):
+        """Indique si la définition de groupe existe fonctionnellement ce jour."""
+        if self.type_groupe != self.TYPE_SEJOUR:
+            return True
+        if self.date_debut_validite and jour < self.date_debut_validite:
+            return False
+        if self.date_fin_validite and jour > self.date_fin_validite:
+            return False
+        return bool(self.date_debut_validite and self.date_fin_validite)
+
+    @property
+    def statut_validite(self):
+        if self.type_groupe != self.TYPE_SEJOUR:
+            return "permanent"
+        aujourd_hui = timezone.localdate()
+        if self.date_debut_validite and aujourd_hui < self.date_debut_validite:
+            return "a_venir"
+        if self.date_fin_validite and aujourd_hui > self.date_fin_validite:
+            return "termine"
+        return "en_cours"
 
     def __str__(self):
         return self.nom
@@ -1032,6 +1286,15 @@ class Evenement(models.Model):
         on_delete=models.CASCADE,
         related_name="evenements",
         verbose_name="lieu",
+    )
+    accueil_centre = models.ForeignKey(
+        AccueilCentre,
+        on_delete=models.CASCADE,
+        related_name="groupes",
+        null=True,
+        blank=True,
+        verbose_name="accueil",
+        help_text="Accueil Vacances ou Périscolaire auquel appartient cette instance de groupe.",
     )
     nom = models.CharField(max_length=100)
     cle_unique = models.CharField(max_length=120, editable=False, default="")
@@ -1085,12 +1348,20 @@ class Evenement(models.Model):
         ordering = ["centre__nom", "ordre", "nom"]
         constraints = [
             models.UniqueConstraint(
+                fields=["accueil_centre", "groupe"],
+                condition=models.Q(accueil_centre__isnull=False),
+                name="unique_instance_groupe_par_accueil",
+            ),
+            models.UniqueConstraint(
                 fields=["centre", "groupe"],
-                name="unique_instance_groupe_par_lieu",
+                condition=models.Q(accueil_centre__isnull=True),
+                name="unique_instance_groupe_legacy_par_lieu",
             ),
         ]
 
     def save(self, *args, **kwargs):
+        if self.accueil_centre_id:
+            self.centre_id = self.accueil_centre.centre_id
         if not self.groupe_id:
             cle = normaliser_cle_unique(self.nom)
             self.groupe, _ = Groupe.objects.get_or_create(
@@ -1133,7 +1404,18 @@ class Evenement(models.Model):
 
         Sans période sélectionnée, le groupe existe dans Gestion mais ne doit
         apparaître ni dans les calendriers ni dans le remplissage automatique.
+        Un groupe de séjour est en plus borné par les dates de validité de sa
+        définition partagée.
         """
+        # Depuis la séparation Lieu → Accueil → Groupes, les dates de
+        # l'AccueilCentre bornent aussi l'existence de l'instance de groupe.
+        # Sans ce contrôle, un accueil créé en 2027 pourrait laisser apparaître
+        # ses groupes dans un planning 2026 dès lors qu'un autre accueil du même
+        # type existe dans le lieu.
+        if self.accueil_centre_id and not self.accueil_centre.est_actif_le(jour):
+            return False
+        if self.groupe_id and not self.groupe.est_valide_le(jour):
+            return False
         periodes = list(self.periodes_scolaires.all())
         if not self.permanent:
             if not periodes:
@@ -1149,6 +1431,8 @@ class Evenement(models.Model):
         return jour not in dates_exclues
 
     def __str__(self):
+        if self.accueil_centre_id:
+            return f"{self.accueil_centre.libelle_analytique} — {self.nom}"
         return f"{self.centre.nom} — {self.nom}"
 
 
@@ -1186,14 +1470,28 @@ class EffectifEnfantsJour(models.Model):
 
     @property
     def ratio_encadrement_effectif(self):
-        return self.ratio_encadrement_exceptionnel or self.evenement.enfants_par_animateur_defaut
+        return (
+            self.ratio_encadrement_exceptionnel
+            or self.enfants_par_animateur
+            or self.evenement.enfants_par_animateur_defaut
+        )
 
     class Meta:
         ordering = ("date",)
         constraints = [
+            # Vacances / fonctionnement historique : une seule valeur par
+            # groupe et par jour quand aucun créneau périscolaire n'est ciblé.
             models.UniqueConstraint(
                 fields=("evenement", "date"),
-                name="unique_effectif_enfants_groupe_date",
+                condition=models.Q(modalite_periscolaire__isnull=True),
+                name="unique_effectif_enfants_groupe_date_sans_modalite",
+            ),
+            # Périscolaire : un même groupe peut avoir un effectif différent
+            # le matin, le midi et le soir le même jour.
+            models.UniqueConstraint(
+                fields=("evenement", "date", "modalite_periscolaire"),
+                condition=models.Q(modalite_periscolaire__isnull=False),
+                name="unique_effectif_enfants_groupe_date_modalite",
             ),
         ]
         verbose_name = "effectif enfants journalier"
@@ -1226,17 +1524,148 @@ class DateExclueEvenement(models.Model):
 
     def clean(self):
         super().clean()
-        if self.evenement.debut and self.date < self.evenement.debut:
-            raise ValidationError("La date exclue doit appartenir à la période du groupe.")
-        if self.evenement.fin and self.date > self.evenement.fin:
-            raise ValidationError("La date exclue doit appartenir à la période du groupe.")
+        if not self.evenement_id or not self.date:
+            return
+
+        evenement = self.evenement
+        if evenement.accueil_centre_id and not evenement.accueil_centre.est_actif_le(self.date):
+            raise ValidationError("La date exclue doit appartenir à la période d'activité de l'accueil.")
+        if evenement.groupe_id and not evenement.groupe.est_valide_le(self.date):
+            raise ValidationError("La date exclue doit appartenir à la période de validité du groupe.")
+
+        periodes = list(evenement.periodes_scolaires.all())
+        if periodes and not any(
+            periode.debut <= self.date <= evenement.fin_ouverture_periode(periode)
+            for periode in periodes
+        ):
+            raise ValidationError("La date exclue doit appartenir à une période du groupe.")
 
     def __str__(self):
         return f"{self.evenement} fermé le {self.date:%d/%m/%Y}"
 
 
+class BesoinEncadrement(models.Model):
+    """Besoin d'équipe propre à un contexte d'accueil d'un groupe.
+
+    ``Evenement.effectif_cible`` reste uniquement un champ historique de
+    compatibilité. Les besoins Vacances et Périscolaire sont enregistrés dans
+    des règles explicites et ne se servent jamais de repli l'un pour l'autre.
+    Une période calendaire précise pourra surcharger ces règles générales.
+    """
+
+    evenement = models.ForeignKey(
+        Evenement,
+        on_delete=models.CASCADE,
+        related_name="besoins_encadrement",
+        verbose_name="groupe",
+    )
+    type_accueil = models.ForeignKey(
+        TypeAccueil,
+        on_delete=models.PROTECT,
+        related_name="besoins_encadrement",
+    )
+    modalite_periscolaire = models.ForeignKey(
+        ModalitePeriscolaire,
+        on_delete=models.PROTECT,
+        related_name="besoins_encadrement",
+        null=True,
+        blank=True,
+    )
+    periode_calendrier = models.ForeignKey(
+        "PeriodeCalendrier",
+        on_delete=models.PROTECT,
+        related_name="besoins_encadrement",
+        null=True,
+        blank=True,
+        help_text="Optionnel : permet de surcharger les besoins pour une année/période précise.",
+    )
+    MODE_MANUEL = "manuel"
+    MODE_REGLEMENTAIRE = "reglementaire"
+    MODES_CALCUL = (
+        (MODE_MANUEL, "Nombre de postes défini manuellement"),
+        (MODE_REGLEMENTAIRE, "Calcul automatique selon les effectifs"),
+    )
+
+    effectif_cible = models.PositiveSmallIntegerField(default=1)
+    mode_calcul = models.CharField(max_length=20, choices=MODES_CALCUL, default=MODE_MANUEL)
+    effectif_enfants_reference = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="fréquentation de référence",
+        help_text="Utilisée pour préparer le planning lorsque l'effectif réel n'est pas encore saisi.",
+    )
+    renforts_souhaites = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="renforts souhaités",
+        help_text="Postes opérationnels ajoutés au-delà du minimum réglementaire.",
+    )
+
+    class Meta:
+        ordering = (
+            "evenement_id",
+            "type_accueil__ordre",
+            "modalite_periscolaire__ordre",
+            "periode_calendrier__debut",
+        )
+        constraints = [
+            models.UniqueConstraint(
+                fields=("evenement", "type_accueil"),
+                condition=models.Q(modalite_periscolaire__isnull=True, periode_calendrier__isnull=True),
+                name="unique_besoin_encadrement_type",
+            ),
+            models.UniqueConstraint(
+                fields=("evenement", "type_accueil", "modalite_periscolaire"),
+                condition=models.Q(modalite_periscolaire__isnull=False, periode_calendrier__isnull=True),
+                name="unique_besoin_encadrement_type_modalite",
+            ),
+            models.UniqueConstraint(
+                fields=("evenement", "type_accueil", "periode_calendrier"),
+                condition=models.Q(modalite_periscolaire__isnull=True, periode_calendrier__isnull=False),
+                name="unique_besoin_encadrement_type_periode",
+            ),
+            models.UniqueConstraint(
+                fields=("evenement", "type_accueil", "modalite_periscolaire", "periode_calendrier"),
+                condition=models.Q(modalite_periscolaire__isnull=False, periode_calendrier__isnull=False),
+                name="unique_besoin_encadrement_contexte",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.mode_calcul == self.MODE_MANUEL and self.effectif_cible < 1:
+            raise ValidationError({"effectif_cible": "Le nombre de personnes doit être d’au moins 1."})
+        if self.effectif_enfants_reference is not None and self.effectif_enfants_reference < 0:
+            raise ValidationError({"effectif_enfants_reference": "La fréquentation de référence est invalide."})
+        if self.modalite_periscolaire_id and self.type_accueil_id:
+            if self.type_accueil.code != TypeAccueil.PERISCOLAIRE:
+                raise ValidationError(
+                    {"modalite_periscolaire": "Un créneau ne peut être utilisé qu’en Périscolaire."}
+                )
+        if self.evenement_id and self.evenement.accueil_centre_id and self.type_accueil_id:
+            if self.evenement.accueil_centre.type_accueil_id != self.type_accueil_id:
+                raise ValidationError(
+                    {"type_accueil": "Le besoin doit utiliser le même type d'accueil que le groupe."}
+                )
+
+    def __str__(self):
+        contexte = self.type_accueil.nom
+        if self.modalite_periscolaire_id:
+            contexte += f" / {self.modalite_periscolaire.nom}"
+        valeur = (
+            f"{self.effectif_cible} poste(s)"
+            if self.mode_calcul == self.MODE_MANUEL
+            else f"auto · {self.effectif_enfants_reference or 0} enfant(s) de référence"
+        )
+        return f"{self.evenement} — {contexte} : {valeur}"
+
+
 class BesoinQualification(models.Model):
-    """Nombre minimal de titulaires d’une qualification pour un groupe."""
+    """Nombre minimal de titulaires d’une qualification pour un groupe.
+
+    Les lignes historiques sans contexte restent le repli général. Les champs
+    de contexte permettent désormais de définir des exigences différentes en
+    Vacances, Périscolaire et par créneau sans dupliquer les groupes.
+    """
 
     evenement = models.ForeignKey(
         Evenement,
@@ -1253,16 +1682,63 @@ class BesoinQualification(models.Model):
         null=True,
         blank=True,
     )
-    modalite_periscolaire = models.ForeignKey(ModalitePeriscolaire, on_delete=models.PROTECT, related_name="besoins", null=True, blank=True)
+    modalite_periscolaire = models.ForeignKey(
+        ModalitePeriscolaire, on_delete=models.PROTECT, related_name="besoins", null=True, blank=True
+    )
+    periode_calendrier = models.ForeignKey(
+        "PeriodeCalendrier",
+        on_delete=models.PROTECT,
+        related_name="besoins_qualifications",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         ordering = ["qualification__nom"]
         constraints = [
             models.UniqueConstraint(
-                fields=["evenement", "qualification"],
-                name="unique_besoin_qualification_evenement",
+                fields=("evenement", "qualification"),
+                condition=models.Q(type_accueil__isnull=True, modalite_periscolaire__isnull=True, periode_calendrier__isnull=True),
+                name="unique_besoin_qualification_generique",
+            ),
+            models.UniqueConstraint(
+                fields=("evenement", "qualification", "type_accueil"),
+                condition=models.Q(type_accueil__isnull=False, modalite_periscolaire__isnull=True, periode_calendrier__isnull=True),
+                name="unique_besoin_qualification_type",
+            ),
+            models.UniqueConstraint(
+                fields=("evenement", "qualification", "type_accueil", "modalite_periscolaire"),
+                condition=models.Q(type_accueil__isnull=False, modalite_periscolaire__isnull=False, periode_calendrier__isnull=True),
+                name="unique_besoin_qualification_modalite",
+            ),
+            models.UniqueConstraint(
+                fields=("evenement", "qualification", "type_accueil", "periode_calendrier"),
+                condition=models.Q(type_accueil__isnull=False, modalite_periscolaire__isnull=True, periode_calendrier__isnull=False),
+                name="unique_besoin_qualification_periode",
+            ),
+            models.UniqueConstraint(
+                fields=("evenement", "qualification", "type_accueil", "modalite_periscolaire", "periode_calendrier"),
+                condition=models.Q(type_accueil__isnull=False, modalite_periscolaire__isnull=False, periode_calendrier__isnull=False),
+                name="unique_besoin_qualification_contexte",
             ),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.modalite_periscolaire_id and not self.type_accueil_id:
+            raise ValidationError(
+                {"type_accueil": "Un créneau périscolaire doit être rattaché au type Périscolaire."}
+            )
+        if self.modalite_periscolaire_id and self.type_accueil_id:
+            if self.type_accueil.code != TypeAccueil.PERISCOLAIRE:
+                raise ValidationError(
+                    {"modalite_periscolaire": "Un créneau ne peut être utilisé qu’en Périscolaire."}
+                )
+        if self.evenement_id and self.evenement.accueil_centre_id and self.type_accueil_id:
+            if self.evenement.accueil_centre.type_accueil_id != self.type_accueil_id:
+                raise ValidationError(
+                    {"type_accueil": "Le besoin doit utiliser le même type d'accueil que le groupe."}
+                )
 
     def __str__(self):
         return f"{self.evenement} : {self.nombre_minimum} × {self.qualification}"
@@ -1438,6 +1914,120 @@ class PeriodeCalendrier(models.Model):
         return f"{self.nom} {self.debut.year}"
 
 
+class OuvertureCentrePeriode(models.Model):
+    """Créneau d'ouverture d'un centre pour une période scolaire.
+
+    La modalité (matin, midi, soir...) reste un référentiel commun, mais les
+    jours et horaires sont propres au centre et à la période. Un même centre
+    peut donc fermer un créneau certains jours ou modifier ses horaires d'une
+    année scolaire à l'autre sans dupliquer le lieu ni le groupe.
+    """
+
+    JOURS_SEMAINE = (
+        (0, "Lundi"),
+        (1, "Mardi"),
+        (2, "Mercredi"),
+        (3, "Jeudi"),
+        (4, "Vendredi"),
+        (5, "Samedi"),
+        (6, "Dimanche"),
+    )
+
+    centre = models.ForeignKey(
+        Centre,
+        on_delete=models.CASCADE,
+        related_name="ouvertures_periodes",
+    )
+    accueil_centre = models.ForeignKey(
+        AccueilCentre,
+        on_delete=models.SET_NULL,
+        related_name="ouvertures_periodes",
+        null=True,
+        blank=True,
+        help_text="Accueil Périscolaire auquel appartient ce créneau. Null uniquement pour compatibilité historique.",
+    )
+    periode_calendrier = models.ForeignKey(
+        PeriodeCalendrier,
+        on_delete=models.CASCADE,
+        related_name="ouvertures_centres",
+    )
+    modalite_periscolaire = models.ForeignKey(
+        ModalitePeriscolaire,
+        on_delete=models.PROTECT,
+        related_name="ouvertures_centres",
+    )
+    jour_semaine = models.PositiveSmallIntegerField(choices=JOURS_SEMAINE)
+    heure_debut = models.TimeField(null=True, blank=True)
+    heure_fin = models.TimeField(null=True, blank=True)
+    actif = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = (
+            "periode_calendrier__debut",
+            "centre__ordre",
+            "modalite_periscolaire__ordre",
+            "jour_semaine",
+        )
+        constraints = [
+            models.UniqueConstraint(
+                fields=(
+                    "centre",
+                    "periode_calendrier",
+                    "modalite_periscolaire",
+                    "jour_semaine",
+                ),
+                name="unique_ouverture_centre_periode_modalite_jour",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(jour_semaine__gte=0, jour_semaine__lte=6),
+                name="ouverture_centre_jour_semaine_valide",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(heure_debut__isnull=True, heure_fin__isnull=True)
+                    | models.Q(
+                        heure_debut__isnull=False,
+                        heure_fin__isnull=False,
+                        heure_fin__gt=models.F("heure_debut"),
+                    )
+                ),
+                name="ouverture_centre_horaires_coherents",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.accueil_centre_id:
+            if self.accueil_centre.centre_id != self.centre_id:
+                raise ValidationError({"accueil_centre": "Cet accueil appartient à un autre lieu."})
+            if self.accueil_centre.type_accueil.code != TypeAccueil.PERISCOLAIRE:
+                raise ValidationError({"accueil_centre": "Une ouverture périscolaire doit appartenir à un accueil Périscolaire."})
+        if (self.heure_debut is None) != (self.heure_fin is None):
+            raise ValidationError(
+                "Renseignez à la fois l'heure de début et l'heure de fin, ou laissez les deux vides."
+            )
+        if self.heure_debut and self.heure_fin and self.heure_fin <= self.heure_debut:
+            raise ValidationError({"heure_fin": "L'heure de fin doit suivre l'heure de début."})
+        if self.periode_calendrier_id and self.periode_calendrier.categorie != PeriodeCalendrier.SCOLAIRE:
+            raise ValidationError(
+                {"periode_calendrier": "Les créneaux périscolaires utilisent une période scolaire."}
+            )
+
+    @property
+    def heure_debut_effective(self):
+        return self.heure_debut or self.modalite_periscolaire.heure_debut
+
+    @property
+    def heure_fin_effective(self):
+        return self.heure_fin or self.modalite_periscolaire.heure_fin
+
+    def __str__(self):
+        return (
+            f"{self.centre} — {self.periode_calendrier} — "
+            f"{self.get_jour_semaine_display()} — {self.modalite_periscolaire}"
+        )
+
+
 class Disponibilite(models.Model):
     """Une plage de dates (bornes incluses) où un animateur est
     disponible pour travailler.
@@ -1600,6 +2190,19 @@ class Affectation(models.Model):
             ),
         ]
 
+    def clean(self):
+        super().clean()
+        if self.evenement_id and self.evenement.accueil_centre_id and self.type_accueil_id:
+            if self.evenement.accueil_centre.type_accueil_id != self.type_accueil_id:
+                raise ValidationError(
+                    {"type_accueil": "L'affectation doit utiliser le même type d'accueil que le groupe."}
+                )
+        if self.modalite_periscolaire_id and self.type_accueil_id:
+            if self.type_accueil.code != TypeAccueil.PERISCOLAIRE:
+                raise ValidationError(
+                    {"modalite_periscolaire": "Un créneau ne peut être utilisé qu’en Périscolaire."}
+                )
+
     def save(self, *args, **kwargs):
         if self.evenement_id:
             self.centre_id = self.evenement.centre_id
@@ -1622,6 +2225,9 @@ class ActiviteTravailComplementaire(models.Model):
     type = models.CharField(max_length=20, choices=TYPES)
     intitule = models.CharField(max_length=160)
     date = models.DateField(null=True, blank=True)
+    heure_debut = models.TimeField(null=True, blank=True)
+    heure_fin = models.TimeField(null=True, blank=True)
+    lieu = models.CharField(max_length=180, blank=True, default="")
     remarque = models.TextField(blank=True, default="")
     periodes = models.ManyToManyField(
         PeriodeScolaire,

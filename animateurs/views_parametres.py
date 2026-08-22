@@ -28,6 +28,23 @@ def _payload(parametres):
         "taux_indemnite_cp_cee": str(parametres.taux_indemnite_cp_cee),
         "prime_journaliere_maximale": str(parametres.prime_journaliere_maximale),
         "adapter_taux_cee_changement_statut": parametres.adapter_taux_cee_changement_statut,
+        "pedt_actif": parametres.pedt_actif,
+        "ratio_vacances_moins_6": parametres.ratio_vacances_moins_6,
+        "ratio_vacances_6_plus": parametres.ratio_vacances_6_plus,
+        "ratio_periscolaire_court_moins_6": parametres.ratio_periscolaire_court_moins_6,
+        "ratio_periscolaire_court_6_plus": parametres.ratio_periscolaire_court_6_plus,
+        "ratio_periscolaire_long_moins_6": parametres.ratio_periscolaire_long_moins_6,
+        "ratio_periscolaire_long_6_plus": parametres.ratio_periscolaire_long_6_plus,
+        "ratio_periscolaire_pedt_court_moins_6": parametres.ratio_periscolaire_pedt_court_moins_6,
+        "ratio_periscolaire_pedt_court_6_plus": parametres.ratio_periscolaire_pedt_court_6_plus,
+        "ratio_periscolaire_pedt_long_moins_6": parametres.ratio_periscolaire_pedt_long_moins_6,
+        "ratio_periscolaire_pedt_long_6_plus": parametres.ratio_periscolaire_pedt_long_6_plus,
+        "pourcentage_qualifies_minimum": parametres.pourcentage_qualifies_minimum,
+        "pourcentage_non_qualifies_maximum": parametres.pourcentage_non_qualifies_maximum,
+        "statuts_animation": [
+            {"id": item.id, "nom": item.nom}
+            for item in Qualification.objects.filter(est_statut=True).order_by("nom", "id")
+        ],
         "modifie_le": parametres.modifie_le.isoformat(),
     }
 
@@ -68,8 +85,34 @@ def api_parametres(request):
             parametres_structure.adapter_taux_cee_changement_statut = bool(
                 donnees["adapter_taux_cee_changement_statut"]
             )
+        if "pedt_actif" in donnees:
+            parametres_structure.pedt_actif = bool(donnees["pedt_actif"])
+
+        champs_ratios = (
+            "ratio_vacances_moins_6", "ratio_vacances_6_plus",
+            "ratio_periscolaire_court_moins_6", "ratio_periscolaire_court_6_plus",
+            "ratio_periscolaire_long_moins_6", "ratio_periscolaire_long_6_plus",
+            "ratio_periscolaire_pedt_court_moins_6", "ratio_periscolaire_pedt_court_6_plus",
+            "ratio_periscolaire_pedt_long_moins_6", "ratio_periscolaire_pedt_long_6_plus",
+        )
+        for champ in champs_ratios:
+            if champ in donnees:
+                valeur = int(donnees[champ])
+                if valeur < 1 or valeur > 999:
+                    raise ValidationError("Les ratios d'encadrement doivent être compris entre 1 et 999.")
+                setattr(parametres_structure, champ, valeur)
+        for champ in ("pourcentage_qualifies_minimum", "pourcentage_non_qualifies_maximum"):
+            if champ in donnees:
+                valeur = int(donnees[champ])
+                if valeur < 0 or valeur > 100:
+                    raise ValidationError("Les pourcentages de qualification doivent être compris entre 0 et 100.")
+                setattr(parametres_structure, champ, valeur)
+
+        # Les catégories réglementaires ne sont pas reconfigurées ici :
+        # Animation Manager réutilise le statut effectif déjà calculé depuis
+        # Diplômes & statuts (et son historique daté).
         parametres_structure.save()
-    except (json.JSONDecodeError, TypeError, ValidationError) as exc:
+    except (json.JSONDecodeError, TypeError, ValueError, ValidationError) as exc:
         if isinstance(exc, ValidationError):
             message = _erreur_validation(exc)
         else:

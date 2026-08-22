@@ -29,7 +29,10 @@
 
     function render() {
         if (!data.formations.length) {
-            listRoot.innerHTML = '<div class="ui-card empty-note">Aucune formation ne correspond à ces filtres.</div>';
+            const hasActiveFilters = Boolean(activeStatus || animatorFilter.value);
+            listRoot.innerHTML = hasActiveFilters
+                ? '<div class="ui-card empty-note">Aucune formation ne correspond aux filtres sélectionnés.</div>'
+                : '<div class="ui-card empty-note">Aucune formation enregistrée. Utilisez « Ajouter une formation » pour créer la première.</div>';
             return;
         }
         listRoot.innerHTML = data.formations.map((item) => {

@@ -1,0 +1,198 @@
+/* Onglet Horaires Direction -------------------------------------------------
+   La vue garde la structure du Planning mais possède son propre défilement
+   vertical afin que plusieurs centres restent accessibles sur un seul écran. */
+.planning-horaires {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 10px;
+  scrollbar-width: thin;
+}
+
+.planning-horaires-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 1rem;
+  margin: -2px -2px 10px;
+  padding: 8px 2px 10px;
+  background: var(--color-surface, #fff);
+}
+
+.planning-horaires-presets-block { min-width: 0; }
+.planning-horaires-presets { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 4px; align-items: center; }
+.planning-horaires-preset-wrap { display: inline-flex; align-items: stretch; }
+.planning-horaires-preset,
+.planning-horaires-preset-action {
+  border: 1px solid #dbe2ec;
+  background: #fff;
+  cursor: pointer;
+}
+.planning-horaires-preset {
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 10px 0 0 10px;
+  font-weight: 700;
+  background: var(--preset-color, #fff);
+}
+.planning-horaires-preset span { font-weight: 600; }
+.planning-horaires-preset-action {
+  width: 27px;
+  padding: 0;
+  border-left: 0;
+  font-size: .76rem;
+}
+.planning-horaires-preset-action:last-child { border-radius: 0 10px 10px 0; }
+.planning-horaires-preset:hover,
+.planning-horaires-preset-action:hover { filter: brightness(.96); }
+.planning-horaires-preset.is-active {
+  background: var(--preset-color, #dcecff);
+  border-color: #315eaa;
+  color: #173764;
+  box-shadow: 0 0 0 3px rgb(49 94 170 / 28%);
+}
+.planning-horaires-presets > [data-add] { min-height: 30px; padding-block: 4px; }
+.planning-horaires-actions { display: flex; gap: 6px; }
+.planning-horaires-save { flex: 0 0 auto; }
+
+.planning-horaires-preset-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 10px;
+  border: 1px solid var(--color-border, #dbe2ec);
+  border-radius: 12px;
+  background: #f8faff;
+}
+.planning-horaires-preset-form[hidden] { display: none; }
+.planning-horaires-preset-form label { display: grid; gap: 3px; color: #53627a; font-size: .74rem; font-weight: 700; }
+.planning-horaires-preset-form input { min-height: 36px; padding: 6px 8px; border: 1px solid #dbe2ec; border-radius: 8px; background: #fff; }
+
+.planning-horaires-centre {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  box-shadow: 0 2px 10px rgb(54 65 85 / 8%);
+}
+.planning-horaires-centre:last-child { margin-bottom: 2px; }
+.planning-horaires-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: 7px; }
+.planning-horaires-heading h2 { margin: 0; font-size: 1.05rem; }
+.planning-horaires-table-wrap { width: 100%; min-width: 0; overflow: hidden; }
+.planning-horaires table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.planning-horaires th,
+.planning-horaires td { padding: 6px; border-bottom: 1px solid #edf0f5; text-align: center; vertical-align: middle; }
+.planning-horaires th:first-child { width: 15%; min-width: 130px; text-align: left; }
+.planning-horaires thead th { color: #40506a; font-size: .78rem; text-transform: uppercase; }
+.planning-horaires thead th:last-child,
+.planning-horaires-row-action { width: 8rem; }
+.planning-horaires-row-action { border: 0 !important; background: transparent; }
+.planning-horaires-group th { border-top: 2px solid #a9b9cf; border-inline: 2px solid #a9b9cf; text-align: left; background: #e6edf7; color: #30445f; font-size: .84rem; font-weight: 800; }
+.planning-horaires-group.group-tone-1 th { background: #e5f1ec; border-color: #9dbdaf; }
+.planning-horaires-group-row th:first-child { border-left: 2px solid #a9b9cf; font-weight: 700; }
+.planning-horaires-group-row td:nth-last-child(2) { border-right: 2px solid #a9b9cf; }
+.planning-horaires-group-row.group-tone-1 th:first-child { border-left-color: #9dbdaf; }
+.planning-horaires-group-row.group-tone-1 td:nth-last-child(2) { border-right-color: #9dbdaf; }
+.planning-horaires-group-row.is-group-last > *:not(:last-child) { border-bottom: 2px solid #a9b9cf; }
+.planning-horaires-group-row.group-tone-1.is-group-last > *:not(:last-child) { border-bottom-color: #9dbdaf; }
+
+.planning-horaires-cell {
+  position: relative;
+  height: 48px;
+  padding: 5px !important;
+  background: #fff;
+}
+.planning-horaires-cell-main {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #dbe2ec;
+  border-radius: 9px;
+  background: #fff;
+  color: #24344f;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.planning-horaires-cell.has-preset-color .planning-horaires-cell-main { background: var(--horaire-color); border-color: color-mix(in srgb, var(--horaire-color), #60738f 35%); }
+.has-active-preset .planning-horaires-cell-main { cursor: crosshair; }
+.has-active-preset .planning-horaires-cell-main:hover { border-color: #5b8def; background: #eef5ff; }
+.planning-horaires-cell.is-disabled {
+  padding-right: 6px !important;
+  color: #b3bcc9;
+  background: #f4f6f9;
+}
+.planning-horaires-cell.is-dirty { background: #fff9df; }
+.planning-horaires-cell.is-editing { z-index: 6; background: #eef5ff; }
+.planning-horaires-cell.is-editing .planning-horaires-cell-main { visibility: hidden; }
+
+.planning-horaires-cell-editor {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  width: clamp(240px, 22vw, 290px);
+  transform: translateX(-50%);
+  z-index: 7;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 5px;
+  align-items: end;
+  padding: 7px;
+  border: 1px solid #9bb8ef;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(46 64 99 / 18%);
+}
+.planning-horaires-cell:nth-child(2) .planning-horaires-cell-editor { left: 4px; transform: none; }
+.planning-horaires-cell:nth-last-child(2) .planning-horaires-cell-editor { right: 4px; left: auto; transform: none; }
+.planning-horaires-cell-editor[hidden] { display: none; }
+.planning-horaires-cell-editor label { display: grid; gap: 2px; min-width: 0; color: #617089; font-size: .62rem; font-weight: 700; }
+.planning-horaires-cell-editor input { width: 100%; min-width: 0; height: 30px; padding: 3px 5px; border: 1px solid #dbe2ec; border-radius: 7px; background: #fff; }
+.planning-horaires-cell-editor-actions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: 5px; padding-top: 2px; }
+.planning-horaires-cell-editor-actions .btn { min-height: 28px; padding: 3px 9px; font-size: .68rem; white-space: nowrap; }
+
+.planning-horaires-copy { width: 100%; min-height: 34px; padding: 5px 7px; font-size: .72rem; white-space: nowrap; }
+
+.planning-horaires-export-canvas { position: fixed; left: -100000px; top: 0; width: 1400px; padding: 24px; background: #fff; color: #24344f; }
+.planning-horaires-export-canvas h1 { margin: 0 0 16px; font-size: 22px; }
+.planning-horaires-export-canvas .planning-horaires-centre { break-inside: avoid; }
+.planning-horaires-export-canvas .planning-horaires-cell-edit,
+.planning-horaires-export-canvas .planning-horaires-cell-editor,
+.planning-horaires-export-canvas .planning-horaires-row-action,
+.planning-horaires-export-canvas thead th:last-child { display: none; }
+.planning-horaires-export-canvas .planning-horaires-cell { padding-right: 5px !important; }
+.planning-horaires-export-value { display: flex; min-height: 34px; align-items: center; justify-content: center; border: 1px solid #dbe2ec; border-radius: 9px; background: var(--horaire-color, #fff); color: #24344f; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+
+/* Le mode Horaires est une vraie vue pleine largeur du Planning. */
+body.planning-mode-horaires #layout,
+#layout[data-planning-mode="horaires"] { grid-template-columns: minmax(0, 1fr); }
+body.planning-mode-horaires #calendars-container,
+body.planning-mode-horaires #animateurs-panel,
+body.planning-mode-horaires .planning-top-controls,
+#layout[data-planning-mode="horaires"] #calendars-container,
+#layout[data-planning-mode="horaires"] #animateurs-panel,
+#layout[data-planning-mode="horaires"] .planning-top-controls { display: none !important; }
+body.planning-mode-horaires #calendars-section,
+#layout[data-planning-mode="horaires"] #calendars-section { min-height: 0; overflow: hidden; }
+body.planning-mode-horaires #planning-horaires,
+#layout[data-planning-mode="horaires"] #planning-horaires { display: block; }
+body.planning-mode-horaires #planning-horaires[hidden],
+#layout[data-planning-mode="horaires"] #planning-horaires[hidden] { display: none; }
+
+@media (max-width: 1100px) {
+  .planning-horaires { padding: 7px; }
+  .planning-horaires-centre { padding: 8px; }
+  .planning-horaires th:first-child { width: 14%; min-width: 110px; }
+  .planning-horaires thead th:last-child,
+  .planning-horaires-row-action { width: 6.7rem; }
+  .planning-horaires-copy { font-size: .66rem; padding-inline: 4px; }
+}

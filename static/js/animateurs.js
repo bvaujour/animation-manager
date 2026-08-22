@@ -95,7 +95,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (!filtered.length) {
-            listEl.innerHTML = '<p class="empty-note">Aucun salarié trouvé.</p>';
+            const hasActiveFilters = Boolean(query || selectedQualificationIds.size || selectedCentreIds.size || selectedDisponibilite || selectedAffectation);
+            listEl.innerHTML = animateurs.length === 0
+                ? '<p class="empty-note">Aucun salarié enregistré. Utilisez « Ajouter un salarié » pour créer la première fiche.</p>'
+                : `<p class="empty-note">${hasActiveFilters ? "Aucun salarié ne correspond à votre recherche ou aux filtres." : "Aucun salarié à afficher."}</p>`;
             return;
         }
 
@@ -353,9 +356,9 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
 
             <nav class="employee-detail-tabs" aria-label="Rubriques de la fiche">
-                <button type="button" data-employee-tab="fiche">Fiche</button>
-                <button type="button" data-employee-tab="affectations">Affectations</button>
-                <button type="button" data-employee-tab="acces">Accès</button>
+                <button type="button" data-employee-tab="fiche">Informations</button>
+                <button type="button" data-employee-tab="affectations">Centres & groupes</button>
+                <button type="button" data-employee-tab="acces">Accès portail</button>
                 ${isNew ? "" : '<button type="button" data-employee-tab="disponibilites">Disponibilités</button><button type="button" data-employee-tab="email">E-mail</button>'}
             </nav>
 
@@ -401,7 +404,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 <div class="employee-detail-panel" data-employee-panel="affectations" hidden>
                     <section class="fiche-section fiche-card employee-compact-card centres-card">
-                        <div class="fiche-section-head"><h3>Lieux d’affectation</h3></div>
+                        <div class="fiche-section-head"><h3>Centres de travail</h3></div>
                         <div class="centre-hierarchy-grid evenement-centres" id="fiche-centres">
                             ${centresHtml(a.centres_preferes || (a.centre_prefere ? [a.centre_prefere] : []), a.centres_interdits || [], `fiche-centre-prefere-${a.id || "new"}`)}
                         </div>
@@ -415,7 +418,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 <div class="employee-detail-panel" data-employee-panel="acces" hidden>
                     <section class="fiche-section fiche-card employee-compact-card access-card">
-                        <div class="fiche-section-head"><h3>Accès au site</h3></div>
+                        <div class="fiche-section-head"><h3>Accès au portail animateur</h3></div>
                         <div class="fiche-grid access-grid">
                             <div class="field">
                                 <label>Rôle</label>
@@ -425,7 +428,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             ${isNew ? `
                             <label class="access-create-option">
                                 <input type="checkbox" id="fiche-create-access">
-                                <span><strong>Créer son accès au site</strong></span>
+                                <span><strong>Créer son accès au portail</strong></span>
                             </label>` : `
                             <div class="access-account-state">
                                 ${a.access?.exists ? `
@@ -436,7 +439,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                         <button type="button" class="btn-danger btn-small" id="fiche-remove-access">Supprimer l’accès</button>
                                     </div>
                                 ` : `
-                                    <p class="empty-note">Aucun compte de connexion associé.</p>
+                                    <p class="empty-note">Aucun accès au portail n’est encore créé pour ce salarié.</p>
                                     <button type="button" class="btn btn-primary btn-small" id="fiche-create-access-now">Créer l’accès</button>
                                 `}
                             </div>`}
@@ -808,7 +811,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             if (!a.email) {
-                erreurEl.textContent = "Ajoute d’abord une adresse e-mail valide dans la fiche.";
+                erreurEl.textContent = "Ajoutez d’abord une adresse e-mail valide dans la fiche.";
                 return;
             }
             if (!confirm(`Envoyer maintenant cet e-mail à ${a.prenom} ${a.nom} (${a.email}) ?`)) return;
@@ -1024,7 +1027,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function showEmpty() {
         if (!detailEl) return;
-        detailEl.innerHTML = '<div class="evenement-empty"><strong>Sélectionne un salarié</strong><p>Sa fiche complète apparaîtra ici.</p></div>';
+        detailEl.innerHTML = '<div class="evenement-empty"><strong>Sélectionnez un salarié</strong><p>Sa fiche complète apparaîtra ici.</p></div>';
     }
 
     function mettreAJourUrl(id = null, nouveau = false) {

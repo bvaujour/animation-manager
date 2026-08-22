@@ -97,7 +97,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function centreBadge(centre) {
         const background = centre.couleur || "#e5e7eb";
-        return `<span class="place-badge" style="--place-color:${escapeHtml(background)};--place-text:${textColorFor(background)}">${escapeHtml(centre.nom)}</span>`;
+        const label = centre.libelle || centre.nom;
+        return `<span class="place-badge" style="--place-color:${escapeHtml(background)};--place-text:${textColorFor(background)}">${escapeHtml(label)}</span>`;
+    }
+
+    function centreVentilationKey(centre) {
+        return String(centre.ventilation_id || centre.id);
+    }
+
+    function ligneVentilationKey(item) {
+        return String(item.ventilation_id || item.centre_id);
     }
 
     function buildApiUrl(base = "/api/recapitulatif/") {
@@ -277,18 +286,22 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        const firstHeader = centres.map((centre) => `
-            <th class="centre-heading" scope="col" title="${escapeHtml(centre.nom)}" style="--centre-color:${escapeHtml(centre.couleur || "#64748b")}">
-                <span>${escapeHtml(centre.code || centre.nom)}</span><small>${escapeHtml(centre.nom)}</small>
-            </th>`).join("");
+        const firstHeader = centres.map((centre) => {
+            const libelleCourt = centre.libelle || centre.code || centre.nom;
+            const detail = centre.type_accueil_nom ? centre.nom : centre.nom;
+            return `
+            <th class="centre-heading" scope="col" title="${escapeHtml(centre.libelle || centre.nom)}" style="--centre-color:${escapeHtml(centre.couleur || "#64748b")}">
+                <span>${escapeHtml(libelleCourt)}</span><small>${escapeHtml(detail)}</small>
+            </th>`;
+        }).join("");
         const secondHeader = centres.map(() => '<th class="metric-heading" scope="col">Jours</th>').join("");
 
         const rows = data.animateurs.map((animateur) => {
-            const byCentre = new Map((animateur.centres || []).map((item) => [String(item.centre_id), item]));
+            const byCentre = new Map((animateur.centres || []).map((item) => [ligneVentilationKey(item), item]));
             const cells = centres.map((centre) => {
-                const result = byCentre.get(String(centre.id)) || { jours_travailles: 0 };
+                const result = byCentre.get(centreVentilationKey(centre)) || { jours_travailles: 0 };
                 const details = (result.details_cee || []).map((item) => `<span class="paie-cell-detail"><span>${escapeHtml(item.statut)}</span><span>${item.jours} × ${formatMoney(item.taux)} = ${formatMoney(item.montant)}</span></span>`).join("");
-                return `<td class="days-value centre-value" data-label="${escapeHtml(centre.code || centre.nom)}"><span class="paie-mobile-content"><span class="paie-cell-main">${result.jours_travailles}</span>${details}</span></td>`;
+                return `<td class="days-value centre-value" data-label="${escapeHtml(centre.libelle || centre.code || centre.nom)}"><span class="paie-mobile-content"><span class="paie-cell-main">${result.jours_travailles}</span>${details}</span></td>`;
             }).join("");
             const preparationClass = animateur.etat_preparation === "incomplet"
                 ? "payroll-preparation-row--incomplete"
@@ -892,11 +905,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 : semainesSelectionnees.flatMap((semaine) => semaine.jours_eligibles);
             if (prime?.mode_calcul === "jour" && !jours.length) {
                 setPrimeEditorBusy(editor, false);
-                afficherToast("Sélectionne au moins un jour concerné.", true); return;
+                afficherToast("Sélectionnez au moins un jour concerné.", true); return;
             }
             if (prime?.mode_calcul === "semaine" && !semainesSelectionnees.length) {
                 setPrimeEditorBusy(editor, false);
-                afficherToast("Sélectionne au moins une semaine concernée.", true); return;
+                afficherToast("Sélectionnez au moins une semaine concernée.", true); return;
             }
             const baseBody = {
                 animateur_id: id,
@@ -926,7 +939,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const editingAttributionId = form.dataset.editingAttributionId;
             if (editingAttributionId && bodies.length !== 1) {
                 setPrimeEditorBusy(editor, false);
-                afficherToast("Modifie une attribution à la fois.", true); return;
+                afficherToast("Modifiez une attribution à la fois.", true); return;
             }
             const originalLabel = addAttribution.textContent;
             const optimistic = optimisticAttribution(editor, prime, bodies, editingAttributionId);

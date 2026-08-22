@@ -2,11 +2,12 @@
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Max, Sum
+from django.db.models import Max, Q, Sum
 from django.utils import timezone
 
 from animateurs.models import (
     Affectation,
+    AccueilCentre,
     BesoinQualification,
     Centre,
     Evenement,
@@ -29,16 +30,31 @@ class FermetureAvecAffectationsError(ValidationError):
         )
 
 
-def _periodes(ids):
-    """Retourne les périodes demandées. Une sélection vide est autorisée."""
+def _periodes(ids, *, accueil_centre=None):
+    """Retourne les périodes demandées dans le contexte du groupe.
+
+    Une sélection vide est autorisée. Pour les nouvelles instances rattachées à
+    ``AccueilCentre``, une période de l'autre type d'accueil est rejetée côté
+    serveur, même si un navigateur contourne le filtrage de l'interface.
+    """
     try:
         ids = sorted({int(value) for value in (ids or [])})
     except (TypeError, ValueError):
         raise ValidationError("La sélection des périodes est invalide.") from None
     if not ids:
         return []
-    periodes = list(PeriodeScolaire.objects.filter(pk__in=ids).order_by("debut"))
+    queryset = PeriodeScolaire.objects.filter(pk__in=ids)
+    if accueil_centre is not None:
+        queryset = queryset.filter(
+            Q(type_accueil=accueil_centre.type_accueil)
+            | Q(types_accueil=accueil_centre.type_accueil)
+        ).distinct()
+    periodes = list(queryset.order_by("debut"))
     if len(periodes) != len(ids):
+        if accueil_centre is not None:
+            raise ValidationError(
+                f"Une ou plusieurs périodes n'appartiennent pas à l'accueil {accueil_centre.type_accueil.nom}."
+            )
         raise ValidationError("Une ou plusieurs périodes sélectionnées sont introuvables.")
     return periodes
 
@@ -54,7 +70,15 @@ def _jours_ouverts(valeurs):
 
 
 def _enregistrer_besoins(groupe, besoins):
-    BesoinQualification.objects.filter(evenement=groupe).delete()
+    # Ne remplace que le besoin historique/général. Les surcharges par type
+    # d'accueil et créneau sont gérées séparément et doivent survivre aux
+    # anciennes API qui ne connaissent que ``qualifications_requises``.
+    BesoinQualification.objects.filter(
+        evenement=groupe,
+        type_accueil__isnull=True,
+        modalite_periscolaire__isnull=True,
+        periode_calendrier__isnull=True,
+    ).delete()
     for qualification_id, nombre in (besoins or {}).items():
         try:
             nombre = int(nombre)
@@ -116,8 +140,13 @@ def creer_evenement(
     ferme_jours_feries=True,
     permanent=False,
     groupe_partage=None,
+    accueil_centre=None,
     **_,
 ):
+    if accueil_centre is not None and not isinstance(accueil_centre, AccueilCentre):
+        accueil_centre = AccueilCentre.objects.select_related("type_accueil", "centre").get(pk=accueil_centre)
+    if accueil_centre is not None:
+        centre = accueil_centre.centre
     if groupe_partage is not None and not isinstance(groupe_partage, Groupe):
         groupe_partage = Groupe.objects.get(pk=groupe_partage)
     if groupe_partage is not None:
@@ -127,10 +156,24 @@ def creer_evenement(
     if not nom:
         raise ValidationError("Le nom du groupe est obligatoire.")
     permanent = bool(permanent)
-    # Un groupe permanent est rattaché à toutes les périodes existantes.
-    # Cela évite qu’il soit interprété comme un groupe « sans période » par
-    # les écrans et exports qui travaillent avec une sélection de semaines.
-    periodes = list(PeriodeScolaire.objects.all().order_by("debut")) if permanent else _periodes(periode_ids)
+    # Un groupe permanent est rattaché à toutes les périodes de SON accueil.
+    # Depuis Lieu → Accueil → Groupes, un groupe Vacances ne doit plus recevoir
+    # artificiellement les semaines Périscolaire (et inversement). Les groupes
+    # legacy sans AccueilCentre conservent l'ancien comportement global.
+    if permanent:
+        if accueil_centre is not None:
+            periodes = list(
+                PeriodeScolaire.objects.filter(
+                    Q(type_accueil=accueil_centre.type_accueil)
+                    | Q(types_accueil=accueil_centre.type_accueil)
+                )
+                .distinct()
+                .order_by("debut")
+            )
+        else:
+            periodes = list(PeriodeScolaire.objects.all().order_by("debut"))
+    else:
+        periodes = _periodes(periode_ids, accueil_centre=accueil_centre)
     effectif_cible = int(effectif_cible)
     enfants_par_animateur_defaut = int(enfants_par_animateur_defaut)
     if effectif_cible < 1:
@@ -140,6 +183,7 @@ def creer_evenement(
 
     groupe = Evenement(
         centre=centre,
+        accueil_centre=accueil_centre,
         groupe=groupe_partage,
         nom=nom,
         permanent=permanent,
@@ -152,6 +196,8 @@ def creer_evenement(
     groupe.full_clean()
     groupe.save()
     groupe.periodes_scolaires.set(periodes)
+    if accueil_centre is not None:
+        groupe.types_accueil.set([accueil_centre.type_accueil])
     _enregistrer_besoins(groupe, qualifications)
     synchroniser_effectif_centre(centre)
     return groupe
@@ -188,11 +234,28 @@ def modifier_evenement(
         groupe.permanent = bool(permanent)
 
     if groupe.permanent:
-        # Permanent signifie toutes les périodes, et non aucune période.
-        periodes = list(PeriodeScolaire.objects.all().order_by("debut"))
+        # Permanent signifie toutes les périodes du même accueil.
+        if groupe.accueil_centre_id:
+            periodes = list(
+                PeriodeScolaire.objects.filter(
+                    Q(type_accueil=groupe.accueil_centre.type_accueil)
+                    | Q(types_accueil=groupe.accueil_centre.type_accueil)
+                )
+                .distinct()
+                .order_by("debut")
+            )
+        else:
+            periodes = list(PeriodeScolaire.objects.all().order_by("debut"))
         periodes_fournies = True
     else:
-        periodes = _periodes(periode_ids) if periodes_fournies else list(groupe.periodes_scolaires.all())
+        periodes = (
+            _periodes(
+                periode_ids,
+                accueil_centre=groupe.accueil_centre if groupe.accueil_centre_id else None,
+            )
+            if periodes_fournies
+            else list(groupe.periodes_scolaires.all())
+        )
     groupe.full_clean()
     groupe.save()
     if periodes_fournies:

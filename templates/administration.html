@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{% if active_tab == "emails" %}E-mails{% else %}Administration{% endif %} - Gestion animation{% endblock %}
+{% block title %}{% if active_tab == "emails" %}Communication{% elif active_tab == "comptes-animateurs" %}Équipe{% else %}Administration{% endif %} - Animation Manager{% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/administration.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/gestion.css' %}?v={{ asset_version }}">
@@ -10,12 +10,21 @@
 
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide administration-page" data-active-tab="{{ active_tab|default:'export' }}">
-    {% include "partials/_page_header.html" with title="Administration" header_class="administration-page-header" picker_mode="none" %}
-    <div class="tabs admin-tabs app-page-tabs app-page-tabs-row" id="administration-tabs" role="tablist" aria-label="Administration">
+    {% if active_tab == "emails" %}
+        {% include "partials/_page_header.html" with title="Communication" header_class="administration-page-header" picker_mode="none" %}
+        {% include "partials/_direction_section_nav.html" with section="communication" active_item="emails" %}
+    {% elif active_tab == "comptes-animateurs" %}
+        {% include "partials/_page_header.html" with title="Équipe" header_class="administration-page-header" picker_mode="none" %}
+        {% include "partials/_direction_section_nav.html" with section="equipe" active_item="acces" %}
+    {% else %}
+        {% include "partials/_page_header.html" with title="Administration" header_class="administration-page-header" picker_mode="none" %}
+        {% include "partials/_direction_section_nav.html" with section="administration" active_item=active_tab %}
+    {% endif %}
+    <div class="tabs admin-tabs app-page-tabs app-page-tabs-row direction-functional-tabs" id="administration-tabs" role="tablist" aria-label="Navigation technique de l’administration">
         <button class="tab-btn{% if active_tab == 'export' %} active{% endif %}" data-admin-tab="export" type="button" role="tab" aria-selected="{% if active_tab == 'export' %}true{% else %}false{% endif %}">Exports</button>
         <button class="tab-btn{% if active_tab == 'emails' %} active{% endif %}" data-admin-tab="emails" type="button" role="tab" aria-selected="{% if active_tab == 'emails' %}true{% else %}false{% endif %}">E-mails</button>
-        <button class="tab-btn{% if active_tab == 'superusers' %} active{% endif %}" data-admin-tab="superusers" type="button" role="tab" aria-selected="{% if active_tab == 'superusers' %}true{% else %}false{% endif %}">Superusers</button>
-        <button class="tab-btn{% if active_tab == 'comptes-animateurs' %} active{% endif %}" data-admin-tab="comptes-animateurs" type="button" role="tab" aria-selected="{% if active_tab == 'comptes-animateurs' %}true{% else %}false{% endif %}">Comptes animateurs</button>
+        <button class="tab-btn{% if active_tab == 'superusers' %} active{% endif %}" data-admin-tab="superusers" type="button" role="tab" aria-selected="{% if active_tab == 'superusers' %}true{% else %}false{% endif %}">Administrateurs</button>
+        <button class="tab-btn{% if active_tab == 'comptes-animateurs' %} active{% endif %}" data-admin-tab="comptes-animateurs" type="button" role="tab" aria-selected="{% if active_tab == 'comptes-animateurs' %}true{% else %}false{% endif %}">Accès portail</button>
         <button class="tab-btn{% if active_tab == 'mot-de-passe' %} active{% endif %}" data-admin-tab="mot-de-passe" type="button" role="tab" aria-selected="{% if active_tab == 'mot-de-passe' %}true{% else %}false{% endif %}">Mot de passe</button>
     </div>
     {% if message_admin %}<div class="admin-message success" role="status">{{ message_admin }}</div>{% endif %}
@@ -70,7 +79,7 @@
 
     <div class="admin-tab-panel" data-admin-panel="superusers"{% if active_tab != 'superusers' %} hidden{% endif %}>
         <section class="ui-card administration-section admin-users-section" aria-labelledby="superusers-title">
-            <div class="admin-compact-heading"><div><h1 id="superusers-title">Superusers</h1></div></div>
+            <div class="admin-compact-heading"><div><h1 id="superusers-title">Administrateurs</h1></div></div>
             <div class="superuser-layout">
                 <div class="admin-card">
                     <h2>Comptes existants</h2>
@@ -79,20 +88,20 @@
                         <div class="superuser-row">
                             <div><strong>{{ compte.username }}</strong><small>{{ compte.email|default:"Aucune adresse e-mail" }}{% if compte.pk == request.user.pk %} · compte actuel{% endif %}</small></div>
                             {% if compte.pk != request.user.pk %}
-                            <form method="post" onsubmit="return confirm('Supprimer ce superuser ?');">{% csrf_token %}<input type="hidden" name="onglet" value="superusers"><input type="hidden" name="action" value="delete_superuser"><input type="hidden" name="user_id" value="{{ compte.pk }}"><button class="btn-danger btn-small" type="submit">Supprimer</button></form>
+                            <form method="post" onsubmit="return confirm('Supprimer cet administrateur ?');">{% csrf_token %}<input type="hidden" name="onglet" value="superusers"><input type="hidden" name="action" value="delete_superuser"><input type="hidden" name="user_id" value="{{ compte.pk }}"><button class="btn-danger btn-small" type="submit">Supprimer</button></form>
                             {% else %}<span class="status-badge">Connecté</span>{% endif %}
                         </div>
-                        {% empty %}<p>Aucun superuser enregistré.</p>{% endfor %}
+                        {% empty %}<p>Aucun administrateur enregistré.</p>{% endfor %}
                     </div>
                 </div>
                 <form class="ui-form admin-card admin-form" method="post">
                     {% csrf_token %}<input type="hidden" name="onglet" value="superusers"><input type="hidden" name="action" value="create_superuser">
-                    <h2>Ajouter un superuser</h2>
+                    <h2>Ajouter un administrateur</h2>
                     <label>Nom d’utilisateur<input name="username" autocomplete="username" required></label>
                     <label>Adresse e-mail<input name="email" type="email" autocomplete="email"></label>
                     <label>Mot de passe<input name="password" type="password" autocomplete="new-password" minlength="{{ password_min_length }}" required></label>
                     <label>Confirmation<input name="confirmation" type="password" autocomplete="new-password" minlength="{{ password_min_length }}" required></label>
-                    <button class="btn btn-primary" type="submit">Créer le superuser</button>
+                    <button class="btn btn-primary" type="submit">Créer l’administrateur</button>
                 </form>
             </div>
         </section>
@@ -100,7 +109,7 @@
 
     <div class="admin-tab-panel" data-admin-panel="comptes-animateurs"{% if active_tab != 'comptes-animateurs' %} hidden{% endif %}>
         <section class="ui-card administration-section gestion-comptes" id="comptes-animateurs-management" data-api-url="{% url 'api_animateurs' %}">
-            <div class="admin-compact-heading"><div><h1>Comptes animateurs</h1><p>Gérez les accès au portail animateur depuis un seul endroit.</p></div></div>
+            <div class="admin-compact-heading"><div><h1>Accès au portail animateur</h1><p>Gérez les comptes et les accès de l’équipe depuis un seul endroit.</p></div></div>
             <div class="comptes-toolbar"><input type="search" data-comptes-search placeholder="Rechercher un animateur…" aria-label="Rechercher un animateur"><select data-comptes-filter aria-label="Filtrer les comptes"><option value="all">Tous</option><option value="none">Non activés</option><option value="never">Jamais connectés</option><option value="used">Compte utilisé</option><option value="disabled">Accès désactivé</option></select><button type="button" class="btn btn-primary" data-comptes-bulk disabled>Activer les accès sélectionnés</button></div>
             <p class="comptes-feedback" data-comptes-feedback role="status" aria-live="polite"></p>
             <div class="comptes-list" data-comptes-list></div>

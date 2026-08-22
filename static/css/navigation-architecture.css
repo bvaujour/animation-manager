@@ -1,0 +1,312 @@
+/* ========================================================================== 
+   Architecture de navigation Direction — regroupement métier uniquement
+   Aucune règle métier ni aucun comportement de formulaire n'est modifié ici.
+   ========================================================================== */
+
+/* Les anciens routeurs d'onglets restent dans le DOM pour leur JavaScript,
+   mais la navigation visible passe désormais par des liens métier explicites.
+   La règle est volontairement plus spécifique que la pile d'onglets fixes de
+   app-layout.css : celle-ci utilise aussi display: ... !important. */
+body.app-body .direction-functional-tabs,
+body.app-body.has-fixed-page-tabs .app-page-tabs.direction-functional-tabs {
+  display: none !important;
+}
+
+.direction-section-nav {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--site-line, #d7e0ed);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .92);
+  scrollbar-width: thin;
+  box-sizing: border-box;
+}
+
+.direction-section-link {
+  min-height: 30px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--site-muted, #64748b) !important;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.15;
+  text-decoration: none !important;
+  white-space: nowrap;
+}
+
+.direction-section-link:hover {
+  border-color: var(--site-line, #d7e0ed);
+  background: var(--site-soft, #f3f6fb);
+  color: var(--site-ink, #1f2937) !important;
+}
+
+.direction-section-link.active {
+  border-color: rgba(73, 105, 199, .22);
+  background: rgba(73, 105, 199, .11);
+  color: var(--site-primary, #4969c7) !important;
+}
+
+/* Le Planning reprend la présentation de la sous-navigation Direction,
+   tout en conservant ses boutons, identifiants et attributs de mode. */
+body.app-body.page-planning .planning-tabs {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 3px !important;
+  border: 1px solid var(--site-line, #d7e0ed) !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .92) !important;
+  box-shadow: none !important;
+}
+
+body.app-body.page-planning .planning-tabs .planning-tab {
+  min-height: 30px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  padding: 5px 10px !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--site-muted, #64748b) !important;
+  font-family: inherit !important;
+  font-size: .75rem !important;
+  font-weight: 700 !important;
+  line-height: 1.15 !important;
+}
+
+body.app-body.page-planning .planning-tabs .planning-tab:hover {
+  border-color: var(--site-line, #d7e0ed) !important;
+  background: var(--site-soft, #f3f6fb) !important;
+  color: var(--site-ink, #1f2937) !important;
+}
+
+body.app-body.page-planning .planning-tabs .planning-tab.active {
+  border-color: rgba(73, 105, 199, .22) !important;
+  background: rgba(73, 105, 199, .11) !important;
+  color: var(--site-primary, #4969c7) !important;
+  box-shadow: none !important;
+}
+
+body.app-body.page-planning .planning-tabs .planning-tab-icon {
+  display: none !important;
+}
+
+/* Les règles de la pile fixe sont plus spécifiques : conserver exactement
+   les mêmes dimensions lorsque ui.js active cette disposition. */
+body.app-body.page-planning.has-fixed-page-tabs .planning-tabs {
+  gap: 4px !important;
+}
+
+body.app-body.page-planning.has-fixed-page-tabs .planning-tabs > .planning-tab {
+  min-height: 30px !important;
+  padding: 5px 10px !important;
+  font-size: .75rem !important;
+}
+
+
+/* --------------------------------------------------------------------------
+   Une seule grammaire visuelle pour les onglets locaux de l'espace Direction
+   --------------------------------------------------------------------------
+   Les pages qui possèdent déjà leur propre navigation fonctionnelle
+   (Planning, Temps & paie, Paramètres avancés) gardent exactement leur HTML,
+   leurs classes et leur JavaScript. On harmonise uniquement leur apparence
+   avec .direction-section-nav : onglets compacts, proches et lisibles. */
+@media (min-width: 800px) {
+  body.app-body.has-fixed-page-tabs
+  .app-page-tabs:not(.direction-functional-tabs) {
+    display: flex !important;
+    grid-template-columns: none !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 4px !important;
+    padding: 3px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    border: 1px solid var(--site-line, #d7e0ed) !important;
+    border-radius: 10px !important;
+    background: rgba(255, 255, 255, .96) !important;
+    scrollbar-width: thin;
+  }
+
+  body.app-body.has-fixed-page-tabs
+  .app-page-tabs:not(.direction-functional-tabs)
+  > :is(button, .tab-btn, .planning-tab) {
+    width: auto !important;
+    min-width: 0 !important;
+    min-height: 30px !important;
+    height: auto !important;
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 5px 10px !important;
+    border: 1px solid transparent !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    color: var(--site-muted, #64748b) !important;
+    box-shadow: none !important;
+    font-size: .75rem !important;
+    font-weight: 700 !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+    text-align: center !important;
+    overflow-wrap: normal !important;
+  }
+
+  body.app-body.has-fixed-page-tabs
+  .app-page-tabs:not(.direction-functional-tabs)
+  > :is(button, .tab-btn, .planning-tab):hover {
+    border-color: var(--site-line, #d7e0ed) !important;
+    background: var(--site-soft, #f3f6fb) !important;
+    color: var(--site-ink, #1f2937) !important;
+  }
+
+  body.app-body.has-fixed-page-tabs
+  .app-page-tabs:not(.direction-functional-tabs)
+  > :is(button, .tab-btn, .planning-tab).active {
+    border-color: rgba(73, 105, 199, .22) !important;
+    background: rgba(73, 105, 199, .11) !important;
+    color: var(--site-primary, #4969c7) !important;
+    box-shadow: none !important;
+  }
+}
+
+/* Le rail Direction reste compact au repos. Sur PC il s’élargit au survol
+   (ou au clavier) et révèle les noms des rubriques sans réduire le planning. */
+.direction-nav-label {
+  display: none;
+}
+
+@media (min-width: 800px) {
+  body.app-body:not(.animator-space-body):not(.login-body) > .app-rail {
+    /* Le rail est un overlay complet : il doit passer devant les en-têtes,
+       onglets fixes/sticky et tout autre contenu de l'espace Direction. */
+    z-index: 3000 !important;
+    overflow: hidden !important;
+    transition: width .16s ease, box-shadow .16s ease;
+  }
+
+  body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:hover,
+  body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:focus-within {
+    width: 188px !important;
+    align-items: stretch !important;
+    box-shadow: 7px 0 20px rgba(31, 41, 55, .14) !important;
+  }
+
+  body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:hover .app-rail-links,
+  body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:focus-within .app-rail-links {
+    align-items: stretch !important;
+  }
+
+  body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:hover .direction-nav-link,
+  body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:focus-within .direction-nav-link {
+    width: 100% !important;
+    min-width: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 9px !important;
+    padding: 0 7px !important;
+  }
+
+  body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:hover .direction-nav-label,
+  body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:focus-within .direction-nav-label {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: currentColor;
+    font-size: .72rem;
+    font-weight: 700;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 799px) {
+  .direction-section-nav {
+    margin-bottom: 5px;
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .direction-section-link {
+    min-height: 28px;
+    padding: 4px 8px;
+    font-size: .7rem;
+  }
+
+  body.app-body.page-planning .planning-tabs .planning-tab {
+    min-height: 28px !important;
+    padding: 4px 8px !important;
+    font-size: .7rem !important;
+  }
+
+  body.app-body.page-planning.has-fixed-page-tabs .planning-tabs {
+    gap: 2px !important;
+  }
+
+  body.app-body.page-planning.has-fixed-page-tabs .planning-tabs > .planning-tab {
+    min-height: 28px !important;
+    padding: 4px 8px !important;
+    font-size: .7rem !important;
+  }
+}
+
+/* La page Salariés utilise une grille plein écran : la navigation Équipe
+   occupe sa propre ligne afin de ne jamais déplacer la liste ou la fiche. */
+body.page-employes .employees-workspace {
+  grid-template-rows: auto auto minmax(0, 1fr) !important;
+}
+
+body.page-employes .employees-page-header {
+  grid-column: 1 / -1 !important;
+  grid-row: 1 !important;
+}
+
+body.page-employes .employees-workspace > .direction-section-nav {
+  grid-column: 1 / -1 !important;
+  grid-row: 2 !important;
+  margin-bottom: 0;
+}
+
+body.page-employes .employees-sidebar {
+  grid-row: 3 !important;
+}
+
+body.page-employes .employee-editor {
+  grid-row: 3 !important;
+}
+
+@media (max-width: 799px) {
+  body.page-employes .employees-workspace {
+    grid-template-rows: auto auto auto auto !important;
+  }
+
+  body.page-employes .employees-workspace > .direction-section-nav {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+  }
+
+  body.page-employes .employees-sidebar {
+    grid-column: 1 !important;
+    grid-row: 3 !important;
+  }
+
+  body.page-employes .employee-editor {
+    grid-column: 1 !important;
+    grid-row: 4 !important;
+  }
+}

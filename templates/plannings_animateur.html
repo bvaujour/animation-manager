@@ -43,17 +43,19 @@
                     <button class="animator-planning-meeting-chip is-active" type="button" data-open-dialog="planning-meetings-dialog">
                         <span aria-hidden="true">◷</span>
                         {% if reunions|length == 1 %}
-                            <strong>1 réunion</strong>
+                            {% with reunion=reunions.0 %}
+                            <span class="animator-planning-meeting-detail">
+                                Réunion : <time datetime="{{ reunion.date|date:'Y-m-d' }}">{{ reunion.date|date:"D. d/m" }}</time> · <strong title="{{ reunion.titre }}">{{ reunion.titre }}</strong>{% if reunion.horaire %} · {{ reunion.horaire }}{% endif %}
+                            </span>
+                            {% endwith %}
                         {% else %}
                             <strong>{{ reunions|length }} réunions</strong>
+                            <span class="animator-planning-meeting-dates">
+                                {% for reunion in reunions %}{{ reunion.date|date:"D. d" }}{% if not forloop.last %} + {% endif %}{% endfor %}
+                            </span>
                         {% endif %}
                         <b aria-hidden="true">›</b>
                     </button>
-                {% else %}
-                    <span class="animator-planning-meeting-chip">
-                        <span aria-hidden="true">◷</span>
-                        <strong>Réunions · aucune</strong>
-                    </span>
                 {% endif %}
             </div>
         </div>
@@ -159,7 +161,13 @@
             <div class="animator-portal-dialog-list">
                 {% for reunion in reunions %}
                 <article>
-                    <span><strong>{{ reunion.titre }}</strong><small>{{ reunion.date_libelle }}{% if reunion.remarque %} · {{ reunion.remarque }}{% endif %}</small></span>
+                    <span>
+                        <strong>{{ reunion.titre }}</strong>
+                        <small>{{ reunion.date_complete }}</small>
+                        {% if reunion.horaire %}<small>{{ reunion.horaire }}</small>{% endif %}
+                        {% if reunion.lieu %}<small>{{ reunion.lieu }}</small>{% endif %}
+                        {% if reunion.remarque %}<small>{{ reunion.remarque }}</small>{% endif %}
+                    </span>
                 </article>
                 {% endfor %}
             </div>

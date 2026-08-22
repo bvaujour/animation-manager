@@ -35,7 +35,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     function renderBaremes() {
         const target = document.getElementById("settings-cee-rates");
         if (!payrollData.statuts.length) {
-            target.innerHTML = '<p class="settings-note">Aucun statut animateur configuré dans Gestion.</p>';
+            target.innerHTML = '<p class="settings-note">Aucun statut animateur configuré dans Configuration → Diplômes & statuts.</p>';
             return;
         }
         target.innerHTML = payrollData.statuts.map((statut) => {

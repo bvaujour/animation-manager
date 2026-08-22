@@ -35,9 +35,13 @@ class AuthenticationRequiredTests(TestCase):
         self.client.force_login(user)
 
         self.assertEqual(self.client.get(reverse("mon_profil")).status_code, 200)
-        for route in ("documents", "mes_disponibilites"):
+        redirections = {
+            "documents": "accueil",
+            "mes_disponibilites": "mon_profil",
+        }
+        for route, destination in redirections.items():
             with self.subTest(route=route):
-                self.assertRedirects(self.client.get(reverse(route)), reverse("accueil"))
+                self.assertRedirects(self.client.get(reverse(route)), reverse(destination))
 
     def test_api_planning_salarie_retourne_toute_equipe_de_son_lieu(self):
         user = get_user_model().objects.create_user(username="planning-perso", password="secret-test")

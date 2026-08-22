@@ -1,0 +1,38 @@
+{% comment %}
+Navigation secondaire de l'espace Direction.
+Elle ne déplace aucune fonctionnalité : chaque entrée pointe vers une page ou
+un onglet déjà existant. Les anciens contrôles d'onglets restent en place pour
+leur logique JavaScript et peuvent être masqués visuellement par les pages.
+Paramètres attendus : section, active_item.
+{% endcomment %}
+{% if section == "equipe" %}
+<nav class="direction-section-nav" aria-label="Rubriques Équipe">
+    <a class="direction-section-link{% if active_item == 'salaries' %} active{% endif %}" href="{% url 'employes' %}"{% if active_item == 'salaries' %} aria-current="page"{% endif %}>Salariés</a>
+    <a class="direction-section-link{% if active_item == 'formations' %} active{% endif %}" href="{% url 'formations' %}"{% if active_item == 'formations' %} aria-current="page"{% endif %}>Formations</a>
+    <a class="direction-section-link{% if active_item == 'acces' %} active{% endif %}" href="{% url 'administration' %}?onglet=comptes-animateurs"{% if active_item == 'acces' %} aria-current="page"{% endif %}>Accès portail</a>
+</nav>
+{% elif section == "communication" %}
+<nav class="direction-section-nav" aria-label="Rubriques Communication">
+    <a class="direction-section-link{% if active_item == 'informations' %} active{% endif %}" href="{% url 'gestion' %}?onglet=informations"{% if active_item == 'informations' %} aria-current="page"{% endif %}>Infos équipe</a>
+    <a class="direction-section-link{% if active_item == 'documents' %} active{% endif %}" href="{% url 'gestion' %}?onglet=documents"{% if active_item == 'documents' %} aria-current="page"{% endif %}>Documents</a>
+    <a class="direction-section-link{% if active_item == 'emails' %} active{% endif %}" href="{% url 'administration' %}?onglet=emails"{% if active_item == 'emails' %} aria-current="page"{% endif %}>E-mails</a>
+</nav>
+{% elif section == "configuration" %}
+<nav class="direction-section-nav direction-section-nav--configuration" aria-label="Rubriques Configuration">
+    <a class="direction-section-link{% if active_item == 'lieux' %} active{% endif %}" href="{% url 'gestion' %}?onglet=lieux"{% if active_item == 'lieux' %} aria-current="page"{% endif %}>Centres</a>
+    <a class="direction-section-link{% if active_item == 'groupes' %} active{% endif %}" href="{% url 'gestion' %}?onglet=groupes"{% if active_item == 'groupes' %} aria-current="page"{% endif %}>Groupes</a>
+    <a class="direction-section-link{% if active_item == 'qualifications' %} active{% endif %}" href="{% url 'gestion' %}?onglet=qualifications"{% if active_item == 'qualifications' %} aria-current="page"{% endif %}>Diplômes &amp; statuts</a>
+    <a class="direction-section-link{% if active_item == 'periodes' %} active{% endif %}" href="{% url 'gestion' %}?onglet=periodes"{% if active_item == 'periodes' %} aria-current="page"{% endif %}>Vacances</a>
+    <a class="direction-section-link{% if active_item == 'periodes-scolaires' %} active{% endif %}" href="{% url 'gestion' %}?onglet=periodes-scolaires"{% if active_item == 'periodes-scolaires' %} aria-current="page"{% endif %}>Calendrier scolaire</a>
+    <a class="direction-section-link{% if active_item == 'temps-periscolaires' %} active{% endif %}" href="{% url 'gestion' %}?onglet=temps-periscolaires"{% if active_item == 'temps-periscolaires' %} aria-current="page"{% endif %}>Temps périscolaires</a>
+    {% if request.user.is_superuser %}
+    <a class="direction-section-link{% if active_item == 'parametres' %} active{% endif %}" href="{% url 'parametres' %}"{% if active_item == 'parametres' %} aria-current="page"{% endif %}>Paramètres avancés</a>
+    {% endif %}
+</nav>
+{% elif section == "administration" %}
+<nav class="direction-section-nav" aria-label="Rubriques Administration">
+    <a class="direction-section-link{% if active_item == 'export' %} active{% endif %}" href="{% url 'administration' %}?onglet=export"{% if active_item == 'export' %} aria-current="page"{% endif %}>Exports</a>
+    <a class="direction-section-link{% if active_item == 'superusers' %} active{% endif %}" href="{% url 'administration' %}?onglet=superusers"{% if active_item == 'superusers' %} aria-current="page"{% endif %}>Administrateurs</a>
+    <a class="direction-section-link{% if active_item == 'mot-de-passe' %} active{% endif %}" href="{% url 'administration' %}?onglet=mot-de-passe"{% if active_item == 'mot-de-passe' %} aria-current="page"{% endif %}>Mon mot de passe</a>
+</nav>
+{% endif %}

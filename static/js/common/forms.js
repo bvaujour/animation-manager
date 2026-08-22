@@ -18,7 +18,7 @@ window.FormOptionsUtils = Object.freeze({
     },
 
     centresHierarchises(centres, centresPreferes = [], centresInterdits = [], groupe = "centre-options") {
-        if (!centres.length) return '<p class="empty-note">Ajoute d\'abord des centres.</p>';
+        if (!centres.length) return '<p class="empty-note">Ajoutez d\'abord des centres dans Configuration → Centres.</p>';
         const preferesSet = new Set((Array.isArray(centresPreferes) ? centresPreferes : [centresPreferes]).filter(Boolean).map(c => Number(c.id ?? c)));
         const interditsSet = new Set((centresInterdits || []).map(c => Number(c.id ?? c)));
         return `<div class="centre-hierarchy-head"><span>Lieu</span><span>Préféré</span><span>Interdit</span></div>${centres.map(centre => {

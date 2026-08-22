@@ -1,37 +1,41 @@
 {% if utilisateur_est_direction %}
 <aside class="app-rail" aria-label="Navigation principale">
     <nav class="app-rail-links">
-        <a href="{% url 'accueil' %}" class="app-rail-link{% if active == 'accueil' %} active{% endif %}" aria-label="Tableau de bord" title="Tableau de bord"{% if active == 'accueil' %} aria-current="page"{% endif %}>
+        <a href="{% url 'accueil' %}" class="app-rail-link direction-nav-link{% if active == 'accueil' %} active{% endif %}" aria-label="Tableau de bord" title="Tableau de bord"{% if active == 'accueil' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3V3Zm10 0h8v5h-8V3ZM3 13h8v8H3v-8Zm10-3h8v11h-8V10Z"/></svg>
+            <span class="direction-nav-label">Tableau de bord</span>
         </a>
-        <a href="{% url 'employes' %}" class="app-rail-link{% if active == 'employes' %} active{% endif %}" aria-label="Animateurs" title="Animateurs"{% if active == 'employes' %} aria-current="page"{% endif %}>
+        <a href="{% url 'employes' %}" class="app-rail-link direction-nav-link{% if active == 'employes' or active == 'formations' %} active{% elif active == 'administration' and active_tab == 'comptes-animateurs' %} active{% endif %}" aria-label="Équipe" title="Équipe">
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20v-2c0-3.3 3.1-5 7-5s7 1.7 7 5v2H2Zm15.2 0c.5-.7.8-1.5.8-2.4 0-1.5-.7-2.8-1.8-3.8 3.2.2 5.8 1.6 5.8 4.2v2h-4.8Z"/></svg>
+            <span class="direction-nav-label">Équipe</span>
         </a>
-        <a href="{% url 'planning' %}" class="app-rail-link{% if active == 'planning' %} active{% endif %}" aria-label="Planning" title="Planning"{% if active == 'planning' %} aria-current="page"{% endif %}>
+        <a href="{% url 'planning' %}" class="app-rail-link direction-nav-link{% if active == 'planning' %} active{% endif %}" aria-label="Planning" title="Planning"{% if active == 'planning' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V2Zm12 8H5v10h14V10ZM5 8h14V6H5v2Z"/></svg>
+            <span class="direction-nav-label">Planning</span>
         </a>
-        <a href="{% url 'sorties' %}" class="app-rail-link{% if active == 'sorties' %} active{% endif %}" aria-label="Sorties" title="Sorties"{% if active == 'sorties' %} aria-current="page"{% endif %}>
+        <a href="{% url 'sorties' %}" class="app-rail-link direction-nav-link{% if active == 'sorties' %} active{% endif %}" aria-label="Sorties" title="Sorties"{% if active == 'sorties' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12a4 4 0 0 1 4 4v9h-2a3 3 0 0 1-6 0H9a3 3 0 0 1-6 0H2V7a4 4 0 0 1 3-4Zm0 2a2 2 0 0 0-1 2v3h15V7a2 2 0 0 0-2-2H5Zm1 3h4V6H6v2Zm7 0h4V6h-4v2Zm-7 7a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm10 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></svg>
+            <span class="direction-nav-label">Sorties</span>
         </a>
-        <a href="{% url 'demandes_materiel' %}" class="app-rail-link{% if active == 'materiel' %} active{% endif %}" aria-label="Demandes de matériel" title="Demandes de matériel"{% if active == 'materiel' %} aria-current="page"{% endif %}>
+        <a href="{% url 'demandes_materiel' %}" class="app-rail-link direction-nav-link{% if active == 'materiel' %} active{% endif %}" aria-label="Matériel" title="Matériel"{% if active == 'materiel' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 9 4.5v11L12 22l-9-4.5v-11L12 2Zm0 2.2L6.1 7.1 12 10l5.9-2.9L12 4.2ZM5 8.7v7.6l6 3v-7.6l-6-3Zm8 10.6 6-3V8.7l-6 3v7.6Z"/></svg>
+            <span class="direction-nav-label">Matériel</span>
         </a>
-        <a href="{% url 'formations' %}" class="app-rail-link{% if active == 'formations' %} active{% endif %}" aria-label="Formations" title="Formations"{% if active == 'formations' %} aria-current="page"{% endif %}>
-            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 8l10 5 8-4v6h2V8L12 3Zm-6 9v4.5C6 18.4 8.7 20 12 20s6-1.6 6-3.5V12l-6 3-6-3Z"/></svg>
+        <a href="{% url 'gestion' %}?onglet=informations" class="app-rail-link direction-nav-link{% if active == 'emails' or active == 'documents' %} active{% elif active == 'gestion' %}{% if gestion_onglet == 'documents' or gestion_onglet == 'informations' %} active{% endif %}{% endif %}" aria-label="Communication" title="Communication">
+            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v11h2v1.4L8.3 17H20V6H4Zm3 3h10v2H7V9Zm0 4h7v2H7v-2Z"/></svg>
+            <span class="direction-nav-label">Communication</span>
         </a>
-        <a href="{% url 'recapitulatif' %}" class="app-rail-link{% if active == 'recapitulatif' %} active{% endif %}" aria-label="Paie" title="Paie"{% if active == 'recapitulatif' %} aria-current="page"{% endif %}>
+        <a href="{% url 'recapitulatif' %}" class="app-rail-link direction-nav-link{% if active == 'recapitulatif' %} active{% endif %}" aria-label="Temps et paie" title="Temps & paie"{% if active == 'recapitulatif' %} aria-current="page"{% endif %}>
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 4.2a7 7 0 0 0-8.9 3.3H3v2h2.1a8 8 0 0 0 0 2H3v2h2.8a7 7 0 0 0 8.9 3.3l-.7-1.9a5 5 0 0 1-5.9-1.4H13v-2H7.2a6 6 0 0 1 0-2H13v-2H8.1A5 5 0 0 1 14 6.1l.7-1.9Z"/></svg>
+            <span class="direction-nav-label">Temps &amp; paie</span>
         </a>
-        <a href="{% url 'gestion' %}" class="app-rail-link{% if active == 'gestion' %} active{% endif %}" aria-label="Gestion" title="Gestion"{% if active == 'gestion' %} aria-current="page"{% endif %}>
-            <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 3h4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l1-3Zm1.4 2-.7 2H4v3h16V8h-5.7l-.7-2h-3.2ZM9 9h6v3H9V9Z"/></svg>
-        </a>
-        {% if request.user.is_superuser %}
-        <a href="{% url 'parametres' %}" class="app-rail-link{% if active == 'parametres' %} active{% endif %}" aria-label="Paramètres" title="Paramètres"{% if active == 'parametres' %} aria-current="page"{% endif %}>
+        <a href="{% url 'gestion' %}?onglet=lieux" class="app-rail-link direction-nav-link{% if active == 'parametres' %} active{% elif active == 'gestion' %}{% if gestion_onglet != 'documents' and gestion_onglet != 'informations' %} active{% endif %}{% endif %}" aria-label="Configuration" title="Configuration">
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2.1-1.6-2-3.4-2.5 1a8 8 0 0 0-1.7-1L15 3.3h-4L10.7 6A8 8 0 0 0 9 7L6.5 6l-2 3.4L6.6 11a7.8 7.8 0 0 0 0 2l-2.1 1.6 2 3.4L9 17a8 8 0 0 0 1.7 1l.3 2.7h4l.3-2.7a8 8 0 0 0 1.7-1l2.5 1 2-3.4L19.4 13ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
+            <span class="direction-nav-label">Configuration</span>
         </a>
-        {% endif %}
-        <a href="{% url 'administration' %}" class="app-rail-link{% if active == 'administration' %} active{% endif %}" aria-label="Administration" title="Administration"{% if active == 'administration' %} aria-current="page"{% endif %}>
+        <a href="{% url 'administration' %}?onglet=export" class="app-rail-link direction-nav-link{% if active == 'administration' %}{% if active_tab != 'comptes-animateurs' %} active{% endif %}{% endif %}" aria-label="Administration" title="Administration">
             <svg class="app-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5.1 3.4 9.8 8 11 4.6-1.2 8-5.9 8-11V5l-8-3Zm0 5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 11.7c-1.8-.7-3.3-2-4.3-3.7.9-1.2 2.5-2 4.3-2s3.4.8 4.3 2c-1 1.7-2.5 3-4.3 3.7Z"/></svg>
+            <span class="direction-nav-label">Administration</span>
         </a>
     </nav>
 

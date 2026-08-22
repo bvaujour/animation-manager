@@ -4,7 +4,7 @@ import datetime
 import json
 
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
@@ -21,6 +21,8 @@ from .models import (
     HoraireAffectationJour,
     PublicationPlanning,
     Qualification,
+    ModalitePeriscolaire,
+    TypeAccueil,
 )
 from .services.affectations import (
     creer_affectation,
@@ -39,6 +41,36 @@ from .services.serializers import affectation_to_event
 
 def _lundi_semaine(date):
     return date - datetime.timedelta(days=date.weekday())
+
+
+def _contexte_planning(request, payload=None, *, exiger_modalite=False):
+    payload = payload or {}
+    code = str(
+        payload.get("type_accueil")
+        or request.GET.get("type_accueil")
+        or request.session.get("type_accueil", "")
+    ).strip()
+    if code == TypeAccueil.MERCREDIS:
+        code = TypeAccueil.PERISCOLAIRE
+    type_accueil = None
+    if code in (TypeAccueil.VACANCES, TypeAccueil.PERISCOLAIRE):
+        type_accueil = TypeAccueil.objects.filter(code=code, actif=True).first()
+
+    code_modalite = str(
+        payload.get("modalite_periscolaire")
+        or request.GET.get("modalite_periscolaire")
+        or ""
+    ).strip()
+    modalite = None
+    if code_modalite:
+        modalite = ModalitePeriscolaire.objects.filter(code=code_modalite, actif=True).first()
+        if modalite is None:
+            raise ValueError("Créneau périscolaire invalide.")
+    if exiger_modalite and type_accueil and type_accueil.code == TypeAccueil.PERISCOLAIRE and modalite is None:
+        raise ValueError("Choisissez un créneau périscolaire avant de modifier le planning.")
+    if type_accueil is None or type_accueil.code != TypeAccueil.PERISCOLAIRE:
+        modalite = None
+    return type_accueil, modalite
 
 
 @require_http_methods(["GET", "POST"])
@@ -93,7 +125,7 @@ def api_planning(request):
         "statut__id", "statut__nom", "statut__est_statut",
     )
     affectations = (
-        Affectation.objects.select_related("animateur", "centre", "evenement", "evenement__groupe")
+        Affectation.objects.select_related("animateur", "centre", "evenement", "evenement__groupe", "type_accueil", "modalite_periscolaire")
         .prefetch_related(
             "horaires_journaliers",
             Prefetch("animateur__qualifications", queryset=qualifications_statuts),
@@ -106,6 +138,29 @@ def api_planning(request):
             ),
         )
     )
+
+    try:
+        type_accueil, modalite = _contexte_planning(request)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    if type_accueil is not None:
+        if type_accueil.code == TypeAccueil.PERISCOLAIRE:
+            # Compatibilité avec les affectations créées avant le rattachement
+            # explicite au TypeAccueil : une ancienne ligne portant déjà une
+            # modalité périscolaire reste considérée comme périscolaire.
+            affectations = affectations.filter(
+                Q(type_accueil=type_accueil)
+                | Q(type_accueil__isnull=True, modalite_periscolaire__isnull=False)
+            )
+        else:
+            # Les anciennes affectations journalières sans type ni modalité
+            # appartiennent au fonctionnement Vacances historique.
+            affectations = affectations.filter(
+                Q(type_accueil=type_accueil)
+                | Q(type_accueil__isnull=True, modalite_periscolaire__isnull=True)
+            ).filter(modalite_periscolaire__isnull=True)
+    if modalite is not None:
+        affectations = affectations.filter(modalite_periscolaire=modalite)
 
     if not est_direction(request.user):
         animateur = getattr(request.user, "profil_animateur", None)
@@ -193,6 +248,7 @@ def api_affectation_create(request):
         # fin = debut donnerait un groupe de durée nulle (start == end)
         # qui ne s'affiche pas dans le calendrier.
         fin = parse_to_aware_datetime(payload["fin"]) if payload.get("fin") else debut + datetime.timedelta(days=1)
+        type_accueil, modalite = _contexte_planning(request, payload, exiger_modalite=True)
 
     except (Animateur.DoesNotExist, Centre.DoesNotExist, Evenement.DoesNotExist):
         return JsonResponse({"error": "Animateur, centre ou groupe introuvable."}, status=404)
@@ -208,6 +264,8 @@ def api_affectation_create(request):
                 debut=debut,
                 fin=fin,
                 autoriser_formation=payload.get("forcer_formation") is True,
+                type_accueil=type_accueil,
+                modalite_periscolaire=modalite,
             )
             return JsonResponse(
                 affectation_to_event(affectation),
@@ -223,6 +281,8 @@ def api_affectation_create(request):
             debut=debut,
             fin=fin,
             autoriser_formation=payload.get("forcer_formation") is True,
+            type_accueil=type_accueil,
+            modalite_periscolaire=modalite,
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=409)
@@ -237,7 +297,7 @@ def api_affectation_detail(request, affectation_id):
     DELETE : suppression d'une affectation (clic sur le groupe)."""
 
     try:
-        affectation = Affectation.objects.get(pk=affectation_id)
+        affectation = Affectation.objects.select_related("type_accueil", "modalite_periscolaire").get(pk=affectation_id)
     except Affectation.DoesNotExist:
         return JsonResponse({"error": "Affectation introuvable."}, status=404)
 
@@ -302,6 +362,7 @@ def api_affectation_detail(request, affectation_id):
                 )
         elif "centre_id" in payload:
             nouveau_centre = Centre.objects.get(pk=payload["centre_id"])
+        type_accueil, modalite = _contexte_planning(request, payload, exiger_modalite=False)
 
     except (Centre.DoesNotExist, Evenement.DoesNotExist):
         return JsonResponse({"error": "Centre ou groupe introuvable."}, status=404)
@@ -317,6 +378,8 @@ def api_affectation_detail(request, affectation_id):
             evenement=nouvelle_evenement,
             type_affectation=payload.get("type_affectation") if "type_affectation" in payload else None,
             autoriser_formation=payload.get("forcer_formation") is True,
+            type_accueil=type_accueil,
+            modalite_periscolaire=modalite,
         )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=409)

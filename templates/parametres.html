@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Paramètres{% endblock %}
+{% block title %}Configuration - Paramètres{% endblock %}
 {% block page_styles %}<link rel="stylesheet" href="{% static 'css/parametres.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide settings-page" data-settings-root data-api-url="{% url 'api_parametres' %}" data-payroll-url="{% url 'api_parametres_paie' %}" data-rates-url="{% url 'api_baremes_cee' %}" data-primes-url="{% url 'api_types_primes' %}" data-contract-settings-url="{% url 'api_parametres_contrats' %}">
-    {% include "partials/_page_header.html" with title="Paramètres" picker_mode="none" header_class="settings-header" %}
+    {% include "partials/_page_header.html" with title="Paramètres avancés" picker_mode="none" header_class="settings-header" %}
     <div id="settings-form" class="settings-form">
         <div class="tabs app-page-tabs app-page-tabs-row settings-tabs" role="tablist" aria-label="Rubriques des paramètres">
             <button class="tab-btn active" data-tab="structure" type="button" role="tab">Structure</button>
@@ -106,7 +106,56 @@
         </section>
 
         <section class="tab-panel ui-card settings-card settings-empty" data-panel="rh" hidden><h2>Planning &amp; RH</h2><p>Aucun paramètre spécifique configuré pour le moment.</p></section>
-        <section class="tab-panel ui-card settings-card settings-empty" data-panel="encadrement" hidden><h2>Encadrement &amp; qualifications</h2><p>Aucun paramètre spécifique configuré pour le moment.</p></section>
+        <section class="tab-panel ui-card settings-card" data-panel="encadrement" hidden>
+            <div class="settings-section-head settings-legal-head">
+                <div>
+                    <h2>Encadrement &amp; qualifications</h2>
+                    <p>Référentiel utilisé pour calculer le minimum réglementaire à partir des effectifs enfants.</p>
+                </div>
+            </div>
+            <aside class="settings-legal-note" aria-label="Repères réglementaires">
+                <strong>Repères légaux</strong>
+                <p>Les taux ci-dessous servent à calculer l’effectif minimum requis à partir des enfants présents. Les règles de qualification portent uniquement sur ce socle minimum : les renforts ajoutés au-delà sont suivis séparément et ne dégradent pas les quotas du socle réglementaire.</p>
+                <p>Quand un même lieu accueille plusieurs groupes d’âge, Animation Manager mutualise les reliquats : un <strong>animateur mixte</strong> peut compléter plusieurs groupes en appliquant le taux le plus contraignant. Exemple en vacances : 9 enfants de moins de 6 ans + 13 enfants de 6 ans et plus donnent 3 postes réglementaires (et non 4 calculés groupe par groupe).</p>
+                <p class="settings-legal-warning">Ce panneau constitue une aide au paramétrage. Les cas particuliers (direction comptée dans l’équipe, activités spécifiques, dérogations, accueils avec règles particulières…) restent à vérifier auprès du SDJES.</p>
+                <div class="settings-legal-links">
+                    <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000006905565" target="_blank" rel="noopener">R227-15 · Vacances</a>
+                    <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000037247312" target="_blank" rel="noopener">R227-16 · Périscolaire</a>
+                    <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000033253193" target="_blank" rel="noopener">R227-12 · Qualifications</a>
+                    <a href="https://www.jura.gouv.fr/index.php/contenu/telechargement/28526/221266/file/PARTIE%2002_Memento%20ACM_Encadrement%20et%20qualification_V1.pdf" target="_blank" rel="noopener">Exemple officiel · groupe d’âges mixte</a>
+                </div>
+            </aside>
+
+            <div class="settings-encadrement-layout">
+                <section class="settings-payroll-section">
+                    <div class="settings-section-head"><div><h3>Vacances / extrascolaire</h3><p>Taux proposés par défaut : moins de 6 ans 1/8, 6 ans et + 1/12.</p></div></div>
+                    <div class="settings-ratio-grid">
+                        <label class="field"><span>Moins de 6 ans · 1 animateur pour</span><input name="ratio_vacances_moins_6" type="number" min="1" max="999" step="1"></label>
+                        <label class="field"><span>6 ans et plus · 1 animateur pour</span><input name="ratio_vacances_6_plus" type="number" min="1" max="999" step="1"></label>
+                    </div>
+                </section>
+
+                <section class="settings-payroll-section settings-encadrement-perisco">
+                    <div class="settings-section-head"><div><h3>Périscolaire</h3><p>Le seuil de 5 heures consécutives et le PEDT déterminent le taux applicable. Le PEDT se règle désormais dans l’accueil Périscolaire de chaque lieu.</p></div></div>
+                    <div class="settings-ratio-groups">
+                        <div><strong>Sans PEDT · ≤ 5 h</strong><div class="settings-ratio-grid"><label class="field"><span>&lt; 6 ans · 1/</span><input name="ratio_periscolaire_court_moins_6" type="number" min="1" max="999"></label><label class="field"><span>6 ans + · 1/</span><input name="ratio_periscolaire_court_6_plus" type="number" min="1" max="999"></label></div></div>
+                        <div><strong>Sans PEDT · &gt; 5 h</strong><div class="settings-ratio-grid"><label class="field"><span>&lt; 6 ans · 1/</span><input name="ratio_periscolaire_long_moins_6" type="number" min="1" max="999"></label><label class="field"><span>6 ans + · 1/</span><input name="ratio_periscolaire_long_6_plus" type="number" min="1" max="999"></label></div></div>
+                        <div><strong>Avec PEDT · ≤ 5 h</strong><div class="settings-ratio-grid"><label class="field"><span>&lt; 6 ans · 1/</span><input name="ratio_periscolaire_pedt_court_moins_6" type="number" min="1" max="999"></label><label class="field"><span>6 ans + · 1/</span><input name="ratio_periscolaire_pedt_court_6_plus" type="number" min="1" max="999"></label></div></div>
+                        <div><strong>Avec PEDT · &gt; 5 h</strong><div class="settings-ratio-grid"><label class="field"><span>&lt; 6 ans · 1/</span><input name="ratio_periscolaire_pedt_long_moins_6" type="number" min="1" max="999"></label><label class="field"><span>6 ans + · 1/</span><input name="ratio_periscolaire_pedt_long_6_plus" type="number" min="1" max="999"></label></div></div>
+                    </div>
+                </section>
+
+                <section class="settings-payroll-section settings-qualification-rules">
+                    <div class="settings-section-head"><div><h3>Composition de l’équipe réglementaire</h3><p>Ces bornes s’appliquent au nombre d’animateurs légalement requis, pas aux renforts surnuméraires.</p></div></div>
+                    <div class="settings-ratio-grid">
+                        <label class="field"><span>Diplômés · minimum</span><div class="settings-number"><input name="pourcentage_qualifies_minimum" type="number" min="0" max="100"><span>%</span></div></label>
+                        <label class="field"><span>Non diplômés · maximum</span><div class="settings-number"><input name="pourcentage_non_qualifies_maximum" type="number" min="0" max="100"><span>%</span></div></label>
+                    </div>
+                    <p class="settings-qualification-reference">La répartition Diplômés / Stagiaires / Non diplômés est déterminée à partir des statuts déjà configurés dans « Diplômes &amp; statuts ».</p>
+                    <a class="settings-qualification-link" href="/gestion/?onglet=qualifications">Voir Diplômes &amp; statuts</a>
+                </section>
+            </div>
+        </section>
 
         <div class="settings-actions"><span id="settings-status" role="status" aria-live="polite"></span><button class="btn btn-primary" id="settings-save" type="button">Enregistrer</button></div>
     </div>

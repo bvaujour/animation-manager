@@ -138,11 +138,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 const inlineError = editor.querySelector(".form-error");
                 inlineError.textContent = "";
                 if (!editorPermanent.checked && !ids.length) {
-                    inlineError.textContent = "Sélectionne au moins une semaine ou choisis Document permanent.";
+                    inlineError.textContent = "Sélectionnez au moins une semaine ou choisissez « Document permanent ».";
                     return;
                 }
                 if (!editorCentres.tousCentres() && !editorCentres.ids().length) {
-                    inlineError.textContent = "Sélectionne au moins un centre.";
+                    inlineError.textContent = "Sélectionnez au moins un centre.";
                     return;
                 }
                 try {
@@ -216,15 +216,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const ids = selectedIds();
         const centreSelection = initMainCentres;
         if (!file) {
-            errorElement.textContent = "Choisis un fichier.";
+            errorElement.textContent = "Choisissez un fichier.";
             return;
         }
         if (!permanentInput.checked && !ids.length) {
-            errorElement.textContent = "Sélectionne au moins une semaine ou choisis Document permanent.";
+            errorElement.textContent = "Sélectionnez au moins une semaine ou choisissez « Document permanent ».";
             return;
         }
         if (!centreSelection.tousCentres() && !centreSelection.ids().length) {
-            errorElement.textContent = "Sélectionne au moins un centre.";
+            errorElement.textContent = "Sélectionnez au moins un centre.";
             return;
         }
 

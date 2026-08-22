@@ -542,7 +542,16 @@ def generer_tableau_de_bord_animateur(
         {
             "date": item.activite.date,
             "date_libelle": f"{JOURS_FR[item.activite.date.weekday()]} {_libelle_date(item.activite.date)}",
+            "date_complete": f"{JOURS_FR[item.activite.date.weekday()]} {_libelle_date(item.activite.date)} {item.activite.date.year}",
             "titre": item.activite.intitule,
+            "heure_debut": item.activite.heure_debut,
+            "heure_fin": item.activite.heure_fin,
+            "horaire": (
+                f"{_format_heure(item.activite.heure_debut)}"
+                + (f"–{_format_heure(item.activite.heure_fin)}" if item.activite.heure_fin else "")
+                if item.activite.heure_debut else ""
+            ),
+            "lieu": item.activite.lieu,
             "remarque": item.activite.remarque or item.remarque,
         }
         for item in reunions

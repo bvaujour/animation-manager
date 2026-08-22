@@ -8,14 +8,14 @@
 {% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--fluid employees-workspace" data-animateur-page>
-    {% include "partials/_page_header.html" with title="Salariés" header_class="employees-page-header" picker_mode="none" %}
+    {% include "partials/_page_header.html" with title="Équipe" header_class="employees-page-header" picker_mode="none" actions_class="employees-header-actions" action_id="evenement-add" action_label="+ Ajouter un salarié" action_class="btn-primary" %}
+    {% include "partials/_direction_section_nav.html" with section="equipe" active_item="salaries" %}
     <aside class="ui-card employees-sidebar" aria-label="Liste des salariés">
         <div class="employees-sidebar-head">
             <div>
-                <h2>Liste de l’équipe</h2>
+                <h2>Salariés</h2>
                 <p id="employees-count">Chargement…</p>
             </div>
-            <button class="btn btn-primary" id="evenement-add" type="button">+ Ajouter un salarié</button>
         </div>
 
         {% include "partials/_staff_filter.html" with toolbar_class="employees-sidebar-toolbar" search_id="evenement-search" search_name="recherche_salarie" details_id="salaries-filter" count_id="salaries-filter-count" qualifications_id="salaries-filter-qualifications" availability_id="salaries-filter-disponibilite" assignment_id="salaries-filter-affectation" centres_id="salaries-filter-centres" reset_id="salaries-filter-reset" %}

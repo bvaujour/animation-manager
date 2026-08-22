@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Gestion{% endblock %}
+{% block title %}{% if gestion_onglet == "documents" or gestion_onglet == "informations" %}Communication{% else %}Configuration{% endif %}{% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/gestion.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/documents.css' %}?v={{ asset_version }}">
@@ -8,13 +8,20 @@
 {% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide gestion-page gestion-page-compact">
-    {% include "partials/_page_header.html" with title="Gestion" header_class="gestion-page-header" container_id="gestion-period-nav" previous_id="gestion-prev-week" today_id="gestion-current-week" next_id="gestion-next-week" label_id="gestion-visible-period" generic_navigation="true" %}
-    <div class="tabs gestion-main-tabs app-page-tabs app-page-tabs-row" id="gestion-tabs" role="tablist" aria-label="Rubriques de gestion">
+    {% if gestion_onglet == "documents" or gestion_onglet == "informations" %}
+        {% include "partials/_page_header.html" with title="Communication" header_class="gestion-page-header" container_id="gestion-period-nav" previous_id="gestion-prev-week" today_id="gestion-current-week" next_id="gestion-next-week" label_id="gestion-visible-period" generic_navigation="true" %}
+        {% include "partials/_direction_section_nav.html" with section="communication" active_item=gestion_onglet %}
+    {% else %}
+        {% include "partials/_page_header.html" with title="Configuration" header_class="gestion-page-header" picker_mode="none" %}
+        {% include "partials/_direction_section_nav.html" with section="configuration" active_item=gestion_onglet %}
+    {% endif %}
+    <div class="tabs gestion-main-tabs app-page-tabs app-page-tabs-row direction-functional-tabs" id="gestion-tabs" role="tablist" aria-label="Navigation technique des rubriques de gestion">
         <button class="tab-btn{% if gestion_onglet == 'lieux' or not gestion_onglet %} active{% endif %}" data-tab="lieux" type="button" role="tab">Lieux</button>
         <button class="tab-btn" data-tab="groupes" type="button" role="tab">Groupes</button>
         <button class="tab-btn" data-tab="qualifications" type="button" role="tab">Diplômes et statuts</button>
         <button class="tab-btn" data-tab="periodes" type="button" role="tab">Périodes vacances</button>
         <button class="tab-btn" data-tab="periodes-scolaires" type="button" role="tab">Périodes scolaires</button>
+        <button class="tab-btn" data-tab="temps-periscolaires" type="button" role="tab">Temps périscolaires</button>
         <button class="tab-btn" data-tab="documents" type="button" role="tab">Documents</button>
         <button class="tab-btn" data-tab="informations" type="button" role="tab">Informations animateurs</button>
     </div>
@@ -33,6 +40,9 @@
     </div>
     <div class="tab-panel" data-panel="periodes-scolaires" hidden>
         <div id="panel-periodes-scolaires"></div>
+    </div>
+    <div class="tab-panel" data-panel="temps-periscolaires" hidden>
+        <div id="panel-temps-periscolaires"></div>
     </div>
     <div class="tab-panel" data-panel="documents" hidden>
         <section class="ui-card gestion-documents" id="documents-management-app">
@@ -69,7 +79,7 @@
         <section class="ui-card gestion-informations" id="informations-animateurs-management">
             <div class="ui-section-heading gestion-section-heading">
                 <div>
-                    <h2>Informations du portail animateur</h2>
+                    <h2>Informations à l’équipe</h2>
                     <p>Publiez des consignes visibles dans la carte « Infos » du portail animateur.</p>
                 </div>
             </div>
@@ -204,6 +214,7 @@ document.addEventListener("DOMContentLoaded", () => {
     GestionApp.mountQualifications(document.getElementById("panel-qualifications"));
     GestionApp.mountPeriodes(document.getElementById("panel-periodes"));
     GestionApp.mountPeriodesScolaires(document.getElementById("panel-periodes-scolaires"));
+    GestionApp.mountModalitesPeriscolaires(document.getElementById("panel-temps-periscolaires"));
 
     const root = document.getElementById("gestion-tabs").closest("main");
     initTabs(root);

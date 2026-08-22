@@ -43,8 +43,8 @@ def dates_visibles(debut: date, fin: date) -> list[date]:
 
 
 def libelle_evenement(evenement: Evenement) -> str:
-    """Nom lisible du groupe, y compris la ligne flottante du lieu."""
-    return "Animateurs flottants" if est_groupe_flottants(evenement) else evenement.nom
+    """Nom lisible du groupe, y compris la ligne mixte du lieu."""
+    return "Animateurs mixtes" if est_groupe_flottants(evenement) else evenement.nom
 
 
 def libelle_affectation(affectation: Affectation) -> str:

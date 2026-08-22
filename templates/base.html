@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Gestion équipe animation{% endblock %}</title>
+    <title>{% block title %}Animation Manager{% endblock %}</title>
     <link rel="icon" href="{% static 'favicon.ico' %}" sizes="any">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,10 +14,11 @@
     <link rel="stylesheet" href="{% static 'css/common-ui.css' %}?v={{ asset_version }}">
     {% block page_styles %}{% endblock %}
     <link rel="stylesheet" href="{% static 'css/app-layout.css' %}?v={{ asset_version }}-anim-mobile-v4">
+    <link rel="stylesheet" href="{% static 'css/navigation-architecture.css' %}?v={{ asset_version }}">
 </head>
 <body class="app-body{% if request.user.is_authenticated and not utilisateur_est_direction %} animator-space-body{% endif %} {% block body_class %}{% endblock %}">
     {% csrf_token %}
-    {% if utilisateur_est_direction and active_page != "employes" and active_page != "recapitulatif" and active_page != "formations" and active_page != "parametres" %}
+    {% if utilisateur_est_direction and active_page != "employes" and active_page != "recapitulatif" and active_page != "formations" and active_page != "parametres" and not masquer_selecteurs_configuration %}
         {% if active_page != "accueil" and active_page != "planning" and active_page != "temps_travail" and active_page != "sorties" and active_page != "materiel" %}
             {% include "partials/_type_accueil_selector.html" %}
         {% endif %}

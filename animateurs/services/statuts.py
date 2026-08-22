@@ -1,6 +1,7 @@
 """Historique daté des statuts et compatibilité avec les qualifications."""
 
 from dataclasses import dataclass
+import unicodedata
 
 from django.db.models import Prefetch
 from django.utils import timezone
@@ -10,6 +11,40 @@ from animateurs.services.status_colors import statut_principal_des_qualification
 
 
 ATTR_HISTORIQUE_PREFETCH = "_historique_statuts_dates"
+
+
+CATEGORIE_DIPLOME = "diplome"
+CATEGORIE_STAGIAIRE = "stagiaire"
+CATEGORIE_NON_DIPLOME = "non_diplome"
+CATEGORIE_STATUT_INCONNU = "inconnu"
+
+
+def _normaliser_statut(texte):
+    valeur = unicodedata.normalize("NFKD", str(texte or ""))
+    valeur = "".join(caractere for caractere in valeur if not unicodedata.combining(caractere))
+    return " ".join(valeur.casefold().replace("-", " ").split())
+
+
+def categorie_encadrement_du_statut(statut):
+    """Classe le statut *déjà existant* pour le contrôle ACM.
+
+    Animation Manager possède déjà le référentiel Diplômes → Statut et un
+    historique daté. On ne crée donc aucun second classement. La catégorie
+    réglementaire découle du libellé du statut effectif : Diplômé, Stagiaire
+    ou Non diplômé / Sans diplôme. Les autres statuts restent volontairement
+    inconnus afin de ne jamais inventer une conformité.
+    """
+
+    if statut is None:
+        return CATEGORIE_STATUT_INCONNU
+    nom = _normaliser_statut(getattr(statut, "nom", statut))
+    if "non diplome" in nom or "sans diplome" in nom or "non qualifie" in nom:
+        return CATEGORIE_NON_DIPLOME
+    if "stagiaire" in nom:
+        return CATEGORIE_STAGIAIRE
+    if "diplome" in nom or "qualifie" in nom:
+        return CATEGORIE_DIPLOME
+    return CATEGORIE_STATUT_INCONNU
 
 
 @dataclass(frozen=True)

@@ -146,10 +146,41 @@ function escapeHtml(value) {
 		.replaceAll("'", "&#039;");
 }
 
+// Rend les intitulés de vacances explicites sans modifier les valeurs stockées.
+// Exemples : « Été » → « Vacances d’été », « Toussaint 2026 » →
+// « Vacances de la Toussaint 2026 ». Les suffixes « — Semaine N » sont conservés.
+function libelleNomVacances(nom) {
+	const valeur = String(nom ?? "").trim();
+	if (!valeur) return "Vacances scolaires";
+
+	const semaineMatch = valeur.match(/(\s*[—–-]\s*Semaine\b.*)$/i);
+	const suffixeSemaine = semaineMatch?.[1] || "";
+	let base = suffixeSemaine ? valeur.slice(0, -suffixeSemaine.length).trim() : valeur;
+	const anneeMatch = base.match(/\s+(\d{4})$/);
+	const annee = anneeMatch?.[1] || "";
+	if (annee) base = base.slice(0, -anneeMatch[0].length).trim();
+	base = base.replace(/^vacances\s+(de\s+|d['’]\s*)?/i, "").trim();
+
+	const normalise = base.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+	let libelle;
+	if (normalise.includes("toussaint")) libelle = "Vacances de la Toussaint";
+	else if (normalise.includes("noel")) libelle = "Vacances de Noël";
+	else if (normalise.includes("hiver")) libelle = "Vacances d’hiver";
+	else if (normalise.includes("printemps")) libelle = "Vacances de printemps";
+	else if (normalise.includes("ete")) libelle = "Vacances d’été";
+	else libelle = base ? `Vacances — ${base}` : "Vacances scolaires";
+
+	return `${libelle}${annee ? ` ${annee}` : ""}${suffixeSemaine}`;
+}
+
 // Affiche une semaine avec son année civile, partout de la même façon.
-// Exemple : « Été — Semaine 2 » devient « Été 2026 — Semaine 2 ».
+// Exemple : « Été — Semaine 2 » devient « Vacances d’été 2026 — Semaine 2 »
+// lorsqu'il s'agit d'une semaine de vacances.
 function libellePeriodeAvecAnnee(periode) {
-	const nom = String(periode?.nom ?? "").trim();
+	let nom = String(periode?.nom ?? "").trim();
+	const typeAccueil = String(periode?.type_accueil ?? "").toLowerCase();
+	const typesAccueil = Array.isArray(periode?.types_accueil) ? periode.types_accueil.map((item) => String(item).toLowerCase()) : [];
+	if (typeAccueil === "vacances" || typesAccueil.includes("vacances")) nom = libelleNomVacances(nom);
 	if (!nom) return "Période sans nom";
 
 	const annee = String(periode?.debut ?? periode?.annee_scolaire ?? "").slice(0, 4);

@@ -10,22 +10,28 @@
         return String(value || "").slice(0, 10);
     }
 
-    function cacheKey(start, end) {
-        return `${normaliseDate(start)}|${normaliseDate(end)}`;
+    function cacheKey(start, end, modalite = "", suffixe = "") {
+        return `${normaliseDate(start)}|${normaliseDate(end)}|${String(modalite || "")}|${suffixe}`;
     }
 
     function fetchCentresWithGroups(start = null, end = null) {
         const query = new URLSearchParams({ include_groupes: "1" });
         if (start) query.set("start", normaliseDate(start));
         if (end) query.set("end", normaliseDate(end));
+        // Le créneau choisi dans Planning détermine aussi le besoin d'équipe
+        // effectif renvoyé pour chaque groupe. Aucun état métier n'est stocké
+        // ici : on transmet simplement le contexte visible à l'API.
+        const modalite = new URLSearchParams(window.location.search).get("modalite_periscolaire") || "";
+        if (modalite) query.set("modalite_periscolaire", modalite);
         return apiFetch(`/api/centres/?${query.toString()}`);
     }
 
-    function fetchWeekEvents(start, end, { force = false } = {}) {
-        const key = cacheKey(start, end);
+    function fetchWeekEvents(start, end, { force = false, modalite = "" } = {}) {
+        const key = cacheKey(start, end, modalite);
         if (force) eventsCache.delete(key);
         if (!eventsCache.has(key)) {
             const query = new URLSearchParams({ start: String(start), end: String(end) });
+            if (modalite) query.set("modalite_periscolaire", modalite);
             const request = apiFetch(`/api/planning/?${query.toString()}`)
                 .catch((error) => {
                     eventsCache.delete(key);
@@ -36,18 +42,20 @@
         return eventsCache.get(key);
     }
 
-    function invalidateWeekEvents(start = null, end = null) {
-        if (start && end) eventsCache.delete(cacheKey(start, end));
-        else eventsCache.clear();
+    function invalidateWeekEvents() {
+        eventsCache.clear();
     }
 
-    function fetchWeekEffectifs(start, end, { force = false } = {}) {
+    function fetchWeekEffectifs(start, end, { force = false, modalite = "", typeAccueil = "", inclureReferences = false } = {}) {
         const debut = normaliseDate(start);
         const fin = normaliseDate(end);
-        const key = cacheKey(debut, fin);
+        const key = cacheKey(debut, fin, modalite, `${typeAccueil || ""}|${inclureReferences ? "refs" : "reels"}`);
         if (force) effectifsCache.delete(key);
         if (!effectifsCache.has(key)) {
             const query = new URLSearchParams({ debut, fin });
+            if (modalite) query.set("modalite_periscolaire", modalite);
+            if (typeAccueil) query.set("type_accueil", typeAccueil);
+            if (inclureReferences) query.set("inclure_references", "1");
             const request = apiFetch(`/api/effectifs-enfants/?${query.toString()}`, { cache: "no-store" })
                 .catch((error) => {
                     effectifsCache.delete(key);
@@ -58,9 +66,8 @@
         return effectifsCache.get(key);
     }
 
-    function invalidateWeekEffectifs(start = null, end = null) {
-        if (start && end) effectifsCache.delete(cacheKey(normaliseDate(start), normaliseDate(end)));
-        else effectifsCache.clear();
+    function invalidateWeekEffectifs() {
+        effectifsCache.clear();
     }
 
     function fetchWeekSorties(start, end, { force = false } = {}) {

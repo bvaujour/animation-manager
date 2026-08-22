@@ -89,7 +89,7 @@ def animateurs_eligibles_responsabilites(sortie: Sortie):
             continue
         animateurs_affectes[affectation.animateur_id] = affectation.animateur
         if est_groupe_flottants(affectation.evenement):
-            libelle = f"Flottant — {affectation.centre.nom}"
+            libelle = f"Mixte — {affectation.centre.nom}"
         else:
             libelle = f"{affectation.centre.nom} — {affectation.evenement.nom}"
         if libelle not in affectations_concernees[affectation.animateur_id]:

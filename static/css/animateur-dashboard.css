@@ -2208,6 +2208,8 @@ body.animator-planning-body .animator-planning-heading-meetings{
 }
 body.animator-planning-body .animator-planning-meeting-chip{
   min-width:0;
+  max-width:100%;
+  overflow:hidden;
   min-height:30px;
   display:inline-flex;
   align-items:center;
@@ -2232,6 +2234,18 @@ body.animator-planning-body .animator-planning-meeting-chip.is-active{
   box-shadow:inset 0 0 0 1px #ded8ff;
 }
 body.animator-planning-body .animator-planning-meeting-chip b{font-size:.9rem;line-height:.7}
+body.animator-planning-body .animator-planning-meeting-detail,
+body.animator-planning-body .animator-planning-meeting-dates{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+body.animator-planning-body .animator-planning-meeting-detail{display:inline-flex;align-items:center;gap:4px}
+body.animator-planning-body .animator-planning-meeting-detail strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit;color:inherit}
+body.animator-planning-body .animator-planning-meeting-detail time{flex:0 0 auto}
+body.animator-planning-body .animator-planning-heading-meetings{flex:1 1 auto}
+body.animator-planning-body .animator-planning-heading-meetings .animator-planning-meeting-chip{flex:0 1 auto}
 
 /* Le lieu est une information de premier niveau. */
 body.animator-planning-body .animator-planning-stage{

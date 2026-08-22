@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Demandes de matériel{% endblock %}
+{% block title %}Matériel{% endblock %}
 {% block page_styles %}<link rel="stylesheet" href="{% static 'css/demandes-materiel.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide material-page">
     {% if direction %}
-    {% include "partials/_page_header.html" with title="Demandes de matériel" header_class="material-header" picker_mode="none" context_selector=True %}
+    {% include "partials/_page_header.html" with title="Matériel" header_class="material-header" picker_mode="none" context_selector=True %}
     {% else %}
     <header class="animator-mobile-header animator-portal-header">
         <div class="animator-portal-title-wrap"><h1>Matériel</h1></div>
@@ -102,7 +102,7 @@
             {% endfor %}
         </div>
         {% else %}
-        <p class="empty-note">Aucune demande de matériel pour le moment.</p>
+        <p class="empty-note">{% if direction %}Aucune demande de matériel reçue pour le moment.{% else %}Aucune demande de matériel pour le moment.{% endif %}</p>
         {% endif %}
     </section>
 </main>

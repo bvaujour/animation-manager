@@ -58,28 +58,85 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
         jours_autorises &= set(jours_selectionnes)
 
     affectations = (
-        Affectation.objects.select_related("animateur", "centre", "evenement")
+        Affectation.objects.select_related(
+            "animateur",
+            "centre",
+            "evenement",
+            "evenement__accueil_centre",
+            "evenement__accueil_centre__type_accueil",
+            "type_accueil",
+        )
+        .prefetch_related("evenement__types_accueil")
         .filter(debut__lt=fin, fin__gt=debut)
         .order_by("animateur__nom", "animateur__prenom", "debut")
     )
 
     jours_par_animateur = defaultdict(set)
-    jours_par_animateur_centre = defaultdict(lambda: defaultdict(set))
+    jours_par_animateur_accueil = defaultdict(lambda: defaultdict(set))
     details_par_animateur = defaultdict(lambda: defaultdict(dict))
     animateurs = {}
-    centres = {}
+    accueils = {}
 
     for affectation in affectations:
         animateur = affectation.animateur
         centre = affectation.centre
+        type_accueil = affectation.type_accueil
+        if type_accueil is None:
+            # Les anciennes affectations ne portaient pas toujours le type
+            # d'accueil. On le récupère uniquement si le groupe n'en possède
+            # qu'un seul, afin de ventiler l'historique sans inventer de
+            # contexte lorsqu'un groupe sert à la fois Vacances et Périscolaire.
+            types_evenement = list(affectation.evenement.types_accueil.all())
+            if len(types_evenement) == 1:
+                type_accueil = types_evenement[0]
+        code_type = type_accueil.code if type_accueil else ""
+        accueil_centre = affectation.evenement.accueil_centre
+        if (
+            accueil_centre is not None
+            and type_accueil is not None
+            and accueil_centre.type_accueil_id != type_accueil.id
+        ):
+            # Une ancienne affectation incohérente ne doit pas être ventilée
+            # sous le mauvais accueil. On conserve alors le repli historique
+            # Centre + Type d'accueil.
+            accueil_centre = None
+        cle_ventilation = (
+            f"accueil:{accueil_centre.id}"
+            if accueil_centre is not None
+            else f"type:{code_type}"
+        )
+        cle_accueil = (centre.id, cle_ventilation)
         animateurs[animateur.id] = animateur
-        centres[centre.id] = {
+        accueil = {
             "id": centre.id,
             "nom": centre.nom,
             "code": centre.code,
             "couleur": centre.couleur,
             "ordre": centre.ordre,
+            "ordre_type": type_accueil.ordre if type_accueil else -1,
         }
+        if type_accueil is not None:
+            libelle = (
+                accueil_centre.libelle_analytique
+                if accueil_centre is not None
+                else f"{centre.code} — {type_accueil.nom}"
+            )
+            accueil.update({
+                "ventilation_id": (
+                    f"{centre.id}:accueil:{accueil_centre.id}"
+                    if accueil_centre is not None
+                    else f"{centre.id}:{type_accueil.code}"
+                ),
+                "libelle": libelle,
+                "type_accueil_code": type_accueil.code,
+                "type_accueil_nom": type_accueil.nom,
+                "accueil_centre_id": accueil_centre.id if accueil_centre is not None else None,
+                "accueil_nom": accueil_centre.nom_affichage if accueil_centre is not None else type_accueil.nom,
+                "cle_ventilation": cle_ventilation,
+            })
+        else:
+            accueil["cle_ventilation"] = cle_ventilation
+        accueils[cle_accueil] = accueil
 
         debut_affectation = max(timezone.localtime(affectation.debut).date(), debut_date)
         fin_affectation = min(timezone.localtime(affectation.fin).date(), fin_date)
@@ -87,18 +144,33 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
             if jour not in jours_autorises:
                 continue
             jours_par_animateur[animateur.id].add(jour)
-            jours_par_animateur_centre[animateur.id][centre.id].add(jour)
-            details_par_animateur[animateur.id][jour][centre.id] = {
+            jours_par_animateur_accueil[animateur.id][cle_accueil].add(jour)
+            detail = {
                 "id": centre.id,
                 "nom": centre.nom,
                 "code": centre.code,
                 "couleur": centre.couleur,
-                "groupe": "Animateur flottant" if est_groupe_flottants(affectation.evenement) else affectation.evenement.nom,
+                "groupe": "Animateur mixte" if est_groupe_flottants(affectation.evenement) else affectation.evenement.nom,
             }
+            if type_accueil is not None:
+                detail.update({
+                    "ventilation_id": accueil["ventilation_id"],
+                    "libelle": accueil["libelle"],
+                    "type_accueil_code": type_accueil.code,
+                    "type_accueil_nom": type_accueil.nom,
+                    "accueil_centre_id": accueil.get("accueil_centre_id"),
+                    "accueil_nom": accueil.get("accueil_nom"),
+                })
+            details_par_animateur[animateur.id][jour][cle_accueil] = detail
 
     centres_tries = sorted(
-        centres.values(),
-        key=lambda centre: (centre["ordre"], centre["nom"].casefold(), centre["code"]),
+        accueils.values(),
+        key=lambda centre: (
+            centre["ordre"],
+            centre["nom"].casefold(),
+            centre["ordre_type"],
+            centre.get("libelle", centre.get("type_accueil_nom", "")).casefold(),
+        ),
     )
 
     ids_periodes_selectionnees = {int(item) for item in (periode_ids or [])}
@@ -123,12 +195,22 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
             continue
         ventilation = []
         for centre in centres_tries:
-            nombre_jours = len(jours_par_animateur_centre[animateur.id][centre["id"]])
-            ventilation.append({
+            cle_accueil = (centre["id"], centre.get("cle_ventilation", "type:"))
+            nombre_jours = len(jours_par_animateur_accueil[animateur.id][cle_accueil])
+            ligne_ventilation = {
                 "centre_id": centre["id"],
                 "jours_travailles": nombre_jours,
                 "paie": _montant(nombre_jours, animateur.paie_jour),
-            })
+            }
+            if centre.get("ventilation_id"):
+                ligne_ventilation.update({
+                    "ventilation_id": centre["ventilation_id"],
+                    "type_accueil_code": centre["type_accueil_code"],
+                    "type_accueil_nom": centre["type_accueil_nom"],
+                    "accueil_centre_id": centre.get("accueil_centre_id"),
+                    "accueil_nom": centre.get("accueil_nom"),
+                })
+            ventilation.append(ligne_ventilation)
 
         complement = complements[animateur.id]
         jours_reunion = complement["reunion"]
@@ -167,7 +249,14 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
 
     return {
         "dates": [jour.isoformat() for jour in sorted(jours_autorises)],
-        "centres": [{key: value for key, value in centre.items() if key != "ordre"} for centre in centres_tries],
+        "centres": [
+            {
+                key: value
+                for key, value in centre.items()
+                if key not in {"ordre", "ordre_type", "cle_ventilation"}
+            }
+            for centre in centres_tries
+        ],
         "animateurs": lignes,
         "total_jours": _nombre_json(sum((Decimal(str(ligne["jours_travailles"])) for ligne in lignes), Decimal("0"))),
         "total_paie_connue": str(total_paie.quantize(Decimal("0.01"))),
@@ -472,12 +561,22 @@ def generer_recapitulatif_excel(recap, debut: datetime.date, fin: datetime.date)
     ]])
 
     centres = classeur.create_sheet("Détail par centre")
-    centres.append(["Animateur", *[centre["nom"] for centre in recap["centres"]], "Total jours"])
+    centres.append([
+        "Animateur",
+        *[centre.get("libelle") or centre["nom"] for centre in recap["centres"]],
+        "Total jours",
+    ])
     for animateur in animateurs:
-        jours_par_centre = {item["centre_id"]: item["jours_travailles"] for item in animateur["centres"]}
+        jours_par_centre = {
+            str(item.get("ventilation_id") or item["centre_id"]): item["jours_travailles"]
+            for item in animateur["centres"]
+        }
         centres.append([
             f'{animateur["nom"]} {animateur["prenom"]}',
-            *[jours_par_centre.get(centre["id"], 0) for centre in recap["centres"]],
+            *[
+                jours_par_centre.get(str(centre.get("ventilation_id") or centre["id"]), 0)
+                for centre in recap["centres"]
+            ],
             animateur["jours_travailles"],
         ])
 

@@ -3652,34 +3652,37 @@ body.dashboard-body .dashboard-action--slate { --action-color: #53657f; --action
 
 
 /* Planning : les trois onglets restent toujours visibles. */
-body.page-planning .planning-tabs {
-  display: grid !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  width: auto !important;
+body.app-body.page-planning.has-fixed-page-tabs .planning-tabs {
+  display: flex !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+  right: auto !important;
+  width: max-content !important;
   max-width: none !important;
   overflow: visible !important;
 }
 
-body.page-planning .planning-tabs > .planning-tab {
-  width: 100% !important;
-  min-width: 0 !important;
-  flex: none !important;
+body.app-body.page-planning.has-fixed-page-tabs .planning-tabs > .planning-tab {
+  width: auto !important;
+  min-width: max-content !important;
+  flex: 0 0 auto !important;
   justify-content: center !important;
-  white-space: normal !important;
+  white-space: nowrap !important;
   text-align: center !important;
 }
 
 @media (max-width: 799px) {
-  body.page-planning .planning-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  body.app-body.page-planning.has-fixed-page-tabs .planning-tabs {
+    gap: 3px !important;
   }
 
-  body.page-planning .planning-tabs > .planning-tab {
+  body.app-body.page-planning.has-fixed-page-tabs .planning-tabs > .planning-tab {
     padding-inline: 3px !important;
     font-size: .64rem !important;
   }
 
-  body.page-planning .planning-tabs .planning-tab-icon {
+  body.app-body.page-planning.has-fixed-page-tabs .planning-tabs .planning-tab-icon {
     display: none !important;
   }
 }

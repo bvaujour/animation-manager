@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Paie{% endblock %}
+{% block title %}Temps &amp; paie{% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/recapitulatif.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/temps-travail.css' %}?v={{ asset_version }}">
 {% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide recap-page" data-recap-root data-employees-url="{% url 'employes' %}" data-settings-url="{% url 'parametres' %}">
-    {% include "partials/_page_header.html" with title="Paie" header_class="recap-header" picker_mode="none" recap_date_range=True actions_class="recap-exports" action_id="btn-recap-excel" action_label="Exporter en Excel" action_class="btn-primary" second_action_id="btn-recap-pdf" second_action_label="Exporter en PDF" second_action_class="btn-secondary" %}
-    <div class="tabs recap-tabs app-page-tabs app-page-tabs-row" id="recap-tabs" role="tablist" aria-label="Rubriques de paie">
+    {% include "partials/_page_header.html" with title="Temps & paie" header_class="recap-header" picker_mode="none" recap_date_range=True actions_class="recap-exports" action_id="btn-recap-excel" action_label="Exporter en Excel" action_class="btn-primary" second_action_id="btn-recap-pdf" second_action_label="Exporter en PDF" second_action_class="btn-secondary" %}
+    <div class="tabs recap-tabs app-page-tabs app-page-tabs-row" id="recap-tabs" role="tablist" aria-label="Rubriques Temps et paie">
         <button id="worktime-tab" class="tab-btn active" data-recap-tab="temps-travail" type="button" role="tab" aria-selected="true"><span class="tab-label-full">Temps de travail</span><span class="tab-label-short">Temps de travail</span></button>
         <button class="tab-btn" data-recap-tab="paie" type="button" role="tab" aria-selected="false"><span class="tab-label-full">Prime</span><span class="tab-label-short">Prime</span></button>
         <button class="tab-btn" data-recap-tab="centres" type="button" role="tab" aria-selected="false"><span class="tab-label-full">Jours et paie par centre</span><span class="tab-label-short">Par centre</span></button>

@@ -121,11 +121,37 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
         self.assertEqual(julie["centres"][0]["paie"], "130.00")
         self.assertEqual(julie["paie_totale"], "130.00")
 
+    def test_ventilation_distingue_les_types_accueil_d_un_meme_centre(self):
+        from animateurs.models import TypeAccueil
+
+        vacances = TypeAccueil.objects.get(code=TypeAccueil.VACANCES)
+        periscolaire = TypeAccueil.objects.get(code=TypeAccueil.PERISCOLAIRE)
+        premier = self._affecter(self.julie, datetime.date(2026, 7, 6))
+        premier.type_accueil = vacances
+        premier.save(update_fields=["type_accueil"])
+        second = self._affecter(self.julie, datetime.date(2026, 7, 7))
+        second.type_accueil = periscolaire
+        second.save(update_fields=["type_accueil"])
+
+        data = self.client.get(
+            reverse("api_recapitulatif") + "?debut=2026-07-06&fin=2026-07-08"
+        ).json()
+
+        self.assertEqual(
+            [item["libelle"] for item in data["centres"]],
+            ["PAC — Vacances", "PAC — Périscolaire"],
+        )
+        self.assertEqual(
+            [item["jours_travailles"] for item in data["animateurs"][0]["centres"]],
+            [1, 1],
+        )
+        self.assertEqual(data["animateurs"][0]["jours_travailles"], 2)
+
     def test_page_paie_affiche_les_quatre_onglets_dans_le_bon_ordre(self):
         response = self.client.get(reverse("recapitulatif"))
         contenu = response.content.decode()
 
-        self.assertContains(response, "Paie")
+        self.assertContains(response, "Temps &amp; paie", html=False)
         self.assertContains(response, "Temps de travail")
         self.assertContains(response, "Prime")
         self.assertContains(response, "Jours et paie par centre")

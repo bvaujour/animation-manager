@@ -556,7 +556,7 @@ function render(){
               ${transportSourceNote(data.transport.source_heure_arrivee_retour)}
             </article>
           </div>
-          ${floatingNotes?`<p class="sortie-floating-note"><strong>Animateurs flottants :</strong><br>${floatingNotes}</p>`:""}
+          ${floatingNotes?`<p class="sortie-floating-note"><strong>Animateurs mixtes :</strong><br>${floatingNotes}</p>`:""}
         </section>
 
         <section class="sortie-section">
@@ -756,7 +756,7 @@ function open(key,title){
     const documents=(data.catalogue_documents||[]).map(item=>`<label class="sortie-document-choice"><input type="checkbox" name="document_ids" value="${item.id}" ${selected.has(Number(item.id))?"checked":""}><span>${escapeHtml(item.titre)}</span></label>`).join("");
     body.innerHTML=`<div class="full sortie-resources-editor">
       <section><h3>Documents de la semaine</h3><div class="sortie-document-choices">${documents||'<p class="sortie-muted">Aucun document disponible pour cette semaine.</p>'}</div></section>
-      <section class="sortie-document-upload"><h3>Ajouter un document</h3><label>Intitulé<input name="nouveau_document_titre" maxlength="150" placeholder="Le nom du fichier sera utilisé si laissé vide"></label><label>Fichier<input name="nouveau_document" type="file"></label><small>Le document sera publié et ajouté à Gestion → Documents pour la semaine de cette sortie.</small></section>
+      <section class="sortie-document-upload"><h3>Ajouter un document</h3><label>Intitulé<input name="nouveau_document_titre" maxlength="150" placeholder="Le nom du fichier sera utilisé si laissé vide"></label><label>Fichier<input name="nouveau_document" type="file"></label><small>Le document sera publié et ajouté à Communication → Documents pour la semaine de cette sortie.</small></section>
       <label class="links-editor">Liens — une ligne par lien, sous la forme Libellé | URL<textarea name="liens">${escapeHtml((data.liens||[]).map(item=>`${item.libelle} | ${item.url}`).join("\n"))}</textarea></label>
     </div>`
   }else {

@@ -204,7 +204,7 @@ document.addEventListener("DOMContentLoaded", () => {
         StaffFilterUI.updateCount(filtreCompteur, nombreFiltres);
         if (filtreInfo) {
             filtreInfo.textContent = filtresSemaineActifs && !periodes.length
-                ? "Choisis au moins une semaine pour filtrer par dispo ou affectation."
+                ? "Choisissez au moins une semaine pour filtrer par disponibilité ou affectation."
                 : `${visibles} salarié${visibles > 1 ? "s" : ""} affiché${visibles > 1 ? "s" : ""}.`;
         }
     }
@@ -368,7 +368,7 @@ document.addEventListener("DOMContentLoaded", () => {
         modelesCompteur.textContent = `${modelesGestion.length} modèle${modelesGestion.length > 1 ? "s" : ""}`;
         modelesListe.innerHTML = "";
         if (!modelesGestion.length) {
-            modelesListe.innerHTML = '<div class="email-template-empty"><strong>Aucun modèle</strong><p>Crée ton premier modèle avec le formulaire.</p></div>';
+            modelesListe.innerHTML = '<div class="email-template-empty"><strong>Aucun modèle</strong><p>Créez votre premier modèle avec le formulaire.</p></div>';
             reinitialiserModele();
             return;
         }
@@ -559,7 +559,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const message = messageInput.value.trim();
 
         if (!animateurIds.length && !contactIds.length) {
-            erreur.textContent = "Choisis au moins un destinataire.";
+            erreur.textContent = "Choisissez au moins un destinataire.";
             return;
         }
         if (!objet || !message) {

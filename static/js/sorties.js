@@ -151,7 +151,7 @@
         const statusText = totals.non_couverts ? "Encadrement à vérifier" : "Encadrement conforme";
         const floating = data.flottants_par_centre.length
             ? `<div class="sortie-floating-list">${data.flottants_par_centre.map((centre) => `
-                <span><strong>${escapeHtml(centre.centre)}</strong> · Flottant${centre.animateurs.length > 1 ? "s" : ""} : ${centre.animateurs.map((item) => escapeHtml(item.nom)).join(", ")}</span>
+                <span><strong>${escapeHtml(centre.centre)}</strong> · Mixte${centre.animateurs.length > 1 ? "s" : ""} : ${centre.animateurs.map((item) => escapeHtml(item.nom)).join(", ")}</span>
               `).join("")}</div>`
             : "";
 

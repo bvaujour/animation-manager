@@ -16,7 +16,7 @@ class AdministrationSuperusersTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Planning calendrier par groupe")
         self.assertContains(response, "E-mails")
-        self.assertContains(response, "Superusers")
+        self.assertContains(response, "Administrateurs")
 
     def test_acces_direct_aux_emails_active_le_bon_onglet(self):
         response = self.client.get(reverse("emails"), follow=True)
