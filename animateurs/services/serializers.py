@@ -1,10 +1,11 @@
 """Sérialisation JSON centralisée des modèles de l'application."""
 
 import datetime
+import re
 
 from django.utils import timezone
 
-from animateurs.models import jours_feries_france
+from animateurs.models import BesoinEncadrement, TypeAccueil, jours_feries_france
 from animateurs.services.flottants import est_groupe_flottants, type_affectation
 from animateurs.services.besoins_encadrement import besoin_encadrement_effectif, besoins_contextuels_payload
 from animateurs.services.disponibilites import formation_bloquante
@@ -384,6 +385,174 @@ def animateur_planning_to_dict(animateur, *, date_reference=None, dates_referenc
     }
 
 
+def _jour_dans_ouverture(ouverture):
+    """Retourne une date réelle de la période correspondant au jour ouvert."""
+
+    debut = ouverture.periode_calendrier.debut
+    decalage = (int(ouverture.jour_semaine) - debut.weekday()) % 7
+    jour = debut + datetime.timedelta(days=decalage)
+    return jour if jour <= ouverture.periode_calendrier.fin else None
+
+
+def _periodes_vacances_resume(periodes):
+    groupes = {}
+    for periode in sorted(periodes, key=lambda item: (item.debut, item.id)):
+        cle = (periode.categorie_vacances, periode.debut.year)
+        numero = re.search(r"Semaine\s+(\d+)", periode.nom, flags=re.IGNORECASE)
+        ligne = groupes.setdefault(cle, {"nom": f"{cle[0]} {cle[1]}", "semaines": []})
+        if numero:
+            ligne["semaines"].append(f"S{numero.group(1)}")
+        elif periode.libelle_avec_annee not in ligne["semaines"]:
+            ligne["semaines"].append(periode.libelle_avec_annee)
+    return list(groupes.values())
+
+
+def _ratio_reglementaire_accueil(accueil, evenement, *, modalite=None, ouverture=None):
+    """Délègue le taux affiché au même moteur que le calcul réglementaire."""
+
+    from animateurs.services.categories_groupes import categorie_reglementaire_groupe
+    from animateurs.services.reglementation_encadrement import ratio_reglementaire
+
+    jour = _jour_dans_ouverture(ouverture) if ouverture is not None else None
+    if accueil.type_accueil.code == TypeAccueil.PERISCOLAIRE and jour is None:
+        return None
+    return ratio_reglementaire(
+        type_accueil=accueil.type_accueil,
+        categorie_age=categorie_reglementaire_groupe(evenement),
+        centre=accueil.centre,
+        jour=jour,
+        modalite=modalite,
+        accueil_centre=accueil,
+    )
+
+
+def _resume_encadrement_groupes(accueil, groupes, ouvertures):
+    from animateurs.services.besoins_encadrement import regle_encadrement_effective
+
+    resultats = []
+    ouvertures_par_modalite = {}
+    for ouverture in ouvertures:
+        ouvertures_par_modalite.setdefault(ouverture.modalite_periscolaire_id, []).append(ouverture)
+
+    for evenement in groupes:
+        regles = [
+            regle for regle in evenement.besoins_encadrement.all()
+            if regle.type_accueil_id == accueil.type_accueil_id
+        ]
+        ligne = {"nom": evenement.nom, "resume": "À configurer", "details": [], "exigences": []}
+        if not regles:
+            resultats.append(ligne)
+            continue
+
+        modes = {regle.mode_calcul for regle in regles}
+        valeurs_references = [regle.effectif_enfants_reference for regle in regles]
+        references = {int(valeur) for valeur in valeurs_references if valeur is not None}
+        reference = (
+            next(iter(references))
+            if len(references) == 1 and all(valeur is not None for valeur in valeurs_references)
+            else None
+        )
+        suffixe_reference = f" · Effectif de référence : {reference} enfants" if reference is not None else ""
+
+        def ajouter_references_contextuelles():
+            if reference is not None:
+                return
+            for regle in regles:
+                if regle.effectif_enfants_reference is None:
+                    continue
+                contexte = regle.modalite_periscolaire.nom if regle.modalite_periscolaire_id else "Par défaut"
+                ligne["details"].append({
+                    "contexte": contexte,
+                    "texte": f"Effectif de référence : {regle.effectif_enfants_reference} enfants",
+                })
+
+        if modes == {BesoinEncadrement.MODE_MANUEL}:
+            postes = {int(regle.effectif_cible) for regle in regles}
+            if len(postes) == 1:
+                nombre = next(iter(postes))
+                ligne["resume"] = f"{nombre} poste{'s' if nombre > 1 else ''} requis{suffixe_reference}"
+                ajouter_references_contextuelles()
+            else:
+                ligne["resume"] = "Postes définis selon les créneaux"
+                for regle in regles:
+                    contexte = regle.modalite_periscolaire.nom if regle.modalite_periscolaire_id else "Par défaut"
+                    texte = f"{regle.effectif_cible} poste{'s' if regle.effectif_cible > 1 else ''} requis"
+                    if regle.effectif_enfants_reference is not None:
+                        texte += f" · Effectif de référence : {regle.effectif_enfants_reference} enfants"
+                    ligne["details"].append({"contexte": contexte, "texte": texte})
+        elif modes == {BesoinEncadrement.MODE_REGLEMENTAIRE}:
+            taux_contextes = []
+            if accueil.type_accueil.code == TypeAccueil.VACANCES:
+                taux = _ratio_reglementaire_accueil(accueil, evenement)
+                if taux:
+                    taux_contextes.append(("", int(taux)))
+            else:
+                for modalite_id, lignes_ouverture in ouvertures_par_modalite.items():
+                    modalite = lignes_ouverture[0].modalite_periscolaire
+                    taux_par_ouverture = []
+                    for ouverture in lignes_ouverture:
+                        regle_effective = regle_encadrement_effective(
+                            evenement,
+                            type_accueil=accueil.type_accueil,
+                            modalite=modalite,
+                            periode_calendrier=ouverture.periode_calendrier,
+                        )
+                        if (
+                            regle_effective is None
+                            or regle_effective.mode_calcul != BesoinEncadrement.MODE_REGLEMENTAIRE
+                        ):
+                            continue
+                        taux = _ratio_reglementaire_accueil(
+                            accueil, evenement, modalite=modalite, ouverture=ouverture
+                        )
+                        if taux:
+                            taux_par_ouverture.append((ouverture, int(taux)))
+                    taux_vus = {taux for _ouverture, taux in taux_par_ouverture}
+                    if len(taux_vus) == 1:
+                        taux_contextes.append((modalite.nom, next(iter(taux_vus))))
+                    else:
+                        couples_vus = set()
+                        for ouverture, taux in taux_par_ouverture:
+                            cle = (ouverture.periode_calendrier_id, taux)
+                            if cle in couples_vus:
+                                continue
+                            couples_vus.add(cle)
+                            contexte = f"{modalite.nom} · {ouverture.periode_calendrier.nom}"
+                            taux_contextes.append((contexte, taux))
+            taux_distincts = {taux for _contexte, taux in taux_contextes}
+            ligne["resume"] = "Calcul réglementaire"
+            if len(taux_distincts) == 1:
+                ligne["resume"] += f" · Taux appliqué : 1 / {next(iter(taux_distincts))}"
+            elif len(taux_distincts) > 1:
+                ligne["details"] = [
+                    {"contexte": contexte, "texte": f"Taux appliqué : 1 / {taux}"}
+                    for contexte, taux in taux_contextes
+                ]
+            ligne["resume"] += suffixe_reference
+            ajouter_references_contextuelles()
+        else:
+            ligne["resume"] = "Selon les créneaux"
+            for regle in regles:
+                contexte = regle.modalite_periscolaire.nom if regle.modalite_periscolaire_id else "Par défaut"
+                if regle.mode_calcul == BesoinEncadrement.MODE_MANUEL:
+                    texte = f"{regle.effectif_cible} poste{'s' if regle.effectif_cible > 1 else ''} requis"
+                else:
+                    ouverture = next(iter(ouvertures_par_modalite.get(regle.modalite_periscolaire_id, [])), None)
+                    taux = _ratio_reglementaire_accueil(
+                        accueil, evenement,
+                        modalite=regle.modalite_periscolaire if regle.modalite_periscolaire_id else None,
+                        ouverture=ouverture,
+                    )
+                    texte = "Calcul réglementaire" + (f" · 1 / {taux}" if taux else "")
+                if regle.effectif_enfants_reference is not None:
+                    texte += f" · Effectif de référence : {regle.effectif_enfants_reference} enfants"
+                ligne["details"].append({"contexte": contexte, "texte": texte})
+
+        ligne["exigences"] = _exigences_contextuelles_moderne(evenement)
+        resultats.append(ligne)
+    return resultats
+
+
 def _accueils_centre_payload(centre):
     cache = getattr(centre, "_prefetched_objects_cache", {}).get("accueils")
     accueils = list(cache) if cache is not None else list(centre.accueils.select_related("type_accueil").all())
@@ -400,14 +569,20 @@ def _accueils_centre_payload(centre):
         for groupe in groupes:
             jours.update(int(numero) for numero in (groupe.jours_ouverts or []))
             for periode in groupe.periodes_scolaires.all():
-                periodes[periode.id] = periode.libelle_avec_annee
+                periodes[periode.id] = periode
             for besoin in groupe.besoins_encadrement.all():
+                if besoin.type_accueil_id != accueil.type_accueil_id:
+                    continue
                 modes.add(besoin.mode_calcul)
         ouvertures = list(
             accueil.ouvertures_periodes.select_related("modalite_periscolaire", "periode_calendrier")
             .filter(actif=True)
             .order_by("periode_calendrier__debut", "modalite_periscolaire__ordre", "jour_semaine")
         )
+        if accueil.type_accueil.code == TypeAccueil.PERISCOLAIRE:
+            # Les jours du Périscolaire viennent des ouvertures réelles de
+            # l'accueil, pas des anciens jours génériques portés par le groupe.
+            jours = {int(ouverture.jour_semaine) for ouverture in ouvertures}
         modalites = []
         vus = set()
         for ouverture in ouvertures:
@@ -415,7 +590,11 @@ def _accueils_centre_payload(centre):
             if cle in vus:
                 continue
             vus.add(cle)
-            modalites.append(ouverture.modalite_periscolaire.nom)
+            modalites.append({
+                "id": ouverture.modalite_periscolaire_id,
+                "code": ouverture.modalite_periscolaire.code,
+                "nom": ouverture.modalite_periscolaire.nom,
+            })
         if not modes:
             encadrement = "À configurer"
         elif modes == {"reglementaire"}:
@@ -423,7 +602,7 @@ def _accueils_centre_payload(centre):
         elif modes == {"manuel"}:
             encadrement = "Postes définis manuellement"
         else:
-            encadrement = "Configuration mixte"
+            encadrement = "Selon les groupes / créneaux"
         resultats.append({
             "id": accueil.id,
             "type_accueil_id": accueil.type_accueil_id,
@@ -440,10 +619,75 @@ def _accueils_centre_payload(centre):
             "groupes_noms": [groupe.nom for groupe in groupes],
             "nb_groupes": len(groupes),
             "jours_ouverts": sorted(jours),
-            "periodes_noms": list(periodes.values()),
-            "modalites_noms": modalites,
+            "periodes_noms": [periode.libelle_avec_annee for periode in periodes.values()],
+            "periodes_ouvertes": _periodes_vacances_resume(periodes.values()),
+            "modalites_periscolaires": modalites,
+            "modalites_noms": [modalite["nom"] for modalite in modalites],
             "encadrement_resume": encadrement,
+            "encadrement_groupes": _resume_encadrement_groupes(accueil, groupes, ouvertures),
         })
+    return resultats
+
+
+def _resume_encadrement_moderne(evenement):
+    """Résume l'encadrement sans consulter les champs historiques du groupe."""
+
+    accueil = evenement.accueil_centre
+    regles = list(
+        evenement.besoins_encadrement.filter(type_accueil=accueil.type_accueil)
+        .select_related("modalite_periscolaire", "periode_calendrier")
+    )
+    if not regles:
+        return "À configurer"
+
+    modes = {regle.mode_calcul for regle in regles}
+    if modes == {"reglementaire"}:
+        resume = "Calcul réglementaire"
+    elif modes == {"manuel"}:
+        nombres = {int(regle.effectif_cible) for regle in regles}
+        if len(nombres) == 1:
+            nombre = nombres.pop()
+            resume = f"{nombre} animateur{'s' if nombre > 1 else ''} requis"
+        else:
+            resume = "Postes définis selon les créneaux"
+    else:
+        resume = "Selon les créneaux"
+
+    if accueil.type_accueil.code == "periscolaire" and accueil.pedt_applicable:
+        resume += " · PEDT"
+    return resume
+
+
+def _exigences_contextuelles_moderne(evenement):
+    """Retourne uniquement les exigences rattachées au type de l'accueil."""
+
+    accueil = evenement.accueil_centre
+    regles = list(
+        evenement.besoins_encadrement.filter(type_accueil=accueil.type_accueil)
+        .select_related("modalite_periscolaire", "periode_calendrier")
+    )
+    contextes_valides = {
+        (regle.modalite_periscolaire_id, regle.periode_calendrier_id): regle
+        for regle in regles
+    }
+    besoins = evenement.besoins_qualifications.filter(
+        type_accueil=accueil.type_accueil,
+    ).select_related("qualification", "modalite_periscolaire", "periode_calendrier")
+    resultats = []
+    for besoin in besoins:
+        cle = (besoin.modalite_periscolaire_id, besoin.periode_calendrier_id)
+        regle = contextes_valides.get(cle)
+        if regle is None:
+            continue
+        contexte = []
+        if besoin.modalite_periscolaire_id:
+            contexte.append(besoin.modalite_periscolaire.nom)
+        if besoin.periode_calendrier_id:
+            contexte.append(besoin.periode_calendrier.nom)
+        libelle = f"{besoin.nombre_minimum} × {besoin.qualification.nom}"
+        if contexte:
+            libelle += f" ({' · '.join(contexte)})"
+        resultats.append(libelle)
     return resultats
 
 
@@ -490,6 +734,7 @@ def evenement_to_dict(
     )
     periodes = list(evenement.periodes_scolaires.all())
     effectifs_enfants = list(evenement.effectifs_enfants.all()) if include_effectifs else []
+    moderne = bool(evenement.accueil_centre_id)
     besoin_effectif = besoin_encadrement_effectif(
         evenement,
         type_accueil=type_accueil,
@@ -565,6 +810,10 @@ def evenement_to_dict(
         ),
         "effectif_cible": besoin_effectif.effectif_cible,
         "effectif_cible_base": evenement.effectif_cible,
+        "encadrement_resume": _resume_encadrement_moderne(evenement) if moderne else "",
+        "exigences_particulieres_libelle": (
+            _exigences_contextuelles_moderne(evenement) if moderne else []
+        ),
         "besoin_encadrement_personnalise": besoin_effectif.personnalise,
         "enfants_par_animateur_defaut": evenement.enfants_par_animateur_defaut,
         # Les écrans de gestion conservent la liste complète. Le chargement

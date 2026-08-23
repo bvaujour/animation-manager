@@ -450,10 +450,17 @@ function bouton(label, classes, onClick)
 		let modalitesPeriscolaires = [];
 		let periodesCalendrier = [];
 		let periodesCalendrierScolaires = [];
+		let lieuxDonnees = [];
+		let carteLieuGlissee = null;
+		const CLE_ETAT_LIEUX = "animation-manager:configuration-lieux";
 		container.innerHTML = `
 			<div class="centre-config-toolbar">
 				<div><p class="section-title">Lieux & accueils</p></div>
 				<button class="btn btn-primary" id="centre-wizard-new" type="button">+ Nouveau lieu</button>
+			</div>
+			<div class="lieux-navigation" aria-label="Rechercher et filtrer les lieux">
+				<label class="lieux-search"><span class="sr-only">Recherche par nom, nom court ou commune</span><input type="search" id="lieux-search" placeholder="Rechercher un lieu, un nom court ou une commune"></label>
+				<label class="lieux-filter"><span class="sr-only">Filtrer par accueil</span><select id="lieux-filter"><option value="tous">Tous les accueils</option></select></label>
 			</div>
 			<div id="centre-wizard-host" class="centre-wizard-host" hidden></div>
 			<div class="lieux-cards" id="lieux-list"></div>
@@ -480,6 +487,8 @@ function bouton(label, classes, onClick)
 		const list = container.querySelector("#lieux-list");
 		const wizardHost = container.querySelector("#centre-wizard-host");
 		const wizardNewButton = container.querySelector("#centre-wizard-new");
+		const rechercheLieux = container.querySelector("#lieux-search");
+		const filtreLieux = container.querySelector("#lieux-filter");
 		const nomEl = container.querySelector("#lieu-nom");
 		const codeEl = container.querySelector("#lieu-code");
 		const couleurEl = container.querySelector("#lieu-couleur");
@@ -499,6 +508,90 @@ function bouton(label, classes, onClick)
 			{ numero: 5, court: "Sam", long: "Samedi" },
 			{ numero: 6, court: "Dim", long: "Dimanche" },
 		];
+
+		function lireEtatLieux()
+		{
+			try { return JSON.parse(sessionStorage.getItem(CLE_ETAT_LIEUX) || "{}") || {}; }
+			catch (_err) { return {}; }
+		}
+
+		function enregistrerEtatLieux(changements)
+		{
+			try { sessionStorage.setItem(CLE_ETAT_LIEUX, JSON.stringify({ ...lireEtatLieux(), ...changements })); }
+			catch (_err) { /* Le stockage local est un confort, jamais un prérequis. */ }
+		}
+
+		function definirLieuOuvert(card, ouvert, memoriser = true)
+		{
+			const corps = card.querySelector(".lieu-accueils-block");
+			const boutonOuverture = card.querySelector(".lieu-toggle");
+			card.classList.toggle("is-open", ouvert);
+			corps.hidden = !ouvert;
+			boutonOuverture.setAttribute("aria-expanded", String(ouvert));
+			boutonOuverture.textContent = ouvert ? "Replier" : "Ouvrir";
+			if (memoriser)
+			{
+				const etat = lireEtatLieux();
+				const memeLieu = Number(etat.lieuId) === Number(card.dataset.lieuId);
+				enregistrerEtatLieux({ lieuId: ouvert ? Number(card.dataset.lieuId) : null, accueilId: ouvert && memeLieu ? etat.accueilId || null : null });
+			}
+		}
+
+		function ouvrirLieuUnique(card)
+		{
+			const ouvrir = !card.classList.contains("is-open");
+			list.querySelectorAll(".lieu-card.is-open").forEach((autre) => {
+				if (autre !== card) definirLieuOuvert(autre, false, false);
+			});
+			definirLieuOuvert(card, ouvrir);
+		}
+
+		function normaliserRecherche(valeur)
+		{
+			return String(valeur || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+		}
+
+		function appliquerFiltresLieux()
+		{
+			const recherche = normaliserRecherche(rechercheLieux.value);
+			const type = filtreLieux.value;
+			let visibles = 0;
+			list.querySelectorAll(".lieu-card").forEach((card) => {
+				const correspondRecherche = !recherche || card.dataset.recherche.includes(recherche);
+				const correspondType = type === "tous" || card.dataset.typesAccueil.split(" ").includes(type);
+				card.hidden = !(correspondRecherche && correspondType);
+				if (!card.hidden) visibles += 1;
+			});
+			let vide = list.querySelector(".lieux-filter-empty");
+			if (!vide)
+			{
+				vide = document.createElement("p");
+				vide.className = "empty-note lieux-filter-empty";
+				vide.textContent = "Aucun lieu ne correspond à cette recherche.";
+				list.appendChild(vide);
+			}
+			vide.hidden = visibles > 0 || lieuxDonnees.length === 0;
+		}
+
+		function cartesLieuxOrdonnees()
+		{
+			return [...list.querySelectorAll(".lieu-card")];
+		}
+
+		function persisterOrdreLieux()
+		{
+			const centre_ids = cartesLieuxOrdonnees().map((card) => Number(card.dataset.lieuId));
+			return apiFetch("/api/centres/reordonner/", {
+				method: "POST",
+				body: JSON.stringify({ centre_ids }),
+			}).then(() => {
+				lieuxDonnees.sort((a, b) => centre_ids.indexOf(Number(a.id)) - centre_ids.indexOf(Number(b.id)));
+				afficherToast("Ordre des lieux enregistré.");
+			}).catch((err) => {
+				afficherToast(erreurMessage(err, "Impossible d’enregistrer l’ordre des lieux."), true);
+				return charger();
+			});
+		}
 
 		function typesLieuHtml(prefix, selection = ["vacances"])
 		{
@@ -634,7 +727,7 @@ function bouton(label, classes, onClick)
 			}).join("");
 		}
 
-		function evenementFormHtml(prefix, groupe = null, accueilCode = null)
+		function evenementFormHtml(prefix, groupe = null, accueilCode = null, accueil = null)
 		{
 			const uid = identifiantChamp(`groupe-${groupe?.id || "nouveau"}`);
 			const nomId = `${uid}-nom`;
@@ -669,7 +762,7 @@ function bouton(label, classes, onClick)
 
 			function besoinsHtmlContexte(valeurs, attribut = "data-context-qualification-id")
 			{
-				return `<div class="besoins-diplomes-statuts">${blocBesoins("Statuts", qualificationsEvenements.filter((item) => item.est_statut), "besoin-type-block--statuts", valeurs, attribut)}<details class="besoins-diplomes-details"><summary><span>Diplômes / besoins spécifiques</span><span class="period-year-chevron" aria-hidden="true">⌄</span></summary>${blocBesoins("Diplômes / besoins spécifiques", qualificationsEvenements.filter((item) => !item.est_statut), "besoin-type-block--diplomes", valeurs, attribut)}</details></div>`;
+				return `<details class="staffing-advanced-requirements"><summary><span>Qualifications et exigences particulières</span><span class="period-year-chevron" aria-hidden="true">⌄</span></summary><div class="besoins-diplomes-statuts">${blocBesoins("Statuts", qualificationsEvenements.filter((item) => item.est_statut), "besoin-type-block--statuts", valeurs, attribut)}${blocBesoins("Diplômes / besoins spécifiques", qualificationsEvenements.filter((item) => !item.est_statut), "besoin-type-block--diplomes", valeurs, attribut)}</div></details>`;
 			}
 
 			const vacances = contexteExistant("vacances", null);
@@ -701,7 +794,7 @@ function bouton(label, classes, onClick)
 							<label class="staffing-total" data-staffing-auto><span>Fréquentation de référence</span><input type="number" min="0" step="1" class="${prefix}-staffing-context-reference" value="${reference}" placeholder="ex : 24" ${active ? "" : "disabled"}><small>L’effectif réel saisi dans le Planning reste prioritaire.</small></label>
 							<label class="staffing-total"><span>Renforts souhaités</span><input type="number" min="0" step="1" class="${prefix}-staffing-context-renforts" value="${renforts}" ${active ? "" : "disabled"}><small>Ajoutés au-delà du minimum requis.</small></label>
 						</div>
-						<div class="staffing-specific-needs"><div class="event-setting-heading event-setting-heading--needs"><strong>Exigences spécifiques</strong><span>Facultatif : diplômes/statuts métier supplémentaires. Les quotas légaux sont contrôlés globalement dans Paramètres avancés.</span></div>${besoinsHtmlContexte(qualifs)}</div>
+						<div class="staffing-specific-needs">${besoinsHtmlContexte(qualifs)}</div>
 					</div>
 				</section>`;
 			}
@@ -714,16 +807,18 @@ function bouton(label, classes, onClick)
 				regle: vacances,
 				obligatoire: true,
 			});
+			const modalitesAccueil = accueil?.modalites_periscolaires || (accueil ? [] : modalitesPeriscolaires);
 			const periDefautHtml = carteBesoin({
 				cle: "periscolaire-defaut",
 				typeCode: "periscolaire",
-				titre: "Périscolaire — besoin par défaut",
-				sousTitre: "Aucun besoin Vacances n’est repris automatiquement.",
+				titre: modalitesAccueil.length === 1 ? "Encadrement" : "Encadrement par défaut",
+				sousTitre: modalitesAccueil.length > 1 ? "Ce besoin s’applique à tous les temps de cet accueil." : "C’est l’encadrement normal de ce groupe pour cet accueil.",
 				regle: periscolaireDefaut,
+				obligatoire: true,
 			});
-			const periModalitesHtml = modalitesPeriscolaires.map((modalite) => {
+			const periModalitesHtml = modalitesAccueil.map((modalite) => {
 				const regle = contexteExistant("periscolaire", modalite.code);
-				return carteBesoin({
+				return `<div class="staffing-exception-item" data-staffing-exception="${escapeHtml(modalite.code)}" ${regle ? "" : "hidden"}>${carteBesoin({
 					cle: `periscolaire-${modalite.code}`,
 					typeCode: "periscolaire",
 					titre: modalite.nom,
@@ -731,8 +826,9 @@ function bouton(label, classes, onClick)
 					regle,
 					modaliteCode: modalite.code,
 					herite: Boolean(periscolaireDefaut),
-				});
+				})}</div>`;
 			}).join("");
+			const modalitesDisponiblesHtml = modalitesAccueil.map((modalite) => `<option value="${escapeHtml(modalite.code)}" ${contexteExistant("periscolaire", modalite.code) ? "hidden" : ""}>${escapeHtml(modalite.nom)}</option>`).join("");
 
 			const joursHtml = JOURS_EVENEMENT.map((jour) => {
 				const id = `${uid}-jour-${jour.numero}`;
@@ -774,8 +870,8 @@ function bouton(label, classes, onClick)
 						<summary><span><strong>Périscolaire</strong><small>Configuration propre au Périscolaire, sans reprise des besoins Vacances.</small></span><span class="period-year-chevron" aria-hidden="true">⌄</span></summary>
 						<div class="staffing-periscolaire-content">
 							${periDefautHtml}
-							<div class="event-setting-heading event-setting-heading--needs"><strong>Exceptions par créneau</strong><span>Un créneau non personnalisé reprend uniquement le besoin Périscolaire par défaut. Sans défaut, il reste non configuré.</span></div>
-							<div class="staffing-context-modalities">${periModalitesHtml}</div>
+							${modalitesAccueil.length === 1 ? `<p class="staffing-single-modality">Cet accueil utilise uniquement : <strong>${escapeHtml(modalitesAccueil[0].nom)}</strong>. Aucun autre réglage n’est nécessaire.</p>` : ""}
+							${modalitesAccueil.length > 1 ? `<section class="staffing-exceptions"><div class="event-setting-heading event-setting-heading--needs"><strong>Adapter l’encadrement pour un temps particulier</strong><span>Ajoutez une exception uniquement si un temps nécessite un encadrement différent.</span></div><div class="staffing-exception-add"><select class="${prefix}-staffing-exception-select" aria-label="Temps à différencier"><option value="">Choisir un temps</option>${modalitesDisponiblesHtml}</select><button type="button" class="btn btn-secondary ${prefix}-staffing-exception-add">+ Ajouter un encadrement différent</button></div><div class="staffing-context-modalities">${periModalitesHtml}</div></section>` : ""}
 						</div>
 					</details>` : ""}
 				</section>
@@ -786,6 +882,26 @@ function bouton(label, classes, onClick)
 		{
 			const permanentInput = root.querySelector(`.${prefix}-permanent`);
 			const periodSettings = root.querySelector(`.${prefix}-period-settings`);
+			const exceptionSelect = root.querySelector(`.${prefix}-staffing-exception-select`);
+			const exceptionAdd = root.querySelector(`.${prefix}-staffing-exception-add`);
+			if (exceptionSelect && exceptionAdd)
+			{
+				exceptionAdd.addEventListener("click", () =>
+				{
+					const code = exceptionSelect.value;
+					if (!code) return;
+					const item = root.querySelector(`[data-staffing-exception="${CSS.escape(code)}"]`);
+					const toggle = item?.querySelector(`.${prefix}-staffing-context-enabled`);
+					if (item && toggle)
+					{
+						item.hidden = false;
+						toggle.checked = true;
+						toggle.dispatchEvent(new Event("change", { bubbles: true }));
+						exceptionSelect.querySelector(`option[value="${CSS.escape(code)}"]`).hidden = true;
+						exceptionSelect.value = "";
+					}
+				});
+			}
 
 			function actualiserModePermanent()
 			{
@@ -921,7 +1037,17 @@ function bouton(label, classes, onClick)
 				});
 			});
 			root.querySelectorAll(`.${prefix}-staffing-context-enabled`).forEach((input) =>
-				input.addEventListener("change", actualiserContextesEncadrement)
+				input.addEventListener("change", () =>
+				{
+					actualiserContextesEncadrement();
+					const item = input.closest("[data-staffing-exception]");
+					if (item && !input.checked)
+					{
+						item.hidden = true;
+						const option = exceptionSelect?.querySelector(`option[value="${CSS.escape(item.dataset.staffingException)}"]`);
+						if (option) option.hidden = false;
+					}
+				})
 			);
 			root.querySelectorAll(`.${prefix}-staffing-context-mode`).forEach((input) =>
 				input.addEventListener("change", actualiserContextesEncadrement)
@@ -1128,10 +1254,10 @@ function bouton(label, classes, onClick)
 			if (intro) intro.textContent = accueilCode === "vacances" ? "Besoins propres à cet accueil Vacances." : "Besoins propres à cet accueil Périscolaire.";
 		}
 
-		function ouvrirEditionEvenement(evenement, lieu, row)
+		function ouvrirEditionEvenement(evenement, lieu, row, accueil = null)
 		{
 			row.classList.add("team-row-editing");
-			row.innerHTML = evenementFormHtml("edit-team", evenement, evenement.type_accueil_code || evenement.type_accueil_codes?.[0] || null);
+			row.innerHTML = evenementFormHtml("edit-team", evenement, evenement.type_accueil_code || evenement.type_accueil_codes?.[0] || null, accueil);
 			initialiserFormGroupe(row, "edit-team");
 			contextualiserFormGroupe(row, evenement.type_accueil_code || evenement.type_accueil_codes?.[0] || null);
 			const error = row.querySelector(".edit-team-error");
@@ -1173,12 +1299,15 @@ function bouton(label, classes, onClick)
 							</div>
 							<div class="team-meta">
 								${evenement.groupe_type === "sejour" ? `<span>${escapeHtml(libelleDate(evenement.groupe_date_debut_validite))} → ${escapeHtml(libelleDate(evenement.groupe_date_fin_validite))}</span>` : ""}
-								<span>${evenement.effectif_cible} animateur${evenement.effectif_cible > 1 ? "s" : ""}</span>
-								<span>1 anim. / ${evenement.enfants_par_animateur_defaut || 8} enfants</span>
+								${evenement.accueil_centre_id
+									? `<span>Encadrement : ${escapeHtml(evenement.encadrement_resume || "À configurer")}</span>`
+									: `<span>${evenement.effectif_cible} animateur${evenement.effectif_cible > 1 ? "s" : ""}</span><span>1 anim. / ${evenement.enfants_par_animateur_defaut || 8} enfants</span>`}
 								<span>${escapeHtml(periodeLibelle(evenement))}</span>
 								<span>${escapeHtml(joursOuvertureLibelle(evenement))}</span>
 								${(evenement.dates_exclues || []).length ? `<span>${evenement.dates_exclues.length} fermeture${evenement.dates_exclues.length > 1 ? "s" : ""}</span>` : ""}
-								${(evenement.qualifications_libelle || []).length ? `<span>${escapeHtml(evenement.qualifications_libelle.join(", "))}</span>` : ""}
+								${evenement.accueil_centre_id
+									? ((evenement.exigences_particulieres_libelle || []).length ? `<span>Exigence particulière : ${escapeHtml(evenement.exigences_particulieres_libelle.join(", "))}</span>` : "")
+									: ((evenement.qualifications_libelle || []).length ? `<span>${escapeHtml(evenement.qualifications_libelle.join(", "))}</span>` : "")}
 								${evenement.nb_affectations ? `<span>${evenement.nb_affectations} affectation${evenement.nb_affectations > 1 ? "s" : ""}</span>` : ""}
 							</div>
 						</div>
@@ -1189,7 +1318,7 @@ function bouton(label, classes, onClick)
 					actions.lastChild.disabled = index === 0;
 					actions.appendChild(bouton("↓", "btn btn-icon btn-ghost", () => deplacerEvenement(c, evenements, index, 1)));
 					actions.lastChild.disabled = index === evenements.length - 1;
-					actions.appendChild(bouton("Modifier", "btn btn-ghost", () => ouvrirEditionEvenement(evenement, c, row)));
+					actions.appendChild(bouton("Modifier", "btn btn-ghost", () => ouvrirEditionEvenement(evenement, c, row, accueil)));
 					const supprimer = bouton("Supprimer", "btn btn-danger-ghost", () =>
 					{
 						if (!confirm(`Supprimer le groupe « ${evenement.nom} » ?`)) return;
@@ -1583,7 +1712,7 @@ function bouton(label, classes, onClick)
 				<div class="accueil-config-section"><div class="teams-heading"><div><h4>Groupes de cet accueil</h4><p>Ces groupes et leurs besoins sont propres à ${escapeHtml(accueil.nom_affichage || accueil.type_accueil_nom)}.</p></div><button type="button" class="btn btn-secondary team-add-toggle">+ Attribuer un groupe</button></div><div class="team-list"><p class="empty-note">Chargement…</p></div><div class="team-create-form" hidden></div></div>
 				${accueil.type_accueil_code === "periscolaire" ? '<div class="accueil-config-section"><div class="wizard-card-title"><strong>Fonctionnement Périscolaire</strong><button type="button" class="btn btn-secondary accueil-openings-toggle">Configurer les ouvertures</button></div><div class="periscolaire-openings-host" hidden></div></div>' : '<div class="accueil-config-section accueil-function-summary"><div class="wizard-card-title"><strong>Fonctionnement Vacances</strong><span>Les périodes et jours sont repris sur les groupes de cet accueil.</span></div></div>'}
 			</section>`;
-			host.querySelector(".accueil-config-close").addEventListener("click", () => { host.hidden = true; host.innerHTML = ""; });
+			host.querySelector(".accueil-config-close").addEventListener("click", () => { host.hidden = true; host.innerHTML = ""; enregistrerEtatLieux({ accueilId: null }); });
 			host.querySelector(".accueil-edit-save").addEventListener("click", async () => {
 				const err = host.querySelector(".accueil-general-error"); err.textContent = "";
 				const date_debut = host.querySelector(".accueil-edit-start").value; const date_fin = host.querySelector(".accueil-edit-end").value;
@@ -1599,7 +1728,7 @@ function bouton(label, classes, onClick)
 			{
 				if (form.dataset.initialise) return;
 				form.dataset.initialise = "1";
-				form.innerHTML = `${evenementFormHtml("new-team", null, accueil.type_accueil_code)}<div class="edit-actions"><button type="button" class="btn btn-primary team-create-submit">Créer l’instance</button><button type="button" class="btn btn-ghost team-create-cancel">Annuler</button></div>`;
+				form.innerHTML = `${evenementFormHtml("new-team", null, accueil.type_accueil_code, accueil)}<div class="edit-actions"><button type="button" class="btn btn-primary team-create-submit">Créer l’instance</button><button type="button" class="btn btn-ghost team-create-cancel">Annuler</button></div>`;
 				initialiserFormGroupe(form, "new-team"); contextualiserFormGroupe(form, accueil.type_accueil_code);
 				form.querySelector(".team-create-cancel").addEventListener("click", () => { form.hidden = true; });
 				form.querySelector(".team-create-submit").addEventListener("click", () => {
@@ -1616,25 +1745,64 @@ function bouton(label, classes, onClick)
 
 		function creerCarteLieu(c)
 		{
-			const card = document.createElement("section"); card.className = "lieu-card"; appliquerCouleurLieu(card, c.couleur); const accueils = c.accueils || [];
+			const card = document.createElement("section"); card.className = "lieu-card"; card.dataset.lieuId = c.id; appliquerCouleurLieu(card, c.couleur); const accueils = c.accueils || [];
+			card.dataset.recherche = normaliserRecherche([c.nom, c.code, c.commune].join(" "));
+			card.dataset.typesAccueil = [...new Set(accueils.map((accueil) => accueil.type_accueil_code).filter(Boolean))].join(" ");
 			function resumeAccueil(accueil)
 			{
+				const joursMap = new Map(JOURS_EVENEMENT.map((j)=>[j.numero,j.court]));
+				const jours = (accueil.jours_ouverts || []).map((j)=>joursMap.get(Number(j))).filter(Boolean).join(" · ") || "À compléter";
 				const groupes = (accueil.groupes_noms || []).join(" · ") || "Aucun groupe";
-				const joursMap = new Map(JOURS_EVENEMENT.map((j)=>[j.numero,j.court])); const jours=(accueil.jours_ouverts||[]).map((j)=>joursMap.get(Number(j))).filter(Boolean).join(" · ");
-				const fonctionnement = accueil.type_accueil_code === "periscolaire" ? ((accueil.modalites_noms||[]).join(" · ") || "Ouvertures à compléter") : ((accueil.periodes_noms||[]).slice(0,4).join(" · ") || "Périodes à compléter");
-				return `<div class="lieu-accueil-summary"><span><strong>Groupes :</strong> ${escapeHtml(groupes)}</span><span><strong>Fonctionnement :</strong> ${escapeHtml(fonctionnement)}${jours?` · ${escapeHtml(jours)}`:""}</span><span><strong>Encadrement :</strong> ${escapeHtml(accueil.encadrement_resume || "À compléter")}</span></div>`;
+				const ouverture = accueil.type_accueil_code === "periscolaire"
+					? `<div class="accueil-summary-section"><strong>Temps d’accueil</strong><span>${escapeHtml((accueil.modalites_noms || []).join(" · ") || "À compléter")}</span></div>`
+					: `<div class="accueil-summary-section"><strong>Périodes ouvertes</strong><div class="accueil-period-lines">${(accueil.periodes_ouvertes || []).length ? accueil.periodes_ouvertes.map((periode) => `<span>${escapeHtml(periode.nom)}${periode.semaines?.length ? ` · ${escapeHtml(periode.semaines.join(", "))}` : ""}</span>`).join("") : "<span>À compléter</span>"}</div></div>`;
+				const encadrement = (accueil.encadrement_groupes || []).length
+					? accueil.encadrement_groupes.map((groupe) => `<div class="accueil-staffing-line"><strong>${escapeHtml(groupe.nom)}</strong><span>${escapeHtml(groupe.resume)}</span>${(groupe.details || []).length ? `<ul>${groupe.details.map((detail) => `<li><b>${escapeHtml(detail.contexte)}</b> : ${escapeHtml(detail.texte)}</li>`).join("")}</ul>` : ""}${(groupe.exigences || []).length ? `<small>Exigence particulière : ${escapeHtml(groupe.exigences.join(", "))}</small>` : ""}</div>`).join("")
+					: '<span class="empty-note compact">Aucun groupe</span>';
+				return `<div class="lieu-accueil-summary">${ouverture}<div class="accueil-summary-section"><strong>Jours ouverts</strong><span>${escapeHtml(jours)}</span></div><div class="accueil-summary-section"><strong>Groupes</strong><span>${escapeHtml(groupes)}</span></div><div class="accueil-summary-section accueil-summary-staffing"><strong>Encadrement</strong><div>${encadrement}</div></div></div>`;
 			}
-			card.innerHTML = `<div class="lieu-card-header"><div class="lieu-card-identity"><span class="swatch lieu-swatch" style="background:${escapeHtml(c.couleur)}"></span><div><h3>${escapeHtml(c.nom)}</h3><span class="lieu-code">${escapeHtml(c.code)}</span>${c.code_postal?`<small>${escapeHtml(c.adresse||"")}${c.adresse?" · ":""}${escapeHtml(c.code_postal)} ${escapeHtml(c.commune||"")}</small>`:"<small>Coordonnées routières à compléter</small>"}</div></div><div class="lieu-actions"></div></div>
-				<div class="lieu-accueils-block"><div class="lieu-accueils-grid">${accueils.length?accueils.map((accueil)=>`<article class="lieu-accueil-card ${accueil.statut === "termine" ? "is-ended" : accueil.statut === "a_venir" ? "is-upcoming" : "is-active"}" data-accueil-id="${accueil.id}"><div class="lieu-accueil-card-main"><span class="accueil-status">${escapeHtml(accueilStatutLibelle(accueil))}</span><strong>${escapeHtml(accueil.nom_affichage || accueil.type_accueil_nom)}</strong><small>${escapeHtml(accueilDateResume(accueil))}${accueil.type_accueil_code === "periscolaire" && accueil.pedt_applicable ? " · PEDT" : ""}</small><em>${escapeHtml(accueil.libelle_analytique || "")}</em>${resumeAccueil(accueil)}</div><button type="button" class="btn btn-primary accueil-configure" data-accueil-id="${accueil.id}">Configurer l’accueil</button></article>`).join(""):'<div class="empty-note">Aucun accueil configuré.</div>'}</div><div class="accueil-inline-edit-host" hidden></div></div>`;
-			const actions = card.querySelector(".lieu-actions"); actions.appendChild(bouton("+ Ajouter un accueil","btn btn-primary",()=>ouvrirAssistantCentre(c))); actions.appendChild(bouton("Modifier le lieu","btn btn-ghost",()=>ouvrirEditionLieu(c,card))); actions.appendChild(bouton("Supprimer le lieu","btn btn-danger-ghost",()=>{if(!confirm(`Supprimer le lieu « ${c.nom} » ?`))return;apiFetch(`/api/centres/${c.id}/`,{method:"DELETE"}).then(()=>{afficherToast("Lieu supprimé.");charger();if(options.onChange)options.onChange();}).catch((err)=>afficherToast(erreurMessage(err,"Suppression impossible."),true));}));
-			card.querySelectorAll(".accueil-configure").forEach((button)=>button.addEventListener("click",()=>{const accueil=accueils.find((item)=>Number(item.id)===Number(button.dataset.accueilId));const host=card.querySelector(".accueil-inline-edit-host");if(!accueil)return;if(!host.hidden&&Number(host.dataset.accueilId)===Number(accueil.id)){host.hidden=true;host.innerHTML="";return;}afficherEditionAccueil(c,accueil,host);})); return card;
+			const nomsAccueils = [...new Set(accueils.map((accueil) => accueil.nom_affichage || accueil.type_accueil_nom).filter(Boolean))];
+			const resumeLieu = `${accueils.length} accueil${accueils.length > 1 ? "s" : ""}${nomsAccueils.length ? ` · ${nomsAccueils.join(" · ")}` : ""}`;
+			card.innerHTML = `<div class="lieu-card-header"><button type="button" class="lieu-drag-handle" draggable="true" title="Faire glisser pour réordonner" aria-label="Déplacer ${escapeHtml(c.nom)} par glisser-déposer">⋮⋮</button><div class="lieu-card-identity"><span class="swatch lieu-swatch" style="background:${escapeHtml(c.couleur)}"></span><div><div class="lieu-title-line"><h3>${escapeHtml(c.nom)}</h3><span class="lieu-code">${escapeHtml(c.code)}</span></div><small class="lieu-compact-summary">${escapeHtml(resumeLieu)}</small><small class="lieu-address">${c.code_postal?`${escapeHtml(c.commune||"")} · ${escapeHtml(c.code_postal)}`:"Coordonnées routières à compléter"}</small></div></div><div class="lieu-actions"><button type="button" class="btn btn-ghost lieu-toggle" aria-expanded="false">Ouvrir</button></div></div>
+				<div class="lieu-accueils-block" hidden><div class="lieu-inner-actions"></div><div class="lieu-accueils-grid">${accueils.length?accueils.map((accueil)=>`<article class="lieu-accueil-card ${accueil.statut === "termine" ? "is-ended" : accueil.statut === "a_venir" ? "is-upcoming" : "is-active"}" data-accueil-id="${accueil.id}"><div class="lieu-accueil-card-main"><span class="accueil-status">${escapeHtml(accueilStatutLibelle(accueil))}</span><strong>${escapeHtml(accueil.nom_affichage || accueil.type_accueil_nom)}</strong><small>${escapeHtml(accueilDateResume(accueil))}${accueil.type_accueil_code === "periscolaire" && accueil.pedt_applicable ? " · PEDT" : ""}</small><em>${escapeHtml(accueil.libelle_analytique || "")}</em>${resumeAccueil(accueil)}</div><button type="button" class="btn btn-primary accueil-configure" data-accueil-id="${accueil.id}">Configurer l’accueil</button></article>`).join(""):'<div class="empty-note">Aucun accueil configuré.</div>'}</div><div class="accueil-inline-edit-host" hidden></div></div>`;
+			card.querySelector(".lieu-toggle").addEventListener("click", () => ouvrirLieuUnique(card));
+			const poignee = card.querySelector(".lieu-drag-handle");
+			poignee.addEventListener("dragstart", (event) => {
+				carteLieuGlissee = card;
+				card.classList.add("is-dragging");
+				event.dataTransfer.effectAllowed = "move";
+				event.dataTransfer.setData("text/plain", String(c.id));
+			});
+			poignee.addEventListener("dragend", () => {
+				card.classList.remove("is-dragging");
+				list.querySelectorAll(".lieu-card.is-drag-over").forEach((item) => item.classList.remove("is-drag-over"));
+				carteLieuGlissee = null;
+			});
+			card.addEventListener("dragover", (event) => {
+				if (!carteLieuGlissee || carteLieuGlissee === card) return;
+				event.preventDefault();
+				card.classList.add("is-drag-over");
+			});
+			card.addEventListener("dragleave", () => card.classList.remove("is-drag-over"));
+			card.addEventListener("drop", (event) => {
+				event.preventDefault();
+				card.classList.remove("is-drag-over");
+				if (!carteLieuGlissee || carteLieuGlissee === card) return;
+				const apres = event.clientY > card.getBoundingClientRect().top + card.offsetHeight / 2;
+				list.insertBefore(carteLieuGlissee, apres ? card.nextSibling : card);
+				persisterOrdreLieux();
+			});
+			const actions = card.querySelector(".lieu-inner-actions"); actions.appendChild(bouton("+ Ajouter un accueil","btn btn-primary",()=>ouvrirAssistantCentre(c))); actions.appendChild(bouton("Modifier le lieu","btn btn-ghost",()=>ouvrirEditionLieu(c,card))); actions.appendChild(bouton("Supprimer le lieu","btn btn-danger-ghost",()=>{if(!confirm(`Supprimer le lieu « ${c.nom} » ?`))return;apiFetch(`/api/centres/${c.id}/`,{method:"DELETE"}).then(()=>{afficherToast("Lieu supprimé.");charger();if(options.onChange)options.onChange();}).catch((err)=>afficherToast(erreurMessage(err,"Suppression impossible."),true));}));
+			card.querySelectorAll(".accueil-configure").forEach((button)=>button.addEventListener("click",()=>{const accueil=accueils.find((item)=>Number(item.id)===Number(button.dataset.accueilId));const host=card.querySelector(".accueil-inline-edit-host");if(!accueil)return;if(!host.hidden&&Number(host.dataset.accueilId)===Number(accueil.id)){host.hidden=true;host.innerHTML="";enregistrerEtatLieux({accueilId:null});return;}enregistrerEtatLieux({lieuId:Number(c.id),accueilId:Number(accueil.id)});afficherEditionAccueil(c,accueil,host);})); return card;
 		}
 
 		function charger()
 		{
+			const positionScroll = window.scrollY;
 			list.setAttribute("aria-busy", "true");
 			return apiFetch("/api/centres/?tous_types=1").then((data) =>
 			{
+				lieuxDonnees = data;
 				const contenu = document.createDocumentFragment();
 				if (data.length === 0)
 				{
@@ -1651,6 +1819,21 @@ function bouton(label, classes, onClick)
 				// Ne remplace l'ancien affichage qu'une fois le nouveau construit.
 				// Ainsi, une erreur réseau ne laisse jamais la page Gestion vide.
 				list.replaceChildren(contenu);
+				const typesPresents = new Map();
+				data.forEach((lieu) => (lieu.accueils || []).forEach((accueil) => typesPresents.set(accueil.type_accueil_code, accueil.type_accueil_nom)));
+				const filtreActuel = filtreLieux.value;
+				filtreLieux.innerHTML = '<option value="tous">Tous les accueils</option>' + [...typesPresents].map(([code, nom]) => `<option value="${escapeHtml(code)}">${escapeHtml(nom)}</option>`).join("");
+				if ([...filtreLieux.options].some((option) => option.value === filtreActuel)) filtreLieux.value = filtreActuel;
+				appliquerFiltresLieux();
+				const etat = lireEtatLieux();
+				const cardOuverte = etat.lieuId ? list.querySelector(`.lieu-card[data-lieu-id="${CSS.escape(String(etat.lieuId))}"]`) : null;
+				if (cardOuverte)
+				{
+					definirLieuOuvert(cardOuverte, true, false);
+					const accueilBouton = etat.accueilId ? cardOuverte.querySelector(`.accueil-configure[data-accueil-id="${CSS.escape(String(etat.accueilId))}"]`) : null;
+					if (accueilBouton) accueilBouton.click();
+				}
+				requestAnimationFrame(() => window.scrollTo({ top: positionScroll, behavior: "auto" }));
 				return data;
 			}).catch((err) =>
 			{
@@ -1665,6 +1848,9 @@ function bouton(label, classes, onClick)
 				list.removeAttribute("aria-busy");
 			});
 		}
+
+		rechercheLieux.addEventListener("input", appliquerFiltresLieux);
+		filtreLieux.addEventListener("change", appliquerFiltresLieux);
 
 		container.querySelector("#lieu-submit").addEventListener("click", () =>
 		{

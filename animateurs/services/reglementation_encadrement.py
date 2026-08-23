@@ -25,7 +25,7 @@ from animateurs.models import (
     PeriodeCalendrier,
     TypeAccueil,
 )
-from animateurs.services.accueils import accueil_centre
+from animateurs.services.accueils import accueil_centre as resoudre_accueil_centre
 from animateurs.services.affectations import _ouverture_periscolaire_pour_date
 from animateurs.services.categories_groupes import categorie_reglementaire_groupe
 from animateurs.services.parametres import get_parametres_structure
@@ -70,17 +70,22 @@ class BesoinCentreCalcule:
         return self.effectif_reglementaire_requis + self.renforts_souhaites
 
 
-def duree_accueil_heures(centre, jour, modalite: ModalitePeriscolaire | None):
+def duree_accueil_heures(centre, jour, modalite: ModalitePeriscolaire | None, accueil_centre=None):
     if modalite is None:
         return None
-    ouvert, debut, fin = _ouverture_periscolaire_pour_date(centre, jour, modalite)
+    ouvert, debut, fin = _ouverture_periscolaire_pour_date(
+        centre, jour, modalite, accueil_centre
+    )
     if not ouvert or debut is None or fin is None:
         return None
     minutes = (fin.hour * 60 + fin.minute) - (debut.hour * 60 + debut.minute)
     return max(0, minutes) / 60
 
 
-def ratio_reglementaire(*, type_accueil, categorie_age, centre=None, jour=None, modalite=None, structure=None):
+def ratio_reglementaire(
+    *, type_accueil, categorie_age, centre=None, jour=None, modalite=None,
+    structure=None, accueil_centre=None,
+):
     """Retourne le nombre d'enfants par animateur pour le contexte demandé."""
 
     structure = structure or get_parametres_structure()
@@ -98,18 +103,22 @@ def ratio_reglementaire(*, type_accueil, categorie_age, centre=None, jour=None, 
     if code != TypeAccueil.PERISCOLAIRE:
         return None
 
-    duree = duree_accueil_heures(centre, jour, modalite) if centre is not None and jour is not None else None
+    duree = (
+        duree_accueil_heures(centre, jour, modalite, accueil_centre=accueil_centre)
+        if centre is not None and jour is not None else None
+    )
     court = duree is not None and duree <= 5
     pedt_applicable = bool(structure.pedt_actif)
-    if centre is not None:
-        accueil_periscolaire = accueil_centre(
+    accueil_periscolaire = accueil_centre
+    if accueil_periscolaire is None and centre is not None:
+        accueil_periscolaire = resoudre_accueil_centre(
             centre,
             TypeAccueil.PERISCOLAIRE,
             jour=jour,
             modalite=modalite,
         )
-        if accueil_periscolaire is not None:
-            pedt_applicable = bool(accueil_periscolaire.pedt_applicable)
+    if accueil_periscolaire is not None:
+        pedt_applicable = bool(accueil_periscolaire.pedt_applicable)
     if pedt_applicable:
         if court:
             return int(
