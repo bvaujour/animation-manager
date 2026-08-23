@@ -2229,6 +2229,167 @@ class Affectation(models.Model):
         return f"{self.animateur} @ {self.evenement} ({self.debut:%d/%m/%Y})"
 
 
+class FonctionOperationnelle(models.Model):
+    """Référentiel stable des responsabilités exercées dans le Planning."""
+
+    DIRECTEUR = "directeur"
+    DIRECTEUR_ADJOINT = "directeur_adjoint"
+    REFERENT_SITE = "referent_site"
+
+    code = models.SlugField(max_length=40, unique=True)
+    nom = models.CharField(max_length=80)
+    ordre = models.PositiveSmallIntegerField(default=0)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("ordre", "nom", "id")
+
+    def __str__(self):
+        return self.nom
+
+
+class ResponsabiliteOperationnelle(models.Model):
+    """Fonction temporaire, indépendante des postes d'animation du Planning.
+
+    Une responsabilité liée à une affectation est seulement un attribut métier
+    de cette présence. Une responsabilité autonome peut, elle, fournir du temps
+    de travail et contribuer explicitement à l'encadrement.
+    """
+
+    PERIMETRE_GROUPE = "groupe"
+    PERIMETRE_ACCUEIL = "accueil"
+    PERIMETRE_SITE = "site"
+    PERIMETRES = (
+        (PERIMETRE_GROUPE, "Groupe"),
+        (PERIMETRE_ACCUEIL, "Accueil"),
+        (PERIMETRE_SITE, "Site"),
+    )
+
+    animateur = models.ForeignKey(
+        Animateur, on_delete=models.PROTECT, related_name="responsabilites_operationnelles"
+    )
+    fonction = models.ForeignKey(
+        FonctionOperationnelle, on_delete=models.PROTECT, related_name="responsabilites"
+    )
+    debut = models.DateTimeField()
+    fin = models.DateTimeField()
+    perimetre = models.CharField(max_length=12, choices=PERIMETRES)
+    affectation_source_id = models.PositiveBigIntegerField(
+        null=True, blank=True, db_index=True,
+        help_text="Trace de la ligne d'origine ; le lien actif est résolu par animateur, groupe et période.",
+    )
+    evenement = models.ForeignKey(
+        Evenement, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="responsabilites_operationnelles",
+    )
+    accueil_centre = models.ForeignKey(
+        AccueilCentre, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="responsabilites_operationnelles",
+    )
+    centre = models.ForeignKey(
+        Centre, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="responsabilites_operationnelles",
+    )
+    bloque_affectation_animation = models.BooleanField(default=True)
+    fournit_temps_travail = models.BooleanField(
+        default=True,
+        help_text="La période constitue une présence propre, hors temps déjà fourni par une affectation.",
+    )
+    compte_dans_encadrement = models.BooleanField(default=False)
+    compte_dans_quotas_qualification = models.BooleanField(default=False)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("debut", "fonction__ordre", "animateur__prenom", "animateur__nom", "id")
+        indexes = [
+            models.Index(fields=("animateur", "debut", "fin"), name="resp_anim_periode_idx"),
+            models.Index(fields=("centre", "debut", "fin"), name="resp_site_periode_idx"),
+            models.Index(fields=("accueil_centre", "debut", "fin"), name="resp_acc_periode_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(fin__gt=models.F("debut")),
+                name="responsabilite_fin_apres_debut",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(perimetre="groupe", evenement__isnull=False, accueil_centre__isnull=True, centre__isnull=True)
+                    | models.Q(perimetre="accueil", evenement__isnull=True, accueil_centre__isnull=False, centre__isnull=True, affectation_source_id__isnull=True)
+                    | models.Q(perimetre="site", evenement__isnull=True, accueil_centre__isnull=True, centre__isnull=False, affectation_source_id__isnull=True)
+                ),
+                name="responsabilite_perimetre_coherent",
+            ),
+            models.UniqueConstraint(
+                fields=("affectation_source_id",),
+                condition=models.Q(affectation_source_id__isnull=False),
+                name="responsabilite_unique_par_affectation_source",
+            ),
+        ]
+
+    @property
+    def est_liee_affectation(self):
+        return not self.fournit_temps_travail
+
+    def clean(self):
+        super().clean()
+        erreurs = {}
+        if self.perimetre == self.PERIMETRE_GROUPE:
+            if not self.evenement_id:
+                erreurs["evenement"] = "Choisis le groupe concerné."
+            elif self.accueil_centre_id or self.centre_id:
+                erreurs["perimetre"] = "Un périmètre groupe ne peut pas cibler aussi un accueil ou un site."
+        elif self.perimetre == self.PERIMETRE_ACCUEIL:
+            if not self.accueil_centre_id:
+                erreurs["accueil_centre"] = "Choisis l'accueil concerné."
+            elif self.evenement_id or self.centre_id or self.affectation_source_id:
+                erreurs["perimetre"] = "Un périmètre accueil doit cibler uniquement un AccueilCentre."
+        elif self.perimetre == self.PERIMETRE_SITE:
+            if not self.centre_id:
+                erreurs["centre"] = "Choisis le site concerné."
+            elif self.evenement_id or self.accueil_centre_id or self.affectation_source_id:
+                erreurs["perimetre"] = "Un périmètre site doit cibler uniquement un lieu."
+        affectation = None
+        if self.affectation_source_id:
+            affectation = Affectation.objects.filter(pk=self.affectation_source_id).first()
+            if self.perimetre != self.PERIMETRE_GROUPE:
+                erreurs["affectation"] = "Une responsabilité liée à une affectation doit cibler un groupe."
+            elif affectation is not None and self.animateur_id != affectation.animateur_id:
+                erreurs["animateur"] = "La responsabilité doit concerner l'animateur affecté."
+            elif affectation is not None and self.evenement_id != affectation.evenement_id:
+                erreurs["evenement"] = "La responsabilité doit cibler le groupe de l'affectation."
+            elif affectation is not None and (self.debut < affectation.debut or self.fin > affectation.fin):
+                erreurs["debut"] = "La responsabilité doit rester dans la période de l'affectation."
+            if (self.fournit_temps_travail or self.bloque_affectation_animation
+                    or self.compte_dans_encadrement or self.compte_dans_quotas_qualification):
+                erreurs["affectation"] = (
+                    "Une responsabilité liée utilise déjà le temps et l'encadrement de l'affectation."
+                )
+        if self.compte_dans_quotas_qualification and not self.compte_dans_encadrement:
+            erreurs["compte_dans_quotas_qualification"] = (
+                "Une personne doit compter dans l'encadrement pour compter dans ses quotas."
+            )
+        if (
+            self.fournit_temps_travail and self.bloque_affectation_animation
+            and self.animateur_id and self.debut and self.fin
+            and Affectation.objects.filter(
+                animateur_id=self.animateur_id, debut__lt=self.fin, fin__gt=self.debut
+            ).exists()
+        ):
+            erreurs["bloque_affectation_animation"] = (
+                "Cette responsabilité bloquante chevauche déjà une affectation d’animation."
+            )
+        if erreurs:
+            raise ValidationError(erreurs)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.animateur} — {self.fonction} ({self.get_perimetre_display()})"
+
+
 class ActiviteTravailComplementaire(models.Model):
     """Temps de travail hors affectation dans un lieu ou un groupe."""
 

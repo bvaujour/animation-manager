@@ -14,6 +14,7 @@ from animateurs.models import (
     OuvertureCentrePeriode,
     PeriodeCalendrier,
     TypeAccueil,
+    ResponsabiliteOperationnelle,
 )
 
 from .accueils import accueil_actif_le, valider_contexte_accueil
@@ -25,6 +26,7 @@ from .flottants import (
     groupe_flottants_pour_centre,
     groupes_visibles,
 )
+from .responsabilites import conflit_responsabilite_bloquante
 
 
 def _ouverture_periscolaire_pour_date(centre, jour, modalite, accueil_centre=None):
@@ -258,6 +260,14 @@ def valider_affectation(
         type_accueil=type_accueil, modalite_periscolaire=modalite_periscolaire,
     ):
         return "Cet animateur a déjà une affectation qui chevauche ce créneau."
+    responsabilite = conflit_responsabilite_bloquante(
+        animateur=animateur, debut=debut, fin=fin
+    )
+    if responsabilite is not None:
+        return (
+            f"{animateur.prenom} {animateur.nom} exerce déjà la responsabilité "
+            f"« {responsabilite.fonction.nom} » sur ce créneau."
+        )
     indisponibilite = indisponibilite_effective_sur_plage(animateur, debut, fin)
     if indisponibilite:
         if autoriser_formation and indisponibilite[1].type_indisponibilite == "formation":
@@ -583,6 +593,17 @@ def modifier_affectation(
             "debut", "fin", "centre", "evenement",
             "type_accueil", "modalite_periscolaire",
         ]
+    )
+    # Le déplacement manuel conserve la responsabilité attachée à la carte,
+    # sans changer la création/déplacement de l'Affectation elle-même.
+    ResponsabiliteOperationnelle.objects.filter(
+        affectation_source_id=affectation.id,
+        fournit_temps_travail=False,
+    ).update(
+        animateur=affectation.animateur,
+        evenement=affectation.evenement,
+        debut=affectation.debut,
+        fin=affectation.fin,
     )
     affectation.horaires_journaliers.exclude(
         date__gte=affectation.debut.date(),

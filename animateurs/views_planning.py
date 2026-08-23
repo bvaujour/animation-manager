@@ -5,6 +5,7 @@ import json
 
 from django.db import transaction
 from django.db.models import Prefetch, Q
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
@@ -13,6 +14,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from .access import est_direction
 from .models import (
     Affectation,
+    AccueilCentre,
     Animateur,
     Centre,
     Evenement,
@@ -22,6 +24,8 @@ from .models import (
     PublicationPlanning,
     Qualification,
     ModalitePeriscolaire,
+    FonctionOperationnelle,
+    ResponsabiliteOperationnelle,
     TypeAccueil,
 )
 from .services.affectations import (
@@ -33,6 +37,7 @@ from .services.affectations import (
 from .services.dates import parse_to_aware_datetime
 from .services.flottants import est_groupe_flottants
 from .services.serializers import affectation_to_event
+from .services.responsabilites import responsabilite_correspond_affectation
 
 # ---------------------------------------------------------------------------
 # API - Planning (lecture des groupes + écriture individuelle)
@@ -41,6 +46,35 @@ from .services.serializers import affectation_to_event
 
 def _lundi_semaine(date):
     return date - datetime.timedelta(days=date.weekday())
+
+
+def _responsabilite_payload(item):
+    return {
+        "id": item.id,
+        "animateur_id": item.animateur_id,
+        "animateur_nom": f"{item.animateur.prenom} {item.animateur.nom}",
+        "fonction_id": item.fonction_id,
+        "fonction_code": item.fonction.code,
+        "fonction_nom": item.fonction.nom,
+        "debut": item.debut.isoformat(),
+        "fin": item.fin.isoformat(),
+        "perimetre": item.perimetre,
+        "affectation_id": item.affectation_source_id,
+        "evenement_id": item.evenement_id,
+        "accueil_centre_id": item.accueil_centre_id,
+        "centre_id": item.centre_id,
+        "bloque_affectation_animation": item.bloque_affectation_animation,
+        "fournit_temps_travail": item.fournit_temps_travail,
+        "compte_dans_encadrement": item.compte_dans_encadrement,
+        "compte_dans_quotas_qualification": item.compte_dans_quotas_qualification,
+    }
+
+
+def _booleen_payload(payload, nom, default=False):
+    valeur = payload.get(nom, default)
+    if valeur not in (True, False):
+        raise ValueError
+    return valeur
 
 
 def _contexte_planning(request, payload=None, *, exiger_modalite=False):
@@ -209,6 +243,22 @@ def api_planning(request):
         )
     )
 
+    affectations = list(affectations)
+    responsabilites_liees = list(
+        ResponsabiliteOperationnelle.objects.filter(
+            Q(affectation_source_id__in=[item.id for item in affectations])
+            | Q(
+                fournit_temps_travail=False,
+                evenement_id__in=[item.evenement_id for item in affectations],
+                animateur_id__in=[item.animateur_id for item in affectations],
+            )
+        ).select_related("fonction").order_by("id")
+    ) if affectations else []
+    for affectation in affectations:
+        affectation._responsabilites_planning = [
+            item for item in responsabilites_liees
+            if responsabilite_correspond_affectation(item, affectation)
+        ][:1]
     events = [affectation_to_event(a) for a in affectations]
 
     return JsonResponse(events, safe=False)
@@ -385,6 +435,140 @@ def api_affectation_detail(request, affectation_id):
         return JsonResponse({"error": str(exc)}, status=409)
 
     return JsonResponse(affectation_to_event(affectation))
+
+
+@require_http_methods(["GET", "POST"])
+def api_responsabilites_operationnelles(request):
+    """Liste ou crée la couche de responsabilités, sans écrire d'Affectation."""
+
+    if request.method == "GET":
+        queryset = ResponsabiliteOperationnelle.objects.select_related(
+            "animateur", "fonction", "evenement", "accueil_centre", "centre"
+        )
+        try:
+            if request.GET.get("start") and request.GET.get("end"):
+                debut = parse_to_aware_datetime(request.GET["start"])
+                fin = parse_to_aware_datetime(request.GET["end"])
+                queryset = queryset.filter(debut__lt=fin, fin__gt=debut)
+            if request.GET.get("centre_id"):
+                centre_id = int(request.GET["centre_id"])
+                queryset = queryset.filter(
+                    Q(centre_id=centre_id)
+                    | Q(accueil_centre__centre_id=centre_id)
+                    | Q(evenement__centre_id=centre_id)
+                )
+            if request.GET.get("affectation_id"):
+                queryset = queryset.filter(affectation_source_id=int(request.GET["affectation_id"]))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "Filtres invalides."}, status=400)
+        return JsonResponse([_responsabilite_payload(item) for item in queryset], safe=False)
+
+    try:
+        payload = json.loads(request.body)
+        if payload.get("fonction_id"):
+            fonction = FonctionOperationnelle.objects.get(pk=int(payload["fonction_id"]), active=True)
+        else:
+            fonction = FonctionOperationnelle.objects.get(code=payload["fonction_code"], active=True)
+        affectation = None
+        if payload.get("affectation_id"):
+            affectation = Affectation.objects.select_related("evenement").get(
+                pk=int(payload["affectation_id"])
+            )
+            item = ResponsabiliteOperationnelle(
+                animateur=affectation.animateur,
+                fonction=fonction,
+                debut=affectation.debut,
+                fin=affectation.fin,
+                perimetre=ResponsabiliteOperationnelle.PERIMETRE_GROUPE,
+                affectation_source_id=affectation.id,
+                evenement=affectation.evenement,
+                fournit_temps_travail=False,
+                bloque_affectation_animation=False,
+                compte_dans_encadrement=False,
+                compte_dans_quotas_qualification=False,
+            )
+            with transaction.atomic():
+                ResponsabiliteOperationnelle.objects.filter(
+                    affectation_source_id=affectation.id
+                ).delete()
+                item.save()
+        else:
+            animateur = Animateur.objects.get(pk=int(payload["animateur_id"]))
+            perimetre = payload["perimetre"]
+            item = ResponsabiliteOperationnelle(
+                animateur=animateur,
+                fonction=fonction,
+                debut=parse_to_aware_datetime(payload["debut"]),
+                fin=parse_to_aware_datetime(payload["fin"]),
+                perimetre=perimetre,
+                bloque_affectation_animation=_booleen_payload(
+                    payload, "bloque_affectation_animation", True
+                ),
+                compte_dans_encadrement=_booleen_payload(
+                    payload, "compte_dans_encadrement"
+                ),
+                compte_dans_quotas_qualification=_booleen_payload(
+                    payload, "compte_dans_quotas_qualification"
+                ),
+            )
+            if perimetre == ResponsabiliteOperationnelle.PERIMETRE_ACCUEIL:
+                item.accueil_centre = AccueilCentre.objects.get(pk=int(payload["accueil_centre_id"]))
+            elif perimetre == ResponsabiliteOperationnelle.PERIMETRE_SITE:
+                item.centre = Centre.objects.get(pk=int(payload["centre_id"]))
+            elif perimetre == ResponsabiliteOperationnelle.PERIMETRE_GROUPE:
+                item.evenement = Evenement.objects.get(pk=int(payload["evenement_id"]))
+            else:
+                raise ValueError
+            item.save()
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse({"error": "Responsabilité invalide."}, status=400)
+    except (Animateur.DoesNotExist, FonctionOperationnelle.DoesNotExist,
+            AccueilCentre.DoesNotExist, Centre.DoesNotExist, Evenement.DoesNotExist,
+            Affectation.DoesNotExist):
+        return JsonResponse({"error": "Contexte de responsabilité introuvable."}, status=404)
+    except ValidationError as exc:
+        return JsonResponse({"error": " ".join(exc.messages)}, status=400)
+    return JsonResponse(_responsabilite_payload(item), status=201)
+
+
+@require_http_methods(["PATCH", "DELETE"])
+def api_responsabilite_operationnelle_detail(request, responsabilite_id):
+    try:
+        item = ResponsabiliteOperationnelle.objects.select_related(
+            "animateur", "fonction"
+        ).get(pk=responsabilite_id)
+    except ResponsabiliteOperationnelle.DoesNotExist:
+        return JsonResponse({"error": "Responsabilité introuvable."}, status=404)
+    if request.method == "DELETE":
+        item.delete()
+        return JsonResponse({"ok": True})
+    try:
+        payload = json.loads(request.body)
+        if "fonction_id" in payload:
+            item.fonction = FonctionOperationnelle.objects.get(
+                pk=int(payload["fonction_id"]), active=True
+            )
+        elif "fonction_code" in payload:
+            item.fonction = FonctionOperationnelle.objects.get(
+                code=payload["fonction_code"], active=True
+            )
+        if item.fournit_temps_travail:
+            if "debut" in payload:
+                item.debut = parse_to_aware_datetime(payload["debut"])
+            if "fin" in payload:
+                item.fin = parse_to_aware_datetime(payload["fin"])
+            for nom in (
+                "bloque_affectation_animation", "compte_dans_encadrement",
+                "compte_dans_quotas_qualification",
+            ):
+                if nom in payload:
+                    setattr(item, nom, _booleen_payload(payload, nom))
+        item.save()
+    except (TypeError, ValueError, json.JSONDecodeError, FonctionOperationnelle.DoesNotExist):
+        return JsonResponse({"error": "Responsabilité invalide."}, status=400)
+    except ValidationError as exc:
+        return JsonResponse({"error": " ".join(exc.messages)}, status=400)
+    return JsonResponse(_responsabilite_payload(item))
 
 
 @require_POST

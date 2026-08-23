@@ -9,12 +9,61 @@ from django.utils import timezone
 
 from animateurs.models import (
     Affectation, ActiviteTravailComplementaire, ParticipationTravailComplementaire,
-    PeriodeScolaire,
+    PeriodeScolaire, ResponsabiliteOperationnelle,
 )
 
 
 class SelectionTempsTravailInvalide(ValueError):
     pass
+
+
+def fusionner_intervalles_travail(intervalles):
+    """Fusionne les présences superposées afin qu'une personne ne soit comptée qu'une fois."""
+
+    resultat = []
+    for debut, fin in sorted(intervalles, key=lambda item: item[0]):
+        if fin <= debut:
+            continue
+        if resultat and debut <= resultat[-1][1]:
+            resultat[-1] = (resultat[-1][0], max(resultat[-1][1], fin))
+        else:
+            resultat.append((debut, fin))
+    return resultat
+
+
+def intervalles_travail_responsabilites(animateur, debut, fin):
+    """Temps autonome exact ; les responsabilités liées sont déjà portées par l'affectation."""
+
+    return fusionner_intervalles_travail([
+        (max(item.debut, debut), min(item.fin, fin))
+        for item in ResponsabiliteOperationnelle.objects.filter(
+            animateur=animateur, fournit_temps_travail=True, debut__lt=fin, fin__gt=debut
+        )
+    ])
+
+
+def intervalles_travail_pour_animateur(animateur, debut, fin):
+    """Source horaire fusionnée des affectations et responsabilités autonomes."""
+
+    intervalles = list(intervalles_travail_responsabilites(animateur, debut, fin))
+    affectations = (
+        Affectation.objects.filter(animateur=animateur, debut__lt=fin, fin__gt=debut)
+        .prefetch_related("horaires_journaliers")
+    )
+    tz = timezone.get_current_timezone()
+    for affectation in affectations:
+        horaires = list(affectation.horaires_journaliers.all())
+        if horaires:
+            intervalles.extend(
+                (
+                    timezone.make_aware(datetime.datetime.combine(item.date, item.heure_arrivee), tz),
+                    timezone.make_aware(datetime.datetime.combine(item.date, item.heure_depart), tz),
+                )
+                for item in horaires
+            )
+        else:
+            intervalles.append((max(affectation.debut, debut), min(affectation.fin, fin)))
+    return fusionner_intervalles_travail(intervalles)
 
 
 def activites_temps_travail_pour_periodes(periodes, *, accepter_selection_englobante=False):
@@ -117,7 +166,7 @@ def selectionner_periodes(identifiants):
 
 
 def animateurs_affectes_sur_jours(jours, debut, fin):
-    """Retourne les animateurs ayant une vraie affectation sur les dates choisies."""
+    """Retourne les animateurs ayant une affectation ou une responsabilité autonome."""
 
     dates_par_animateur = {}
     animateurs = {}
@@ -134,6 +183,24 @@ def animateurs_affectes_sur_jours(jours, debut, fin):
             if jour in jours:
                 animateurs[affectation.animateur_id] = affectation.animateur
                 dates_par_animateur.setdefault(affectation.animateur_id, set()).add(jour)
+            jour += datetime.timedelta(days=1)
+    responsabilites = (
+        ResponsabiliteOperationnelle.objects.select_related("animateur")
+        .filter(fournit_temps_travail=True, debut__lt=fin, fin__gt=debut)
+        .order_by("animateur__prenom", "animateur__nom", "debut")
+    )
+    for responsabilite in responsabilites:
+        premier = max(timezone.localtime(responsabilite.debut).date(), min(jours))
+        dernier_exclusif = min(
+            timezone.localtime(responsabilite.fin - datetime.timedelta(microseconds=1)).date()
+            + datetime.timedelta(days=1),
+            max(jours) + datetime.timedelta(days=1),
+        )
+        jour = premier
+        while jour < dernier_exclusif:
+            if jour in jours:
+                animateurs[responsabilite.animateur_id] = responsabilite.animateur
+                dates_par_animateur.setdefault(responsabilite.animateur_id, set()).add(jour)
             jour += datetime.timedelta(days=1)
     resultat = []
     for animateur in sorted(animateurs.values(), key=lambda item: (item.prenom.casefold(), item.nom.casefold())):

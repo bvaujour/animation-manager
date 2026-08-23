@@ -62,6 +62,8 @@ from .views_pages import (
 from .views_planning import (
     api_affectation_create,
     api_affectation_detail,
+    api_responsabilite_operationnelle_detail,
+    api_responsabilites_operationnelles,
     api_horaires_affectations_groupe,
     api_planning,
     api_publication_planning,
@@ -99,6 +101,8 @@ __all__ = [
     "administration",
     "api_affectation_create",
     "api_affectation_detail",
+    "api_responsabilite_operationnelle_detail",
+    "api_responsabilites_operationnelles",
     "api_animateur_detail",
     "api_animateurs",
     "api_historique_statut_detail",

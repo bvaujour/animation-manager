@@ -89,6 +89,19 @@ document.addEventListener("DOMContentLoaded", function ()
 	const modalHorairesAffectation = document.getElementById("modal-horaires-affectation");
 	const formulaireHorairesAffectation = document.getElementById("horaires-affectation-form");
 	const champsHorairesAffectation = document.getElementById("horaires-affectation-fields");
+	const selectResponsabiliteAffectation = document.getElementById("affectation-responsabilite");
+	const modalResponsabiliteStandalone = document.getElementById("modal-responsabilite-standalone");
+	const formulaireResponsabiliteStandalone = document.getElementById("responsabilite-standalone-form");
+	const titreResponsabiliteStandalone = document.getElementById("responsabilite-standalone-title");
+	const selectResponsabiliteAnimateur = document.getElementById("responsabilite-animateur");
+	const selectResponsabiliteFonction = document.getElementById("responsabilite-fonction");
+	const selectResponsabilitePerimetre = document.getElementById("responsabilite-perimetre");
+	const inputResponsabiliteDebut = document.getElementById("responsabilite-debut");
+	const inputResponsabiliteFin = document.getElementById("responsabilite-fin");
+	const caseResponsabiliteBloque = document.getElementById("responsabilite-bloque");
+	const caseResponsabiliteEncadrement = document.getElementById("responsabilite-encadrement");
+	const caseResponsabiliteQuotas = document.getElementById("responsabilite-quotas");
+	const boutonSupprimerResponsabilite = document.getElementById("supprimer-responsabilite-standalone");
 	const titreHorairesAffectation = document.getElementById("horaires-affectation-title");
 	const boutonSupprimerAffectation = document.getElementById("supprimer-affectation");
 	const caseAffectationFlottante = document.getElementById("affectation-case-flottante");
@@ -99,6 +112,7 @@ document.addEventListener("DOMContentLoaded", function ()
 	let contexteEffectifsEnfants = null;
 	let contexteEncadrementSpecial = null;
 	let contexteHorairesAffectation = null;
+	let contexteResponsabiliteStandalone = null;
 	let contexteHorairesGroupe = null;
 
 	// Un FullCalendar.Calendar par centre, dans le même ordre que les
@@ -1899,6 +1913,7 @@ function libelleDate(dateStr)
 		}
 		contexteHorairesAffectation = { calendar, affectation, jours };
 		if (caseAffectationFlottante) caseAffectationFlottante.checked = eventEstFlottant(affectation);
+		if (selectResponsabiliteAffectation) selectResponsabiliteAffectation.value = affectation.extendedProps.responsabilite?.fonction_code || "";
 		titreHorairesAffectation.textContent = `Horaires — ${affectation.extendedProps.animateur_nom || affectation.title}`;
 		const horaires = affectation.extendedProps.horaires || {};
 		champsHorairesAffectation.innerHTML = jours.map((dateStr) =>
@@ -1964,6 +1979,19 @@ function libelleDate(dateStr)
 			await apiFetch(`/api/affectations/${contexteHorairesAffectation.affectation.id}/`, {
 				method: "PATCH", body: JSON.stringify({ horaires, type_affectation: caseAffectationFlottante?.checked ? "flottant" : "groupe", ...contextePlanningPayload() }),
 			});
+			const responsabiliteActuelle = contexteHorairesAffectation.affectation.extendedProps.responsabilite;
+			const fonctionCode = selectResponsabiliteAffectation?.value || "";
+			if (!fonctionCode && responsabiliteActuelle?.id)
+			{
+				await apiFetch(`/api/responsabilites-operationnelles/${responsabiliteActuelle.id}/`, { method: "DELETE" });
+			}
+			else if (fonctionCode && fonctionCode !== responsabiliteActuelle?.fonction_code)
+			{
+				await apiFetch("/api/responsabilites-operationnelles/", {
+					method: "POST",
+					body: JSON.stringify({ affectation_id: contexteHorairesAffectation.affectation.id, fonction_code: fonctionCode }),
+				});
+			}
 			const calendarEnregistre = contexteHorairesAffectation.calendar;
 			fermerModal(modalHorairesAffectation);
 			afficherToast(caseAffectationFlottante?.checked ? "Animateur enregistré comme mixte." : "Affectation enregistrée.");
@@ -2288,10 +2316,18 @@ function libelleDate(dateStr)
 
 			eventDidMount: function (info)
 			{
+				const responsabilite = info.event.extendedProps?.responsabilite;
+				const titre = info.el.querySelector(".fc-event-title");
+				if (responsabilite && titre)
+				{
+					const badge = document.createElement("span");
+					badge.className = "planning-responsibility-badge";
+					badge.textContent = responsabilite.fonction_nom;
+					titre.appendChild(badge);
+				}
 				const conflits = info.event.extendedProps?.conflits_formation || [];
 				if (!conflits.length) return;
 				info.el.classList.add("affectation-formation-conflict");
-				const titre = info.el.querySelector(".fc-event-title");
 				if (titre)
 				{
 					titre.textContent = titre.textContent.replace(/\s*⚠\s*FORMATION\s*$/u, "");
@@ -2502,6 +2538,118 @@ function libelleDate(dateStr)
 		ouvrirSaisieHorairesAffectation({ event }, calendar);
 	}
 
+	function accueilsContexteCentre(centre)
+	{
+		const idsVisibles = new Set((centre.evenements || []).map((item) => Number(item.accueil_centre_id)).filter(Boolean));
+		return (centre.accueils || []).filter((item) => idsVisibles.has(Number(item.id)) && (!typeAccueilPlanning || item.type_accueil_code === typeAccueilPlanning));
+	}
+
+	function valeurDateHeureLocale(valeur)
+	{
+		if (!valeur) return "";
+		const date = new Date(valeur);
+		const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+		return local.toISOString().slice(0, 16);
+	}
+
+	async function rafraichirResponsabilitesCentre(centre, zone)
+	{
+		if (!zone) return;
+		const calendar = calendars.find((item) => Number(item.centrePlanning?.id) === Number(centre.id));
+		if (!calendar?.view?.activeStart) return;
+		const params = new URLSearchParams({
+			centre_id: centre.id,
+			start: calendar.view.activeStart.toISOString(),
+			end: calendar.view.activeEnd.toISOString(),
+		});
+		try
+		{
+			const items = (await apiFetch(`/api/responsabilites-operationnelles/?${params}`)).filter((item) => !item.affectation_id);
+			zone.querySelector(".planning-responsibilities-list").innerHTML = items.length
+				? items.map((item) => `<button type="button" class="planning-responsibility-person" data-responsabilite-id="${item.id}"><strong>${escapeHtml(item.animateur_nom)}</strong><span>${escapeHtml(item.fonction_nom)}</span></button>`).join("")
+				: '<span class="planning-responsibilities-empty">Aucune responsabilité autonome</span>';
+			zone._responsabilites = items;
+		}
+		catch (_error)
+		{
+			zone.querySelector(".planning-responsibilities-list").innerHTML = '<span class="planning-responsibilities-empty">Chargement impossible</span>';
+		}
+	}
+
+	function ouvrirResponsabiliteStandalone(centre, zone, item=null)
+	{
+		const calendar = calendars.find((element) => Number(element.centrePlanning?.id) === Number(centre.id));
+		if (!calendar?.view?.activeStart) return;
+		contexteResponsabiliteStandalone = { centre, zone, item };
+		titreResponsabiliteStandalone.textContent = item ? "Modifier la responsabilité" : `Ajouter une responsabilité — ${centre.code}`;
+		selectResponsabiliteAnimateur.innerHTML = animateursPlanning.map((animateur) => `<option value="${animateur.id}">${escapeHtml(`${animateur.prenom} ${animateur.nom}`)}</option>`).join("");
+		selectResponsabiliteAnimateur.disabled = Boolean(item);
+		if (item) selectResponsabiliteAnimateur.value = item.animateur_id;
+		selectResponsabiliteFonction.value = item?.fonction_code || "directeur";
+		const accueils = accueilsContexteCentre(centre);
+		selectResponsabilitePerimetre.innerHTML = '<option value="site">Site entier</option>' + accueils.map((accueil) => `<option value="accueil:${accueil.id}">${escapeHtml(accueil.nom_affichage || accueil.libelle_analytique || "Accueil courant")}</option>`).join("");
+		selectResponsabilitePerimetre.value = item?.accueil_centre_id ? `accueil:${item.accueil_centre_id}` : "site";
+		selectResponsabilitePerimetre.disabled = Boolean(item);
+		inputResponsabiliteDebut.value = valeurDateHeureLocale(item?.debut || calendar.view.activeStart);
+		inputResponsabiliteFin.value = valeurDateHeureLocale(item?.fin || calendar.view.activeEnd);
+		caseResponsabiliteBloque.checked = item?.bloque_affectation_animation ?? true;
+		caseResponsabiliteEncadrement.checked = item?.compte_dans_encadrement ?? false;
+		caseResponsabiliteQuotas.checked = item?.compte_dans_quotas_qualification ?? false;
+		boutonSupprimerResponsabilite.hidden = !item;
+		ouvrirModal(modalResponsabiliteStandalone);
+	}
+
+	formulaireResponsabiliteStandalone?.addEventListener("submit", async (event) =>
+	{
+		event.preventDefault();
+		if (!contexteResponsabiliteStandalone) return;
+		if (caseResponsabiliteQuotas.checked && !caseResponsabiliteEncadrement.checked)
+		{
+			afficherToast("Pour compter dans les quotas, la personne doit compter dans l’encadrement.", true);
+			return;
+		}
+		const { centre, zone, item } = contexteResponsabiliteStandalone;
+		const valeurPerimetre = selectResponsabilitePerimetre.value;
+		const payload = {
+			fonction_code: selectResponsabiliteFonction.value,
+			debut: new Date(inputResponsabiliteDebut.value).toISOString(),
+			fin: new Date(inputResponsabiliteFin.value).toISOString(),
+			bloque_affectation_animation: caseResponsabiliteBloque.checked,
+			compte_dans_encadrement: caseResponsabiliteEncadrement.checked,
+			compte_dans_quotas_qualification: caseResponsabiliteQuotas.checked,
+		};
+		if (!item)
+		{
+			payload.animateur_id = Number(selectResponsabiliteAnimateur.value);
+			payload.perimetre = valeurPerimetre.startsWith("accueil:") ? "accueil" : "site";
+			if (payload.perimetre === "accueil") payload.accueil_centre_id = Number(valeurPerimetre.split(":")[1]);
+			else payload.centre_id = centre.id;
+		}
+		try
+		{
+			await apiFetch(item ? `/api/responsabilites-operationnelles/${item.id}/` : "/api/responsabilites-operationnelles/", {
+				method: item ? "PATCH" : "POST", body: JSON.stringify(payload),
+			});
+			fermerModal(modalResponsabiliteStandalone);
+			await rafraichirResponsabilitesCentre(centre, zone);
+			afficherToast("Responsabilité enregistrée.");
+		}
+		catch (error) { afficherToast(erreurMessage(error, "La responsabilité n’a pas pu être enregistrée."), true); }
+	});
+
+	boutonSupprimerResponsabilite?.addEventListener("click", async () =>
+	{
+		const contexte = contexteResponsabiliteStandalone;
+		if (!contexte?.item) return;
+		try
+		{
+			await apiFetch(`/api/responsabilites-operationnelles/${contexte.item.id}/`, { method: "DELETE" });
+			fermerModal(modalResponsabiliteStandalone);
+			await rafraichirResponsabilitesCentre(contexte.centre, contexte.zone);
+		}
+		catch (error) { afficherToast(erreurMessage(error, "La responsabilité n’a pas pu être supprimée."), true); }
+	});
+
 	function ajouterCentreAuPlanning(centre, conteneurLigne)
 	{
 		const evenements = (centre.evenements || []).filter((groupe) => groupe.permanent || (groupe.periodes || []).length > 0);
@@ -2527,11 +2675,23 @@ function libelleDate(dateStr)
 				<span class="planning-floating-label" aria-hidden="true">Mixte</span>
 				<div class="planning-floating-days"></div>
 			</section>
+			<section class="planning-responsibilities" aria-label="Direction et responsabilités">
+				<div><strong>Direction / responsabilités</strong><div class="planning-responsibilities-list"></div></div>
+				<button type="button" class="btn btn-secondary planning-responsibility-add">+ Ajouter</button>
+			</section>
 			<div class="evenement-calendars calendar-group-list"></div>
 			<p class="calendar-site-empty" ${evenements.length ? "hidden" : ""}>Aucun groupe ouvert cette semaine.</p>
 			<footer class="centre-effectifs-summary" aria-live="polite"></footer>`;
 
 		(conteneurLigne || calendarsContainer).appendChild(groupe);
+		const zoneResponsabilites = groupe.querySelector(".planning-responsibilities");
+		zoneResponsabilites.querySelector(".planning-responsibility-add").addEventListener("click", () => ouvrirResponsabiliteStandalone(centre, zoneResponsabilites));
+		zoneResponsabilites.querySelector(".planning-responsibilities-list").addEventListener("click", (event) => {
+			const bouton = event.target.closest("[data-responsabilite-id]");
+			if (!bouton) return;
+			const item = (zoneResponsabilites._responsabilites || []).find((element) => Number(element.id) === Number(bouton.dataset.responsabiliteId));
+			if (item) ouvrirResponsabiliteStandalone(centre, zoneResponsabilites, item);
+		});
 		attacherSurvolCentre(groupe, centre.id);
 
 		const zoneEvenements = groupe.querySelector(".evenement-calendars");
@@ -2623,6 +2783,7 @@ function libelleDate(dateStr)
 			calendar.on("eventsSet", () => rafraichirLigneAnimateursFlottants(centre, ligneFlottants));
 		});
 		window.setTimeout(() => rafraichirLigneAnimateursFlottants(centre, ligneFlottants), 0);
+		window.setTimeout(() => rafraichirResponsabilitesCentre(centre, zoneResponsabilites), 0);
 
 		return groupe;
 	}

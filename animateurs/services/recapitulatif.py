@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape as escape_xml
 
 from django.utils import timezone
 
-from animateurs.models import Affectation, PeriodeScolaire
+from animateurs.models import Affectation, PeriodeScolaire, ResponsabiliteOperationnelle
 from animateurs.services.flottants import est_groupe_flottants
 from animateurs.services.temps_travail import (
     activites_temps_travail_pour_periodes,
@@ -162,6 +162,71 @@ def generer_recapitulatif(debut, fin, jours_selectionnes=None, periode_ids=None)
                     "accueil_nom": accueil.get("accueil_nom"),
                 })
             details_par_animateur[animateur.id][jour][cle_accueil] = detail
+
+    responsabilites = (
+        ResponsabiliteOperationnelle.objects.filter(
+            fournit_temps_travail=True, debut__lt=fin, fin__gt=debut
+        )
+        .select_related(
+            "animateur", "fonction", "centre", "accueil_centre",
+            "accueil_centre__centre", "accueil_centre__type_accueil",
+            "evenement", "evenement__centre", "evenement__accueil_centre",
+            "evenement__accueil_centre__type_accueil",
+        )
+    )
+    for responsabilite in responsabilites:
+        accueil_centre = responsabilite.accueil_centre
+        if responsabilite.perimetre == ResponsabiliteOperationnelle.PERIMETRE_GROUPE:
+            centre = responsabilite.evenement.centre
+            accueil_centre = responsabilite.evenement.accueil_centre
+        elif accueil_centre is not None:
+            centre = accueil_centre.centre
+        else:
+            centre = responsabilite.centre
+        type_accueil = accueil_centre.type_accueil if accueil_centre is not None else None
+        code_type = type_accueil.code if type_accueil else ""
+        cle_ventilation = f"accueil:{accueil_centre.id}" if accueil_centre else f"type:{code_type}"
+        cle_accueil = (centre.id, cle_ventilation)
+        animateur = responsabilite.animateur
+        animateurs[animateur.id] = animateur
+        accueil = {
+            "id": centre.id, "nom": centre.nom, "code": centre.code,
+            "couleur": centre.couleur, "ordre": centre.ordre,
+            "ordre_type": type_accueil.ordre if type_accueil else -1,
+            "cle_ventilation": cle_ventilation,
+        }
+        if type_accueil:
+            accueil.update({
+                "ventilation_id": f"{centre.id}:accueil:{accueil_centre.id}",
+                "libelle": accueil_centre.libelle_analytique,
+                "type_accueil_code": type_accueil.code,
+                "type_accueil_nom": type_accueil.nom,
+                "accueil_centre_id": accueil_centre.id,
+                "accueil_nom": accueil_centre.nom_affichage,
+            })
+        accueils[cle_accueil] = accueil
+        premier = max(timezone.localtime(responsabilite.debut).date(), debut_date)
+        dernier = min(
+            timezone.localtime(responsabilite.fin - datetime.timedelta(microseconds=1)).date()
+            + datetime.timedelta(days=1),
+            fin_date,
+        )
+        for jour in _jours_entre(premier, dernier):
+            if jour not in jours_autorises:
+                continue
+            jours_par_animateur[animateur.id].add(jour)
+            jours_par_animateur_accueil[animateur.id][cle_accueil].add(jour)
+            detail = {
+                "id": centre.id, "nom": centre.nom, "code": centre.code,
+                "couleur": centre.couleur, "groupe": responsabilite.fonction.nom,
+            }
+            if type_accueil:
+                detail.update({
+                    "ventilation_id": accueil["ventilation_id"], "libelle": accueil["libelle"],
+                    "type_accueil_code": type_accueil.code, "type_accueil_nom": type_accueil.nom,
+                    "accueil_centre_id": accueil_centre.id, "accueil_nom": accueil_centre.nom_affichage,
+                })
+            details_par_animateur[animateur.id][jour].setdefault(cle_accueil, detail)
 
     centres_tries = sorted(
         accueils.values(),

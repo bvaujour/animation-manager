@@ -28,6 +28,7 @@ from animateurs.models import (
     ModalitePeriscolaire,
     PeriodeCalendrier,
     Qualification,
+    ResponsabiliteOperationnelle,
     TypeAccueil,
 )
 
@@ -45,6 +46,7 @@ from .reglementation_encadrement import (
     contraintes_qualification,
 )
 from .statuts import ids_qualifications_pour_date, prefetch_historiques_statuts, statut_pour_date
+from .responsabilites import membres_encadrement_uniques, membres_quotas_uniques
 
 
 @dataclass
@@ -335,6 +337,21 @@ def generer_planning_auto(payload):
             )
         }, 400
 
+    responsabilites_standalone = list(
+        ResponsabiliteOperationnelle.objects.filter(
+            fournit_temps_travail=True, debut__lt=fin_dt, fin__gt=debut_dt
+        ).select_related(
+            "animateur", "fonction", "centre", "accueil_centre", "evenement"
+        )
+    )
+    responsabilites_par_jour = defaultdict(list)
+    for responsabilite in responsabilites_standalone:
+        for jour in jours:
+            debut_jour = parse_to_aware_datetime(jour.isoformat())
+            fin_jour = parse_to_aware_datetime((jour + datetime.timedelta(days=1)).isoformat())
+            if responsabilite.debut < fin_jour and responsabilite.fin > debut_jour:
+                responsabilites_par_jour[jour].append(responsabilite)
+
     if not any(groupes_par_jour.values()) and not any(postes_mixtes.values()):
         return {"error": "Aucune place à remplir : vérifie les besoins et les jours/créneaux d'ouverture des groupes."}, 400
 
@@ -450,12 +467,18 @@ def generer_planning_auto(payload):
     details_qualifications = []
 
     def disponible(animateur, jour):
-        return disponibilite_effective(
+        disponibilite = disponibilite_effective(
             animateur,
             jour,
             plages=disponibilites[animateur.id],
             formations=animateur.formations_bloquantes,
         ).disponible
+        if not disponibilite:
+            return False
+        return not any(
+            item.animateur_id == animateur.id and item.bloque_affectation_animation
+            for item in responsabilites_par_jour[jour]
+        )
 
     # ``jour_courant`` est mis à jour dans la boucle afin que le score puisse
     # vérifier les affectations conservées dans d'autres contextes.
@@ -492,6 +515,7 @@ def generer_planning_auto(payload):
     non_conformites_reglementaires = 0
     mixtes_planifies = 0
     mixtes_remplis = defaultdict(int)
+    postes_couverts_responsabilites = defaultdict(int)
 
     for jour in jours:
         jour_courant = jour
@@ -509,11 +533,39 @@ def generer_planning_auto(payload):
                     resultat.effectif_reglementaire_requis, structure=structure
                 )
 
+        ids_evenements_jour = {groupe.id for groupe in groupes_jour}
+        accueils_par_centre = defaultdict(set)
+        for groupe in groupes_jour:
+            if groupe.accueil_centre_id:
+                accueils_par_centre[groupe.centre_id].add(groupe.accueil_centre_id)
+
+        def responsabilites_encadrement_centre(centre_id, *, quotas=False):
+            resultat = []
+            for item in responsabilites_par_jour[jour]:
+                if not item.compte_dans_encadrement:
+                    continue
+                if quotas and not item.compte_dans_quotas_qualification:
+                    continue
+                correspond = (
+                    item.perimetre == ResponsabiliteOperationnelle.PERIMETRE_SITE
+                    and item.centre_id == centre_id
+                ) or (
+                    item.perimetre == ResponsabiliteOperationnelle.PERIMETRE_ACCUEIL
+                    and item.accueil_centre_id in accueils_par_centre[centre_id]
+                ) or (
+                    item.perimetre == ResponsabiliteOperationnelle.PERIMETRE_GROUPE
+                    and item.evenement_id in ids_evenements_jour
+                    and item.evenement.centre_id == centre_id
+                )
+                if correspond:
+                    resultat.append(item)
+            return resultat
+
         def ajouter(animateur, groupe, *, utilises=utilises, selections=selections):
             utilises.add(animateur.id)
             selections[groupe.id].append(animateur)
 
-        def selections_reglementaires_centre(centre_id):
+        def selections_reglementaires_ordinaires_centre(centre_id):
             personnes = []
             for groupe in groupes_jour:
                 if groupe.centre_id != centre_id:
@@ -521,11 +573,31 @@ def generer_planning_auto(payload):
                 limite = cibles_reglementaires_directes.get((groupe.id, jour), 0)
                 personnes.extend(selections[groupe.id][:limite])
             personnes.extend(selections_mixtes.get(centre_id, ()))
-            return personnes
+            return list({personne.id: personne for personne in personnes}.values())
+
+        def selections_reglementaires_centre(centre_id):
+            return membres_encadrement_uniques(
+                selections_reglementaires_ordinaires_centre(centre_id),
+                responsabilites_encadrement_centre(centre_id),
+            )
+
+        def objectif_affectations_reglementaires_centre(centre_id):
+            contrainte = contraintes_par_centre.get(centre_id)
+            if not contrainte:
+                return 0
+            responsabilites = responsabilites_encadrement_centre(centre_id)
+            personnes = {item.animateur_id for item in responsabilites}
+            couverture = min(contrainte["effectif_requis"], len(personnes))
+            postes_couverts_responsabilites[(centre_id, jour)] = couverture
+            return max(0, contrainte["effectif_requis"] - couverture)
 
         def stats_legaux_centre(centre_id):
             personnes = selections_reglementaires_centre(centre_id)
-            categories = [categories_legales.get((animateur.id, jour), "inconnu") for animateur in personnes]
+            personnes_quotas = membres_quotas_uniques(
+                selections_reglementaires_ordinaires_centre(centre_id),
+                responsabilites_encadrement_centre(centre_id, quotas=True),
+            )
+            categories = [categories_legales.get((animateur.id, jour), "inconnu") for animateur in personnes_quotas]
             return {
                 "total": len(personnes),
                 "diplomes": categories.count("diplome"),
@@ -563,6 +635,10 @@ def generer_planning_auto(payload):
             while True:
                 meilleur = None
                 for groupe in groupes_jour:
+                    if contexte_explicit and len(
+                        selections_reglementaires_ordinaires_centre(groupe.centre_id)
+                    ) >= objectif_affectations_reglementaires_centre(groupe.centre_id):
+                        continue
                     selection = selections[groupe.id]
                     # En contexte typé, les exigences spécifiques sont portées
                     # par le socle requis. Les renforts restent volontairement
@@ -630,6 +706,10 @@ def generer_planning_auto(payload):
             while True:
                 meilleur = None
                 for groupe in groupes_jour:
+                    if len(
+                        selections_reglementaires_ordinaires_centre(groupe.centre_id)
+                    ) >= objectif_affectations_reglementaires_centre(groupe.centre_id):
+                        continue
                     cible_reglementaire = cibles_reglementaires_directes.get((groupe.id, jour), 0)
                     if len(selections[groupe.id]) >= cible_reglementaire:
                         continue
@@ -677,7 +757,12 @@ def generer_planning_auto(payload):
                             qualifications_contributrices.update(besoins_statuts.get((groupe_id, jour), {}))
                             qualifications_contributrices.update(besoins_diplomes.get((groupe_id, jour), {}))
 
-                for index_mixte in range(nombre_mixte):
+                places_reglementaires_restantes = max(
+                    0,
+                    objectif_affectations_reglementaires_centre(centre_id)
+                    - len(selections_reglementaires_ordinaires_centre(centre_id)),
+                )
+                for index_mixte in range(min(nombre_mixte, places_reglementaires_restantes)):
                     meilleur = None
                     for animateur in disponibles_jour:
                         if animateur.id in utilises:
@@ -725,7 +810,11 @@ def generer_planning_auto(payload):
                 restants,
                 groupes_jour,
                 {
-                    g.id: max(0, effectifs_cibles.get((g.id, jour), 0) - len(selections[g.id]))
+                    g.id: (
+                        max(0, cibles_renforts.get((g.id, jour), 0))
+                        if postes_couverts_responsabilites.get((g.centre_id, jour), 0)
+                        else max(0, effectifs_cibles.get((g.id, jour), 0) - len(selections[g.id]))
+                    )
                     for g in groupes_jour
                 },
                 score_affinite_preferences,
@@ -851,7 +940,7 @@ def generer_planning_auto(payload):
     remplis = defaultdict(int)
     for jour, _, groupe in planning:
         remplis[(jour, groupe.id)] += 1
-    details_non_remplis = []
+    details_non_remplis_bruts = []
     groupes_complets = groupes_partiels = groupes_vides = 0
     for jour in jours:
         for groupe in groupes_par_jour[jour]:
@@ -864,26 +953,40 @@ def generer_planning_auto(payload):
                 groupes_complets += 1
             elif nombre:
                 groupes_partiels += 1
-                details_non_remplis.append(
-                    f"{jour.strftime('%d/%m')} - {groupe.centre.code} / {groupe.nom} : {manque} place(s) vide(s)"
-                )
+                details_non_remplis_bruts.append((
+                    groupe.centre_id, jour,
+                    f"{jour.strftime('%d/%m')} - {groupe.centre.code} / {groupe.nom}",
+                    manque, "place(s) vide(s)",
+                ))
             else:
                 groupes_vides += 1
-                details_non_remplis.append(
-                    f"{jour.strftime('%d/%m')} - {groupe.centre.code} / {groupe.nom} : {manque} place(s) vide(s)"
-                )
+                details_non_remplis_bruts.append((
+                    groupe.centre_id, jour,
+                    f"{jour.strftime('%d/%m')} - {groupe.centre.code} / {groupe.nom}",
+                    manque, "place(s) vide(s)",
+                ))
         if contexte_explicit:
             centres = {groupe.centre_id: groupe.centre for groupe in groupes_par_jour[jour]}
             for centre_id, centre in centres.items():
                 attendu = postes_mixtes.get((centre_id, jour), 0)
                 manque_mixte = max(0, attendu - mixtes_remplis.get((centre_id, jour), 0))
                 if manque_mixte:
-                    details_non_remplis.append(
-                        f"{jour.strftime('%d/%m')} - {centre.code} : {manque_mixte} poste(s) d’animateur mixte non pourvu(s)"
-                    )
+                    details_non_remplis_bruts.append((
+                        centre_id, jour, f"{jour.strftime('%d/%m')} - {centre.code}",
+                        manque_mixte, "poste(s) d’animateur mixte non pourvu(s)",
+                    ))
 
     creees = len(a_creer)
-    non_remplies = total_places - creees
+    total_couverts_responsabilites = sum(postes_couverts_responsabilites.values())
+    non_remplies = max(0, total_places - creees - total_couverts_responsabilites)
+    couverture_restante = dict(postes_couverts_responsabilites)
+    details_non_remplis = []
+    for centre_id, jour, libelle, manque, suffixe in details_non_remplis_bruts:
+        absorbe = min(manque, couverture_restante.get((centre_id, jour), 0))
+        couverture_restante[(centre_id, jour)] = couverture_restante.get((centre_id, jour), 0) - absorbe
+        manque_reel = manque - absorbe
+        if manque_reel:
+            details_non_remplis.append(f"{libelle} : {manque_reel} {suffixe}")
     contexte_message = ""
     if contexte_explicit and type_accueil.code == TypeAccueil.PERISCOLAIRE:
         contexte_message = f" pour « {modalite_periscolaire.nom} »"
@@ -894,6 +997,11 @@ def generer_planning_auto(payload):
     )
     if mixtes_planifies:
         message += f" {mixtes_planifies} poste(s) d’animateur mixte utilisé(s) pour mutualiser les reliquats d’enfants."
+    if total_couverts_responsabilites:
+        message += (
+            f" {total_couverts_responsabilites} poste(s) réglementaire(s) "
+            "couvert(s) au niveau du site par une responsabilité opérationnelle."
+        )
     if qualifications_manquantes_total:
         message += f" {qualifications_manquantes_total} besoin(s) de statut ou diplôme reste(nt) non couvert(s)."
     if non_conformites_reglementaires:
@@ -907,6 +1015,7 @@ def generer_planning_auto(payload):
         "deleted": supprimees,
         "total_places": total_places,
         "unfilled": non_remplies,
+        "postes_couverts_par_responsabilites": total_couverts_responsabilites,
         "animateurs_utilises": len({a.animateur_id for a in a_creer}),
         "groupes_complets": groupes_complets,
         "groupes_partiels": groupes_partiels,

@@ -134,6 +134,13 @@ def affectation_to_event(affectation):
     titre = f"{affectation.animateur.prenom} {affectation.animateur.nom[0]}."
     flottant = est_groupe_flottants(affectation.evenement)
     type_affectation_valeur = type_affectation(affectation)
+    responsabilites = getattr(affectation, "_responsabilites_planning", None)
+    if responsabilites is None:
+        from animateurs.models import ResponsabiliteOperationnelle
+        responsabilites = list(ResponsabiliteOperationnelle.objects.filter(
+            affectation_source_id=affectation.id
+        ).select_related("fonction"))
+    responsabilite = responsabilites[0] if responsabilites else None
     if flottant:
         titre = f"↔ {titre}"
     if len(horaires) == 1:
@@ -188,6 +195,11 @@ def affectation_to_event(affectation):
             "modalite_periscolaire_nom": (
                 affectation.modalite_periscolaire.nom if affectation.modalite_periscolaire_id else None
             ),
+            "responsabilite": ({
+                "id": responsabilite.id,
+                "fonction_code": responsabilite.fonction.code,
+                "fonction_nom": responsabilite.fonction.nom,
+            } if responsabilite else None),
         },
     }
 

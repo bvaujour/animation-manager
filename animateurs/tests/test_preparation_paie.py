@@ -411,11 +411,13 @@ class AttributionPrimeTests(ConnexionTestCase):
         }
         with CaptureQueriesContext(connection) as contexte:
             creation = self.client.post(reverse("api_attributions_primes"), data=json.dumps(payload), content_type="application/json")
-        self.assertLessEqual(len(contexte), 25)
+        # Le récapitulatif inclut désormais les responsabilités standalone :
+        # leur lecture ajoute une requête bornée, nécessaire au temps de travail.
+        self.assertLessEqual(len(contexte), 26)
         detail = reverse("api_attribution_prime_detail", args=[creation.json()["attributions"][0]["id"]])
         with CaptureQueriesContext(connection) as contexte:
             modification = self.client.patch(detail, data=json.dumps({**payload, "montant": "4.00"}), content_type="application/json")
-        self.assertLessEqual(len(contexte), 27)
+        self.assertLessEqual(len(contexte), 28)
         detail = reverse("api_attribution_prime_detail", args=[modification.json()["attributions"][0]["id"]])
         with CaptureQueriesContext(connection) as contexte:
             self.client.delete(detail + f"?date_debut={DEBUT.isoformat()}&date_fin={FIN.isoformat()}")

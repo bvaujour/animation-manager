@@ -503,6 +503,61 @@ body.planning-mode-effectifs .planning-floating-lane,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.page-planning .planning-responsibility-badge {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 1px 6px;
+  overflow: hidden;
+  color: #4f4665;
+  font-size: .68rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, .72);
+  border: 1px solid rgba(79, 70, 101, .2);
+  border-radius: 999px;
+}
+.page-planning .planning-responsibility-field {
+  display: grid;
+  gap: 6px;
+}
+.page-planning .planning-responsibilities {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #faf7ff;
+  border-bottom: 1px solid rgba(79, 70, 101, .12);
+}
+.page-planning .planning-responsibilities-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 10px;
+}
+.page-planning .planning-responsibility-person {
+  display: inline-flex;
+  gap: 5px;
+  padding: 3px 8px;
+  color: #4f4665;
+  background: #fff;
+  border: 1px solid rgba(79, 70, 101, .18);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.page-planning .planning-responsibilities-empty { color: #776f86; font-size: .78rem; }
+.page-planning .planning-responsibility-form,
+.page-planning .planning-responsibility-form > label { display: grid; gap: 6px; }
+.page-planning .planning-responsibility-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 700px) {
+  .page-planning .planning-responsibilities { align-items: stretch; flex-direction: column; }
+  .page-planning .planning-responsibilities-list { display: flex; margin: 6px 0 0; }
+  .page-planning .planning-responsibility-dates { grid-template-columns: 1fr; }
+}
 .page-planning .shared-calendar .fc-bg-event { opacity: .28; }
 .page-planning .shared-calendar .fc-highlight { background: rgba(108, 85, 202, .14); }
 .page-planning .shared-calendar .fc-daygrid-day.day-pick-active,

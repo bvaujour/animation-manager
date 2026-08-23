@@ -15,6 +15,8 @@ from .views import (
     administration,
     api_affectation_create,
     api_affectation_detail,
+    api_responsabilite_operationnelle_detail,
+    api_responsabilites_operationnelles,
     api_animateur_detail,
     api_animateurs,
     api_historique_statut_detail,
@@ -378,6 +380,16 @@ urlpatterns = [
         "api/affectations/<int:affectation_id>/",
         direction_requise_api(api_affectation_detail),
         name="api_affectation_detail",
+    ),
+    path(
+        "api/responsabilites-operationnelles/",
+        direction_requise_api(api_responsabilites_operationnelles),
+        name="api_responsabilites_operationnelles",
+    ),
+    path(
+        "api/responsabilites-operationnelles/<int:responsabilite_id>/",
+        direction_requise_api(api_responsabilite_operationnelle_detail),
+        name="api_responsabilite_operationnelle_detail",
     ),
     path(
         "api/groupes/<int:evenement_id>/horaires-affectations/",
