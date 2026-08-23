@@ -92,6 +92,6 @@ class InterfaceOuverturesGroupeTests(ConnexionTestCase):
     def test_gestion_contient_jours_et_periodes_facultatives(self):
         contenu = Path("static/js/gestion.js").read_text(encoding="utf-8")
         self.assertIn("Jours ouverts", contenu)
-        self.assertIn("sans période", contenu)
+        self.assertIn("Périodes à compléter", contenu)
         self.assertIn("Fermé les jours fériés", contenu)
         self.assertNotIn("Groupe d’accueil actif", contenu)

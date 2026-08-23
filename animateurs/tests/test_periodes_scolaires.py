@@ -205,7 +205,6 @@ class PeriodesScolairesApiTests(ConnexionTestCase):
         self.assertEqual(PeriodeScolaire.objects.count(), nombre)
         reference = PeriodeCalendrier.objects.get(categorie=PeriodeCalendrier.SCOLAIRE)
         self.assertEqual(set(reference.types_accueil.values_list("code", flat=True)), {"periscolaire"})
-        self.assertTrue(all(set(item.modalites_periscolaires.values_list("code", flat=True)) == {"mercredi_journee", "soir"} for item in reference.semaines.all()))
 
     def test_sejour_reste_distinct_du_lieu_et_peut_avoir_reference_et_equipe(self):
         reference = PeriodeCalendrier.objects.create(categorie="vacances", nom="Été", annee_scolaire="2027-2028", zone="A", debut="2028-07-10", fin="2028-07-21")

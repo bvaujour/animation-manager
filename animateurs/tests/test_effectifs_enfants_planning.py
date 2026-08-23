@@ -48,6 +48,9 @@ class EffectifsEnfantsPlanningTests(TestCase):
                     "ratio_encadrement_exceptionnel": None,
                     "heure_arrivee": "",
                     "heure_depart": "",
+                    "type_accueil": None,
+                    "modalite_periscolaire": None,
+                    "modalite_periscolaire_nom": None,
                 }
             ],
         )
@@ -122,6 +125,8 @@ class EffectifsEnfantsPlanningTests(TestCase):
                     "ratio_encadrement_exceptionnel": None,
                     "heure_arrivee": "",
                     "heure_depart": "",
+                    "type_accueil": None,
+                    "modalite_periscolaire": None,
                 }
             ],
         )
@@ -348,4 +353,3 @@ class EffectifsEnfantsPlanningTests(TestCase):
             4,
             f"La lecture des effectifs a effectué {len(contexte)} requêtes.",
         )
-

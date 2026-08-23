@@ -503,6 +503,15 @@ def evenement_to_dict(
         and besoin.modalite_periscolaire_id is None
         and getattr(besoin, "periode_calendrier_id", None) is None
     ]
+    codes_types_accueil = (
+        [evenement.accueil_centre.type_accueil.code]
+        if evenement.accueil_centre_id
+        else [
+            type_accueil.code
+            for type_accueil in evenement.types_accueil.all()
+            if type_accueil.actif
+        ]
+    )
     return {
         "id": evenement.id,
         "groupe_id": evenement.groupe_id,
@@ -525,9 +534,9 @@ def evenement_to_dict(
         "centre_id": evenement.centre_id,
         "nom": evenement.nom,
         "permanent": evenement.permanent,
-        "type_accueil_codes": [
-            type_accueil.code for type_accueil in evenement.types_accueil.all() if type_accueil.actif
-        ],
+        # Pour une instance moderne, AccueilCentre est la source de vérité,
+        # même si le M2M historique contient encore une valeur incohérente.
+        "type_accueil_codes": codes_types_accueil,
         "modalite_periscolaire": (evenement.modalite_periscolaire.code if evenement.modalite_periscolaire_id else None),
         "modalite_periscolaire_nom": (evenement.modalite_periscolaire.nom if evenement.modalite_periscolaire_id else None),
         "periode_ids": [periode.id for periode in periodes],

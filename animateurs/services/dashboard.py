@@ -27,6 +27,7 @@ from animateurs.models import (
     StatutPreparationSemaine,
 )
 from animateurs.services.categories_groupes import categorie_age_groupe
+from animateurs.services.besoins_encadrement import besoin_encadrement_effectif
 from animateurs.services.flottants import est_groupe_flottants, groupes_visibles
 from animateurs.services.formations import resume_formations_dashboard
 from animateurs.services.statuts import ids_qualifications_pour_date
@@ -115,10 +116,11 @@ def generer_tableau_de_bord(date_reference: datetime.date):
 
     groupes = list(
         groupes_visibles(Evenement.objects.filter(centre_id__in=ids_centres))
-        .select_related("centre", "groupe")
+        .select_related("centre", "groupe", "accueil_centre", "accueil_centre__type_accueil")
         .prefetch_related(
             "periodes_scolaires",
             Prefetch("dates_exclues"),
+            "besoins_encadrement",
             "besoins_qualifications__qualification",
         )
         .order_by("centre__ordre", "centre__nom", "ordre", "nom")
@@ -132,7 +134,7 @@ def generer_tableau_de_bord(date_reference: datetime.date):
         evenement_id__in=groupes_par_id,
         date__gte=debut_recherche,
         date__lt=fin_recherche,
-    ).select_related("evenement")
+    ).select_related("evenement", "type_accueil", "modalite_periscolaire")
     effectifs_par_cle = {(ligne.evenement_id, ligne.date): ligne for ligne in effectifs}
 
     affectations = list(
@@ -201,11 +203,31 @@ def generer_tableau_de_bord(date_reference: datetime.date):
         effectif_saisi = ligne is not None
         enfants = ligne.nombre if ligne else 0
         ratio = ligne.ratio_encadrement_effectif if ligne else max(1, groupe.enfants_par_animateur_defaut)
-        necessaires = (
-            (math.ceil(enfants / ratio) if effectif_saisi and enfants else 0)
-            if effectif_saisi
-            else max(0, groupe.effectif_cible)
+        type_contexte = (
+            ligne.type_accueil
+            if ligne is not None and ligne.type_accueil_id
+            else groupe.accueil_centre.type_accueil
+            if groupe.accueil_centre_id
+            else None
         )
+        besoin_contextuel = (
+            besoin_encadrement_effectif(
+                groupe,
+                type_accueil=type_contexte,
+                modalite=ligne.modalite_periscolaire if ligne is not None else None,
+            )
+            if type_contexte is not None
+            else None
+        )
+        if effectif_saisi:
+            necessaires = math.ceil(enfants / ratio) if enfants else 0
+        elif besoin_contextuel is not None:
+            # Les instances modernes ne doivent jamais reprendre le champ
+            # historique Evenement.effectif_cible. Sans effectif journalier,
+            # le besoin par défaut de leur accueil reste le seul repère fiable.
+            necessaires = max(0, besoin_contextuel.effectif_cible)
+        else:
+            necessaires = max(0, groupe.effectif_cible)
 
         ids_affectes = set(affectes_par_cle.get(cle, set()))
         horaires_saisis = bool(ids_affectes) and ids_affectes <= horaires_par_cle.get(cle, set())
@@ -213,7 +235,12 @@ def generer_tableau_de_bord(date_reference: datetime.date):
         manque = max(necessaires - affectes, 0)
 
         qualifications_manquantes = []
-        for besoin in groupe.besoins_qualifications.all():
+        besoins_qualifications = (
+            besoin_contextuel.qualifications
+            if besoin_contextuel is not None
+            else groupe.besoins_qualifications.all()
+        )
+        for besoin in besoins_qualifications:
             couverts = sum(
                 1
                 for animateur_id in ids_affectes

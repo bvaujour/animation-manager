@@ -89,4 +89,5 @@ class CorrectionMercredisSejoursTests(ConnexionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, '<option value="mercredis">', html=False)
-        self.assertContains(response, '<option value="periscolaire">', html=False)
+        self.assertContains(response, 'data-panel="periodes-scolaires"')
+        self.assertContains(response, "Temps périscolaires")

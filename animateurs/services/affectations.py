@@ -11,7 +11,6 @@ from animateurs.models import (
     Animateur,
     Centre,
     Evenement,
-    ModalitePeriscolaire,
     OuvertureCentrePeriode,
     PeriodeCalendrier,
     TypeAccueil,

@@ -1497,6 +1497,23 @@ class EffectifEnfantsJour(models.Model):
         verbose_name = "effectif enfants journalier"
         verbose_name_plural = "effectifs enfants journaliers"
 
+    def clean(self):
+        super().clean()
+        if self.evenement_id and self.evenement.accueil_centre_id:
+            type_attendu = self.evenement.accueil_centre.type_accueil
+            if self.type_accueil_id and self.type_accueil_id != type_attendu.id:
+                raise ValidationError(
+                    {"type_accueil": "L’effectif doit utiliser le même type d’accueil que le groupe."}
+                )
+        if self.modalite_periscolaire_id:
+            type_effectif = self.type_accueil
+            if type_effectif is None and self.evenement_id and self.evenement.accueil_centre_id:
+                type_effectif = self.evenement.accueil_centre.type_accueil
+            if type_effectif is not None and type_effectif.code != TypeAccueil.PERISCOLAIRE:
+                raise ValidationError(
+                    {"modalite_periscolaire": "Un créneau ne peut être utilisé qu’en Périscolaire."}
+                )
+
     def __str__(self):
         return f"{self.evenement} — {self.date:%d/%m/%Y} : {self.nombre} enfants (1/{self.enfants_par_animateur})"
 

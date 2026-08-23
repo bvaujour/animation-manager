@@ -4,15 +4,19 @@ import json
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from animateurs.models import (
     AccueilCentre,
+    Affectation,
     BesoinEncadrement,
     Animateur,
     Centre,
     DateExclueEvenement,
-    Evenement,
+    EffectifEnfantsJour,
+    Disponibilite,
     Groupe,
+    ModalitePeriscolaire,
     PeriodeScolaire,
     TypeAccueil,
 )
@@ -20,6 +24,8 @@ from animateurs.services.affectations import creer_affectation
 from animateurs.tests.base import ConnexionTestCase
 from animateurs.services.besoins_encadrement import enregistrer_besoins_contextuels
 from animateurs.services.evenements import creer_evenement, modifier_evenement
+from animateurs.services.planning_solver import generer_planning_auto
+from animateurs.services.recapitulatif import generer_recapitulatif
 from animateurs.services.serializers import evenement_to_dict
 from animateurs.views_catalogue import (
     _groupe_assistant_partage,
@@ -176,6 +182,51 @@ class ArchitectureAccueilGroupesTests(TestCase):
                 type_accueil=self.periscolaire,
             )
 
+    def test_effectif_enfants_refuse_un_type_contradictoire(self):
+        vacances = self._creer_instance(self.accueil_vacances, self.semaine_vacances)
+        effectif = EffectifEnfantsJour(
+            evenement=vacances,
+            date=self.semaine_vacances.debut,
+            nombre=12,
+            type_accueil=self.periscolaire,
+        )
+
+        with self.assertRaises(ValidationError):
+            effectif.full_clean()
+
+    def test_recapitulatif_paie_ventile_par_accueil_centre(self):
+        vacances = self._creer_instance(self.accueil_vacances, self.semaine_vacances)
+        periscolaire = self._creer_instance(self.accueil_periscolaire, self.semaine_periscolaire)
+        animateur = Animateur.objects.create(prenom="Paie", nom="Ventilation")
+        for evenement, jour, type_accueil in (
+            (periscolaire, self.semaine_periscolaire.debut, self.periscolaire),
+            (vacances, self.semaine_vacances.debut, self.vacances),
+        ):
+            debut = timezone.make_aware(datetime.datetime.combine(jour, datetime.time.min))
+            Affectation.objects.create(
+                animateur=animateur,
+                centre=self.centre,
+                evenement=evenement,
+                debut=debut,
+                fin=debut + datetime.timedelta(days=1),
+                type_accueil=type_accueil,
+            )
+
+        debut = timezone.make_aware(datetime.datetime(2026, 9, 1))
+        fin = timezone.make_aware(datetime.datetime(2026, 11, 1))
+        recapitulatif = generer_recapitulatif(debut, fin)
+
+        self.assertEqual(
+            {item["accueil_centre_id"] for item in recapitulatif["centres"]},
+            {self.accueil_vacances.id, self.accueil_periscolaire.id},
+        )
+        ligne = recapitulatif["animateurs"][0]
+        self.assertEqual(ligne["jours_affectation"], 2)
+        self.assertEqual(
+            {item["accueil_centre_id"]: item["jours_travailles"] for item in ligne["centres"]},
+            {self.accueil_vacances.id: 1, self.accueil_periscolaire.id: 1},
+        )
+
     def test_date_exclue_utilise_les_periodes_du_groupe(self):
         vacances = self._creer_instance(self.accueil_vacances, self.semaine_vacances)
         valide = DateExclueEvenement(
@@ -201,6 +252,7 @@ class ArchitectureAccueilGroupesTests(TestCase):
         payload = evenement_to_dict(vacances, include_effectifs=False)
 
         self.assertEqual(payload["type_accueil_code"], TypeAccueil.VACANCES)
+        self.assertEqual(payload["type_accueil_codes"], [TypeAccueil.VACANCES])
 
     def test_assistant_ne_reutilise_pas_un_groupe_de_sejour_par_son_nom(self):
         Groupe.objects.create(
@@ -303,3 +355,45 @@ class ArchitectureAccueilGroupesApiTests(ConnexionTestCase):
                     "effectif_cible": 1,
                 }],
             )
+
+    def test_aide_aux_devoirs_a_trois_est_enregistree_affichee_et_utilisee(self):
+        modalite = ModalitePeriscolaire.objects.create(
+            code="aide_devoirs_integration",
+            nom="Aide aux devoirs intégration",
+            heure_debut=datetime.time(16, 30),
+            heure_fin=datetime.time(18, 0),
+            actif=True,
+        )
+        response = self.client.patch(
+            reverse("api_groupe_detail", args=[self.evenement.pk]),
+            data=json.dumps({
+                "besoins_encadrement": [{
+                    "type_accueil": TypeAccueil.PERISCOLAIRE,
+                    "modalite_periscolaire": modalite.code,
+                    "mode_calcul": BesoinEncadrement.MODE_MANUEL,
+                    "effectif_cible": 3,
+                    "qualifications_requises": {},
+                }],
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["besoins_encadrement"][0]["effectif_cible"], 3)
+
+        for index in range(3):
+            animateur = Animateur.objects.create(prenom=f"Aide{index}", nom="Devoirs")
+            Disponibilite.objects.create(
+                animateur=animateur,
+                debut=self.periode.debut,
+                fin=self.periode.fin,
+            )
+
+        resultat, statut = generer_planning_auto({
+            "debut": self.periode.debut.isoformat(),
+            "type_accueil": TypeAccueil.PERISCOLAIRE,
+            "modalite_periscolaire": modalite.code,
+        })
+
+        self.assertEqual(statut, 200)
+        self.assertEqual(resultat["total_places"], 6)
+        self.assertEqual(resultat["created"], 6)

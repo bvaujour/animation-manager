@@ -265,7 +265,7 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn('document.addEventListener("effectifs-enfants-importes", async (event) =>', planning)
         self.assertIn("PlanningData.invalidateWeekEffectifs();", planning)
         self.assertIn("event.detail?.periodes", planning)
-        self.assertIn("PlanningData.fetchWeekEffectifs(periode.debut, periode.fin, { force: true })", planning)
+        self.assertIn("PlanningData.fetchWeekEffectifs(periode.debut, periode.fin, { force: true, modalite: modalitePeriscolaireCourante })", planning)
         self.assertIn("await Promise.all(calendars.map((calendar) => chargerEffectifsEnfants(calendar)))", planning)
 
     def test_effectifs_et_taux_sont_modifiables_directement_dans_les_cartes(self):
@@ -322,8 +322,8 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         script = (Path(settings.BASE_DIR) / "static/js/planning.js").read_text(encoding="utf-8")
         css = (Path(settings.BASE_DIR) / "static/css/planning.css").read_text(encoding="utf-8")
 
-        self.assertNotIn('data-planning-mode="horaires"', template)
-        self.assertNotIn('id="planning-horaires-panel"', template)
+        self.assertIn('data-planning-mode="horaires"', template)
+        self.assertIn('id="planning-horaires"', template)
         self.assertIn("function ouvrirSaisieHorairesAffectation(info, calendar)", script)
         self.assertIn("function normaliserHeureSaisie(valeur)", script)
         self.assertIn("correspondance[2] || 0", script)
@@ -331,7 +331,7 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         self.assertIn("modal-horaires-affectation", template)
         self.assertIn("horaires-affectation-row", script)
         self.assertIn("modal-horaires-groupe", template)
-        self.assertIn("btn-horaires-groupe", script)
+        self.assertIn('id="planning-horaires"', template)
         self.assertIn("horaires-affectations/", script)
         self.assertIn(".horaires-affectation-row", css)
         self.assertNotIn("body.page-planning.planning-mode-horaires", css)
@@ -446,10 +446,12 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
         }
 
         self.assertTrue(media_layout)
-        self.assertEqual(
-            media_layout,
-            {"@media (min-width: 800px) {", "@media (max-width: 799px) {"},
-        )
+        self.assertEqual(media_layout, {
+            "@media (min-width: 800px) {",
+            "@media (max-width: 799px) {",
+            "@media (max-width:799px){",
+            "@media (max-width:360px){",
+        })
 
     def test_layout_global_ne_possede_que_les_modes_pc_et_portable(self):
         css = (Path(settings.BASE_DIR) / "static/css/app-layout.css").read_text(encoding="utf-8")

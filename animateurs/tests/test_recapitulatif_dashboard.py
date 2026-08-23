@@ -1,6 +1,6 @@
 import datetime
 from decimal import Decimal
-from io import BytesIO, StringIO
+from io import StringIO
 from pathlib import Path
 
 from django.conf import settings
@@ -829,7 +829,7 @@ class RecapitulatifDashboardTests(ConnexionTestCase):
             self.assertEqual(ligne["jours_travailles"], synthese[prenom]["jours_total_recapitulatif"])
 
         lignes_export = {ligne[0]: ligne for ligne in lignes_recapitulatif_paie(data)[1:-1]}
-        self.assertEqual(lignes_export["Jordan SIMON"][1:5], ["7", "0", "3", "10"])
+        self.assertEqual(lignes_export["SIMON Jordan"][1:5], ["7", "0", "3", "10"])
 
     def test_reunion_n_est_pas_divisee_sur_les_semaines_vides(self):
         periodes = [self.periode] + [

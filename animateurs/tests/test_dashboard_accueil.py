@@ -6,7 +6,21 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from animateurs.models import Affectation, Animateur, Centre, EffectifEnfantsJour, Evenement, HoraireAffectationJour, Sejour, Sortie, StatutPreparationSemaine
+from animateurs.models import (
+    AccueilCentre,
+    Affectation,
+    Animateur,
+    BesoinEncadrement,
+    Centre,
+    EffectifEnfantsJour,
+    Evenement,
+    Groupe,
+    HoraireAffectationJour,
+    Sejour,
+    Sortie,
+    StatutPreparationSemaine,
+    TypeAccueil,
+)
 from animateurs.services.flottants import groupe_flottants_pour_centre
 from animateurs.tests.base import ConnexionTestCase
 from animateurs.tests.factories import creer_periode
@@ -83,6 +97,44 @@ class DashboardAccueilTests(ConnexionTestCase):
         self.assertEqual(data["indicateurs"]["problemes_moderes"], 1)
         self.assertEqual(centre["etat"], "danger")
         self.assertTrue(any("manque 1 animateur" in alerte["titre"].lower() for alerte in data["alertes"]))
+
+    def test_api_utilise_le_besoin_contextualise_sans_effectif_saisi(self):
+        vacances, _ = TypeAccueil.objects.get_or_create(
+            code=TypeAccueil.VACANCES,
+            defaults={"nom": "Vacances", "ordre": 10, "actif": True},
+        )
+        centre = Centre.objects.create(nom="Besoin contextuel", code="BCX")
+        accueil = AccueilCentre.objects.create(
+            centre=centre,
+            type_accueil=vacances,
+            date_debut=self.jour,
+        )
+        groupe_partage = Groupe.objects.create(
+            nom="Aides devoirs tableau",
+            cle_unique="aides-devoirs-tableau",
+        )
+        evenement = Evenement.objects.create(
+            groupe=groupe_partage,
+            centre=centre,
+            accueil_centre=accueil,
+            nom=groupe_partage.nom,
+            permanent=True,
+            effectif_cible=1,
+            jours_ouverts=[0, 1, 2, 3, 4],
+            ferme_jours_feries=False,
+        )
+        BesoinEncadrement.objects.create(
+            evenement=evenement,
+            type_accueil=vacances,
+            effectif_cible=3,
+        )
+
+        data = self.client.get(
+            reverse("api_tableau_de_bord"), {"semaine": self.jour.isoformat()}
+        ).json()
+        ligne = next(item for item in data["centres_semaine"] if item["id"] == centre.id)
+
+        self.assertEqual(ligne["journees_necessaires"], 15)
 
     def test_api_compte_centres_ouverts_sejours_et_sorties_pour_chaque_semaine(self):
         Sejour.objects.create(

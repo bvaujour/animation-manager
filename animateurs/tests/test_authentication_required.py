@@ -27,7 +27,7 @@ class AuthenticationRequiredTests(TestCase):
         response = self.client.get(reverse("accueil"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Tableau de bord")
-        self.assertContains(response, "Mon planning")
+        self.assertContains(response, "Mes plannings")
 
     def test_compte_salarie_accede_aux_pages_de_son_tableau_de_bord(self):
         user = get_user_model().objects.create_user(username="espace-unique", password="secret-test")

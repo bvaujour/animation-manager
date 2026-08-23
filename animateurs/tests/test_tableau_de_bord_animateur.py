@@ -123,14 +123,13 @@ class TableauDeBordAnimateurTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Tableau de bord")
-        self.assertContains(response, "Mon planning")
+        self.assertContains(response, "Mes plannings")
         self.assertNotContains(response, "Bonjour Marine")
-        self.assertContains(response, 'id="home-calendars"')
         self.assertContains(response, 'data-calendar-date="2026-08-24"')
-        self.assertContains(response, "Sorties de la semaine")
-        self.assertContains(response, "Piscine de Roanne")
-        self.assertContains(response, "Réunion d&#x27;équipe")
-        self.assertContains(response, "Livret animateur")
+        self.assertContains(response, "Le planning de cette semaine est disponible.")
+        self.assertContains(response, "<strong>1</strong> document à consulter.", html=True)
+        self.assertContains(response, "sortie cette semaine.")
+        self.assertContains(response, "Piscine")
         self.assertContains(response, "Tableau de bord")
         self.assertContains(response, 'class="app-rail"')
         self.assertNotContains(response, 'class="animator-sidebar"')
@@ -277,7 +276,8 @@ class TableauDeBordAnimateurTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Semaine du 31 août au 4 septembre 2026")
         self.assertContains(response, "Le planning de cette semaine n’est pas encore publié")
-        self.assertContains(response, "Cette semaine")
+        self.assertContains(response, '?semaine=2026-08-24')
+        self.assertContains(response, '?semaine=2026-09-07')
 
     def test_la_direction_conserve_sa_navigation_compacte(self):
         direction = get_user_model().objects.create_superuser(

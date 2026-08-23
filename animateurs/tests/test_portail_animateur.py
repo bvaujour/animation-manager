@@ -159,7 +159,7 @@ class InformationsPortailAnimateurTests(TestCase):
         self.client.force_login(self.user_alice)
         accueil = self.client.get(reverse("accueil"), {"semaine": "2026-08-17"})
         self.assertEqual(accueil.status_code, 200)
-        self.assertContains(accueil, "1 information importante")
+        self.assertContains(accueil, "<strong>1</strong> information importante.", html=True)
         self.assertContains(accueil, "Important")
         infos = self.client.get(reverse("infos_animateur"), {"semaine": "2026-08-17"})
         self.assertContains(infos, "Consigne importante")
