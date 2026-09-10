@@ -148,6 +148,7 @@ def recuperer_semaines(
     zone: str,
     *,
     timeout: int = 15,
+    inclure_bornes: bool = False,
 ) -> list[SemaineVacances]:
     """Récupère et déduplique les semaines d'une année et d'une zone."""
     annee_scolaire, zone = _valider_parametres(annee_scolaire, zone)
@@ -207,6 +208,11 @@ def recuperer_semaines(
         if not debut or not fin:
             continue
 
+        # L'Éducation nationale publie seulement le départ de l'été. Cette
+        # borne est rendue disponible à l'assistant, sans la transformer en
+        # une fausse semaine importable.
+        if inclure_bornes and _nom_vacances(description) == "Été" and debut == fin:
+            semaines.append(SemaineVacances("Été — début officiel", debut, fin, description, 0))
         for semaine in decouper_en_semaines(description, debut, fin):
             cle = (semaine.debut, semaine.fin)
             if cle in deja_vues:
@@ -215,7 +221,7 @@ def recuperer_semaines(
             semaines.append(semaine)
 
     semaines.sort(key=lambda semaine: (semaine.debut, semaine.nom))
-    if not semaines:
+    if not any(semaine.numero for semaine in semaines):
         raise CalendrierScolaireError(
             "Aucune semaine de vacances complète n’a été trouvée pour cette "
             "année scolaire et cette zone. L’année n’est peut-être pas encore publiée."

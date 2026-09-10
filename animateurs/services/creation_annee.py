@@ -3,7 +3,7 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
-from datetime import date as date_value
+from datetime import date as date_value, timedelta
 
 from animateurs.models import (
     AccueilCentre, AnneeScolaire, BesoinEncadrement, BesoinQualification,
@@ -17,17 +17,68 @@ from .calendrier_scolaire import (
 
 def calendrier_officiel(libelle, zone):
     """Retourne les périodes calculées par le service officiel, sans écriture."""
-    semaines = recuperer_semaines(libelle, zone)
+    reponse = recuperer_semaines(libelle, zone, inclure_bornes=True)
+    debut_ete = next((semaine.debut for semaine in reponse if semaine.numero == 0), None)
+    semaines = [semaine for semaine in reponse if semaine.numero]
     try:
         periodes = calculer_periodes_scolaires(libelle, semaines)
     except (ValueError, TypeError, OverflowError) as erreur:
         raise CalendrierScolaireError("Le calcul des périodes scolaires officielles a échoué.") from erreur
     if not periodes:
         raise CalendrierScolaireError("Aucune période scolaire officielle n’a pu être calculée.")
-    return {"periodes": periodes, "semaines": semaines}
+    return {"periodes": periodes, "semaines": semaines, "debut_ete": debut_ete}
 
 
-def previsualiser_calendrier(cible, zone, calendrier):
+def _lundi_suivant(jour):
+    return jour + timedelta(days=(7 - jour.weekday()) % 7)
+
+
+def _cle_semaine(semaine):
+    """Clé stable entre les semaines officielles de deux années."""
+    nom, separateur, numero = semaine.nom.rpartition("— Semaine")
+    if separateur and numero.strip().isdigit():
+        return (nom.strip(), int(numero.strip()))
+    return (semaine.nom, getattr(semaine, "numero", getattr(semaine, "ordre", 0)))
+
+
+def proposer_semaines_ete(source, cible, evenements, debut_ete):
+    """Propose tout l'été ; l'année source détermine seulement les suggestions."""
+    if not debut_ete:
+        return []
+    source_semaines = {}
+    for evenement in evenements:
+        for semaine in evenement.periodes_scolaires.all():
+            if semaine.annee_scolaire != source.libelle:
+                continue
+            texte = f"{semaine.nom} {semaine.description_source}".casefold()
+            if "été" not in texte and "ete" not in texte:
+                continue
+            source_semaines.setdefault(semaine.pk, {"semaine": semaine, "evenements": []})["evenements"].append(evenement)
+    premier_cible = _lundi_suivant(debut_ete)
+    dernier_jour = date_value(cible.date_fin.year, 8, 31)
+    suggestions = {}
+    if source_semaines:
+        premier_source = min(item["semaine"].debut for item in source_semaines.values())
+        for item in source_semaines.values():
+            position = (item["semaine"].debut - premier_source).days // 7
+            suggestions[position] = item
+    candidats = []
+    position = 0
+    while True:
+        debut = premier_cible + timedelta(days=position * 7)
+        fin = debut + timedelta(days=4)
+        if fin > dernier_jour or fin > cible.date_fin:
+            break
+        item = suggestions.get(position)
+        candidats.append({"id": str(position), "nom": f"Été — Semaine {position + 1}",
+                          "debut": debut, "fin": fin, "suggeree": item is not None,
+                          "source_ids": [item["semaine"].pk] if item else [],
+                          "evenement_ids": [e.pk for e in item["evenements"]] if item else []})
+        position += 1
+    return candidats
+
+
+def previsualiser_calendrier(cible, zone, calendrier, semaines_ete=()):
     """Décrit les objets générés ou existants, sans recalcul ni écriture."""
     periodes = list(PeriodeCalendrier.objects.filter(annee_scolaire=cible.libelle, zone=zone))
     semaines_existantes = list(PeriodeScolaire.objects.filter(
@@ -42,6 +93,9 @@ def previsualiser_calendrier(cible, zone, calendrier):
     # Les vacances sont déjà représentées par des semaines dans le plan de
     # création. Leur regroupement est uniquement visuel, pas un nouvel objet.
     semaines = {(s.debut, s.fin): s for s in calendrier["semaines"]}
+    for ete in semaines_ete:
+        semaines[(ete["debut"], ete["fin"])] = SemaineVacances(
+            ete["nom"], ete["debut"], ete["fin"], "Vacances d'Été", int(ete["id"]) + 1)
     for s in semaines_existantes:
         if (s.type_accueil and s.type_accueil.code == "vacances") or (
                 s.periode_calendrier and s.periode_calendrier.categorie == PeriodeCalendrier.VACANCES):
@@ -189,7 +243,28 @@ def creer_annee(cible, plan=None):
                       "ordre": semaine_source.numero, "type_accueil_id": type_vacances.pk if type_vacances else None},
         )
         semaines[(semaine_source.debut, semaine_source.fin)] = semaine
-    decalage = cible.date_debut.year - plan["source_date_debut"].year
+
+    # Les semaines d'été viennent exclusivement de la sélection prévisualisée.
+    # Elles ne décalent jamais les dates historiques d'une année à l'autre.
+    semaines_ete = {}
+    for entree in plan.get("semaines_ete", []):
+        debut, fin = entree["debut"], entree["fin"]
+        if debut.weekday() != 0 or fin != debut + timedelta(days=4):
+            raise ValidationError("Les semaines estivales doivent aller du lundi au vendredi.")
+        semaine, _ = PeriodeScolaire.objects.get_or_create(
+            annee_scolaire=cible.libelle, zone=plan.get("zone", "A"), debut=debut, fin=fin,
+            defaults={"nom": entree["nom"], "description_source": "Vacances d'Été",
+                      "ordre": int(entree["id"]) + 1, "type_accueil_id": type_vacances.pk},
+        )
+        semaines_ete[entree["id"]] = (semaine, set(entree["evenement_ids"]))
+
+    # Les autres vacances réutilisent leur semaine officielle correspondante,
+    # identifiée par son libellé et son numéro, jamais par un décalage de date.
+    semaines_cibles = {_cle_semaine(s): s for s in (calendrier.get("semaines", []) if isinstance(calendrier, dict) else [])}
+    liens_ete = {evenement_id: [] for _, (_, evenement_ids) in semaines_ete.items() for evenement_id in evenement_ids}
+    for semaine, evenement_ids in semaines_ete.values():
+        for evenement_id in evenement_ids:
+            liens_ete.setdefault(evenement_id, []).append(semaine)
     for evenement in plan.get("evenements", []):
         cibles = []
         for source_semaine in evenement.periodes_scolaires.all():
@@ -197,20 +272,10 @@ def creer_annee(cible, plan=None):
             # l'année choisie est reprise ; les autres liens restent intacts.
             if source_semaine.annee_scolaire != plan["source_libelle"]:
                 continue
-            try:
-                debut = source_semaine.debut.replace(year=source_semaine.debut.year + decalage)
-                fin = source_semaine.fin.replace(year=source_semaine.fin.year + decalage)
-            except ValueError:
-                continue
-            if not cible.date_debut <= debut <= fin <= cible.date_fin:
-                raise ValidationError(f"La période reprise « {source_semaine.nom} » dépasse les limites de l’année cible.")
-            semaine, _ = PeriodeScolaire.objects.get_or_create(
-                annee_scolaire=cible.libelle,
-                zone=plan.get("zone", source_semaine.zone), debut=debut, fin=fin,
-                defaults={"nom": source_semaine.nom, "description_source": source_semaine.description_source,
-                          "ordre": source_semaine.ordre, "type_accueil_id": source_semaine.type_accueil_id},
-            )
-            cibles.append(semaine)
+            cle = _cle_semaine(source_semaine)
+            if cle in semaines_cibles:
+                cibles.append(semaines[(semaines_cibles[cle].debut, semaines_cibles[cle].fin)])
+        cibles.extend(liens_ete.get(evenement.pk, []))
         if cibles:
             evenement.periodes_scolaires.add(*cibles)
     for code, lignes in plan["lignes"].items():

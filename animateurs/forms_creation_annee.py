@@ -4,7 +4,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from .models import AnneeScolaire, Centre, PeriodeCalendrier
-from .services.creation_annee import CATEGORIES, accueils_reutilisables, preparer_copie, calendrier_officiel
+from .services.creation_annee import CATEGORIES, accueils_reutilisables, preparer_copie, calendrier_officiel, proposer_semaines_ete
 from .services.multisite import multisite_actif
 from .services.calendrier_scolaire import CalendrierScolaireError
 
@@ -56,6 +56,23 @@ class RepriseAnneeForm(forms.Form):
         self.champs_dates = []
         decalage = cible.date_debut.year - source.date_debut.year
         self.zone = zone
+        self.semaines_ete = []
+        self.champs_ete = []
+        self.calendrier_officiel = None
+        try:
+            self.calendrier_officiel = calendrier_officiel(cible.libelle, self.zone)
+        except CalendrierScolaireError as erreur:
+            self.calendrier_erreur = erreur
+        else:
+            evenements = __import__("animateurs.models", fromlist=["Evenement"]).Evenement.objects.filter(
+                groupe__type_groupe="structure").prefetch_related("periodes_scolaires")
+            self.semaines_ete = proposer_semaines_ete(source, cible, evenements, self.calendrier_officiel["debut_ete"])
+            for semaine in self.semaines_ete:
+                nom_champ = f"ete_{semaine['id']}"
+                self.fields[nom_champ] = forms.BooleanField(
+                    label=f"{semaine['nom']} · {semaine['debut']} au {semaine['fin']}",
+                    required=False, initial=semaine["suggeree"])
+                self.champs_ete.append(self[nom_champ])
         for periode in self.periodes:
             noms = []
             for borne in ("debut", "fin"):
@@ -73,6 +90,8 @@ class RepriseAnneeForm(forms.Form):
         data = super().clean()
         if self.errors:
             return data
+        if hasattr(self, "calendrier_erreur"):
+            raise ValidationError(f"Calendrier officiel indisponible : {self.calendrier_erreur}")
         dates = {p.pk: (data.get(f"periode_{p.pk}_debut"), data.get(f"periode_{p.pk}_fin")) for p in self.periodes}
         # Les dates ne sont obligatoires que pour les périodes effectivement reprises.
         try:
@@ -81,8 +100,12 @@ class RepriseAnneeForm(forms.Form):
         except TypeError:
             raise ValidationError("Renseignez les dates des périodes utilisées par les configurations sélectionnées.")
         self.plan["zone"] = self.zone
-        try:
-            self.plan["calendrier_officiel"] = calendrier_officiel(self.cible.libelle, self.zone)
-        except CalendrierScolaireError as erreur:
-            raise ValidationError(f"Calendrier officiel indisponible : {erreur}") from erreur
+        self.plan["calendrier_officiel"] = self.calendrier_officiel
+        selection = {identifiant for identifiant in (semaine["id"] for semaine in self.semaines_ete)
+                     if data.get(f"ete_{identifiant}")}
+        evenement_ids = {evenement.pk for evenement in self.plan["evenements"]}
+        self.plan["semaines_ete"] = [candidate for candidate in (
+            {**semaine, "evenement_ids": [pk for pk in semaine["evenement_ids"] if pk in evenement_ids]}
+            for semaine in self.semaines_ete if semaine["id"] in selection
+        )]
         return data

@@ -29,6 +29,7 @@ class CreationAnneeTests(ConnexionTestCase):
                                ("Hiver", date(2027, 2, 15)), ("Printemps", date(2027, 4, 12)))
             for numero in range(2)
         ]
+        semaines.append(SemaineVacances("Été — début officiel", date(2027, 7, 3), date(2027, 7, 3), "Début des Vacances d'Été", 0))
         patcher = patch("animateurs.services.creation_annee.recuperer_semaines", return_value=semaines)
         self.recuperer_semaines = patcher.start()
         self.addCleanup(patcher.stop)
@@ -226,11 +227,11 @@ class CreationAnneeTests(ConnexionTestCase):
         response = self.client.post(self.url, data)
         self.assertEqual(response.context["plan"]["zone"], "C")
         self.assertContains(response, "Zone C")
-        self.recuperer_semaines.assert_called_with("2026-2027", "C")
+        self.recuperer_semaines.assert_called_with("2026-2027", "C", inclure_bornes=True)
         response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(self.recuperer_semaines.call_count, 2)
-        self.recuperer_semaines.assert_called_with("2026-2027", "C")
+        self.assertEqual(self.recuperer_semaines.call_count, 3)
+        self.recuperer_semaines.assert_called_with("2026-2027", "C", inclure_bornes=True)
         self.assertEqual(set(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").values_list("zone", flat=True)), {"C"})
         self.assertEqual(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").count(), 5)
         self.assertEqual(PeriodeScolaire.objects.filter(annee_scolaire="2026-2027").count(), 8)
@@ -285,14 +286,13 @@ class CreationAnneeTests(ConnexionTestCase):
         self.assertEqual(cible.statut, "PREPARATION")
         self.assertEqual(AnneeScolaire.objects.values().get(pk=self.source.pk), annee_source_avant)
         self.assertEqual(list(PeriodeScolaire.objects.filter(pk__in=[p["id"] for p in avant]).order_by("pk").values()), avant)
-        nouvelle = PeriodeScolaire.objects.get(annee_scolaire="2026-2027", debut=date(2027, 4, 6))
         self.assertEqual(set(self.evenement.periodes_scolaires.values_list("pk", flat=True)),
-            {source.pk, autre.pk, cible_existante.pk, nouvelle_source.pk, nouvelle.pk})
+            {source.pk, autre.pk, cible_existante.pk, nouvelle_source.pk})
         self.assertEqual(set(second.periodes_scolaires.values_list("pk", flat=True)),
-            {source.pk, nouvelle_source.pk, cible_existante.pk, nouvelle.pk})
-        self.assertEqual(PeriodeScolaire.objects.count(), len(avant) + 1)
+            {source.pk, nouvelle_source.pk})
+        self.assertEqual(PeriodeScolaire.objects.count(), len(avant))
 
-    def test_decalage_depuis_annee_source_et_non_premiere_periode(self):
+    def test_semaine_source_sans_equivalent_officiel_n_est_pas_decalee(self):
         self.periode.debut = date(2026, 2, 9)
         self.periode.fin = date(2026, 2, 13)
         self.periode.save()
@@ -302,15 +302,13 @@ class CreationAnneeTests(ConnexionTestCase):
         plan = preparer_copie(self.cible(), self.source, [self.centre.pk], [self.accueil.pk], ["horaires"],
             {self.periode.pk: (date(2027, 2, 9), date(2027, 2, 13))})
         creer_annee(self.cible(), plan)
-        cible = self.evenement.periodes_scolaires.get(annee_scolaire="2026-2027")
-        self.assertEqual(cible.debut, date(2027, 2, 9))
-        self.assertEqual(cible.fin, date(2027, 2, 13))
+        self.assertFalse(self.evenement.periodes_scolaires.filter(annee_scolaire="2026-2027").exists())
         self.assertTrue(self.evenement.periodes_scolaires.filter(pk=semaine.pk).exists())
 
     def test_calendrier_modifie_apres_preview_refuse(self):
         response = self.client.post(self.url, self.identite())
         response = self.client.post(self.url, self.options(response.context["jeton"]))
-        self.recuperer_semaines.return_value = self.recuperer_semaines.return_value[:-1]
+        self.recuperer_semaines.return_value = self.recuperer_semaines.return_value[:-2]
         response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
         self.assertContains(response, "La configuration source a changé")
         self.assertFalse(AnneeScolaire.objects.filter(libelle="2026-2027").exists())
@@ -387,3 +385,94 @@ class CreationAnneeTests(ConnexionTestCase):
         ete = next(v for v in response.context["calendrier_preview"]["vacances"] if v["nom"].startswith("Été"))
         self.assertEqual((ete["creees"], ete["reutilisees"]), (0, 1))
         self.assertContains(response, "2027-07-09")
+
+    def test_semaines_ete_recalculees_selectionnees_et_visibles_avant_confirmation(self):
+        semaines_source = [
+            PeriodeScolaire.objects.create(nom=f"Été — Semaine {numero}", zone="A", annee_scolaire="2025-2026",
+                debut=debut, fin=debut + timedelta(days=4), description_source="Vacances d'Été", ordre=numero)
+            for numero, debut in ((1, date(2026, 7, 6)), (2, date(2026, 7, 13)),
+                                  (3, date(2026, 7, 20)), (4, date(2026, 7, 27)), (8, date(2026, 8, 24)))
+        ]
+        self.evenement.periodes_scolaires.add(*semaines_source)
+        source_avant = list(PeriodeScolaire.objects.filter(annee_scolaire="2025-2026").order_by("pk").values())
+        response = self.client.post(self.url, self.identite())
+        self.assertContains(response, "Semaines d’ouverture estivale à reprendre")
+        self.assertContains(response, "2027-07-05 au 2027-07-09")
+        self.assertContains(response, "2027-08-23 au 2027-08-27")
+        options = self.options(response.context["jeton"])
+        for semaine in response.context["options"].semaines_ete:
+            if semaine["suggeree"]:
+                options[f"ete_{semaine['id']}"] = "on"
+        # La troisième semaine est explicitement décochée : elle ne peut pas
+        # être créée ni rattachée lors de la confirmation.
+        options.pop("ete_2")
+        response = self.client.post(self.url, options)
+        self.assertEqual(response.context["etape"], "preview")
+        preview = response.context["calendrier_preview"]
+        ete = next(v for v in preview["vacances"] if v["nom"].startswith("Été"))
+        self.assertEqual([(s["debut"], s["fin"]) for s in ete["semaines"]], [
+            ("2027-07-05", "2027-07-09"), ("2027-07-12", "2027-07-16"),
+            ("2027-07-26", "2027-07-30"), ("2027-08-23", "2027-08-27"),
+        ])
+        self.assertTrue(all(date.fromisoformat(s["debut"]).weekday() == 0
+                            and date.fromisoformat(s["fin"]) - date.fromisoformat(s["debut"]) == timedelta(days=4)
+                            for s in ete["semaines"]))
+        self.assertNotContains(response, "2027-07-19 au 2027-07-23")
+        visibles = {(s["debut"], s["fin"]) for s in ete["semaines"]}
+        response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
+        self.assertEqual(response.status_code, 302)
+        creees = PeriodeScolaire.objects.filter(annee_scolaire="2026-2027", description_source="Vacances d'Été")
+        self.assertEqual(set(creees.values_list("debut", "fin")),
+                         {(date.fromisoformat(d), date.fromisoformat(f)) for d, f in visibles})
+        self.assertFalse(creees.filter(debut=date(2027, 7, 19)).exists())
+        self.assertTrue(all(s.debut.weekday() == 0 and s.fin == s.debut + timedelta(days=4) for s in creees))
+        self.assertEqual(list(PeriodeScolaire.objects.filter(annee_scolaire="2025-2026").order_by("pk").values()), source_avant)
+        self.assertEqual(self.evenement.periodes_scolaires.filter(annee_scolaire="2026-2027", description_source="Vacances d'Été").count(), 4)
+        # La confirmation rejouée n'ajoute aucun doublon grâce aux mêmes clés de dates.
+        self.assertEqual(creees.count(), 4)
+
+    def test_toutes_les_semaines_ete_sont_proposees_et_les_suggestions_seules_sont_cochees(self):
+        semaines_source = [
+            PeriodeScolaire.objects.create(nom=f"Été — Semaine {numero}", zone="A", annee_scolaire="2025-2026",
+                debut=debut, fin=debut + timedelta(days=4), description_source="Vacances d'Été", ordre=numero)
+            for numero, debut in ((1, date(2026, 7, 6)), (2, date(2026, 7, 13)),
+                                  (3, date(2026, 7, 20)), (4, date(2026, 7, 27)), (8, date(2026, 8, 24)))
+        ]
+        self.evenement.periodes_scolaires.add(*semaines_source)
+        response = self.client.post(self.url, self.identite())
+        ete = response.context["options"].semaines_ete
+        self.assertEqual([(semaine["debut"], semaine["fin"]) for semaine in ete], [
+            (date(2027, 7, 5), date(2027, 7, 9)), (date(2027, 7, 12), date(2027, 7, 16)),
+            (date(2027, 7, 19), date(2027, 7, 23)), (date(2027, 7, 26), date(2027, 7, 30)),
+            (date(2027, 8, 2), date(2027, 8, 6)), (date(2027, 8, 9), date(2027, 8, 13)),
+            (date(2027, 8, 16), date(2027, 8, 20)), (date(2027, 8, 23), date(2027, 8, 27)),
+        ])
+        self.assertEqual([semaine["id"] for semaine in ete if semaine["suggeree"]], ["0", "1", "2", "3", "7"])
+        self.assertEqual([semaine["id"] for semaine in ete if not semaine["suggeree"]], ["4", "5", "6"])
+        html = response.content.decode()
+        self.assertIn('name="ete_4"', html)
+        self.assertNotIn('name="ete_4" id="id_ete_4" checked', html)
+
+    def test_semaine_ete_supplementaire_cochee_est_la_seule_ajoutee(self):
+        semaine_source = PeriodeScolaire.objects.create(nom="Été — Semaine 1", zone="A", annee_scolaire="2025-2026",
+            debut=date(2026, 7, 6), fin=date(2026, 7, 10), description_source="Vacances d'Été", ordre=1)
+        self.evenement.periodes_scolaires.add(semaine_source)
+        response = self.client.post(self.url, self.identite())
+        options = self.options(response.context["jeton"])
+        # La première suggestion reste cochée ; l'utilisateur ajoute la
+        # semaine 5, initialement décochée, sans ouvrir les autres semaines.
+        options["ete_0"] = "on"
+        options["ete_4"] = "on"
+        response = self.client.post(self.url, options)
+        preview = response.context["calendrier_preview"]
+        ete = next(v for v in preview["vacances"] if v["nom"].startswith("Été"))
+        self.assertEqual([(s["debut"], s["fin"]) for s in ete["semaines"]], [
+            ("2027-07-05", "2027-07-09"), ("2027-08-02", "2027-08-06"),
+        ])
+        response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
+        self.assertEqual(response.status_code, 302)
+        creees = PeriodeScolaire.objects.filter(annee_scolaire="2026-2027", description_source="Vacances d'Été")
+        self.assertEqual(set(creees.values_list("debut", "fin")), {
+            (date(2027, 7, 5), date(2027, 7, 9)), (date(2027, 8, 2), date(2027, 8, 6)),
+        })
+        self.assertEqual(self.evenement.periodes_scolaires.filter(annee_scolaire="2026-2027").count(), 1)
