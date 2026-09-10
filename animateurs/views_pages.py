@@ -561,7 +561,15 @@ def planning(request):
     """Page principale des affectations et des effectifs enfants."""
     if request.GET.get("mode") == "temps-travail":
         return redirect("/recapitulatif/?onglet=temps-travail")
-    return render(request, "planning.html", {"active_page": "planning"})
+    from .models import FonctionOperationnelle
+    from .services.responsabilites import regle_eligibilite_fonction
+    fonctions = list(FonctionOperationnelle.objects.filter(active=True))
+    for fonction in fonctions:
+        fonction.regle_eligibilite = regle_eligibilite_fonction(fonction)
+    return render(request, "planning.html", {
+        "active_page": "planning",
+        "fonctions_responsabilite": fonctions,
+    })
 
 
 

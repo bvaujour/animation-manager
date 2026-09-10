@@ -24,6 +24,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (field.type === "checkbox") field.checked = Boolean(value);
             else field.value = value ?? "";
         });
+        const rules = document.getElementById("settings-responsibility-rules");
+        rules.innerHTML = (data.regles_responsabilites || []).map((rule) => `
+            <div class="settings-ratio-grid" data-responsibility-rule="${escapeHtml(rule.code)}">
+                <label class="field"><span>${escapeHtml(rule.libelle)}</span><select name="responsabilite_${escapeHtml(rule.code)}_qualification"><option value="">Aucune qualification</option>${(data.qualifications_responsabilites || []).map((item) => `<option value="${item.id}" ${Number(item.id) === Number(rule.qualification_requise_id) ? "selected" : ""}>${escapeHtml(item.nom)}</option>`).join("")}</select></label>
+                <label class="planning-floating-toggle"><input name="responsabilite_${escapeHtml(rule.code)}_majorite" type="checkbox" ${rule.majorite_requise ? "checked" : ""}> <span><strong>Majorité obligatoire</strong></span></label>
+            </div>`).join("");
     }
 
     function dateAujourdhui() {
@@ -220,6 +226,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         fieldsRoot.querySelectorAll("[name]").forEach((field) => {
             if (field.closest("#settings-prime-form")) return;
             payload[field.name] = field.type === "checkbox" ? field.checked : field.value;
+        });
+        payload.regles_responsabilites = [...document.querySelectorAll("[data-responsibility-rule]")].map((row) => {
+            const code = row.dataset.responsibilityRule;
+            return {
+                code,
+                majorite_requise: row.querySelector(`[name="responsabilite_${code}_majorite"]`).checked,
+                qualification_requise_id: Number(row.querySelector(`[name="responsabilite_${code}_qualification"]`).value) || null,
+            };
         });
         setStatus("Enregistrement…");
         try {

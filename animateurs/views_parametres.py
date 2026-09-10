@@ -41,6 +41,22 @@ def _payload(parametres):
         "ratio_periscolaire_pedt_long_6_plus": parametres.ratio_periscolaire_pedt_long_6_plus,
         "pourcentage_qualifies_minimum": parametres.pourcentage_qualifies_minimum,
         "pourcentage_non_qualifies_maximum": parametres.pourcentage_non_qualifies_maximum,
+        "regles_responsabilites": [
+            {
+                "code": code, "libelle": libelle,
+                "majorite_requise": getattr(parametres, f"{prefixe}_majorite_requise"),
+                "qualification_requise_id": getattr(parametres, f"{prefixe}_qualification_requise_id"),
+            }
+            for code, libelle, prefixe in (
+                ("directeur", "Directrice générale / Directeur général", "directeur_general"),
+                ("directeur_adjoint", "Directrice adjointe / Directeur adjoint", "directeur_adjoint"),
+                ("referent_site", "Référente / Référent de site", "referent_site"),
+            )
+        ],
+        "qualifications_responsabilites": [
+            {"id": item.id, "nom": item.nom}
+            for item in Qualification.objects.order_by("nom", "id")
+        ],
         "statuts_animation": [
             {"id": item.id, "nom": item.nom}
             for item in Qualification.objects.filter(est_statut=True).order_by("nom", "id")
@@ -107,6 +123,20 @@ def api_parametres(request):
                 if valeur < 0 or valeur > 100:
                     raise ValidationError("Les pourcentages de qualification doivent être compris entre 0 et 100.")
                 setattr(parametres_structure, champ, valeur)
+        regles = {item.get("code"): item for item in donnees.get("regles_responsabilites", [])}
+        for code, prefixe in (
+            ("directeur", "directeur_general"),
+            ("directeur_adjoint", "directeur_adjoint"),
+            ("referent_site", "referent_site"),
+        ):
+            if code not in regles:
+                continue
+            regle = regles[code]
+            setattr(parametres_structure, f"{prefixe}_majorite_requise", bool(regle.get("majorite_requise")))
+            qualification_id = regle.get("qualification_requise_id") or None
+            if qualification_id and not Qualification.objects.filter(pk=qualification_id).exists():
+                raise ValidationError("La qualification requise est invalide.")
+            setattr(parametres_structure, f"{prefixe}_qualification_requise_id", qualification_id)
 
         # Les catégories réglementaires ne sont pas reconfigurées ici :
         # Animation Manager réutilise le statut effectif déjà calculé depuis

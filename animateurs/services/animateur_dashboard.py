@@ -24,6 +24,7 @@ from animateurs.models import (
     Document,
     InformationAnimateur,
     PublicationPlanning,
+    ResponsabiliteOperationnelle,
     EffectifEnfantsJour,
     HoraireAffectationJour,
     ParticipationTravailComplementaire,
@@ -70,6 +71,19 @@ def _jours_couverts(
     fin = min(fin_locale_exclusive, fin_inclusive + datetime.timedelta(days=1))
     while jour < fin:
         yield jour
+        jour += datetime.timedelta(days=1)
+
+
+def _jours_responsabilite(responsabilite, debut, fin_inclusive):
+    """Une responsabilité horaire 8h–18h couvre bien son jour civil."""
+    premier = max(timezone.localtime(responsabilite.debut).date(), debut)
+    dernier = min(timezone.localtime(responsabilite.fin).date(), fin_inclusive)
+    jour = premier
+    while jour <= dernier:
+        borne_debut = _borne_jour(jour)
+        borne_fin = _borne_jour(jour + datetime.timedelta(days=1))
+        if responsabilite.debut < borne_fin and responsabilite.fin > borne_debut:
+            yield jour
         jour += datetime.timedelta(days=1)
 
 
@@ -367,12 +381,19 @@ def generer_tableau_de_bord_animateur(
         queryset=HoraireAffectationJour.objects.filter(date__range=(lundi, vendredi)).order_by("date"),
     )
     affectations = []
+    responsabilites = []
     if planning_publie:
         affectations = list(
             Affectation.objects.filter(animateur=animateur, debut__lt=fin_dt, fin__gt=debut_dt)
             .select_related("centre", "evenement", "evenement__groupe")
             .prefetch_related(horaires_prefetch)
             .order_by("debut", "id")
+        )
+        responsabilites = list(
+            ResponsabiliteOperationnelle.objects.filter(
+                animateur=animateur, fournit_temps_travail=True,
+                debut__lt=fin_dt, fin__gt=debut_dt,
+            ).select_related("fonction", "centre", "accueil_centre__centre")
         )
 
     affectation_par_jour: dict[datetime.date, Affectation] = {}
@@ -381,6 +402,11 @@ def generer_tableau_de_bord_animateur(
         for jour in _jours_couverts(affectation, lundi, vendredi):
             affectation_par_jour.setdefault(jour, affectation)
             evenements_par_jour[jour].add(affectation.evenement_id)
+
+    responsabilite_par_jour = {}
+    for responsabilite in responsabilites:
+        for jour in _jours_responsabilite(responsabilite, lundi, vendredi):
+            responsabilite_par_jour.setdefault(jour, responsabilite)
 
     ids_evenements = {item.evenement_id for item in affectations}
     effectifs = {
@@ -452,7 +478,8 @@ def generer_tableau_de_bord_animateur(
     for index in range(5):
         jour = lundi + datetime.timedelta(days=index)
         affectation = affectation_par_jour.get(jour)
-        if affectation is None:
+        responsabilite_autonome = responsabilite_par_jour.get(jour)
+        if affectation is None and responsabilite_autonome is None:
             jours.append(
                 {
                     "date": jour,
@@ -464,6 +491,25 @@ def generer_tableau_de_bord_animateur(
                     "sorties": sorties_par_jour[jour],
                 }
             )
+            continue
+
+        if affectation is None:
+            centre = responsabilite_autonome.centre or responsabilite_autonome.accueil_centre.centre
+            jours.append({
+                "date": jour, "jour": JOURS_FR[index], "date_libelle": _libelle_date(jour),
+                "est_aujourdhui": jour == aujourd_hui, "travaille": True,
+                "disponible": est_disponible(jour), "centre": centre.nom,
+                "centre_code": centre.code, "centre_couleur": centre.couleur,
+                "groupe": responsabilite_autonome.fonction.nom,
+                "est_sejour": False, "type_affectation": "Responsabilité",
+                "horaire": "", "horaires_renseignes": False,
+                "enfants": None, "effectif_renseigne": False, "animateurs": 1,
+                "animateurs_prenoms": [animateur.prenom], "animateurs_libelle": animateur.prenom,
+                "collegues": [], "collegues_libelle": "", "collegues_details": [],
+                "collegues_centre_details": [], "sorties": sorties_par_jour[jour],
+                "sortie": sorties_par_jour[jour][0] if sorties_par_jour[jour] else None,
+                "responsabilite": responsabilite_autonome.fonction.nom,
+            })
             continue
 
         horaire = next((item for item in affectation.horaires_journaliers.all() if item.date == jour), None)

@@ -1,4 +1,5 @@
 import datetime
+import json
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -8,7 +9,7 @@ from django.utils import timezone
 from animateurs.models import (
     AccueilCentre, Affectation, Animateur, BesoinEncadrement, Centre, Disponibilite,
     FonctionOperationnelle, HoraireAffectationJour, Qualification,
-    ResponsabiliteOperationnelle, TypeAccueil,
+    ParametresStructure, PublicationPlanning, ResponsabiliteOperationnelle, TypeAccueil,
 )
 from animateurs.services.affectations import creer_affectation, modifier_affectation
 from animateurs.services.planning_solver import generer_planning_auto
@@ -166,6 +167,68 @@ class ResponsabilitesOperationnellesTests(TestCase):
         quotas = membres_quotas_uniques([], [compte, ignoree])
         self.assertEqual([item.id for item in quotas], [self.betty.id])
         self.assertEqual(categorie_encadrement_du_statut(statut_pour_date(self.betty, LUNDI)), "diplome")
+
+    def test_api_applique_la_meme_eligibilite_aux_deux_modes(self):
+        bafa = Qualification.objects.create(nom="BAFA titulaire")
+        structure = ParametresStructure.objects.get(cle="principale")
+        structure.directeur_adjoint_qualification_requise = bafa
+        structure.directeur_adjoint_majorite_requise = True
+        structure.save()
+        self.julie.date_naissance = datetime.date(2010, 1, 1)
+        self.julie.save()
+        user = get_user_model().objects.create_superuser(username="eligibilite", password="secret")
+        self.client.force_login(user)
+        url = reverse("api_responsabilites_operationnelles")
+        standalone = self.client.post(url, data=json.dumps({
+            "animateur_id": self.julie.id, "fonction_code": "directeur_adjoint",
+            "debut": self.debut.isoformat(), "fin": self.fin.isoformat(),
+            "perimetre": "site", "centre_id": self.centre.id,
+        }), content_type="application/json")
+        affectation = Affectation.objects.create(
+            animateur=self.julie, centre=self.centre, evenement=self.groupe,
+            debut=self.debut, fin=self.fin,
+        )
+        liee = self.client.post(url, data=json.dumps({
+            "affectation_id": affectation.id, "fonction_code": "directeur_adjoint",
+        }), content_type="application/json")
+        self.assertEqual((standalone.status_code, liee.status_code), (400, 400))
+        self.assertIn("BAFA titulaire et majorité requis", standalone.json()["error"])
+
+        self.julie.date_naissance = datetime.date(1990, 1, 1)
+        self.julie.save()
+        encore_sans_bafa = self.client.post(url, data=json.dumps({
+            "affectation_id": affectation.id, "fonction_code": "directeur_adjoint",
+        }), content_type="application/json")
+        self.assertEqual(encore_sans_bafa.status_code, 400)
+        self.julie.qualifications.add(bafa)
+        eligible = self.client.post(url, data=json.dumps({
+            "affectation_id": affectation.id, "fonction_code": "directeur_adjoint",
+        }), content_type="application/json")
+        self.assertEqual(eligible.status_code, 201)
+
+    def test_api_planning_publie_agrege_et_dedoublonne_la_presence_autonome(self):
+        user = get_user_model().objects.create_user(username="betty", password="secret")
+        self.betty.utilisateur = user
+        self.betty.save()
+        PublicationPlanning.objects.create(semaine_debut=LUNDI, publie=True)
+        responsabilite = ResponsabiliteOperationnelle.objects.create(
+            animateur=self.betty, fonction=self.directrice, debut=self.debut, fin=self.fin,
+            perimetre="site", centre=self.centre, bloque_affectation_animation=False,
+        )
+        self.client.force_login(user)
+        url = reverse("api_planning")
+        params = {"start": self.debut.isoformat(), "end": self.fin.isoformat()}
+
+        seule = self.client.get(url, params).json()
+        self.assertEqual([item["id"] for item in seule], [f"responsabilite-{responsabilite.id}"])
+
+        Affectation.objects.create(
+            animateur=self.betty, centre=self.centre, evenement=self.groupe,
+            debut=self.debut, fin=self.fin,
+        )
+        avec_affectation = self.client.get(url, params).json()
+        self.assertEqual(len(avec_affectation), 1)
+        self.assertNotEqual(avec_affectation[0]["id"], f"responsabilite-{responsabilite.id}")
 
 
 class ResponsabilitesSolveurTests(TestCase):

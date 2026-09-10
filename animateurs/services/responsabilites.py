@@ -4,7 +4,50 @@ from __future__ import annotations
 
 from django.db.models import Q
 
-from animateurs.models import Affectation, ResponsabiliteOperationnelle
+from animateurs.models import Affectation, FonctionOperationnelle, ResponsabiliteOperationnelle
+from animateurs.services.parametres import get_parametres_structure
+from animateurs.services.statuts import ids_qualifications_pour_date
+
+
+CHAMPS_REGLES = {
+    FonctionOperationnelle.DIRECTEUR: "directeur_general",
+    FonctionOperationnelle.DIRECTEUR_ADJOINT: "directeur_adjoint",
+    FonctionOperationnelle.REFERENT_SITE: "referent_site",
+}
+
+
+def regle_eligibilite_fonction(fonction, *, structure=None):
+    """Retourne la règle paramétrée associée au référentiel de fonctions."""
+    prefixe = CHAMPS_REGLES.get(fonction.code)
+    if not prefixe:
+        return {"majorite_requise": False, "qualification_requise": None}
+    structure = structure or get_parametres_structure()
+    return {
+        "majorite_requise": getattr(structure, f"{prefixe}_majorite_requise"),
+        "qualification_requise": getattr(structure, f"{prefixe}_qualification_requise"),
+    }
+
+
+def motif_ineligibilite_responsabilite(animateur, fonction, date_reference, *, structure=None):
+    """Validation unique utilisée par les deux formulaires et par l'API."""
+    regle = regle_eligibilite_fonction(fonction, structure=structure)
+    manques = []
+    if regle["majorite_requise"]:
+        naissance = animateur.date_naissance
+        majeur = naissance is not None and (
+            date_reference.year - naissance.year
+            - ((date_reference.month, date_reference.day) < (naissance.month, naissance.day))
+        ) >= 18
+        if not majeur:
+            manques.append("majorité")
+    qualification = regle["qualification_requise"]
+    if qualification and qualification.id not in ids_qualifications_pour_date(animateur, date_reference):
+        manques.append(qualification.nom)
+    if not manques:
+        return ""
+    if len(manques) == 2:
+        return f"{manques[1]} et majorité requis"
+    return f"{manques[0]} requise" if manques[0] == "majorité" else f"{manques[0]} requis"
 
 
 def responsabilites_standalone_sur_plage(*, animateur=None, debut, fin, bloquantes=None):

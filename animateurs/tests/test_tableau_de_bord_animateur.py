@@ -19,9 +19,12 @@ from animateurs.models import (
     HoraireAffectationJour,
     ParticipationTravailComplementaire,
     PublicationPlanning,
+    FonctionOperationnelle,
+    ResponsabiliteOperationnelle,
     Sortie,
     SortieParticipation,
 )
+from animateurs.services.animateur_dashboard import generer_tableau_de_bord_animateur
 
 
 class TableauDeBordAnimateurTests(TestCase):
@@ -133,6 +136,25 @@ class TableauDeBordAnimateurTests(TestCase):
         self.assertContains(response, "Tableau de bord")
         self.assertContains(response, 'class="app-rail"')
         self.assertNotContains(response, 'class="animator-sidebar"')
+
+    @patch("animateurs.services.animateur_dashboard.timezone.localdate")
+    def test_responsabilite_autonome_est_une_presence_du_planning_publie(self, localdate):
+        localdate.return_value = self.lundi
+        self.animateur.affectations.all().delete()
+        fonction = FonctionOperationnelle.objects.get(code=FonctionOperationnelle.DIRECTEUR)
+        debut = timezone.make_aware(datetime.datetime.combine(self.lundi, datetime.time(8)))
+        ResponsabiliteOperationnelle.objects.create(
+            animateur=self.animateur, fonction=fonction, debut=debut,
+            fin=debut + datetime.timedelta(hours=10), perimetre="site",
+            centre=self.centre, bloque_affectation_animation=True,
+        )
+
+        contexte = generer_tableau_de_bord_animateur(self.animateur, self.lundi)
+
+        lundi = contexte["jours"][0]
+        self.assertTrue(lundi["travaille"])
+        self.assertEqual(lundi["groupe"], "Directrice générale / Directeur général")
+        self.assertEqual(lundi["centre"], self.centre.nom)
 
     def test_plannings_expose_programmes_collegues_et_sorties_du_contexte(self):
         autre_centre = Centre.objects.create(nom="Centre annexe", code="CA")

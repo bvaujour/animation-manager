@@ -627,6 +627,21 @@ class ParametresStructure(models.Model):
         default=20,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
     )
+    directeur_general_majorite_requise = models.BooleanField(default=False)
+    directeur_general_qualification_requise = models.ForeignKey(
+        "Qualification", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="structures_direction_generale",
+    )
+    directeur_adjoint_majorite_requise = models.BooleanField(default=True)
+    directeur_adjoint_qualification_requise = models.ForeignKey(
+        "Qualification", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="structures_direction_adjointe",
+    )
+    referent_site_majorite_requise = models.BooleanField(default=True)
+    referent_site_qualification_requise = models.ForeignKey(
+        "Qualification", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="structures_reference_site",
+    )
     cree_le = models.DateTimeField(auto_now_add=True)
     modifie_le = models.DateTimeField(auto_now=True)
 
@@ -2235,6 +2250,12 @@ class FonctionOperationnelle(models.Model):
     DIRECTEUR = "directeur"
     DIRECTEUR_ADJOINT = "directeur_adjoint"
     REFERENT_SITE = "referent_site"
+
+    LIBELLES = {
+        DIRECTEUR: "Directrice générale / Directeur général",
+        DIRECTEUR_ADJOINT: "Directrice adjointe / Directeur adjoint",
+        REFERENT_SITE: "Référente / Référent de site",
+    }
 
     code = models.SlugField(max_length=40, unique=True)
     nom = models.CharField(max_length=80)

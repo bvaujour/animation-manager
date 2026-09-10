@@ -1914,6 +1914,7 @@ function libelleDate(dateStr)
 		contexteHorairesAffectation = { calendar, affectation, jours };
 		if (caseAffectationFlottante) caseAffectationFlottante.checked = eventEstFlottant(affectation);
 		if (selectResponsabiliteAffectation) selectResponsabiliteAffectation.value = affectation.extendedProps.responsabilite?.fonction_code || "";
+		actualiserEligibiliteFonctionsAffectation(affectation);
 		titreHorairesAffectation.textContent = `Horaires — ${affectation.extendedProps.animateur_nom || affectation.title}`;
 		const horaires = affectation.extendedProps.horaires || {};
 		champsHorairesAffectation.innerHTML = jours.map((dateStr) =>
@@ -1927,6 +1928,32 @@ function libelleDate(dateStr)
 				</div>`;
 		}).join("");
 		ouvrirModal(modalHorairesAffectation);
+	}
+
+	function animateurEligiblePourOption(animateur, option, dateReference)
+	{
+		if (!option?.value) return { eligible: true, motif: "" };
+		const qualificationId = Number(option.dataset.qualificationId) || null;
+		const naissance = animateur?.date_naissance ? new Date(`${animateur.date_naissance}T12:00:00`) : null;
+		let age = naissance ? dateReference.getFullYear() - naissance.getFullYear() : null;
+		if (naissance && (dateReference.getMonth() < naissance.getMonth() || (dateReference.getMonth() === naissance.getMonth() && dateReference.getDate() < naissance.getDate()))) age -= 1;
+		const manqueMajorite = option.dataset.majorite === "true" && (age === null || age < 18);
+		const ids = animateur?.diplome_ids || animateur?.qualification_ids || [];
+		const manqueQualification = qualificationId && !ids.map(Number).includes(qualificationId);
+		const motifs = [manqueQualification ? (option.dataset.qualificationNom || "Qualification") : "", manqueMajorite ? "majorité" : ""].filter(Boolean);
+		return { eligible: motifs.length === 0, motif: motifs.join(" et ") };
+	}
+
+	function actualiserEligibiliteFonctionsAffectation(affectation)
+	{
+		if (!selectResponsabiliteAffectation) return;
+		const animateur = animateursPlanning.find((item) => Number(item.id) === Number(affectation.extendedProps?.animateur_id));
+		const dateReference = new Date(`${affectation.startStr.slice(0, 10)}T12:00:00`);
+		[...selectResponsabiliteAffectation.options].forEach((option) => {
+			const resultat = animateurEligiblePourOption(animateur, option, dateReference);
+			option.disabled = !resultat.eligible && option.value !== selectResponsabiliteAffectation.value;
+			option.title = resultat.motif ? `${resultat.motif} requis` : "";
+		});
 	}
 
 	caseAffectationFlottante?.addEventListener("change", async () =>
@@ -2592,12 +2619,29 @@ function libelleDate(dateStr)
 		selectResponsabilitePerimetre.disabled = Boolean(item);
 		inputResponsabiliteDebut.value = valeurDateHeureLocale(item?.debut || calendar.view.activeStart);
 		inputResponsabiliteFin.value = valeurDateHeureLocale(item?.fin || calendar.view.activeEnd);
+		actualiserEligibiliteResponsabilite();
 		caseResponsabiliteBloque.checked = item?.bloque_affectation_animation ?? true;
 		caseResponsabiliteEncadrement.checked = item?.compte_dans_encadrement ?? false;
 		caseResponsabiliteQuotas.checked = item?.compte_dans_quotas_qualification ?? false;
 		boutonSupprimerResponsabilite.hidden = !item;
 		ouvrirModal(modalResponsabiliteStandalone);
 	}
+
+	function actualiserEligibiliteResponsabilite()
+	{
+		const fonction = selectResponsabiliteFonction?.selectedOptions[0];
+		if (!fonction || !selectResponsabiliteAnimateur) return;
+		[...selectResponsabiliteAnimateur.options].forEach((option) => {
+			const animateur = animateursPlanning.find((item) => Number(item.id) === Number(option.value));
+			const dateDebut = inputResponsabiliteDebut?.value ? new Date(inputResponsabiliteDebut.value) : new Date();
+			const resultat = animateurEligiblePourOption(animateur, fonction, dateDebut);
+			option.disabled = !resultat.eligible && !contexteResponsabiliteStandalone?.item;
+			option.textContent = `${animateur?.prenom || ""} ${animateur?.nom || ""}${resultat.motif ? ` — ${resultat.motif} requis` : ""}`;
+		});
+	}
+
+	selectResponsabiliteFonction?.addEventListener("change", actualiserEligibiliteResponsabilite);
+	inputResponsabiliteDebut?.addEventListener("change", actualiserEligibiliteResponsabilite);
 
 	formulaireResponsabiliteStandalone?.addEventListener("submit", async (event) =>
 	{

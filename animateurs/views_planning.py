@@ -37,7 +37,9 @@ from .services.affectations import (
 from .services.dates import parse_to_aware_datetime
 from .services.flottants import est_groupe_flottants
 from .services.serializers import affectation_to_event
-from .services.responsabilites import responsabilite_correspond_affectation
+from .services.responsabilites import (
+    motif_ineligibilite_responsabilite, responsabilite_correspond_affectation,
+)
 
 # ---------------------------------------------------------------------------
 # API - Planning (lecture des groupes + écriture individuelle)
@@ -67,6 +69,24 @@ def _responsabilite_payload(item):
         "fournit_temps_travail": item.fournit_temps_travail,
         "compte_dans_encadrement": item.compte_dans_encadrement,
         "compte_dans_quotas_qualification": item.compte_dans_quotas_qualification,
+    }
+
+
+def _responsabilite_to_event(item):
+    """Présence autonome publiée, sans fabriquer d'Affectation en base."""
+    return {
+        "id": f"responsabilite-{item.id}",
+        "title": f"{item.animateur.prenom} {item.animateur.nom} · {item.fonction.nom}",
+        "start": item.debut.isoformat(),
+        "end": item.fin.isoformat(),
+        "allDay": False,
+        "extendedProps": {
+            "type_affichage": "responsabilite_autonome",
+            "animateur_id": item.animateur_id,
+            "animateur_nom": f"{item.animateur.prenom} {item.animateur.nom}",
+            "fonction_nom": item.fonction.nom,
+            "centre_id": item.centre_id or getattr(item.accueil_centre, "centre_id", None),
+        },
     }
 
 
@@ -142,6 +162,7 @@ def api_planning(request):
     start = request.GET.get("start")
     end = request.GET.get("end")
 
+    responsabilites_personnelles = ResponsabiliteOperationnelle.objects.none()
     if not est_direction(request.user):
         date_reference = None
         try:
@@ -201,6 +222,9 @@ def api_planning(request):
         if animateur is None:
             return JsonResponse([], safe=False)
         affectations_personnelles = animateur.affectations.all()
+        responsabilites_personnelles = ResponsabiliteOperationnelle.objects.filter(
+            animateur=animateur, fournit_temps_travail=True
+        ).select_related("animateur", "fonction", "centre", "accueil_centre")
         if start and end:
             try:
                 debut_personnel = parse_to_aware_datetime(start)
@@ -209,9 +233,15 @@ def api_planning(request):
                     debut__lt=fin_personnelle,
                     fin__gt=debut_personnel,
                 )
+                responsabilites_personnelles = responsabilites_personnelles.filter(
+                    debut__lt=fin_personnelle, fin__gt=debut_personnel
+                )
             except ValueError:
                 return JsonResponse({"error": "Paramètres start/end invalides."}, status=400)
-        centre_ids = affectations_personnelles.values_list("centre_id", flat=True).distinct()
+        centre_ids = set(affectations_personnelles.values_list("centre_id", flat=True))
+        centre_ids.update(responsabilites_personnelles.values_list("centre_id", flat=True))
+        centre_ids.update(responsabilites_personnelles.values_list("accueil_centre__centre_id", flat=True))
+        centre_ids.discard(None)
         affectations = affectations.filter(centre_id__in=centre_ids)
 
     if evenement_id:
@@ -260,6 +290,21 @@ def api_planning(request):
             if responsabilite_correspond_affectation(item, affectation)
         ][:1]
     events = [affectation_to_event(a) for a in affectations]
+    if not est_direction(request.user):
+        if centre_id:
+            responsabilites_personnelles = responsabilites_personnelles.filter(
+                Q(centre_id=centre_id) | Q(accueil_centre__centre_id=centre_id)
+            )
+        # Une responsabilité superposée à une présence classique enrichit le
+        # métier, mais ne crée jamais une seconde présence dans le planning.
+        for item in responsabilites_personnelles:
+            deja_presente = any(
+                affectation.animateur_id == item.animateur_id
+                and affectation.debut < item.fin and affectation.fin > item.debut
+                for affectation in affectations
+            )
+            if not deja_presente:
+                events.append(_responsabilite_to_event(item))
 
     return JsonResponse(events, safe=False)
 
@@ -487,6 +532,11 @@ def api_responsabilites_operationnelles(request):
                 compte_dans_encadrement=False,
                 compte_dans_quotas_qualification=False,
             )
+            motif = motif_ineligibilite_responsabilite(
+                affectation.animateur, fonction, affectation.debut.date()
+            )
+            if motif:
+                raise ValidationError(motif)
             with transaction.atomic():
                 ResponsabiliteOperationnelle.objects.filter(
                     affectation_source_id=affectation.id
@@ -511,6 +561,11 @@ def api_responsabilites_operationnelles(request):
                     payload, "compte_dans_quotas_qualification"
                 ),
             )
+            motif = motif_ineligibilite_responsabilite(
+                animateur, fonction, item.debut.date()
+            )
+            if motif:
+                raise ValidationError(motif)
             if perimetre == ResponsabiliteOperationnelle.PERIMETRE_ACCUEIL:
                 item.accueil_centre = AccueilCentre.objects.get(pk=int(payload["accueil_centre_id"]))
             elif perimetre == ResponsabiliteOperationnelle.PERIMETRE_SITE:
@@ -563,6 +618,9 @@ def api_responsabilite_operationnelle_detail(request, responsabilite_id):
             ):
                 if nom in payload:
                     setattr(item, nom, _booleen_payload(payload, nom))
+        motif = motif_ineligibilite_responsabilite(item.animateur, item.fonction, item.debut.date())
+        if motif:
+            raise ValidationError(motif)
         item.save()
     except (TypeError, ValueError, json.JSONDecodeError, FonctionOperationnelle.DoesNotExist):
         return JsonResponse({"error": "Responsabilité invalide."}, status=400)

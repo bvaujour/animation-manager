@@ -284,10 +284,15 @@ document.addEventListener("DOMContentLoaded", () =>
                     PlanningData.fetchWeekEffectifs(fetchInfo.startStr, fetchInfo.endStr),
                 ])
                     .then(([events, effectifs]) => {
-                        let affectations = (events || []).filter(
-                            (item) => Number(item.extendedProps?.evenement_id || item.extendedProps?.groupe_id)
-                                === Number(evenement.id)
-                        );
+                        const premierGroupeId = Number((centre.evenements || [])[0]?.id);
+                        let affectations = (events || []).filter((item) => {
+                            if (item.extendedProps?.type_affichage === "responsabilite_autonome") {
+                                return Number(item.extendedProps?.centre_id) === Number(centre.id)
+                                    && Number(evenement.id) === premierGroupeId;
+                            }
+                            return Number(item.extendedProps?.evenement_id || item.extendedProps?.groupe_id)
+                                === Number(evenement.id);
+                        });
                         let espacesLignesPortail = [];
                         if (window.AnimatorPlanningPortal) {
                             const joursParAnimateur = new Map();

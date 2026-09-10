@@ -101,9 +101,7 @@
                 <span>Responsabilité</span>
                 <select id="affectation-responsabilite">
                     <option value="">Aucune</option>
-                    <option value="directeur">Directrice / Directeur</option>
-                    <option value="directeur_adjoint">Direction adjointe</option>
-                    <option value="referent_site">Référente / Référent de site</option>
+                    {% for fonction in fonctions_responsabilite %}<option value="{{ fonction.code }}" data-majorite="{{ fonction.regle_eligibilite.majorite_requise|yesno:'true,false' }}" data-qualification-id="{{ fonction.regle_eligibilite.qualification_requise.id|default:'' }}" data-qualification-nom="{{ fonction.regle_eligibilite.qualification_requise.nom|default:'' }}">{{ fonction.nom }}</option>{% endfor %}
                 </select>
             </label>
             <div id="horaires-affectation-fields" class="effectifs-enfants-fields"></div>
@@ -121,9 +119,7 @@
         <form id="responsabilite-standalone-form" class="modal-body planning-responsibility-form">
             <label>Animateur<select id="responsabilite-animateur" required></select></label>
             <label>Fonction<select id="responsabilite-fonction" required>
-                <option value="directeur">Directrice / Directeur</option>
-                <option value="directeur_adjoint">Direction adjointe</option>
-                <option value="referent_site">Référente / Référent de site</option>
+                {% for fonction in fonctions_responsabilite %}<option value="{{ fonction.code }}" data-majorite="{{ fonction.regle_eligibilite.majorite_requise|yesno:'true,false' }}" data-qualification-id="{{ fonction.regle_eligibilite.qualification_requise.id|default:'' }}" data-qualification-nom="{{ fonction.regle_eligibilite.qualification_requise.nom|default:'' }}">{{ fonction.nom }}</option>{% endfor %}
             </select></label>
             <label>Périmètre<select id="responsabilite-perimetre" required></select></label>
             <div class="planning-responsibility-dates">
