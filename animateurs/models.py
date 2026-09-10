@@ -1824,6 +1824,52 @@ class PreferenceCentre(models.Model):
         return f"{self.animateur} - {type_centre} : {self.centre}"
 
 
+class AnneeScolaire(models.Model):
+    """Référentiel central, indépendant des années texte historiques."""
+
+    class Statut(models.TextChoices):
+        PREPARATION = "PREPARATION", "En préparation"
+        ACTIVE = "ACTIVE", "Active"
+        CLOTUREE = "CLOTUREE", "Clôturée"
+
+    libelle = models.CharField("libellé", max_length=9, unique=True)
+    date_debut = models.DateField("date de début")
+    date_fin = models.DateField("date de fin")
+    statut = models.CharField(max_length=11, choices=Statut.choices, default=Statut.PREPARATION)
+    date_cloture = models.DateTimeField("date de clôture", null=True, blank=True)
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "année scolaire"
+        verbose_name_plural = "années scolaires"
+        ordering = ("-date_debut", "-date_fin", "libelle")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["statut"], condition=models.Q(statut="ACTIVE"),
+                name="annee_scolaire_unique_active",
+                violation_error_message="Une année scolaire est déjà active.",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(date_fin__gte=models.F("date_debut")),
+                name="annee_scolaire_dates_coherentes",
+            ),
+        ]
+
+    def __str__(self):
+        return self.libelle
+
+    def clean(self):
+        super().clean()
+        if not re.fullmatch(r"\d{4}-\d{4}", self.libelle or ""):
+            raise ValidationError({"libelle": "Utilise le format 2025-2026."})
+        debut, fin = map(int, self.libelle.split("-"))
+        if fin != debut + 1:
+            raise ValidationError({"libelle": "Les années doivent être consécutives."})
+        if self.date_debut and self.date_fin and self.date_fin < self.date_debut:
+            raise ValidationError({"date_fin": "La fin doit suivre le début de l’année."})
+
+
 class PeriodeScolaire(models.Model):
     """Semaine de vacances importée et sélectionnable par les groupes.
 

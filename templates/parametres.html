@@ -16,6 +16,9 @@
 
         <section class="tab-panel ui-card settings-card" data-panel="structure">
             <h2>Structure</h2>
+            {% if user.is_staff and perms.animateurs.view_anneescolaire %}
+            <p><a class="btn btn-ghost btn-small" href="{% url 'admin:animateurs_anneescolaire_changelist' %}">Gérer les années scolaires</a></p>
+            {% endif %}
             <div class="settings-grid">
                 <div class="field settings-span-2"><label for="settings-name">Nom de la structure</label><input id="settings-name" name="nom_structure" maxlength="200"></div>
                 <div class="field settings-span-2"><label for="settings-address">Adresse</label><textarea id="settings-address" name="adresse" rows="2"></textarea></div>

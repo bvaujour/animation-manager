@@ -25,6 +25,7 @@ from .models import (
     Affectation,
     AffiniteGroupeAnimateur,
     Animateur,
+    AnneeScolaire,
     Centre,
     ContactEmailExterne,
     DateExclueEvenement,
@@ -50,6 +51,21 @@ from .models import (
     SortieResponsabilite,
     TypeAccueil,
 )
+
+
+@admin.register(AnneeScolaire)
+class AnneeScolaireAdmin(admin.ModelAdmin):
+    list_display = ("libelle", "statut", "est_active", "date_debut", "date_fin", "date_cloture")
+    list_filter = ("statut",)
+    search_fields = ("libelle",)
+    readonly_fields = ("date_creation", "date_modification")
+
+    @admin.display(boolean=True, description="Année active")
+    def est_active(self, obj):
+        return obj.statut == AnneeScolaire.Statut.ACTIVE
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(TypeAccueil)
