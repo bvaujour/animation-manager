@@ -4,7 +4,10 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from .models import AnneeScolaire, Centre, PeriodeCalendrier
-from .services.creation_annee import CATEGORIES, accueils_reutilisables, preparer_copie, calendrier_officiel, proposer_semaines_ete
+from .services.creation_annee import (
+    CATEGORIES, accueils_reutilisables, preparer_copie, calendrier_officiel,
+    proposer_periodes_cibles, proposer_semaines_ete,
+)
 from .services.multisite import multisite_actif
 from .services.calendrier_scolaire import CalendrierScolaireError
 
@@ -58,6 +61,10 @@ class RepriseAnneeForm(forms.Form):
         self.zone = zone
         self.semaines_ete = []
         self.champs_ete = []
+        self.periodes_scolaires = []
+        self.vacances_courtes = []
+        self.champs_periscolaires = []
+        self.champs_vacances = []
         self.calendrier_officiel = None
         try:
             self.calendrier_officiel = calendrier_officiel(cible.libelle, self.zone)
@@ -66,6 +73,20 @@ class RepriseAnneeForm(forms.Form):
         else:
             evenements = __import__("animateurs.models", fromlist=["Evenement"]).Evenement.objects.filter(
                 groupe__type_groupe="structure").prefetch_related("periodes_scolaires")
+            self.periodes_scolaires, self.vacances_courtes = proposer_periodes_cibles(
+                source, self.calendrier_officiel, evenements)
+            for periode in self.periodes_scolaires:
+                nom_champ = f"scolaire_{periode['id']}"
+                self.fields[nom_champ] = forms.BooleanField(
+                    label=f"{periode['nom']} · {periode['debut']} au {periode['fin']}",
+                    required=False, initial=periode["suggeree"])
+                self.champs_periscolaires.append(self[nom_champ])
+            for vacance in self.vacances_courtes:
+                nom_champ = f"vacance_{vacance['id']}"
+                self.fields[nom_champ] = forms.BooleanField(
+                    label=f"{vacance['nom']} · {vacance['debut']} au {vacance['fin']}",
+                    required=False, initial=vacance["suggeree"])
+                self.champs_vacances.append(self[nom_champ])
             self.semaines_ete = proposer_semaines_ete(source, cible, evenements, self.calendrier_officiel["debut_ete"])
             for semaine in self.semaines_ete:
                 nom_champ = f"ete_{semaine['id']}"
@@ -101,6 +122,10 @@ class RepriseAnneeForm(forms.Form):
             raise ValidationError("Renseignez les dates des périodes utilisées par les configurations sélectionnées.")
         self.plan["zone"] = self.zone
         self.plan["calendrier_officiel"] = self.calendrier_officiel
+        self.plan["periodes_scolaires"] = [periode for periode in self.periodes_scolaires
+                                            if data.get(f"scolaire_{periode['id']}")]
+        self.plan["vacances_courtes"] = [vacance for vacance in self.vacances_courtes
+                                          if data.get(f"vacance_{vacance['id']}")]
         selection = {identifiant for identifiant in (semaine["id"] for semaine in self.semaines_ete)
                      if data.get(f"ete_{identifiant}")}
         evenement_ids = {evenement.pk for evenement in self.plan["evenements"]}

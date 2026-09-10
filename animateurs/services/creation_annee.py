@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from datetime import date as date_value, timedelta
+import unicodedata
 
 from animateurs.models import (
     AccueilCentre, AnneeScolaire, BesoinEncadrement, BesoinQualification,
@@ -39,6 +40,45 @@ def _cle_semaine(semaine):
     if separateur and numero.strip().isdigit():
         return (nom.strip(), int(numero.strip()))
     return (semaine.nom, getattr(semaine, "numero", getattr(semaine, "ordre", 0)))
+
+
+def _normaliser_periode(nom):
+    return "".join(caractere for caractere in unicodedata.normalize("NFD", nom or "")
+                   if unicodedata.category(caractere) != "Mn").casefold().strip()
+
+
+def _nom_vacances(nom):
+    return nom.rsplit(" ", 1)[0] if nom.rsplit(" ", 1)[-1].isdigit() else nom
+
+
+def proposer_periodes_cibles(source, calendrier, evenements):
+    """Toutes les périodes possibles, avec la source comme seule suggestion."""
+    utilisees = set()
+    for evenement in evenements:
+        for semaine in evenement.periodes_scolaires.all():
+            if semaine.annee_scolaire != source.libelle:
+                continue
+            if semaine.periode_calendrier_id:
+                utilisees.add(_normaliser_periode(semaine.periode_calendrier.nom))
+            utilisees.add(_normaliser_periode(_cle_semaine(semaine)[0]))
+    for ouverture in OuvertureCentrePeriode.objects.filter(
+            periode_calendrier__annee_scolaire=source.libelle).select_related("periode_calendrier"):
+        utilisees.add(_normaliser_periode(ouverture.periode_calendrier.nom))
+
+    scolaires = [{"id": str(index), "nom": entree["nom"],
+                  "debut": date_value.fromisoformat(entree["debut"]),
+                  "fin": date_value.fromisoformat(entree["fin"]),
+                  "suggeree": _normaliser_periode(entree["nom"]) in utilisees}
+                 for index, entree in enumerate(calendrier["periodes"])]
+    vacances = []
+    for index, groupe in enumerate(regrouper_semaines_vacances(calendrier["semaines"])):
+        nom = _nom_vacances(groupe["nom"])
+        vacances.append({"id": str(index), "nom": nom,
+                         "debut": date_value.fromisoformat(groupe["semaines"][0]["debut"]),
+                         "fin": date_value.fromisoformat(groupe["semaines"][-1]["fin"]),
+                         "semaines": groupe["semaines"],
+                         "suggeree": _normaliser_periode(nom) in utilisees})
+    return scolaires, vacances
 
 
 def proposer_semaines_ete(source, cible, evenements, debut_ete):
@@ -78,41 +118,38 @@ def proposer_semaines_ete(source, cible, evenements, debut_ete):
     return candidats
 
 
-def previsualiser_calendrier(cible, zone, calendrier, semaines_ete=()):
+def previsualiser_calendrier(cible, zone, calendrier, periodes_scolaires=(), vacances_courtes=(), semaines_ete=()):
     """Décrit les objets générés ou existants, sans recalcul ni écriture."""
     periodes = list(PeriodeCalendrier.objects.filter(annee_scolaire=cible.libelle, zone=zone))
     semaines_existantes = list(PeriodeScolaire.objects.filter(
         annee_scolaire=cible.libelle, zone=zone).select_related("type_accueil", "periode_calendrier"))
     dates_existantes = {(s.debut, s.fin) for s in semaines_existantes}
     scolaires = []
-    for entree in calendrier["periodes"]:
+    for entree in periodes_scolaires:
         reutilisee = any(p.categorie == PeriodeCalendrier.SCOLAIRE
-            and p.debut.isoformat() == entree["debut"] and p.fin.isoformat() == entree["fin"] for p in periodes)
+            and p.debut == entree["debut"] and p.fin == entree["fin"] for p in periodes)
         scolaires.append({**entree, "reutilisee": reutilisee})
 
     # Les vacances sont déjà représentées par des semaines dans le plan de
     # création. Leur regroupement est uniquement visuel, pas un nouvel objet.
-    semaines = {(s.debut, s.fin): s for s in calendrier["semaines"]}
+    semaines = {}
+    vacances = []
+    for vacance in vacances_courtes:
+        semaines_vacance = [SemaineVacances(
+            semaine["nom"], date_value.fromisoformat(semaine["debut"]), date_value.fromisoformat(semaine["fin"]),
+            semaine["description_source"], semaine["numero"]) for semaine in vacance["semaines"]]
+        semaines.update({(s.debut, s.fin): s for s in semaines_vacance})
+        vacances.append({**vacance, "periode_existante": any(p.categorie == PeriodeCalendrier.VACANCES
+            and p.debut == vacance["debut"] and p.fin == vacance["fin"] for p in periodes),
+            "semaines": [s.to_dict() for s in semaines_vacance]})
     for ete in semaines_ete:
         semaines[(ete["debut"], ete["fin"])] = SemaineVacances(
             ete["nom"], ete["debut"], ete["fin"], "Vacances d'Été", int(ete["id"]) + 1)
-    for s in semaines_existantes:
-        if (s.type_accueil and s.type_accueil.code == "vacances") or (
-                s.periode_calendrier and s.periode_calendrier.categorie == PeriodeCalendrier.VACANCES):
-            semaines.setdefault((s.debut, s.fin), SemaineVacances(
-                s.nom, s.debut, s.fin, s.description_source, s.ordre))
-    vacances = []
-    for p in periodes:
-        if p.categorie != PeriodeCalendrier.VACANCES:
-            continue
-        couvertes = [s for s in semaines.values() if p.debut <= s.debut <= s.fin <= p.fin]
-        vacances.append({"nom": p.nom, "debut": p.debut.isoformat(), "fin": p.fin.isoformat(),
-                         "periode_existante": True, "semaines": [s.to_dict() for s in couvertes]})
-        for s in couvertes:
-            semaines.pop((s.debut, s.fin))
-    for groupe in regrouper_semaines_vacances(sorted(semaines.values(), key=lambda s: s.debut)):
-        vacances.append({**groupe, "debut": min(s["debut"] for s in groupe["semaines"]),
-                         "fin": max(s["fin"] for s in groupe["semaines"]), "periode_existante": False})
+    if semaines_ete:
+        vacances.append({"nom": "Été", "debut": min(s["debut"] for s in semaines_ete),
+                         "fin": max(s["fin"] for s in semaines_ete), "periode_existante": False,
+                         "semaines": [s.to_dict() for s in semaines.values()
+                                      if "été" in s.description_source.casefold() or "ete" in s.description_source.casefold()]})
     for vacance in vacances:
         for semaine in vacance["semaines"]:
             semaine["reutilisee"] = (date_value.fromisoformat(semaine["debut"]),
@@ -120,8 +157,7 @@ def previsualiser_calendrier(cible, zone, calendrier, semaines_ete=()):
         vacance["creees"] = sum(not s["reutilisee"] for s in vacance["semaines"])
         vacance["reutilisees"] = sum(s["reutilisee"] for s in vacance["semaines"])
     return {"scolaires": scolaires, "vacances": sorted(vacances, key=lambda v: v["debut"]),
-            "vacances_sans_dates": [nom for nom in ("Toussaint", "Noël", "Hiver", "Printemps", "Été")
-                                    if not any(v["nom"].startswith(nom) for v in vacances)],
+            "vacances_sans_dates": [],
             "scolaires_creees": sum(not p["reutilisee"] for p in scolaires),
             "scolaires_reutilisees": sum(p["reutilisee"] for p in scolaires),
             "semaines_creees": sum(v["creees"] for v in vacances),
@@ -207,10 +243,13 @@ def creer_annee(cible, plan=None):
     correspondance = {}
     calendrier = plan.get("calendrier_officiel") or {}
     calendrier_officiel = calendrier.get("periodes", []) if isinstance(calendrier, dict) else calendrier
+    scolaires_selectionnes = plan["periodes_scolaires"] if "periodes_scolaires" in plan else [
+        {"nom": entree["nom"], "debut": date_value.fromisoformat(entree["debut"]),
+         "fin": date_value.fromisoformat(entree["fin"])} for entree in calendrier_officiel]
     periodes_creees = set()
-    for entree in calendrier_officiel:
-        debut = date_value.fromisoformat(entree["debut"])
-        fin = date_value.fromisoformat(entree["fin"])
+    for entree in scolaires_selectionnes:
+        debut = entree["debut"] if isinstance(entree["debut"], date_value) else date_value.fromisoformat(entree["debut"])
+        fin = entree["fin"] if isinstance(entree["fin"], date_value) else date_value.fromisoformat(entree["fin"])
         periode, _ = PeriodeCalendrier.objects.get_or_create(
             categorie=PeriodeCalendrier.SCOLAIRE, annee_scolaire=cible.libelle,
             zone=plan.get("zone", "A"), debut=debut, fin=fin,
@@ -230,19 +269,34 @@ def creer_annee(cible, plan=None):
         )
         periode.types_accueil.set(source.types_accueil.all())
         correspondance[source.pk] = periode.pk
-    # Les semaines officielles sont créées dans la cible, sans toucher à la source.
-    # leurs lignes datées sont recréées, jamais la définition du groupe.
+    # Les semaines officielles sélectionnées sont créées dans la cible, sans
+    # toucher à la source ni imposer l'ouverture d'une période du calendrier.
     from animateurs.models import PeriodeScolaire, TypeAccueil
     type_vacances, _ = TypeAccueil.objects.get_or_create(code=TypeAccueil.VACANCES, defaults={"nom": "Vacances", "ordre": 10, "actif": True})
     semaines = {}
-    for semaine_source in (calendrier.get("semaines", []) if isinstance(calendrier, dict) else []):
-        semaine, _ = PeriodeScolaire.objects.get_or_create(
-            annee_scolaire=cible.libelle, zone=plan.get("zone", "A"),
-            debut=semaine_source.debut, fin=semaine_source.fin,
-            defaults={"nom": semaine_source.nom, "description_source": semaine_source.description_source,
-                      "ordre": semaine_source.numero, "type_accueil_id": type_vacances.pk if type_vacances else None},
-        )
-        semaines[(semaine_source.debut, semaine_source.fin)] = semaine
+    vacances_selectionnees = plan.get("vacances_courtes")
+    if "vacances_courtes" not in plan:
+        vacances_selectionnees = [{"nom": _nom_vacances(groupe["nom"]),
+            "debut": date_value.fromisoformat(groupe["semaines"][0]["debut"]),
+            "fin": date_value.fromisoformat(groupe["semaines"][-1]["fin"]), "semaines": groupe["semaines"]}
+            for groupe in regrouper_semaines_vacances(calendrier.get("semaines", []))]
+    for vacance in vacances_selectionnees:
+        debut_vacance = vacance["debut"] if isinstance(vacance["debut"], date_value) else date_value.fromisoformat(vacance["debut"])
+        fin_vacance = vacance["fin"] if isinstance(vacance["fin"], date_value) else date_value.fromisoformat(vacance["fin"])
+        periode, _ = PeriodeCalendrier.objects.get_or_create(
+            categorie=PeriodeCalendrier.VACANCES, annee_scolaire=cible.libelle,
+            zone=plan.get("zone", "A"), debut=debut_vacance, fin=fin_vacance,
+            defaults={"nom": vacance["nom"]})
+        periode.types_accueil.add(type_vacances)
+        for semaine_source in vacance["semaines"]:
+            debut = semaine_source["debut"] if isinstance(semaine_source["debut"], date_value) else date_value.fromisoformat(semaine_source["debut"])
+            fin = semaine_source["fin"] if isinstance(semaine_source["fin"], date_value) else date_value.fromisoformat(semaine_source["fin"])
+            semaine, _ = PeriodeScolaire.objects.get_or_create(
+                annee_scolaire=cible.libelle, zone=plan.get("zone", "A"), debut=debut, fin=fin,
+                defaults={"nom": semaine_source["nom"], "description_source": semaine_source["description_source"],
+                          "ordre": semaine_source["numero"], "type_accueil_id": type_vacances.pk,
+                          "periode_calendrier": periode})
+            semaines[(debut, fin)] = semaine
 
     # Les semaines d'été viennent exclusivement de la sélection prévisualisée.
     # Elles ne décalent jamais les dates historiques d'une année à l'autre.
@@ -260,7 +314,11 @@ def creer_annee(cible, plan=None):
 
     # Les autres vacances réutilisent leur semaine officielle correspondante,
     # identifiée par son libellé et son numéro, jamais par un décalage de date.
-    semaines_cibles = {_cle_semaine(s): s for s in (calendrier.get("semaines", []) if isinstance(calendrier, dict) else [])}
+    semaines_cibles = {_cle_semaine(s): s for vacance in vacances_selectionnees for s in (
+        SemaineVacances(item["nom"],
+            item["debut"] if isinstance(item["debut"], date_value) else date_value.fromisoformat(item["debut"]),
+            item["fin"] if isinstance(item["fin"], date_value) else date_value.fromisoformat(item["fin"]),
+            item["description_source"], item["numero"]) for item in vacance["semaines"])}
     liens_ete = {evenement_id: [] for _, (_, evenement_ids) in semaines_ete.items() for evenement_id in evenement_ids}
     for semaine, evenement_ids in semaines_ete.values():
         for evenement_id in evenement_ids:

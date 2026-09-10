@@ -41,6 +41,8 @@ def empreinte(plan):
     sources["calendrier"] = {"zone": plan.get("zone"), "periodes": calendrier.get("periodes", []),
         "semaines": [s.to_dict() for s in calendrier.get("semaines", [])]}
     sources["semaines_ete"] = plan.get("semaines_ete", [])
+    sources["periodes_scolaires"] = plan.get("periodes_scolaires", [])
+    sources["vacances_courtes"] = plan.get("vacances_courtes", [])
     sources["rattachements"] = {e.pk: [
         {champ.attname: getattr(p, champ.attname) for champ in p._meta.concrete_fields}
         for p in e.periodes_scolaires.all() if p.annee_scolaire == plan["source_libelle"]
@@ -103,7 +105,9 @@ def assistant(request, administration):
                     return HttpResponseRedirect(reverse("admin:animateurs_anneescolaire_configuration", args=[cible.pk]) + "?" + urlencode({"rapport": rapport}))
                 donnees.update(confirme=True, empreinte=empreinte(plan))
                 context.update(etape="preview", plan=plan,
-                    calendrier_preview=previsualiser_calendrier(cible, plan["zone"], plan["calendrier_officiel"], plan["semaines_ete"]) if plan else None,
+                    calendrier_preview=previsualiser_calendrier(
+                        cible, plan["zone"], plan["calendrier_officiel"], plan["periodes_scolaires"],
+                        plan["vacances_courtes"], plan["semaines_ete"]) if plan else None,
                     periodes_preview=[(p, *plan["dates"][p.pk]) for p in plan["periodes"]] if plan else [],
                     jeton=signing.dumps(donnees, salt=SALT, compress=True))
         except (signing.BadSignature, KeyError):

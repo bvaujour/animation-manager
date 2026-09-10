@@ -63,6 +63,16 @@ class CreationAnneeTests(ConnexionTestCase):
         return {"action": "previsualiser", "jeton": jeton, "centres": [self.centre.pk], "accueils": [self.accueil.pk], "categories": ["horaires"],
                 f"periode_{self.periode.pk}_debut": "2026-09-01", f"periode_{self.periode.pk}_fin": "2026-10-16"}
 
+    @staticmethod
+    def selectionner_calendrier(options, formulaire, *, ete=False):
+        for periode in formulaire.periodes_scolaires:
+            options[f"scolaire_{periode['id']}"] = "on"
+        for vacance in formulaire.vacances_courtes:
+            options[f"vacance_{vacance['id']}"] = "on"
+        if ete:
+            for semaine in formulaire.semaines_ete:
+                options[f"ete_{semaine['id']}"] = "on"
+
     def test_annee_vierge_et_doublon(self):
         counts = (Centre.objects.count(), PeriodeCalendrier.objects.count(), OuvertureCentrePeriode.objects.count())
         cible = creer_annee(self.cible())
@@ -200,17 +210,13 @@ class CreationAnneeTests(ConnexionTestCase):
         self.assertEqual(response.context["etape"], "preview")
         self.assertEqual([n for _, n in response.context["plan"]["resume"]], [0, 0, 0])
         self.assertContains(response, "Périodes source utilisées pour la copie : 0")
-        self.assertContains(response, "Périodes officielles cibles : 5")
-        self.assertEqual(response.context["calendrier_preview"]["vacances_sans_dates"], ["Été"])
-        self.assertContains(response, "Dates non disponibles")
+        self.assertContains(response, "Périodes officielles cibles : 0")
         self.assertContains(response, "Horaires d’ouverture : 0 (aucun horaire annuel à reprendre)")
-        for nom in ("Rentrée → Toussaint", "Toussaint → Noël", "Noël → Hiver", "Hiver → Printemps", "Printemps → Été"):
-            self.assertContains(response, nom)
         self.assertFalse(AnneeScolaire.objects.filter(libelle="2026-2027").exists())
         response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(AnneeScolaire.objects.get(libelle="2026-2027").statut, "PREPARATION")
-        self.assertEqual(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").count(), 5)
+        self.assertEqual(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").count(), 0)
         for modele, avant in regles.items():
             self.assertEqual(list(modele.objects.values()), avant)
 
@@ -224,6 +230,7 @@ class CreationAnneeTests(ConnexionTestCase):
         response = self.client.post(self.url, identite)
         data = self.options(response.context["jeton"])
         data["categories"] = []
+        self.selectionner_calendrier(data, response.context["options"])
         response = self.client.post(self.url, data)
         self.assertEqual(response.context["plan"]["zone"], "C")
         self.assertContains(response, "Zone C")
@@ -233,7 +240,7 @@ class CreationAnneeTests(ConnexionTestCase):
         self.assertEqual(self.recuperer_semaines.call_count, 3)
         self.recuperer_semaines.assert_called_with("2026-2027", "C", inclure_bornes=True)
         self.assertEqual(set(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").values_list("zone", flat=True)), {"C"})
-        self.assertEqual(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").count(), 5)
+        self.assertEqual(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").count(), 9)
         self.assertEqual(PeriodeScolaire.objects.filter(annee_scolaire="2026-2027").count(), 8)
         existante.refresh_from_db()
         semaine.refresh_from_db()
@@ -321,8 +328,7 @@ class CreationAnneeTests(ConnexionTestCase):
         for semaine in self.recuperer_semaines.return_value[:2]:
             PeriodeScolaire.objects.create(nom="Semaine locale", zone="A", annee_scolaire="2026-2027",
                 debut=semaine.debut, fin=semaine.fin, periode_calendrier=toussaint)
-        # L'été est déjà configuré localement, même si le service ne le renvoie
-        # pas : il doit être affiché et conservé, pas recréé.
+        # L'été existant mais non sélectionné n'est pas repris automatiquement.
         ete = PeriodeCalendrier.objects.create(categorie="vacances", nom="Été", zone="A",
             annee_scolaire="2026-2027", debut=date(2027, 7, 5), fin=date(2027, 8, 27))
         modeles = (AnneeScolaire, PeriodeCalendrier, PeriodeScolaire)
@@ -330,6 +336,7 @@ class CreationAnneeTests(ConnexionTestCase):
         response = self.client.post(self.url, self.identite())
         options = self.options(response.context["jeton"])
         options["categories"] = []
+        self.selectionner_calendrier(options, response.context["options"])
         response = self.client.post(self.url, options)
         preview = response.context["calendrier_preview"]
         self.assertEqual((preview["scolaires_creees"], preview["scolaires_reutilisees"]), (4, 1))
@@ -339,25 +346,23 @@ class CreationAnneeTests(ConnexionTestCase):
         vacances_html = html.split('id="vacances-scolaires-cibles"')[1].split("</section>")[0]
         self.assertIn("Rentrée → Toussaint", scolaires_html)
         self.assertNotIn("Rentrée → Toussaint", vacances_html)
-        for nom in ("Toussaint", "Noël", "Hiver", "Printemps", "Été"):
+        for nom in ("Toussaint", "Noël", "Hiver", "Printemps"):
             self.assertIn(nom, vacances_html)
-        self.assertIn("2027-08-27", vacances_html)
+        self.assertNotIn("2027-08-27", vacances_html)
         self.assertIn("Réutilisée", vacances_html)
         self.assertIn("Créée (semaines)", vacances_html)
-        self.assertEqual(len(preview["vacances"]), 5)
+        self.assertEqual(len(preview["vacances"]), 4)
         for modele, lignes in avant.items():
             self.assertEqual(list(modele.objects.order_by("pk").values()), lignes)
         response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
         self.assertEqual(response.status_code, 302)
         for modele, lignes in avant.items():
             self.assertEqual(list(modele.objects.filter(pk__in=[r["id"] for r in lignes]).order_by("pk").values()), lignes)
-        self.assertEqual(PeriodeCalendrier.objects.count(), len(avant[PeriodeCalendrier]) + 4)
+        self.assertEqual(PeriodeCalendrier.objects.count(), len(avant[PeriodeCalendrier]) + 7)
         self.assertEqual(PeriodeScolaire.objects.count(), len(avant[PeriodeScolaire]) + 6)
         self.assertEqual(AnneeScolaire.objects.get(libelle="2026-2027").statut, "PREPARATION")
 
     def test_vacances_partiellement_existantes_et_ete_genere(self):
-        self.recuperer_semaines.return_value = [*self.recuperer_semaines.return_value,
-            SemaineVacances("Été — Semaine 1", date(2027, 7, 5), date(2027, 7, 9), "Été", 1)]
         PeriodeScolaire.objects.create(nom="Nom personnalisé", zone="A", annee_scolaire="2026-2027",
             debut=date(2026, 10, 19), fin=date(2026, 10, 23))
         # Une semaine d'une autre zone ne doit pas être annoncée réutilisable.
@@ -366,22 +371,23 @@ class CreationAnneeTests(ConnexionTestCase):
         response = self.client.post(self.url, self.identite())
         options = self.options(response.context["jeton"])
         options["categories"] = []
+        self.selectionner_calendrier(options, response.context["options"])
         response = self.client.post(self.url, options)
         preview = response.context["calendrier_preview"]
-        self.assertEqual((preview["semaines_creees"], preview["semaines_reutilisees"]), (8, 1))
+        self.assertEqual((preview["semaines_creees"], preview["semaines_reutilisees"]), (7, 1))
         self.assertContains(response, "Réutilisée en partie")
-        self.assertContains(response, "Été 2027")
-        self.assertContains(response, "2027-07-09")
         response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(PeriodeScolaire.objects.filter(annee_scolaire="2026-2027", zone="A").count(), 9)
+        self.assertEqual(PeriodeScolaire.objects.filter(annee_scolaire="2026-2027", zone="A").count(), 8)
 
     def test_vacances_locales_sans_periode_calendaire_affichees(self):
         vacances, _ = TypeAccueil.objects.get_or_create(code="vacances", defaults={"nom": "Vacances"})
         PeriodeScolaire.objects.create(nom="Été — Semaine 1", zone="A", annee_scolaire="2026-2027",
             debut=date(2027, 7, 5), fin=date(2027, 7, 9), type_accueil=vacances)
         response = self.client.post(self.url, self.identite())
-        response = self.client.post(self.url, self.options(response.context["jeton"]))
+        options = self.options(response.context["jeton"])
+        options["ete_0"] = "on"
+        response = self.client.post(self.url, options)
         ete = next(v for v in response.context["calendrier_preview"]["vacances"] if v["nom"].startswith("Été"))
         self.assertEqual((ete["creees"], ete["reutilisees"]), (0, 1))
         self.assertContains(response, "2027-07-09")
@@ -476,3 +482,54 @@ class CreationAnneeTests(ConnexionTestCase):
             (date(2027, 7, 5), date(2027, 7, 9)), (date(2027, 8, 2), date(2027, 8, 6)),
         })
         self.assertEqual(self.evenement.periodes_scolaires.filter(annee_scolaire="2026-2027").count(), 1)
+
+    def test_periodes_et_vacances_sont_suggerees_mais_selectionnees_explicitement(self):
+        rentree = PeriodeCalendrier.objects.create(categorie="scolaire", nom="Rentrée → Toussaint", zone="A",
+            annee_scolaire="2025-2026", debut=date(2025, 9, 8), fin=date(2025, 10, 10))
+        OuvertureCentrePeriode.objects.create(centre=self.centre, accueil_centre=self.accueil,
+            periode_calendrier=rentree, modalite_periscolaire=self.modalite, jour_semaine=0,
+            heure_debut=time(7), heure_fin=time(8))
+        toussaint = PeriodeCalendrier.objects.create(categorie="vacances", nom="Toussaint", zone="A",
+            annee_scolaire="2025-2026", debut=date(2025, 11, 3), fin=date(2025, 11, 14))
+        semaines_source = [
+            PeriodeScolaire.objects.create(nom=f"Toussaint — Semaine {numero}", zone="A", annee_scolaire="2025-2026",
+                debut=debut, fin=debut + timedelta(days=4), description_source="Vacances de la Toussaint",
+                ordre=numero, periode_calendrier=toussaint)
+            for numero, debut in ((1, date(2025, 11, 3)), (2, date(2025, 11, 10)))
+        ]
+        self.evenement.periodes_scolaires.add(*semaines_source)
+        source_avant = {modele: list(modele.objects.filter(annee_scolaire="2025-2026").order_by("pk").values())
+                        for modele in (PeriodeCalendrier, PeriodeScolaire)}
+
+        response = self.client.post(self.url, self.identite())
+        form = response.context["options"]
+        self.assertEqual([p["suggeree"] for p in form.periodes_scolaires], [True, False, False, False, False])
+        self.assertEqual([v["suggeree"] for v in form.vacances_courtes], [True, False, False, False])
+        html = response.content.decode()
+        self.assertIn('name="scolaire_0"', html)
+        self.assertIn('name="vacance_1"', html)
+        self.assertNotIn('name="vacance_1" id="id_vacance_1" checked', html)
+
+        options = self.options(response.context["jeton"])
+        options["categories"] = []
+        options["scolaire_0"] = "on"
+        options["vacance_0"] = "on"
+        options["vacance_1"] = "on"  # Noël est volontairement ajouté malgré son absence source.
+        response = self.client.post(self.url, options)
+        self.assertEqual(response.context["etape"], "preview")
+        preview = response.context["calendrier_preview"]
+        self.assertEqual([p["nom"] for p in preview["scolaires"]], ["Rentrée → Toussaint"])
+        self.assertEqual([v["nom"] for v in preview["vacances"]], ["Toussaint", "Noël"])
+        self.assertNotContains(response, "Hiver — Semaine 1")
+        self.assertNotContains(response, "Printemps — Semaine 1")
+
+        response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027", categorie="scolaire").count(), 1)
+        self.assertEqual(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027", categorie="vacances").count(), 2)
+        self.assertEqual(set(PeriodeScolaire.objects.filter(annee_scolaire="2026-2027").values_list("nom", flat=True)), {
+            "Toussaint — Semaine 1", "Toussaint — Semaine 2", "Noël — Semaine 1", "Noël — Semaine 2"})
+        self.assertFalse(PeriodeScolaire.objects.filter(annee_scolaire="2026-2027", nom__startswith="Hiver").exists())
+        self.assertFalse(PeriodeScolaire.objects.filter(annee_scolaire="2026-2027", nom__startswith="Printemps").exists())
+        for modele, avant in source_avant.items():
+            self.assertEqual(list(modele.objects.filter(annee_scolaire="2025-2026").order_by("pk").values()), avant)

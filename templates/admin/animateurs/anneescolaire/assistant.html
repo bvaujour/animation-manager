@@ -24,6 +24,8 @@
 <h3>Dates de reprise des configurations à vérifier</h3>
 <p>Ces dates sont décalées de l’écart entre les années et concernent uniquement les configurations copiées. Le calendrier officiel cible sera présenté séparément à l’étape suivante.</p>
 {% for champs in options.champs_dates %}<fieldset class="module aligned">{% for champ in champs %}<p>{{ champ.errors }}{{ champ.label_tag }} {{ champ }}</p>{% endfor %}</fieldset>{% empty %}<p>Aucune période calendaire source : aucune configuration annuelle à copier.</p>{% endfor %}
+{% if options.champs_periscolaires %}<h3>Périodes périscolaires à ouvrir</h3>{% for champ in options.champs_periscolaires %}<p>{{ champ.errors }}{{ champ.label_tag }} {{ champ }}</p>{% endfor %}{% endif %}
+{% if options.champs_vacances %}<h3>Petites vacances à ouvrir</h3>{% for champ in options.champs_vacances %}<p>{{ champ.errors }}{{ champ.label_tag }} {{ champ }}</p>{% endfor %}{% endif %}
 {% if options.champs_ete %}<h3>Semaines d’ouverture estivale à reprendre</h3><p>Sélectionnez les semaines ouvertes à reprendre. Elles sont proposées d’après les ouvertures de l’année source et recalculées sur des lundis-vendredis cibles.</p>{% for champ in options.champs_ete %}<p>{{ champ.errors }}{{ champ.label_tag }} {{ champ }}</p>{% endfor %}{% endif %}
 <button type="submit" name="action" value="previsualiser">Prévisualiser la reprise</button>
 {% elif etape == "preview" %}
