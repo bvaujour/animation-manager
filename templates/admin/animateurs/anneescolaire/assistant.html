@@ -1,0 +1,44 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+{% if erreur %}<p class="errornote">{{ erreur }}</p>{% endif %}
+<form method="post">{% csrf_token %}
+{% if etape == "identite" %}
+{{ form.as_p }}
+<p>La nouvelle année sera en préparation. L’année active restera inchangée.</p>
+<button type="submit" name="action" value="continuer">Continuer</button>
+{% elif etape == "options" %}
+<h2>{{ cible.libelle }} à partir de {{ source.libelle }} — {{ source.get_statut_display }}</h2>
+<input type="hidden" name="jeton" value="{{ jeton }}">
+{{ options.non_field_errors }}
+<p>Les lieux physiques, accueils, groupes d’âge et leurs réglages généraux sont partagés : ils restent disponibles sans duplication. La sélection ci-dessous limite uniquement les configurations annuelles copiées ; elle ne masque pas les autres lieux.</p>
+<p>Seuls les accueils déjà ouverts dans l’année source et couvrant toute l’année cible sont proposés. Les accueils terminés et groupes de séjour ne sont pas repris.</p>
+{{ options.centres.as_field_group }}
+{{ options.accueils.as_field_group }}
+{{ options.categories.as_field_group }}
+<p><label><input type="checkbox" disabled> Groupes d’âge — définitions et instances partagées, non dupliquées</label></p>
+<p><label><input type="checkbox" disabled> Règles de responsabilités — fonction disponible après finalisation du module responsabilités</label></p>
+<p>Qualifications et paramètres généraux : référentiels globaux conservés. Seules les exigences liées à une période peuvent être copiées.</p>
+<p>Modèles de journée ou de planning : aucun modèle annuel autonome à dupliquer dans l’architecture actuelle.</p>
+<h3>Dates des périodes cibles à vérifier</h3>
+<p>Les dates proposées sont décalées d’un an (ou de l’écart entre les années). Elles ne constituent pas un calendrier scolaire officiel. Ajustez-les avant de confirmer. Seules les périodes utilisées par les catégories sélectionnées seront créées ; les semaines de vacances et les rattachements des groupes restent à configurer.</p>
+{% for champs in options.champs_dates %}<fieldset class="module aligned">{% for champ in champs %}<p>{{ champ.errors }}{{ champ.label_tag }} {{ champ }}</p>{% endfor %}</fieldset>{% empty %}<p>Aucune période calendaire source : aucune configuration annuelle à copier.</p>{% endfor %}
+<button type="submit" name="action" value="previsualiser">Prévisualiser la reprise</button>
+{% elif etape == "preview" %}
+<h2>Créer {{ cible.libelle }}{% if source %} à partir de {{ source.libelle }}{% else %} — année vierge{% endif %}</h2>
+<p>{{ cible.date_debut }} au {{ cible.date_fin }} — PREPARATION</p>
+{% if plan %}
+<h3>Structure réutilisée, sans copie</h3>
+<p>{{ plan.centres|length }} lieu(x), {{ plan.accueils|length }} accueil(s) sélectionné(s). Groupes partagés conservés.</p>
+<ul>{% for centre in plan.centres %}<li>{{ centre }}</li>{% endfor %}{% for accueil in plan.accueils %}<li>{{ accueil }}</li>{% endfor %}</ul>
+<h3>Éléments copiés</h3>
+<ul>{% for libelle, nombre in plan.resume %}<li>{{ libelle }} : {{ nombre }}</li>{% empty %}<li>Aucune catégorie sélectionnée.</li>{% endfor %}<li>Périodes calendaires : {{ plan.periodes|length }}</li></ul>
+<table><thead><tr><th>Période</th><th>Début cible</th><th>Fin cible</th></tr></thead><tbody>{% for periode, debut, fin in periodes_preview %}<tr><td>{{ periode.nom }} — zone {{ periode.zone }}</td><td>{{ debut }}</td><td>{{ fin }}</td></tr>{% endfor %}</tbody></table>
+{% else %}<p>Seul l’objet année scolaire sera créé. Les référentiels globaux existants resteront accessibles.</p>{% endif %}
+<p>Ne seront pas repris : animateurs, contrats, disponibilités, affectations, plannings réalisés, heures, absences, paie, formations, documents individuels, sorties, séjours et historique opérationnel.</p>
+<input type="hidden" name="jeton" value="{{ jeton }}">
+<button type="submit" name="action" value="creer">Créer l’année scolaire</button>
+{% endif %}
+<a href="{% url 'admin:animateurs_anneescolaire_nouvelle' %}">Recommencer</a>
+<a href="{% url 'admin:animateurs_anneescolaire_changelist' %}">Annuler</a>
+</form>
+{% endblock %}

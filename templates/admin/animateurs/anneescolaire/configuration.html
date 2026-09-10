@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h2>Configuration de {{ annee.libelle }}</h2>
+<p>✓ Année créée — {{ annee.get_statut_display }}</p>
+{% if resume %}<h3>Configurations copiées</h3><ul>{% for libelle, nombre in resume %}<li>{{ libelle }} : {{ nombre }}</li>{% endfor %}</ul>{% endif %}
+<h3>À vérifier et compléter</h3>
+<p>Ces écrans sont partagés entre années. Choisissez les périodes de {{ annee.libelle }} pour les réglages annuels. Modifier un réglage global concerne toutes les années.</p>
+<ul>
+<li><a href="{% url 'gestion' %}?onglet=lieux">Configurer les centres, accueils et groupes</a></li>
+<li><a href="{% url 'gestion' %}?onglet=periodes-scolaires">Vérifier les périodes scolaires</a></li>
+<li><a href="{% url 'gestion' %}?onglet=periodes">Configurer les semaines de vacances et leurs rattachements aux groupes</a></li>
+<li><a href="{% url 'gestion' %}?onglet=lieux">Configurer les horaires d’ouverture et besoins d’encadrement par période</a></li>
+<li><a href="{% url 'parametres' %}">Consulter les paramètres généraux</a></li>
+</ul>
+<p>Responsabilités : reprise indisponible. Modèles : aucun référentiel annuel autonome à configurer.</p>
+<a href="{% url 'admin:animateurs_anneescolaire_change' annee.pk %}">Voir la fiche de l’année</a>
+{% endblock %}

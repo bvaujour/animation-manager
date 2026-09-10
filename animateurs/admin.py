@@ -58,6 +58,7 @@ from .models import (
 
 @admin.register(AnneeScolaire)
 class AnneeScolaireAdmin(admin.ModelAdmin):
+    change_list_template = "admin/animateurs/anneescolaire/change_list.html"
     form = AnneeScolaireAdminForm
     change_form_template = "admin/animateurs/anneescolaire/change_form.html"
     list_display = ("libelle", "statut", "est_active", "date_debut", "date_fin", "date_cloture")
@@ -82,7 +83,10 @@ class AnneeScolaireAdmin(admin.ModelAdmin):
         })
 
     def get_urls(self):
+        from .admin_creation_annee import assistant, configuration
         return [
+            path("nouvelle/", self.admin_site.admin_view(lambda request: assistant(request, self)), name="animateurs_anneescolaire_nouvelle"),
+            path("<int:object_id>/configuration/", self.admin_site.admin_view(lambda request, object_id: configuration(request, object_id, self)), name="animateurs_anneescolaire_configuration"),
             path("<int:object_id>/cloturer/", self.admin_site.admin_view(self.transition_annee), name="animateurs_anneescolaire_cloturer"),
             path("<int:object_id>/reouvrir/", self.admin_site.admin_view(self.transition_annee), {"reouvrir": True}, name="animateurs_anneescolaire_reouvrir"),
         ] + super().get_urls()
