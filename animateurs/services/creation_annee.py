@@ -54,13 +54,18 @@ def _nom_vacances(nom):
 def proposer_periodes_cibles(source, calendrier, evenements):
     """Toutes les périodes possibles, avec la source comme seule suggestion."""
     utilisees = set()
+    semaines_utilisees = set()
+    vacances_avec_semaines_source = set()
     for evenement in evenements:
         for semaine in evenement.periodes_scolaires.all():
             if semaine.annee_scolaire != source.libelle:
                 continue
             if semaine.periode_calendrier_id:
                 utilisees.add(_normaliser_periode(semaine.periode_calendrier.nom))
-            utilisees.add(_normaliser_periode(_cle_semaine(semaine)[0]))
+            nom, numero = _cle_semaine(semaine)
+            utilisees.add(_normaliser_periode(nom))
+            semaines_utilisees.add((_normaliser_periode(nom), numero))
+            vacances_avec_semaines_source.add(_normaliser_periode(nom))
     for ouverture in OuvertureCentrePeriode.objects.filter(
             periode_calendrier__annee_scolaire=source.libelle).select_related("periode_calendrier"):
         utilisees.add(_normaliser_periode(ouverture.periode_calendrier.nom))
@@ -73,11 +78,19 @@ def proposer_periodes_cibles(source, calendrier, evenements):
     vacances = []
     for index, groupe in enumerate(regrouper_semaines_vacances(calendrier["semaines"])):
         nom = _nom_vacances(groupe["nom"])
+        semaines = []
+        for numero, semaine in enumerate(groupe["semaines"]):
+            base, ordre = _cle_semaine(SemaineVacances(
+                semaine["nom"], date_value.fromisoformat(semaine["debut"]),
+                date_value.fromisoformat(semaine["fin"]), semaine["description_source"], semaine["numero"]))
+            semaines.append({**semaine, "id": str(numero),
+                "suggeree": (_normaliser_periode(base), ordre) in semaines_utilisees
+                or (_normaliser_periode(nom) in utilisees
+                    and _normaliser_periode(base) not in vacances_avec_semaines_source)})
         vacances.append({"id": str(index), "nom": nom,
                          "debut": date_value.fromisoformat(groupe["semaines"][0]["debut"]),
                          "fin": date_value.fromisoformat(groupe["semaines"][-1]["fin"]),
-                         "semaines": groupe["semaines"],
-                         "suggeree": _normaliser_periode(nom) in utilisees})
+                         "semaines": semaines})
     return scolaires, vacances
 
 

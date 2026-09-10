@@ -82,11 +82,14 @@ class RepriseAnneeForm(forms.Form):
                     required=False, initial=periode["suggeree"])
                 self.champs_periscolaires.append(self[nom_champ])
             for vacance in self.vacances_courtes:
-                nom_champ = f"vacance_{vacance['id']}"
-                self.fields[nom_champ] = forms.BooleanField(
-                    label=f"{vacance['nom']} · {vacance['debut']} au {vacance['fin']}",
-                    required=False, initial=vacance["suggeree"])
-                self.champs_vacances.append(self[nom_champ])
+                champs = []
+                for semaine in vacance["semaines"]:
+                    nom_champ = f"vacance_{vacance['id']}_{semaine['id']}"
+                    self.fields[nom_champ] = forms.BooleanField(
+                        label=f"{semaine['nom']} · {semaine['debut']} au {semaine['fin']}",
+                        required=False, initial=semaine["suggeree"])
+                    champs.append(self[nom_champ])
+                self.champs_vacances.append({"nom": vacance["nom"], "champs": champs})
             self.semaines_ete = proposer_semaines_ete(source, cible, evenements, self.calendrier_officiel["debut_ete"])
             for semaine in self.semaines_ete:
                 nom_champ = f"ete_{semaine['id']}"
@@ -124,8 +127,12 @@ class RepriseAnneeForm(forms.Form):
         self.plan["calendrier_officiel"] = self.calendrier_officiel
         self.plan["periodes_scolaires"] = [periode for periode in self.periodes_scolaires
                                             if data.get(f"scolaire_{periode['id']}")]
-        self.plan["vacances_courtes"] = [vacance for vacance in self.vacances_courtes
-                                          if data.get(f"vacance_{vacance['id']}")]
+        self.plan["vacances_courtes"] = [
+            {**vacance, "semaines": [semaine for semaine in vacance["semaines"]
+                if data.get(f"vacance_{vacance['id']}_{semaine['id']}")]}
+            for vacance in self.vacances_courtes
+            if any(data.get(f"vacance_{vacance['id']}_{semaine['id']}") for semaine in vacance["semaines"])
+        ]
         selection = {identifiant for identifiant in (semaine["id"] for semaine in self.semaines_ete)
                      if data.get(f"ete_{identifiant}")}
         evenement_ids = {evenement.pk for evenement in self.plan["evenements"]}
