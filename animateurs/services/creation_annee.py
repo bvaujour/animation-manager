@@ -7,9 +7,12 @@ from datetime import date as date_value
 
 from animateurs.models import (
     AccueilCentre, AnneeScolaire, BesoinEncadrement, BesoinQualification,
-    Centre, Groupe, OuvertureCentrePeriode, PeriodeCalendrier,
+    Centre, Groupe, OuvertureCentrePeriode, PeriodeCalendrier, PeriodeScolaire,
 )
-from .calendrier_scolaire import CalendrierScolaireError, calculer_periodes_scolaires, recuperer_semaines
+from .calendrier_scolaire import (
+    CalendrierScolaireError, SemaineVacances, calculer_periodes_scolaires,
+    recuperer_semaines, regrouper_semaines_vacances,
+)
 
 
 def calendrier_officiel(libelle, zone):
@@ -22,6 +25,53 @@ def calendrier_officiel(libelle, zone):
     if not periodes:
         raise CalendrierScolaireError("Aucune période scolaire officielle n’a pu être calculée.")
     return {"periodes": periodes, "semaines": semaines}
+
+
+def previsualiser_calendrier(cible, zone, calendrier):
+    """Décrit les objets générés ou existants, sans recalcul ni écriture."""
+    periodes = list(PeriodeCalendrier.objects.filter(annee_scolaire=cible.libelle, zone=zone))
+    semaines_existantes = list(PeriodeScolaire.objects.filter(
+        annee_scolaire=cible.libelle, zone=zone).select_related("type_accueil", "periode_calendrier"))
+    dates_existantes = {(s.debut, s.fin) for s in semaines_existantes}
+    scolaires = []
+    for entree in calendrier["periodes"]:
+        reutilisee = any(p.categorie == PeriodeCalendrier.SCOLAIRE
+            and p.debut.isoformat() == entree["debut"] and p.fin.isoformat() == entree["fin"] for p in periodes)
+        scolaires.append({**entree, "reutilisee": reutilisee})
+
+    # Les vacances sont déjà représentées par des semaines dans le plan de
+    # création. Leur regroupement est uniquement visuel, pas un nouvel objet.
+    semaines = {(s.debut, s.fin): s for s in calendrier["semaines"]}
+    for s in semaines_existantes:
+        if (s.type_accueil and s.type_accueil.code == "vacances") or (
+                s.periode_calendrier and s.periode_calendrier.categorie == PeriodeCalendrier.VACANCES):
+            semaines.setdefault((s.debut, s.fin), SemaineVacances(
+                s.nom, s.debut, s.fin, s.description_source, s.ordre))
+    vacances = []
+    for p in periodes:
+        if p.categorie != PeriodeCalendrier.VACANCES:
+            continue
+        couvertes = [s for s in semaines.values() if p.debut <= s.debut <= s.fin <= p.fin]
+        vacances.append({"nom": p.nom, "debut": p.debut.isoformat(), "fin": p.fin.isoformat(),
+                         "periode_existante": True, "semaines": [s.to_dict() for s in couvertes]})
+        for s in couvertes:
+            semaines.pop((s.debut, s.fin))
+    for groupe in regrouper_semaines_vacances(sorted(semaines.values(), key=lambda s: s.debut)):
+        vacances.append({**groupe, "debut": min(s["debut"] for s in groupe["semaines"]),
+                         "fin": max(s["fin"] for s in groupe["semaines"]), "periode_existante": False})
+    for vacance in vacances:
+        for semaine in vacance["semaines"]:
+            semaine["reutilisee"] = (date_value.fromisoformat(semaine["debut"]),
+                                     date_value.fromisoformat(semaine["fin"])) in dates_existantes
+        vacance["creees"] = sum(not s["reutilisee"] for s in vacance["semaines"])
+        vacance["reutilisees"] = sum(s["reutilisee"] for s in vacance["semaines"])
+    return {"scolaires": scolaires, "vacances": sorted(vacances, key=lambda v: v["debut"]),
+            "vacances_sans_dates": [nom for nom in ("Toussaint", "Noël", "Hiver", "Printemps", "Été")
+                                    if not any(v["nom"].startswith(nom) for v in vacances)],
+            "scolaires_creees": sum(not p["reutilisee"] for p in scolaires),
+            "scolaires_reutilisees": sum(p["reutilisee"] for p in scolaires),
+            "semaines_creees": sum(v["creees"] for v in vacances),
+            "semaines_reutilisees": sum(v["reutilisees"] for v in vacances)}
 
 
 CATEGORIES = {

@@ -14,7 +14,7 @@ from django.urls import reverse
 
 from .forms_creation_annee import NouvelleAnneeForm, RepriseAnneeForm
 from .models import AnneeScolaire
-from .services.creation_annee import CATEGORIES, creer_annee
+from .services.creation_annee import CATEGORIES, creer_annee, previsualiser_calendrier
 from .services.multisite import multisite_actif
 
 
@@ -102,6 +102,7 @@ def assistant(request, administration):
                     return HttpResponseRedirect(reverse("admin:animateurs_anneescolaire_configuration", args=[cible.pk]) + "?" + urlencode({"rapport": rapport}))
                 donnees.update(confirme=True, empreinte=empreinte(plan))
                 context.update(etape="preview", plan=plan,
+                    calendrier_preview=previsualiser_calendrier(cible, plan["zone"], plan["calendrier_officiel"]) if plan else None,
                     periodes_preview=[(p, *plan["dates"][p.pk]) for p in plan["periodes"]] if plan else [],
                     jeton=signing.dumps(donnees, salt=SALT, compress=True))
         except (signing.BadSignature, KeyError):
