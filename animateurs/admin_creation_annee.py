@@ -35,6 +35,15 @@ def empreinte(plan):
                for code, objets in plan["lignes"].items()}
     sources["periodes"] = [{"id": p.pk, "nom": p.nom, "debut": p.debut, "fin": p.fin,
         "zone": p.zone, "categorie": p.categorie, "types": sorted(p.types_accueil.values_list("pk", flat=True))} for p in plan["periodes"]]
+    # La confirmation doit aussi porter sur le calendrier effectivement affiché
+    # et sur les seules semaines source susceptibles d'être rattachées.
+    calendrier = plan.get("calendrier_officiel", {})
+    sources["calendrier"] = {"zone": plan.get("zone"), "periodes": calendrier.get("periodes", []),
+        "semaines": [s.to_dict() for s in calendrier.get("semaines", [])]}
+    sources["rattachements"] = {e.pk: [
+        {champ.attname: getattr(p, champ.attname) for champ in p._meta.concrete_fields}
+        for p in e.periodes_scolaires.all() if p.annee_scolaire == plan["source_libelle"]
+    ] for e in plan["evenements"]}
     return hashlib.sha256(json.dumps(sources, cls=DjangoJSONEncoder, sort_keys=True).encode()).hexdigest()
 
 
@@ -67,14 +76,14 @@ def assistant(request, administration):
                 if copie:
                     options_data = request.POST if action == "previsualiser" else (
                         donnees_formulaire(donnees["options"]) if action == "creer" and "options" in donnees else None)
-                    options = RepriseAnneeForm(options_data, cible=cible, source=source)
+                    options = RepriseAnneeForm(options_data, cible=cible, source=source, zone=form.cleaned_data["zone"])
                     context.update(etape="options", options=options)
                     if options_data is not None and options.is_valid():
                         plan = options.plan
                         for code in plan["lignes"]:
                             if not request.user.has_perm(f"animateurs.add_{CATEGORIES[code][0]._meta.model_name}"):
                                 raise PermissionDenied
-                        if plan["periodes"] and not request.user.has_perm("animateurs.add_periodecalendrier"):
+                        if (plan["periodes"] or plan["calendrier_officiel"]["periodes"]) and not request.user.has_perm("animateurs.add_periodecalendrier"):
                             raise PermissionDenied
                         donnees["options"] = dict(options_data.lists())
                     else:

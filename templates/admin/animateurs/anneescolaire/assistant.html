@@ -21,8 +21,8 @@
 <p><label><input type="checkbox" disabled> Règles de responsabilités — fonction disponible après finalisation du module responsabilités</label></p>
 <p>Qualifications et paramètres généraux : référentiels globaux conservés. Seules les exigences liées à une période peuvent être copiées.</p>
 <p>Modèles de journée ou de planning : aucun modèle annuel autonome à dupliquer dans l’architecture actuelle.</p>
-<h3>Dates des périodes cibles à vérifier</h3>
-<p>Les dates proposées sont décalées d’un an (ou de l’écart entre les années). Elles ne constituent pas un calendrier scolaire officiel. Ajustez-les avant de confirmer. Seules les périodes utilisées par les catégories sélectionnées seront créées ; les semaines de vacances et les rattachements des groupes restent à configurer.</p>
+<h3>Dates de reprise des configurations à vérifier</h3>
+<p>Ces dates sont décalées de l’écart entre les années et concernent uniquement les configurations copiées. Le calendrier officiel cible sera présenté séparément à l’étape suivante.</p>
 {% for champs in options.champs_dates %}<fieldset class="module aligned">{% for champ in champs %}<p>{{ champ.errors }}{{ champ.label_tag }} {{ champ }}</p>{% endfor %}</fieldset>{% empty %}<p>Aucune période calendaire source : aucune configuration annuelle à copier.</p>{% endfor %}
 <button type="submit" name="action" value="previsualiser">Prévisualiser la reprise</button>
 {% elif etape == "preview" %}
@@ -33,9 +33,14 @@
 <p>{{ plan.centres|length }} lieu(x), {{ plan.accueils|length }} accueil(s) sélectionné(s). Groupes partagés conservés.</p>
 <ul>{% for centre in plan.centres %}<li>{{ centre }}</li>{% endfor %}{% for accueil in plan.accueils %}<li>{{ accueil }}</li>{% endfor %}</ul>
 {% if plan.accueils_ignores %}<p>Accueils ignorés car terminés ou non sélectionnés : {{ plan.accueils_ignores|length }}.</p>{% endif %}
-<h3>Éléments copiés</h3>
-<ul>{% for libelle, nombre in plan.resume %}<li>{{ libelle }} : {{ nombre }}</li>{% empty %}<li>Aucune catégorie sélectionnée.</li>{% endfor %}<li>Périodes calendaires : {{ plan.periodes|length }}</li></ul>
+<h3>Configurations annuelles copiées</h3>
+<ul>{% for libelle, nombre in plan.resume %}<li>{{ libelle }} : {{ nombre }}{% if libelle == "Horaires d’ouverture" and nombre == 0 %} (aucun horaire annuel à reprendre){% endif %}</li>{% empty %}<li>Aucune catégorie sélectionnée.</li>{% endfor %}<li>Périodes source utilisées pour la copie : {{ plan.periodes|length }}</li></ul>
+{% if periodes_preview %}
 <table><thead><tr><th>Période</th><th>Début cible</th><th>Fin cible</th></tr></thead><tbody>{% for periode, debut, fin in periodes_preview %}<tr><td>{{ periode.nom }} — zone {{ periode.zone }}</td><td>{{ debut }}</td><td>{{ fin }}</td></tr>{% endfor %}</tbody></table>
+{% endif %}
+<h3>Calendrier officiel cible — {{ cible.libelle }} — Zone {{ plan.zone }}</h3>
+<p>Périodes officielles cibles : {{ plan.calendrier_officiel.periodes|length }} (création ou réutilisation si déjà présentes).</p>
+<table><thead><tr><th>Période</th><th>Début cible</th><th>Fin cible</th></tr></thead><tbody>{% for periode in plan.calendrier_officiel.periodes %}<tr><td>{{ periode.nom }}</td><td>{{ periode.debut }}</td><td>{{ periode.fin }}</td></tr>{% endfor %}</tbody></table>
 {% else %}<p>Seul l’objet année scolaire sera créé. Les référentiels globaux existants resteront accessibles.</p>{% endif %}
 <p>Ne seront pas repris : animateurs, contrats, disponibilités, affectations, plannings réalisés, heures, absences, paie, formations, documents individuels, sorties, séjours et historique opérationnel.</p>
 <input type="hidden" name="jeton" value="{{ jeton }}">

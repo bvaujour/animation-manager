@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from .models import AnneeScolaire, Centre, PeriodeCalendrier
 from .services.creation_annee import CATEGORIES, accueils_reutilisables, preparer_copie, calendrier_officiel
 from .services.multisite import multisite_actif
+from .services.calendrier_scolaire import CalendrierScolaireError
 
 
 class SourceField(forms.ModelChoiceField):
@@ -45,7 +46,7 @@ class RepriseAnneeForm(forms.Form):
     accueils = forms.ModelMultipleChoiceField(label="Accueils réutilisés dans les centres sélectionnés", queryset=None, required=False, widget=forms.CheckboxSelectMultiple)
     categories = forms.MultipleChoiceField(label="Configurations annuelles à copier", choices=[(code, valeur[1]) for code, valeur in CATEGORIES.items()], required=False, widget=forms.CheckboxSelectMultiple)
 
-    def __init__(self, *args, cible, source, **kwargs):
+    def __init__(self, *args, cible, source, zone="A", **kwargs):
         super().__init__(*args, **kwargs)
         self.cible, self.source = cible, source
         if not multisite_actif():
@@ -54,10 +55,7 @@ class RepriseAnneeForm(forms.Form):
         self.periodes = list(PeriodeCalendrier.objects.filter(annee_scolaire=source.libelle).order_by("debut", "pk"))
         self.champs_dates = []
         decalage = cible.date_debut.year - source.date_debut.year
-        self.zone = self.source_zone = "A"
-        if self.periodes:
-            self.source_zone = self.periodes[0].zone
-        self.zone = self.initial.get("zone") or self.source_zone
+        self.zone = zone
         for periode in self.periodes:
             noms = []
             for borne in ("debut", "fin"):
@@ -80,8 +78,11 @@ class RepriseAnneeForm(forms.Form):
         try:
             self.plan = preparer_copie(self.cible, self.source,
                 [c.pk for c in data["centres"]], [a.pk for a in data["accueils"]], data["categories"], dates)
-            self.plan["zone"] = self.zone
-            self.plan["calendrier_officiel"] = calendrier_officiel(self.cible.libelle, self.zone)
         except TypeError:
             raise ValidationError("Renseignez les dates des périodes utilisées par les configurations sélectionnées.")
+        self.plan["zone"] = self.zone
+        try:
+            self.plan["calendrier_officiel"] = calendrier_officiel(self.cible.libelle, self.zone)
+        except CalendrierScolaireError as erreur:
+            raise ValidationError(f"Calendrier officiel indisponible : {erreur}") from erreur
         return data

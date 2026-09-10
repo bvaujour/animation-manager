@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -11,14 +11,27 @@ from animateurs.forms_creation_annee import NouvelleAnneeForm, RepriseAnneeForm
 from animateurs.models import (
     AccueilCentre, Affectation, Animateur, AnneeScolaire, BesoinEncadrement,
     BesoinQualification, Centre, Contrat, Evenement, Groupe, ModalitePeriscolaire,
-    OuvertureCentrePeriode, PeriodeCalendrier, Qualification, TypeAccueil,
+    OuvertureCentrePeriode, PeriodeCalendrier, PeriodeScolaire, Qualification, TypeAccueil,
 )
 from animateurs.services.creation_annee import accueils_reutilisables, creer_annee, preparer_copie
 from animateurs.tests.base import ConnexionTestCase
+from animateurs.services.calendrier_scolaire import CalendrierScolaireError, SemaineVacances
 
 
 class CreationAnneeTests(ConnexionTestCase):
     def setUp(self):
+        # Seule la récupération réseau est simulée : le calcul du calendrier
+        # et le parcours de prévisualisation/confirmation restent réels.
+        semaines = [
+            SemaineVacances(f"{nom} — Semaine {numero + 1}", debut + timedelta(days=7 * numero),
+                debut + timedelta(days=7 * numero + 4), nom, numero + 1)
+            for nom, debut in (("Toussaint", date(2026, 10, 19)), ("Noël", date(2026, 12, 21)),
+                               ("Hiver", date(2027, 2, 15)), ("Printemps", date(2027, 4, 12)))
+            for numero in range(2)
+        ]
+        patcher = patch("animateurs.services.creation_annee.recuperer_semaines", return_value=semaines)
+        self.recuperer_semaines = patcher.start()
+        self.addCleanup(patcher.stop)
         self.source = AnneeScolaire.objects.get(libelle="2025-2026")
         self.type, _ = TypeAccueil.objects.get_or_create(code="periscolaire", defaults={"nom": "Périscolaire"})
         self.modalite, _ = ModalitePeriscolaire.objects.get_or_create(code="matin", defaults={"nom": "Matin"})
@@ -172,3 +185,130 @@ class CreationAnneeTests(ConnexionTestCase):
         form = NouvelleAnneeForm(data)
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data["source"], self.source)
+
+    def test_calendrier_visible_avec_compteurs_nuls_et_regles_globales_conservees(self):
+        OuvertureCentrePeriode.objects.all().delete()
+        BesoinEncadrement.objects.update(periode_calendrier=None)
+        BesoinQualification.objects.update(periode_calendrier=None)
+        self.periode.delete()
+        regles = {m: list(m.objects.values()) for m in (BesoinEncadrement, BesoinQualification)}
+        response = self.client.post(self.url, self.identite())
+        data = self.options(response.context["jeton"])
+        data["categories"] = ["horaires", "besoins", "qualifications"]
+        response = self.client.post(self.url, data)
+        self.assertEqual(response.context["etape"], "preview")
+        self.assertEqual([n for _, n in response.context["plan"]["resume"]], [0, 0, 0])
+        self.assertContains(response, "Périodes source utilisées pour la copie : 0")
+        self.assertContains(response, "Périodes officielles cibles : 5")
+        self.assertContains(response, "Horaires d’ouverture : 0 (aucun horaire annuel à reprendre)")
+        for nom in ("Rentrée → Toussaint", "Toussaint → Noël", "Noël → Hiver", "Hiver → Printemps", "Printemps → Été"):
+            self.assertContains(response, nom)
+        self.assertFalse(AnneeScolaire.objects.filter(libelle="2026-2027").exists())
+        response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(AnneeScolaire.objects.get(libelle="2026-2027").statut, "PREPARATION")
+        self.assertEqual(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").count(), 5)
+        for modele, avant in regles.items():
+            self.assertEqual(list(modele.objects.values()), avant)
+
+    def test_zone_conservee_jusqua_confirmation_et_calendrier_existant_reutilise(self):
+        identite = self.identite()
+        identite["zone"] = "C"
+        existante = PeriodeCalendrier.objects.create(categorie="scolaire", nom="Déjà présente", zone="C",
+            annee_scolaire="2026-2027", debut=date(2026, 9, 1), fin=date(2026, 10, 16))
+        semaine = PeriodeScolaire.objects.create(nom="Nom local", zone="C", annee_scolaire="2026-2027",
+            debut=date(2026, 10, 19), fin=date(2026, 10, 23))
+        response = self.client.post(self.url, identite)
+        data = self.options(response.context["jeton"])
+        data["categories"] = []
+        response = self.client.post(self.url, data)
+        self.assertEqual(response.context["plan"]["zone"], "C")
+        self.assertContains(response, "Zone C")
+        self.recuperer_semaines.assert_called_with("2026-2027", "C")
+        response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.recuperer_semaines.call_count, 2)
+        self.recuperer_semaines.assert_called_with("2026-2027", "C")
+        self.assertEqual(set(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").values_list("zone", flat=True)), {"C"})
+        self.assertEqual(PeriodeCalendrier.objects.filter(annee_scolaire="2026-2027").count(), 5)
+        self.assertEqual(PeriodeScolaire.objects.filter(annee_scolaire="2026-2027").count(), 8)
+        existante.refresh_from_db()
+        semaine.refresh_from_db()
+        self.assertEqual(existante.nom, "Déjà présente")
+        self.assertEqual(semaine.nom, "Nom local")
+
+    def test_erreur_calendrier_visible_et_selection_conservee(self):
+        response = self.client.post(self.url, self.identite())
+        data = self.options(response.context["jeton"])
+        self.recuperer_semaines.side_effect = CalendrierScolaireError("Service temporairement indisponible.")
+        response = self.client.post(self.url, data)
+        self.assertEqual(response.context["etape"], "options")
+        self.assertContains(response, "Calendrier officiel indisponible")
+        self.assertEqual(response.context["options"]["categories"].value(), ["horaires"])
+        self.assertNotContains(response, 'value="creer"')
+        self.assertFalse(AnneeScolaire.objects.filter(libelle="2026-2027").exists())
+
+    def test_erreur_calcul_calendrier_visible(self):
+        response = self.client.post(self.url, self.identite())
+        with patch("animateurs.services.creation_annee.calculer_periodes_scolaires", side_effect=ValueError("dates invalides")):
+            response = self.client.post(self.url, self.options(response.context["jeton"]))
+        self.assertContains(response, "Le calcul des périodes scolaires officielles a échoué.")
+        self.assertEqual(response.context["etape"], "options")
+
+    def test_erreur_calendrier_a_confirmation_ne_cree_rien(self):
+        response = self.client.post(self.url, self.identite())
+        response = self.client.post(self.url, self.options(response.context["jeton"]))
+        self.recuperer_semaines.side_effect = CalendrierScolaireError("Service indisponible.")
+        response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
+        self.assertContains(response, "Calendrier officiel indisponible")
+        self.assertFalse(AnneeScolaire.objects.filter(libelle="2026-2027").exists())
+
+    def test_rattachements_source_exacte_ajoutes_sans_suppression_ni_doublon(self):
+        source = PeriodeScolaire.objects.create(nom="Source", zone="A", annee_scolaire="2025-2026",
+            debut=date(2026, 2, 9), fin=date(2026, 2, 13))
+        autre = PeriodeScolaire.objects.create(nom="Autre année", zone="A", annee_scolaire="2024-2025",
+            debut=date(2025, 3, 3), fin=date(2025, 3, 7))
+        cible_existante = PeriodeScolaire.objects.create(nom="Libellé cible différent", zone="A", annee_scolaire="2026-2027",
+            debut=date(2027, 2, 9), fin=date(2027, 2, 13))
+        nouvelle_source = PeriodeScolaire.objects.create(nom="Autre source", zone="A", annee_scolaire="2025-2026",
+            debut=date(2026, 4, 6), fin=date(2026, 4, 10))
+        self.evenement.periodes_scolaires.add(source, autre, cible_existante, nouvelle_source)
+        second = Evenement.objects.create(centre=self.centre, accueil_centre=self.accueil,
+            groupe=Groupe.objects.create(nom="Second groupe"), nom="Second")
+        second.periodes_scolaires.add(source, nouvelle_source)
+        avant = list(PeriodeScolaire.objects.order_by("pk").values())
+        annee_source_avant = AnneeScolaire.objects.values().get(pk=self.source.pk)
+        plan = self.plan(categories=())
+        cible = creer_annee(self.cible(), plan)
+        self.assertEqual(cible.statut, "PREPARATION")
+        self.assertEqual(AnneeScolaire.objects.values().get(pk=self.source.pk), annee_source_avant)
+        self.assertEqual(list(PeriodeScolaire.objects.filter(pk__in=[p["id"] for p in avant]).order_by("pk").values()), avant)
+        nouvelle = PeriodeScolaire.objects.get(annee_scolaire="2026-2027", debut=date(2027, 4, 6))
+        self.assertEqual(set(self.evenement.periodes_scolaires.values_list("pk", flat=True)),
+            {source.pk, autre.pk, cible_existante.pk, nouvelle_source.pk, nouvelle.pk})
+        self.assertEqual(set(second.periodes_scolaires.values_list("pk", flat=True)),
+            {source.pk, nouvelle_source.pk, cible_existante.pk, nouvelle.pk})
+        self.assertEqual(PeriodeScolaire.objects.count(), len(avant) + 1)
+
+    def test_decalage_depuis_annee_source_et_non_premiere_periode(self):
+        self.periode.debut = date(2026, 2, 9)
+        self.periode.fin = date(2026, 2, 13)
+        self.periode.save()
+        semaine = PeriodeScolaire.objects.create(nom="Hiver", zone="A", annee_scolaire="2025-2026",
+            debut=self.periode.debut, fin=self.periode.fin)
+        self.evenement.periodes_scolaires.add(semaine)
+        plan = preparer_copie(self.cible(), self.source, [self.centre.pk], [self.accueil.pk], ["horaires"],
+            {self.periode.pk: (date(2027, 2, 9), date(2027, 2, 13))})
+        creer_annee(self.cible(), plan)
+        cible = self.evenement.periodes_scolaires.get(annee_scolaire="2026-2027")
+        self.assertEqual(cible.debut, date(2027, 2, 9))
+        self.assertEqual(cible.fin, date(2027, 2, 13))
+        self.assertTrue(self.evenement.periodes_scolaires.filter(pk=semaine.pk).exists())
+
+    def test_calendrier_modifie_apres_preview_refuse(self):
+        response = self.client.post(self.url, self.identite())
+        response = self.client.post(self.url, self.options(response.context["jeton"]))
+        self.recuperer_semaines.return_value = self.recuperer_semaines.return_value[:-1]
+        response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
+        self.assertContains(response, "La configuration source a changé")
+        self.assertFalse(AnneeScolaire.objects.filter(libelle="2026-2027").exists())
