@@ -3348,6 +3348,7 @@ function libelleDate(dateStr)
 	function animateursFiltresEtTries()
 	{
 		return animateursPlanning
+			.filter((animateur) => animateur.actif !== false)
 			.filter(animateurCorrespondAuxFiltres)
 			.filter(animateurCorrespondARecherche)
 			.sort(comparerAnimateursParPrenom);

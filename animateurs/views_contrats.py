@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 from .models import Animateur, Contrat, HistoriqueRemunerationContrat, TypeContrat
 from .services.parametres import get_parametres_structure
 from .services.serializers import contrat_to_dict
+from .services.contrats import contrat_est_verrouille
 
 
 @require_http_methods(["GET"])
@@ -116,6 +117,8 @@ def api_contrats(request, animateur_id):
     try:
         payload = json.loads(request.body)
         contrat = Contrat(animateur=animateur)
+        if not animateur.actif:
+            return JsonResponse({"error": "Réactivez la fiche avant de créer un nouveau contrat."}, status=400)
         _appliquer_payload(contrat, payload)
         contrat.save()
         _historiser_salaire(contrat, payload)
@@ -128,6 +131,8 @@ def api_contrats(request, animateur_id):
 @require_http_methods(["PATCH", "DELETE"])
 def api_contrat_detail(request, animateur_id, contrat_id):
     contrat = get_object_or_404(Contrat, pk=contrat_id, animateur_id=animateur_id)
+    if contrat_est_verrouille(contrat):
+        return JsonResponse({"error": "Contrat historique — année scolaire clôturée"}, status=403)
     if request.method == "DELETE":
         contrat.delete()
         return JsonResponse({"ok": True})

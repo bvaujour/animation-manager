@@ -76,6 +76,19 @@ def contrat_est_applicable(contrat, date):
     )
 
 
+def contrat_est_verrouille(contrat):
+    """Seule une inclusion complète et non ambiguë dans une année clôturée fige le contrat."""
+    from animateurs.models import AnneeScolaire
+
+    if not contrat.date_debut or not contrat.date_fin:
+        return False
+    return AnneeScolaire.objects.filter(
+        statut=AnneeScolaire.Statut.CLOTUREE,
+        date_debut__lte=contrat.date_debut,
+        date_fin__gte=contrat.date_fin,
+    ).exists()
+
+
 def contrat_actuel(animateur):
     return contrat_pour_date(animateur, timezone.localdate())
 

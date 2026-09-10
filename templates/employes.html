@@ -20,6 +20,7 @@
 
         {% include "partials/_staff_filter.html" with toolbar_class="employees-sidebar-toolbar" search_id="evenement-search" search_name="recherche_salarie" details_id="salaries-filter" count_id="salaries-filter-count" qualifications_id="salaries-filter-qualifications" availability_id="salaries-filter-disponibilite" assignment_id="salaries-filter-affectation" centres_id="salaries-filter-centres" reset_id="salaries-filter-reset" %}
 
+        <label><input type="checkbox" id="afficher-inactifs"> Afficher les inactifs</label>
         <div id="evenement-list" class="employees-list staff-list" role="listbox" aria-label="Salariés"></div>
     </aside>
 

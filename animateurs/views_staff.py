@@ -110,6 +110,8 @@ def api_animateurs(request):
             Prefetch("disponibilites", queryset=disponibilites, to_attr="_filtre_disponibilites"),
         )
         date_fin_statuts = (fin_filtre - datetime.timedelta(days=1)) if fin_filtre else timezone.localdate()
+        if request.GET.get("actif") == "1":
+            animateurs = animateurs.filter(actif=True)
         animateurs = prefetch_historiques_statuts(animateurs, date_fin=date_fin_statuts)
         if debut_filtre and fin_filtre:
             formations_bloquantes = Formation.objects.filter(
@@ -121,7 +123,7 @@ def api_animateurs(request):
                 Prefetch("formations", queryset=formations_bloquantes, to_attr="_filtre_formations")
             )
         if format_planning:
-            animateurs = animateurs.only("id", "prenom", "nom", "telephone", "email")
+            animateurs = animateurs.only("id", "prenom", "nom", "telephone", "email", "actif")
         else:
             affinites = AffiniteGroupeAnimateur.objects.select_related("evenement__centre")
             animateurs = animateurs.select_related(
@@ -317,6 +319,9 @@ def api_animateur_detail(request, animateur_id):
         return JsonResponse(animateur_to_dict(animateur, activation_url=_activation_url(request, animateur)))
 
     if request.method == "DELETE":
+        from .services.contrats import contrat_est_verrouille
+        if any(contrat_est_verrouille(contrat) for contrat in animateur.contrats.all()):
+            return JsonResponse({"error": "Cette fiche contient des contrats historiques. Rendez-la inactive pour conserver son historique."}, status=403)
         utilisateur = animateur.utilisateur
         animateur.delete()
         if utilisateur is not None:
@@ -325,6 +330,11 @@ def api_animateur_detail(request, animateur_id):
 
     try:
         payload = json.loads(request.body)
+
+        if "actif" in payload:
+            if not isinstance(payload["actif"], bool):
+                return JsonResponse({"error": "Le statut actif doit être un booléen."}, status=400)
+            animateur.actif = payload["actif"]
 
         if "prenom" in payload:
             animateur.prenom = payload["prenom"].strip()

@@ -185,6 +185,7 @@ class Animateur(models.Model):
     """
 
     prenom = models.CharField(max_length=100)
+    actif = models.BooleanField(default=True)
     nom = models.CharField(max_length=100)
     cle_unique = models.CharField(max_length=240, unique=True, editable=False)
 

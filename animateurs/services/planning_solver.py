@@ -195,7 +195,7 @@ def generer_planning_auto(payload):
         ).distinct()
     groupes = list(groupes_qs.order_by("centre__ordre", "centre__nom", "ordre", "nom", "id"))
 
-    animateurs_queryset = Animateur.objects.prefetch_related(
+    animateurs_queryset = Animateur.objects.filter(actif=True).prefetch_related(
         "disponibilites",
         "preferences",
         "qualifications",

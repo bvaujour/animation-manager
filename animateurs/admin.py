@@ -408,8 +408,20 @@ class AffiniteGroupeAnimateurInline(admin.TabularInline):
 
 @admin.register(Animateur)
 class AnimateurAdmin(admin.ModelAdmin):
+    list_filter = ("actif",)
+
+    def has_delete_permission(self, request, obj=None):
+        # Une suppression en cascade ne doit pas contourner le verrou des contrats.
+        from .services.contrats import contrat_est_verrouille
+        if obj is None:
+            return False
+        return super().has_delete_permission(request, obj) and not any(
+            contrat_est_verrouille(contrat) for contrat in obj.contrats.all()
+        )
+
     list_display = (
         "prenom",
+        "actif",
         "utilisateur",
         "nom",
         "telephone",

@@ -74,8 +74,10 @@ def _qualifications_payload(qualifications, *, statut_resolu=None, statut_date_r
 
 
 def contrat_to_dict(contrat):
+    from .contrats import contrat_est_verrouille
     return {
         "id": contrat.id,
+        "verrouille": contrat_est_verrouille(contrat),
         "animateur_id": contrat.animateur_id,
         "type_contrat": contrat.type_contrat,
         "type_contrat_ref_id": contrat.type_contrat_ref_id,
@@ -267,6 +269,7 @@ def animateur_to_dict(animateur, *, date_reference=None, activation_url=None):
 
     return {
         "id": animateur.id,
+        "actif": animateur.actif,
         "prenom": animateur.prenom,
         "nom": animateur.nom,
         "telephone": animateur.telephone,
@@ -367,6 +370,7 @@ def animateur_planning_to_dict(animateur, *, date_reference=None, dates_referenc
 
     return {
         "id": animateur.id,
+        "actif": animateur.actif,
         "prenom": animateur.prenom,
         "nom": animateur.nom,
         "telephone": animateur.telephone,

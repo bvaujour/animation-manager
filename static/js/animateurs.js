@@ -15,6 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const requestedId = Number(initialParams.get("salarie") || 0) || null;
     const creationMode = initialParams.get("nouveau") === "1";
     const countEl = document.getElementById("employees-count");
+    const inactifsEl = document.getElementById("afficher-inactifs");
+    inactifsEl?.addEventListener("change", renderList);
 
     let animateurs = [];
     const selectedQualificationIds = new Set();
@@ -60,6 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!listEl || !searchEl) return;
         const query = searchEl.value.trim().toLocaleLowerCase("fr");
         const matchesDirectoryFilter = (a) => {
+            if (a.actif === false && !inactifsEl?.checked) return false;
             const qualificationIds = new Set((a.qualification_ids || []).map(Number));
             const matchesQualifications = [...selectedQualificationIds].every((id) => qualificationIds.has(id));
             if (!matchesQualifications) return false;
@@ -278,7 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return (priorite[premier.statut] - priorite[second.statut])
                 || String(second.date_debut).localeCompare(String(premier.date_debut));
         });
-        const liste = contrats.length ? contrats.map((contrat) => {
+        const ligneContrat = (contrat) => {
             const remuneration = contrat.mode_paie === "cee_journalier"
                 ? `Taux journalier de référence : ${formatMontantContrat(contrat.taux_journalier_reference)} / jour`
                 : contrat.mode_paie === "paie_habituelle" ? "Paie habituelle / hors calcul"
@@ -290,12 +293,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     <span>${escapeHtml(periodeContrat(contrat))}</span>
                     <small>${escapeHtml(remuneration)}</small>
                 </div>
-                <div class="employee-contract-actions">
+                ${contrat.verrouille ? '<p>Contrat historique — année scolaire clôturée</p>' : `<div class="employee-contract-actions">
                     <button class="btn btn-ghost btn-small" type="button" data-contract-edit="${Number(contrat.id)}">Modifier</button>
                     <button class="btn-danger btn-small" type="button" data-contract-delete="${Number(contrat.id)}">Supprimer</button>
-                </div>
+                </div>`}
             </article>`;
-        }).join("") : '<p class="empty-note">Contrat non renseigné.</p>';
+        };
+        const historiques = contrats.filter((contrat) => contrat.statut === "termine" || contrat.verrouille);
+        const actuels = contrats.filter((contrat) => !historiques.includes(contrat));
+        const liste = (actuels.map(ligneContrat).join("") || `<p class="empty-note">${contrats.length ? "Aucun contrat actuel ou à venir." : "Contrat non renseigné."}</p>`)
+            + (historiques.length ? `<details><summary>Voir les contrats des années précédentes (${historiques.length})</summary>${historiques.map(ligneContrat).join("")}</details>` : "");
         return `${liste}
             <form class="employee-contract-form" id="employee-contract-form" hidden>
                 <input type="hidden" id="contract-id">
@@ -351,7 +358,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 </div>
                 <div class="fiche-actions">
                     <button class="btn btn-primary" type="button" id="fiche-save">Enregistrer</button>
-                    ${isNew ? '<button class="btn btn-ghost" type="button" id="fiche-cancel">Annuler</button>' : '<button class="btn-danger" type="button" id="fiche-delete">Supprimer</button>'}
+                    ${isNew ? '<button class="btn btn-ghost" type="button" id="fiche-cancel">Annuler</button>' : `<span>${a.actif === false ? "Fiche inactive" : "Fiche active"}</span><button class="btn btn-ghost" type="button" id="fiche-toggle-active">${a.actif === false ? "Réactiver" : "Rendre inactive"}</button>`}
                 </div>
             </div>
 
@@ -387,7 +394,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     </section>
 
                     ${isNew ? "" : `<section id="contrats" class="fiche-section fiche-card employee-compact-card employee-contracts-card">
-                        <div class="fiche-section-head"><h3>Contrats</h3><button class="btn btn-ghost btn-small" type="button" data-contract-add>+ Ajouter un contrat</button></div>
+                        <div class="fiche-section-head"><h3>Contrats</h3>${a.actif === false ? "" : '<button class="btn btn-ghost btn-small" type="button" data-contract-add>+ Ajouter un contrat</button>'}</div>
                         <div class="employee-contract-list">${contratsHtml(a)}</div>
                     </section>`}
 
@@ -533,7 +540,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (fallback) selectAnimateur(fallback.id); else showEmpty();
             });
         } else {
-            detailEl.querySelector("#fiche-delete").addEventListener("click", () => deleteAnimateur(a));
+            detailEl.querySelector("#fiche-toggle-active").addEventListener("click", async () => {
+                if (!confirm(a.actif === false ? "Réactiver cette fiche ?" : "Rendre cette fiche inactive ? La fiche et tout son historique seront conservés.")) return;
+                try {
+                    const saved = await apiFetch(`/api/animateurs/${a.id}/`, { method: "PATCH", body: JSON.stringify({ actif: a.actif === false }) });
+                    if (inactifsEl && saved.actif === false) inactifsEl.checked = true;
+                    await loadAnimateurs();
+                    renderList();
+                    renderFiche(saved);
+                } catch (err) { setStatus(erreurMessage(err, "Modification impossible."), true); }
+            });
             renderDisponibilites(a.id);
         }
     }
@@ -1100,7 +1116,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
-            const employee = animateursCharges.find((item) => Number(item.id) === Number(requestedId)) || animateursCharges[0];
+            const employee = animateursCharges.find((item) => Number(item.id) === Number(requestedId)) || animateursCharges.find((item) => item.actif !== false);
+            if (employee?.actif === false && inactifsEl) inactifsEl.checked = true;
             if (!employee) {
                 renderList();
                 showEmpty();

@@ -58,6 +58,14 @@ class ConfigurationEvenementRemplissageAutoTests(TestCase):
         data = evenement_to_dict(self.evenement)
         self.assertEqual(data["qualifications_requises"], {str(self.bafa.id): 1})
 
+    def test_animateur_inactif_non_propose_au_remplissage(self):
+        self.animateur.actif = False
+        self.animateur.save()
+        _, status = generer_planning_auto({"debut": "2026-07-06"})
+        self.assertEqual(status, 400)
+        self.assertEqual(Affectation.objects.count(), 0)
+        self.assertTrue(Disponibilite.objects.filter(animateur=self.animateur).exists())
+
     def test_solveur_reserve_le_poste_si_la_qualification_manque(self):
         data, status = generer_planning_auto({"debut": "2026-07-06"})
         self.assertEqual(status, 200)
