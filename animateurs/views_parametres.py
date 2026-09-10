@@ -20,6 +20,7 @@ from .services.smic_provider import SMICProviderIndisponible, get_smic_provider
 def _payload(parametres):
     return {
         "nom_structure": parametres.nom_structure,
+        "multisite": parametres.multisite,
         "adresse": parametres.adresse,
         "code_postal": parametres.code_postal,
         "ville": parametres.ville,
@@ -88,6 +89,10 @@ def api_parametres(request):
 
     try:
         donnees = json.loads(request.body)
+        if "multisite" in donnees:
+            if not isinstance(donnees["multisite"], bool):
+                raise ValidationError("Le réglage multisite doit être un booléen.")
+            parametres_structure.multisite = donnees["multisite"]
         for champ in ("nom_structure", "adresse", "code_postal", "ville", "telephone", "email"):
             setattr(parametres_structure, champ, str(donnees.get(champ, "")).strip())
         parametres_structure.taux_indemnite_cp_cee = _decimal(

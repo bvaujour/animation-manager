@@ -317,6 +317,10 @@ function bouton(label, classes, onClick)
 	// ------------------------------------------------------------------
 	function mountGroupes(container)
 	{
+		let centresGroupes = [];
+		function porteeHtml(groupe = {}) {
+			return `<div class="field"><label>Portée du groupe</label><select class="group-scope"><option value="LOCAL" ${groupe.portee !== "PARTAGE" ? "selected" : ""}>Local à un site</option><option value="PARTAGE" ${groupe.portee === "PARTAGE" ? "selected" : ""}>Partagé entre plusieurs sites</option></select></div><div class="field"><label>Centre de rattachement (groupe local)</label><select class="group-owner"><option value="">Choisir un centre</option>${centresGroupes.map((centre) => `<option value="${centre.id}" ${Number(groupe.centre_id) === Number(centre.id) ? "selected" : ""}>${escapeHtml(centre.nom)}</option>`).join("")}</select></div>`;
+		}
 		let typesAccueilStructure = [];
 		container.innerHTML = `
 			<div class="gestion-form" id="groupe-partage-form">
@@ -369,6 +373,8 @@ function bouton(label, classes, onClick)
 			const typeGroupe = root.querySelector(".shared-group-kind")?.value || "structure";
 			return {
 				nom: root.querySelector(".shared-group-name").value.trim(),
+				portee: root.querySelector(".group-scope").value,
+				centre_id: root.querySelector(".group-scope").value === "LOCAL" ? (root.querySelector(".group-owner").value || null) : null,
 				type_groupe: typeGroupe,
 				date_debut_validite: typeGroupe === "sejour" ? (root.querySelector(".shared-group-valid-from")?.value || "") : "",
 				date_fin_validite: typeGroupe === "sejour" ? (root.querySelector(".shared-group-valid-to")?.value || "") : "",
@@ -380,13 +386,16 @@ function bouton(label, classes, onClick)
 
 		async function charger()
 		{
-			const groupes = await apiFetch("/api/groupes-partages/");
+			const [groupes, centres] = await Promise.all([apiFetch("/api/groupes-partages/"), apiFetch("/api/centres/")]);
+			centresGroupes = centres;
+			if (!formulaire.querySelector(".group-scope")) formulaire.querySelector(".edit-grid").insertAdjacentHTML("beforeend", porteeHtml());
 			liste.innerHTML = groupes.map((groupe) => `
 				<div class="team-row ${groupe.type_groupe === "sejour" ? "shared-group-stay" : ""}" data-shared-group-id="${groupe.id}">
 					<div class="team-main"><strong>${escapeHtml(groupe.nom)}</strong><div class="accueil-type-badges">${groupe.type_groupe === "sejour" ? `<span class="accueil-type-badge accueil-type-badge--stay">Séjour · ${escapeHtml(libelleStatutSejour(groupe))}</span>` : ""}${(groupe.types_accueil || []).map((type) => `<span class="accueil-type-badge">${escapeHtml(type.nom)}</span>`).join("")}</div><div class="team-meta">
 						${groupe.type_groupe === "sejour" ? `<span>${escapeHtml(libelleDate(groupe.date_debut_validite))} → ${escapeHtml(libelleDate(groupe.date_fin_validite))}</span>` : ""}
 						<span>${escapeHtml(groupe.categorie_age_reglementaire_libelle || "Catégorie non définie")}</span>
 						<span>ratio manuel 1/${groupe.enfants_par_animateur_defaut}</span>
+						<span>${groupe.portee === "LOCAL" ? `Local · ${escapeHtml(groupe.centre_nom || "")}` : "Partagé entre sites"}</span>
 						<span>${groupe.nombre_instances} instance${groupe.nombre_instances > 1 ? "s" : ""}</span>
 						${groupe.lieux.length ? `<span>${escapeHtml(groupe.lieux.map((lieu) => lieu.nom).join(", "))}</span>` : ""}
 					</div></div>
@@ -397,6 +406,7 @@ function bouton(label, classes, onClick)
 				const groupe = groupes.find((item) => Number(item.id) === Number(ligne.dataset.sharedGroupId));
 				ligne.querySelector(".shared-group-edit").addEventListener("click", () => {
 					ligne.innerHTML = `<div class="team-form-grid"><div class="field"><label>Nom</label><input class="shared-group-name" value="${escapeHtml(groupe.nom)}"></div><div class="field"><label>Type de groupe</label><select class="shared-group-kind"><option value="structure" ${groupe.type_groupe !== "sejour" ? "selected" : ""}>Structurel</option><option value="sejour" ${groupe.type_groupe === "sejour" ? "selected" : ""}>Séjour temporaire</option></select></div><div class="field"><label>Catégorie d’âge réglementaire</label><select class="shared-group-age"><option value="moins_6" ${groupe.categorie_age_reglementaire === "moins_6" ? "selected" : ""}>Moins de 6 ans</option><option value="six_plus" ${groupe.categorie_age_reglementaire === "six_plus" ? "selected" : ""}>6 ans et plus</option><option value="autre" ${groupe.categorie_age_reglementaire === "autre" ? "selected" : ""}>Autre / non réglementaire</option></select></div><div class="field"><label>Ratio manuel historique</label><input class="shared-group-ratio" type="number" min="1" max="999" value="${groupe.enfants_par_animateur_defaut}"></div><div class="field shared-group-validity" ${groupe.type_groupe === "sejour" ? "" : "hidden"}><label>Début du séjour</label><input class="shared-group-valid-from" type="date" value="${escapeHtml(groupe.date_debut_validite || "")}"></div><div class="field shared-group-validity" ${groupe.type_groupe === "sejour" ? "" : "hidden"}><label>Fin du séjour</label><input class="shared-group-valid-to" type="date" value="${escapeHtml(groupe.date_fin_validite || "")}"></div><div class="field shared-group-types-field"><span class="field-label">Utilisé pour le planning</span><div class="accueil-type-options">${typesAccueilHtml("shared-group", groupe.type_accueil_codes)}</div></div><p class="form-error shared-group-error"></p><div class="edit-actions"><button class="btn btn-primary shared-group-save" type="button">Enregistrer</button><button class="btn btn-ghost shared-group-cancel" type="button">Annuler</button></div></div>`;
+					ligne.querySelector(".team-form-grid").insertAdjacentHTML("afterbegin", porteeHtml(groupe));
 					ligne.querySelector(".shared-group-kind")?.addEventListener("change", () => actualiserValidite(ligne));
 					ligne.querySelector(".shared-group-cancel").addEventListener("click", charger);
 					ligne.querySelector(".shared-group-save").addEventListener("click", () => {
@@ -737,7 +747,8 @@ function bouton(label, classes, onClick)
 			const joursSelectionnes = new Set(
 				(groupe?.jours_ouverts || [0, 1, 2, 3, 4, 5]).map(Number)
 			);
-			const optionsGroupes = groupesPartages.map((modele) => {
+			const centreCible = accueil?.centre_id || groupe?.centre_id;
+			const optionsGroupes = groupesPartages.filter((modele) => modele.portee !== "LOCAL" || !centreCible || Number(modele.centre_id) === Number(centreCible)).map((modele) => {
 				const sejour = modele.type_groupe === "sejour"
 					? ` · séjour ${libelleDate(modele.date_debut_validite)} → ${libelleDate(modele.date_fin_validite)}`
 					: "";

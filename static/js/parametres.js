@@ -225,7 +225,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const payload = {};
         fieldsRoot.querySelectorAll("[name]").forEach((field) => {
             if (field.closest("#settings-prime-form")) return;
-            payload[field.name] = field.type === "checkbox" ? field.checked : field.value;
+            payload[field.name] = field.name === "multisite" ? field.value === "true" : (field.type === "checkbox" ? field.checked : field.value);
         });
         payload.regles_responsabilites = [...document.querySelectorAll("[data-responsibility-rule]")].map((row) => {
             const code = row.dataset.responsibilityRule;

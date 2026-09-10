@@ -16,6 +16,7 @@
 
         <section class="tab-panel ui-card settings-card" data-panel="structure">
             <h2>Structure</h2>
+            <div class="field"><label for="settings-multisite">Fonctionnement de la structure</label><select id="settings-multisite" name="multisite"><option value="false">Mono-site</option><option value="true">Multisite</option></select><p>Le multisite permet de partager des groupes entre plusieurs centres. Le passage en mono-site nécessite un seul centre.</p></div>
             {% if user.is_staff and perms.animateurs.view_anneescolaire %}
             <p><a class="btn btn-ghost btn-small" href="{% url 'admin:animateurs_anneescolaire_changelist' %}">Gérer les années scolaires</a></p>
             {% endif %}

@@ -231,6 +231,9 @@ def _ids_groupes(data):
 
 def _groupes_selectionnes(ids_groupes):
     groupes = list(_queryset_groupes_visibles().filter(pk__in=ids_groupes))
+    from .services.multisite import multisite_actif
+    if not multisite_actif() and len({groupe.centre_id for groupe in groupes}) > 1:
+        raise ValueError("Le mode mono-site interdit une sortie réunissant plusieurs centres.")
     if len(groupes) != len(ids_groupes):
         raise ValueError("Un groupe sélectionné est invalide.")
     return groupes

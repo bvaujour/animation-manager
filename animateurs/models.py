@@ -580,6 +580,7 @@ class ParametresStructure(models.Model):
 
     cle = models.SlugField(max_length=50, unique=True, default="principale", editable=False)
     nom_structure = models.CharField(max_length=200, blank=True)
+    multisite = models.BooleanField(default=True, verbose_name="fonctionnement multisite")
     adresse = models.TextField(blank=True)
     code_postal = models.CharField(max_length=10, blank=True)
     ville = models.CharField(max_length=120, blank=True)
@@ -649,6 +650,11 @@ class ParametresStructure(models.Model):
     class Meta:
         verbose_name = "paramètres de structure"
         verbose_name_plural = "paramètres de structure"
+
+    def clean(self):
+        super().clean()
+        if not self.multisite and Centre.objects.count() > 1:
+            raise ValidationError({"multisite": "Le mode mono-site nécessite un seul centre. Plusieurs centres existent : conservez le multisite pour préserver leurs rattachements."})
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -1014,7 +1020,14 @@ class Centre(models.Model):
     class Meta:
         ordering = ["ordre", "nom"]
 
+    def clean(self):
+        super().clean()
+        from .services.multisite import multisite_actif
+        if self._state.adding and not multisite_actif() and Centre.objects.exists():
+            raise ValidationError("Le mode mono-site interdit la création d’un deuxième centre.")
+
     def save(self, *args, **kwargs):
+        self.clean()
         self.nom = self.nom.strip()
         self.code = self.code.strip().upper()
         self.adresse = self.adresse.strip()
@@ -1176,6 +1189,10 @@ class Groupe(models.Model):
     """
 
     TYPE_STRUCTURE = "structure"
+    LOCAL = "LOCAL"
+    PARTAGE = "PARTAGE"
+    portee = models.CharField(max_length=7, choices=((LOCAL, "Local à un site"), (PARTAGE, "Partagé entre plusieurs sites")), default=PARTAGE)
+    centre = models.ForeignKey(Centre, null=True, blank=True, on_delete=models.PROTECT, related_name="definitions_groupes_locales", verbose_name="centre du groupe local")
     TYPE_SEJOUR = "sejour"
     TYPES_GROUPE = (
         (TYPE_STRUCTURE, "Groupe structurel"),
@@ -1217,7 +1234,7 @@ class Groupe(models.Model):
         verbose_name="catégorie d'âge réglementaire",
         help_text="Utilisée pour calculer automatiquement les taux d'encadrement.",
     )
-    cle_unique = models.CharField(max_length=120, unique=True, editable=False, default="")
+    cle_unique = models.CharField(max_length=120, editable=False, default="")
     enfants_par_animateur_defaut = models.PositiveSmallIntegerField(
         default=8,
         verbose_name="nombre d’enfants par animateur par défaut",
@@ -1233,9 +1250,24 @@ class Groupe(models.Model):
         ordering = ["nom"]
         verbose_name = "groupe partagé"
         verbose_name_plural = "groupes partagés"
+        constraints = [
+            models.CheckConstraint(condition=(models.Q(portee="LOCAL", centre__isnull=False) | models.Q(portee="PARTAGE", centre__isnull=True)), name="groupe_portee_centre_coherent"),
+            models.UniqueConstraint(fields=["cle_unique"], condition=models.Q(portee="PARTAGE"), name="groupe_partage_nom_unique"),
+            models.UniqueConstraint(fields=["centre", "cle_unique"], condition=models.Q(portee="LOCAL"), name="groupe_local_nom_unique_par_centre"),
+        ]
+
+    def valider_portee(self):
+        if self.portee == self.LOCAL:
+            if not self.centre_id:
+                raise ValidationError({"centre": "Sélectionnez le centre du groupe local."})
+            if self.pk and self.instances.exclude(centre_id=self.centre_id).exists():
+                raise ValidationError("Ce groupe possède des instances dans un autre centre. Ses rattachements doivent être conservés.")
+        elif self.portee != self.PARTAGE or self.centre_id is not None:
+            raise ValidationError("Un groupe partagé ne doit pas avoir de centre propriétaire.")
 
     def clean(self):
         super().clean()
+        self.valider_portee()
         if self.type_groupe == self.TYPE_SEJOUR:
             erreurs = {}
             if not self.date_debut_validite:
@@ -1254,6 +1286,7 @@ class Groupe(models.Model):
     def save(self, *args, **kwargs):
         self.nom = self.nom.strip()
         self.cle_unique = normaliser_cle_unique(self.nom)
+        self.valider_portee()
         if self.type_groupe != self.TYPE_SEJOUR:
             # Les dates appartiennent uniquement aux groupes temporaires.
             # Les effacer évite qu'un ancien réglage de séjour borne par
@@ -1379,15 +1412,17 @@ class Evenement(models.Model):
         if self.accueil_centre_id:
             self.centre_id = self.accueil_centre.centre_id
         if not self.groupe_id:
-            cle = normaliser_cle_unique(self.nom)
-            self.groupe, _ = Groupe.objects.get_or_create(
-                cle_unique=cle,
+            from .services.multisite import trouver_ou_creer_groupe
+            self.groupe, _ = trouver_ou_creer_groupe(
+                self.nom, self.centre,
                 defaults={
                     "nom": self.nom.strip(),
                     "enfants_par_animateur_defaut": self.enfants_par_animateur_defaut,
                 },
             )
         if self.groupe_id:
+            from .services.multisite import valider_rattachement
+            valider_rattachement(self.groupe, self.centre_id)
             self.nom = self.groupe.nom
             self.enfants_par_animateur_defaut = self.groupe.enfants_par_animateur_defaut
         self.nom = self.nom.strip()
@@ -1402,6 +1437,9 @@ class Evenement(models.Model):
             raise ValidationError({"jours_ouverts": "Les jours d’ouverture sont invalides."}) from None
         if not jours or any(numero < 0 or numero > 6 for numero in jours):
             raise ValidationError({"jours_ouverts": "Choisis au moins un jour d’ouverture valide."})
+        if self.groupe_id and self.centre_id:
+            from .services.multisite import valider_rattachement
+            valider_rattachement(self.groupe, self.centre_id)
         self.jours_ouverts = jours
 
     def fin_ouverture_periode(self, periode):

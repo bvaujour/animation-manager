@@ -553,6 +553,8 @@ def api_centres(request):
             effectif_cible=effectif_cible,
             ordre=prochain_ordre_centre(),
         )
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
     except IntegrityError:
         # Le champ `code` est unique en base (contrainte du modèle) :
         # on transforme l'erreur SQL brute en message compréhensible.
@@ -692,6 +694,9 @@ def _groupe_partage_to_dict(groupe):
         "type_accueil_codes": [item.code for item in types],
         "types_accueil": [{"code": item.code, "nom": item.nom} for item in types],
         "nombre_instances": groupe.instances.count(),
+        "portee": groupe.portee,
+        "centre_id": groupe.centre_id,
+        "centre_nom": groupe.centre.nom if groupe.centre_id else None,
         "lieux": [
             {"id": instance.centre_id, "nom": instance.centre.nom}
             for instance in groupe.instances.select_related("centre").order_by("centre__nom")
@@ -700,6 +705,11 @@ def _groupe_partage_to_dict(groupe):
 
 
 def _enregistrer_caracteristiques_groupe(groupe, payload):
+    groupe.portee = payload.get("portee", groupe.portee)
+    if "centre_id" in payload:
+        groupe.centre_id = int(payload["centre_id"]) if payload["centre_id"] else None
+    if groupe.portee == Groupe.PARTAGE:
+        groupe.centre_id = None
     nom = str(payload.get("nom", groupe.nom)).strip()
     ratio = int(payload.get("enfants_par_animateur_defaut", groupe.enfants_par_animateur_defaut))
     categorie_age = str(
@@ -844,8 +854,9 @@ def api_groupes(request, centre_id):
                 groupe_partage = groupes_partages_visibles(Groupe.objects.all()).get(pk=int(groupe_id))
             else:
                 nom_groupe = str(payload.get("nom", "")).strip()
-                groupe_partage, creation = Groupe.objects.get_or_create(
-                    cle_unique=normaliser_cle_unique(nom_groupe),
+                from .services.multisite import trouver_ou_creer_groupe
+                groupe_partage, creation = trouver_ou_creer_groupe(
+                    nom_groupe, centre, portee=payload.get("portee"),
                     defaults={
                         "nom": nom_groupe,
                         "enfants_par_animateur_defaut": int(payload.get("enfants_par_animateur_defaut", 8) or 8),
@@ -1248,7 +1259,7 @@ def api_accueil_centre_detail(request, accueil_id):
     return JsonResponse(_accueil_centre_to_dict(accueil))
 
 
-def _groupe_assistant_partage(ligne, type_accueil):
+def _groupe_assistant_partage(ligne, type_accueil, centre=None):
     if not isinstance(ligne, dict):
         raise ValidationError("Un groupe sélectionné est invalide.")
     groupe_id = ligne.get("id") or ligne.get("groupe_id")
@@ -1261,7 +1272,9 @@ def _groupe_assistant_partage(ligne, type_accueil):
         if not nom:
             raise ValidationError("Le nom du nouveau groupe est obligatoire.")
         cle = normaliser_cle_unique(nom)
-        groupe = Groupe.objects.filter(cle_unique=cle).first()
+        from .services.multisite import multisite_actif
+        portee = ligne.get("portee") or (Groupe.PARTAGE if multisite_actif() else Groupe.LOCAL)
+        groupe = Groupe.objects.filter(cle_unique=cle, portee=portee, centre=centre if portee == Groupe.LOCAL else None).first()
         if groupe is not None and groupe.type_groupe != Groupe.TYPE_STRUCTURE:
             raise ValidationError(
                 "Un groupe de séjour porte déjà ce nom. Choisis un autre nom pour le groupe structurel."
@@ -1270,6 +1283,8 @@ def _groupe_assistant_partage(ligne, type_accueil):
             groupe = Groupe(
                 nom=nom,
                 cle_unique=cle,
+                portee=portee,
+                centre=centre if portee == Groupe.LOCAL else None,
                 type_groupe=Groupe.TYPE_STRUCTURE,
                 categorie_age_reglementaire=str(ligne.get("categorie_age_reglementaire") or Groupe.AGE_AUTRE),
                 enfants_par_animateur_defaut=int(ligne.get("enfants_par_animateur_defaut", 8) or 8),
@@ -1351,7 +1366,7 @@ def _groupes_assistant_accueil(accueil, lignes, fonctionnement):
     jours = _jours_accueil(accueil, fonctionnement)
     evenements = []
     for ligne in lignes:
-        groupe = _groupe_assistant_partage(ligne, accueil.type_accueil)
+        groupe = _groupe_assistant_partage(ligne, accueil.type_accueil, accueil.centre)
         evenement = accueil.groupes.filter(groupe=groupe).first()
         if evenement is None:
             evenement = creer_evenement(
