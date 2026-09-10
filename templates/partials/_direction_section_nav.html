@@ -25,6 +25,7 @@ Paramètres attendus : section, active_item.
     <a class="direction-section-link{% if active_item == 'periodes' %} active{% endif %}" href="{% url 'gestion' %}?onglet=periodes"{% if active_item == 'periodes' %} aria-current="page"{% endif %}>Vacances</a>
     <a class="direction-section-link{% if active_item == 'periodes-scolaires' %} active{% endif %}" href="{% url 'gestion' %}?onglet=periodes-scolaires"{% if active_item == 'periodes-scolaires' %} aria-current="page"{% endif %}>Calendrier scolaire</a>
     <a class="direction-section-link{% if active_item == 'temps-periscolaires' %} active{% endif %}" href="{% url 'gestion' %}?onglet=temps-periscolaires"{% if active_item == 'temps-periscolaires' %} aria-current="page"{% endif %}>Temps périscolaires</a>
+    <a class="direction-section-link{% if active_item == 'annees-scolaires' %} active{% endif %}" href="{% url 'gestion_annees_scolaires' %}"{% if active_item == 'annees-scolaires' %} aria-current="page"{% endif %}>Années scolaires</a>
     {% if request.user.is_superuser %}
     <a class="direction-section-link{% if active_item == 'parametres' %} active{% endif %}" href="{% url 'parametres' %}"{% if active_item == 'parametres' %} aria-current="page"{% endif %}>Paramètres avancés</a>
     {% endif %}

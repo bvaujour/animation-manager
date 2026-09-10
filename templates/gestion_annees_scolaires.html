@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Années scolaires{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/gestion.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main id="main-content" class="page-shell page-shell--wide gestion-page gestion-page-compact">
+    {% include "partials/_page_header.html" with title="Configuration" header_class="gestion-page-header" picker_mode="none" %}
+    {% include "partials/_direction_section_nav.html" with section="configuration" active_item="annees-scolaires" %}
+    <section class="ui-card" aria-labelledby="annees-scolaires-title">
+        <div class="ui-section-heading">
+            <div><h2 id="annees-scolaires-title">Années scolaires</h2><p>Suivez l’état des années et accédez à leur configuration.</p></div>
+            {% if peut_creer_annee %}<a class="btn btn-primary" href="{% url 'admin:animateurs_anneescolaire_nouvelle' %}">Créer une nouvelle année scolaire</a>{% endif %}
+        </div>
+        <table>
+            <thead><tr><th>Année</th><th>Début</th><th>Fin</th><th>Statut</th><th>Actions</th></tr></thead>
+            <tbody>{% for annee in annees_scolaires %}<tr>
+                <td><a href="{% url 'admin:animateurs_anneescolaire_change' annee.pk %}">{{ annee.libelle }}</a></td>
+                <td>{{ annee.date_debut|date:"d/m/Y" }}</td><td>{{ annee.date_fin|date:"d/m/Y" }}</td><td>{{ annee.get_statut_display }}</td>
+                <td><a class="btn btn-ghost btn-small" href="{% url 'admin:animateurs_anneescolaire_change' annee.pk %}">Voir la fiche</a>{% if peut_modifier_annee and annee.statut == "ACTIVE" %} <a class="btn btn-ghost btn-small" href="{% url 'admin:animateurs_anneescolaire_cloturer' annee.pk %}">Clôturer l’année</a>{% elif peut_modifier_annee and reouverture_possible and annee.statut == "CLOTUREE" %} <a class="btn btn-ghost btn-small" href="{% url 'admin:animateurs_anneescolaire_reouvrir' annee.pk %}">Réouvrir l’année</a>{% endif %}</td>
+            </tr>{% empty %}<tr><td colspan="5">Aucune année scolaire.</td></tr>{% endfor %}</tbody>
+        </table>
+    </section>
+</main>
+{% endblock %}

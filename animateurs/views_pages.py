@@ -8,8 +8,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, login, update_session_auth_hash
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
-from django.core.exceptions import ValidationError
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.validators import validate_email
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -21,6 +20,7 @@ from .access import est_direction
 from .models import (
     Affectation,
     Animateur,
+    AnneeScolaire,
     Centre,
     DemandeMateriel,
     Evenement,
@@ -694,6 +694,22 @@ def gestion(request):
             "animateurs_informations": Animateur.objects.order_by("nom", "prenom"),
         },
     )
+
+
+def gestion_annees_scolaires(request):
+    """Expose le suivi des années dans l'interface Direction."""
+    if not request.user.has_perm("animateurs.view_anneescolaire"):
+        raise PermissionDenied
+    annees_scolaires = AnneeScolaire.objects.all()
+    return render(request, "gestion_annees_scolaires.html", {
+        "active_page": "gestion",
+        "gestion_onglet": "annees-scolaires",
+        "masquer_selecteurs_configuration": True,
+        "annees_scolaires": annees_scolaires,
+        "peut_creer_annee": request.user.has_perm("animateurs.add_anneescolaire"),
+        "peut_modifier_annee": request.user.has_perm("animateurs.change_anneescolaire"),
+        "reouverture_possible": not annees_scolaires.filter(statut=AnneeScolaire.Statut.ACTIVE).exists(),
+    })
 
 
 def employes(request):
