@@ -11,14 +11,17 @@ ou consulter/filtrer l'historique des affectations.
 from datetime import timedelta
 
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.forms import CheckboxSelectMultiple
 from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
-from .admin_forms import ClassificationPeriodesForm
+from .admin_forms import AnneeScolaireAdminForm, ClassificationPeriodesForm
+from .services.annees_scolaires import changer_etat_annee
 
 from .models import (
     ActiviteTravailComplementaire,
@@ -55,10 +58,55 @@ from .models import (
 
 @admin.register(AnneeScolaire)
 class AnneeScolaireAdmin(admin.ModelAdmin):
+    form = AnneeScolaireAdminForm
+    change_form_template = "admin/animateurs/anneescolaire/change_form.html"
     list_display = ("libelle", "statut", "est_active", "date_debut", "date_fin", "date_cloture")
     list_filter = ("statut",)
     search_fields = ("libelle",)
-    readonly_fields = ("date_creation", "date_modification")
+    readonly_fields = ("date_creation", "date_modification", "date_cloture")
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and (
+            obj is None or obj.statut != AnneeScolaire.Statut.CLOTUREE
+        )
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj and obj.statut == AnneeScolaire.Statut.ACTIVE:
+            return self.readonly_fields + ("statut",)
+        return self.readonly_fields
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        return super().change_view(request, object_id, form_url, {
+            **(extra_context or {}),
+            "peut_transition_annee": request.user.has_perm("animateurs.change_anneescolaire"),
+        })
+
+    def get_urls(self):
+        return [
+            path("<int:object_id>/cloturer/", self.admin_site.admin_view(self.transition_annee), name="animateurs_anneescolaire_cloturer"),
+            path("<int:object_id>/reouvrir/", self.admin_site.admin_view(self.transition_annee), {"reouvrir": True}, name="animateurs_anneescolaire_reouvrir"),
+        ] + super().get_urls()
+
+    def transition_annee(self, request, object_id, reouvrir=False):
+        if not request.user.has_perm("animateurs.change_anneescolaire"):
+            raise PermissionDenied
+        annee = get_object_or_404(AnneeScolaire, pk=object_id)
+        retour = reverse("admin:animateurs_anneescolaire_change", args=[annee.pk])
+        if request.method == "POST" and request.POST.get("confirmer") == "oui":
+            try:
+                with transaction.atomic():
+                    annee = changer_etat_annee(annee.pk, reouvrir=reouvrir)
+                    self.log_change(request, annee, "Réouverture de l’année" if reouvrir else "Clôture de l’année")
+            except ValidationError as erreur:
+                self.message_user(request, " ".join(erreur.messages), messages.ERROR)
+            else:
+                self.message_user(request, "Année réouverte." if reouvrir else "Année clôturée. Les données historiques sont conservées.", messages.SUCCESS)
+            return HttpResponseRedirect(retour)
+        return TemplateResponse(request, "admin/animateurs/anneescolaire/confirmation.html", {
+            **self.admin_site.each_context(request), "opts": self.model._meta,
+            "annee": annee, "retour": retour, "reouvrir": reouvrir,
+            "title": "Réouvrir l’année" if reouvrir else "Clôturer l’année",
+        })
 
     @admin.display(boolean=True, description="Année active")
     def est_active(self, obj):

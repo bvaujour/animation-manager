@@ -1,0 +1,14 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h2>{{ title }} : {{ annee.libelle }}</h2>
+{% if reouvrir %}
+<p>L’année redeviendra active et sa date de clôture sera effacée, uniquement si aucune autre année n’est active.</p>
+{% else %}
+<p>L’année restera consultable et toutes ses données historiques seront conservées. Elle ne sera plus l’année active.</p>
+<p>Sa fiche sera en lecture seule. Les données annuelles devront ensuite être considérées comme historiques et verrouillées progressivement ; les anciens écrans ne sont pas encore verrouillés.</p>
+{% endif %}
+<form method="post">{% csrf_token %}
+<input type="hidden" name="confirmer" value="oui">
+<div class="submit-row"><input type="submit" value="Confirmer : {{ title }}"><a href="{{ retour }}">Annuler</a></div>
+</form>
+{% endblock %}

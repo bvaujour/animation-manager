@@ -1,6 +1,26 @@
 from django import forms
 
-from .models import PeriodeScolaire, TypeAccueil
+from .models import AnneeScolaire, PeriodeScolaire, TypeAccueil
+
+
+class AnneeScolaireAdminForm(forms.ModelForm):
+    class Meta:
+        model = AnneeScolaire
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "statut" in self.fields:
+            self.fields["statut"].choices = [
+                choix for choix in AnneeScolaire.Statut.choices
+                if choix[0] != AnneeScolaire.Statut.CLOTUREE
+            ]
+
+    def clean_statut(self):
+        statut = self.cleaned_data["statut"]
+        if statut == AnneeScolaire.Statut.CLOTUREE:
+            raise forms.ValidationError("Utilise le bouton Clôturer l’année.")
+        return statut
 
 
 class ClassificationPeriodesForm(forms.Form):

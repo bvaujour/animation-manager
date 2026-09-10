@@ -1,0 +1,16 @@
+{% extends "admin/change_form.html" %}
+{% block object-tools-items %}
+{{ block.super }}
+{% if peut_transition_annee %}
+{% if original.statut == "ACTIVE" %}<li><a href="{% url 'admin:animateurs_anneescolaire_cloturer' original.pk %}">Clôturer l’année</a></li>{% endif %}
+{% if original.statut == "CLOTUREE" %}<li><a href="{% url 'admin:animateurs_anneescolaire_reouvrir' original.pk %}">Réouvrir l’année</a></li>{% endif %}
+{% endif %}
+{% endblock %}
+{% block form_top %}
+{{ block.super }}
+{% if original.statut == "CLOTUREE" %}
+<ul class="messagelist"><li class="warning">Année scolaire {{ original.libelle }} — clôturée. Les données de cette année sont conservées comme historique. Cette fiche est en lecture seule.</li></ul>
+{% elif original.statut == "ACTIVE" %}
+<ul class="messagelist"><li class="success">Année scolaire {{ original.libelle }} — année active.</li></ul>
+{% endif %}
+{% endblock %}
