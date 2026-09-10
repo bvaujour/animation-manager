@@ -128,6 +128,7 @@ class CreationAnneeTests(ConnexionTestCase):
     def test_parcours_copie_avec_preview(self):
         response = self.client.post(self.url, self.identite())
         self.assertEqual(response.context["etape"], "options")
+        self.assertTrue(response.context["mode_multisite"])
         self.assertContains(response, "finalisation du module responsabilités")
         response = self.client.post(self.url, self.options(response.context["jeton"]))
         self.assertEqual(response.context["etape"], "preview")

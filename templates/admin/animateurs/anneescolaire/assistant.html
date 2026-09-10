@@ -8,7 +8,7 @@
 <button type="submit" name="action" value="continuer">Continuer</button>
 {% elif etape == "options" %}
 <h2>{{ cible.libelle }} à partir de {{ source.libelle }} — {{ source.get_statut_display }}</h2>
-<p>Zone scolaire : {{ form.cleaned_data.zone|default:"A" }} · Fonctionnement : {% if plan.mode_multisite %}multisite{% else %}mono-site{% endif %}</p>
+<p>Zone scolaire : {{ form.cleaned_data.zone|default:"A" }} · Fonctionnement : {% if mode_multisite %}multisite{% else %}mono-site{% endif %}</p>
 <input type="hidden" name="jeton" value="{{ jeton }}">
 {{ options.non_field_errors }}
 <p>Les lieux physiques, accueils, groupes d’âge et leurs réglages généraux sont partagés : ils restent disponibles sans duplication. La sélection ci-dessous limite uniquement les configurations annuelles copiées ; elle ne masque pas les autres lieux.</p>

@@ -49,6 +49,15 @@ class ParametresApiTests(ConnexionTestCase):
         self.assertContains(page, "Paramètres")
         self.assertContains(page, "Planning &amp; RH", html=False)
         self.assertEqual(self.client.get(self.api_url).status_code, 200)
+        self.assertContains(page, "Fonctionnement de la structure")
+
+    def test_multisite_est_modifiable_et_relus(self):
+        payload = self._payload(multisite=False)
+        self.assertEqual(self.client.put(self.api_url, data=json.dumps(payload), content_type="application/json").json()["multisite"], False)
+        self.assertFalse(self.client.get(self.api_url).json()["multisite"])
+        payload["multisite"] = True
+        self.assertEqual(self.client.put(self.api_url, data=json.dumps(payload), content_type="application/json").json()["multisite"], True)
+        self.assertTrue(self.client.get(self.api_url).json()["multisite"])
 
     def test_modification_structure_et_taux_persiste_apres_relecture(self):
         response = self.client.put(

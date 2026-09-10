@@ -15,6 +15,7 @@ from django.urls import reverse
 from .forms_creation_annee import NouvelleAnneeForm, RepriseAnneeForm
 from .models import AnneeScolaire
 from .services.creation_annee import CATEGORIES, creer_annee
+from .services.multisite import multisite_actif
 
 
 SALT = "assistant-annee-scolaire"
@@ -41,7 +42,8 @@ def assistant(request, administration):
     if not administration.has_add_permission(request) or not administration.has_view_permission(request):
         raise PermissionDenied
     context = {**administration.admin_site.each_context(request), "opts": AnneeScolaire._meta,
-               "title": "Créer une nouvelle année scolaire", "etape": "identite"}
+               "title": "Créer une nouvelle année scolaire", "etape": "identite",
+               "mode_multisite": multisite_actif()}
     derniere = AnneeScolaire.objects.order_by("-date_debut").first()
     initial = {"mode": "copie" if derniere else "vierge", "source": derniere}
     if derniere:
