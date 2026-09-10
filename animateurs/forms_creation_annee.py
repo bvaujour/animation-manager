@@ -12,6 +12,12 @@ from .services.multisite import multisite_actif
 from .services.calendrier_scolaire import CalendrierScolaireError
 
 
+def _date_affichage(valeur):
+    """Formate les dates des libellés, sans modifier leur valeur métier."""
+    valeur = valeur if isinstance(valeur, date) else date.fromisoformat(valeur)
+    return valeur.strftime("%d/%m/%Y")
+
+
 class SourceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
         return f"{obj.libelle} — {obj.get_statut_display()}"
@@ -78,7 +84,7 @@ class RepriseAnneeForm(forms.Form):
             for periode in self.periodes_scolaires:
                 nom_champ = f"scolaire_{periode['id']}"
                 self.fields[nom_champ] = forms.BooleanField(
-                    label=f"{periode['nom']} · {periode['debut']} au {periode['fin']}",
+                    label=f"{periode['nom']} · {_date_affichage(periode['debut'])} au {_date_affichage(periode['fin'])}",
                     required=False, initial=periode["suggeree"])
                 self.champs_periscolaires.append(self[nom_champ])
             for vacance in self.vacances_courtes:
@@ -86,7 +92,7 @@ class RepriseAnneeForm(forms.Form):
                 for semaine in vacance["semaines"]:
                     nom_champ = f"vacance_{vacance['id']}_{semaine['id']}"
                     self.fields[nom_champ] = forms.BooleanField(
-                        label=f"{semaine['nom']} · {semaine['debut']} au {semaine['fin']}",
+                        label=f"{semaine['nom']} · {_date_affichage(semaine['debut'])} au {_date_affichage(semaine['fin'])}",
                         required=False, initial=semaine["suggeree"])
                     champs.append(self[nom_champ])
                 self.champs_vacances.append({"nom": vacance["nom"], "champs": champs})
@@ -94,7 +100,7 @@ class RepriseAnneeForm(forms.Form):
             for semaine in self.semaines_ete:
                 nom_champ = f"ete_{semaine['id']}"
                 self.fields[nom_champ] = forms.BooleanField(
-                    label=f"{semaine['nom']} · {semaine['debut']} au {semaine['fin']}",
+                    label=f"{semaine['nom']} · {_date_affichage(semaine['debut'])} au {_date_affichage(semaine['fin'])}",
                     required=False, initial=semaine["suggeree"])
                 self.champs_ete.append(self[nom_champ])
         for periode in self.periodes:

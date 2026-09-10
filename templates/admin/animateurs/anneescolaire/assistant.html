@@ -30,7 +30,7 @@
 <button type="submit" name="action" value="previsualiser">Prévisualiser la reprise</button>
 {% elif etape == "preview" %}
 <h2>Créer {{ cible.libelle }}{% if source %} à partir de {{ source.libelle }}{% else %} — année vierge{% endif %}</h2>
-<p>{{ cible.date_debut }} au {{ cible.date_fin }} — PREPARATION</p>
+<p>{{ cible.date_debut|date:"d/m/Y" }} au {{ cible.date_fin|date:"d/m/Y" }} — PREPARATION</p>
 {% if plan %}
 <h3>Structure réutilisée, sans copie</h3>
 <p>{{ plan.centres|length }} lieu(x), {{ plan.accueils|length }} accueil(s) sélectionné(s). Groupes partagés conservés.</p>
@@ -39,19 +39,19 @@
 <h3>Configurations annuelles copiées</h3>
 <ul>{% for libelle, nombre in plan.resume %}<li>{{ libelle }} : {{ nombre }}{% if libelle == "Horaires d’ouverture" and nombre == 0 %} (aucun horaire annuel à reprendre){% endif %}</li>{% empty %}<li>Aucune catégorie sélectionnée.</li>{% endfor %}<li>Périodes source utilisées pour la copie : {{ plan.periodes|length }}</li></ul>
 {% if periodes_preview %}
-<table><thead><tr><th>Période</th><th>Début cible</th><th>Fin cible</th></tr></thead><tbody>{% for periode, debut, fin in periodes_preview %}<tr><td>{{ periode.nom }} — zone {{ periode.zone }}</td><td>{{ debut }}</td><td>{{ fin }}</td></tr>{% endfor %}</tbody></table>
+<table><thead><tr><th>Période</th><th>Début cible</th><th>Fin cible</th></tr></thead><tbody>{% for periode, debut, fin in periodes_preview %}<tr><td>{{ periode.nom }} — zone {{ periode.zone }}</td><td>{{ debut|date:"d/m/Y" }}</td><td>{{ fin|date:"d/m/Y" }}</td></tr>{% endfor %}</tbody></table>
 {% endif %}
 <h3>Calendrier officiel cible — {{ cible.libelle }} — Zone {{ plan.zone }}</h3>
 <section id="periodes-scolaires-cibles">
 <h4>Périodes scolaires cibles</h4>
 <p>Périodes officielles cibles : {{ calendrier_preview.scolaires|length }} · À créer : {{ calendrier_preview.scolaires_creees }} · Réutilisées : {{ calendrier_preview.scolaires_reutilisees }}</p>
-<table><thead><tr><th>Période</th><th>Début cible</th><th>Fin cible</th><th>À la confirmation</th></tr></thead><tbody>{% for periode in calendrier_preview.scolaires %}<tr><td>{{ periode.nom }}</td><td>{{ periode.debut }}</td><td>{{ periode.fin }}</td><td>{% if periode.reutilisee %}Réutilisée{% else %}Créée{% endif %}</td></tr>{% endfor %}</tbody></table>
+<table><thead><tr><th>Période</th><th>Début cible</th><th>Fin cible</th><th>À la confirmation</th></tr></thead><tbody>{% for periode in calendrier_preview.scolaires %}<tr><td>{{ periode.nom }}</td><td>{{ periode.debut|date:"d/m/Y" }}</td><td>{{ periode.fin|date:"d/m/Y" }}</td><td>{% if periode.reutilisee %}Réutilisée{% else %}Créée{% endif %}</td></tr>{% endfor %}</tbody></table>
 </section>
 <section id="vacances-scolaires-cibles">
 <h4>Vacances scolaires cibles</h4>
 <p>Semaines de vacances · À créer : {{ calendrier_preview.semaines_creees }} · Réutilisées : {{ calendrier_preview.semaines_reutilisees }}</p>
 <table><thead><tr><th>Vacances</th><th>Début cible</th><th>Fin cible</th><th>À la confirmation</th></tr></thead><tbody>{% for vacance in calendrier_preview.vacances %}
-<tr><td>{{ vacance.nom }}</td><td>{{ vacance.debut }}</td><td>{{ vacance.fin }}</td><td>{% if vacance.periode_existante %}Réutilisée{% elif not vacance.creees %}Réutilisée{% elif vacance.reutilisees %}Réutilisée en partie{% else %}Créée (semaines){% endif %}{% if vacance.semaines %}<details><summary>{{ vacance.creees }} semaine(s) à créer · {{ vacance.reutilisees }} réutilisée(s)</summary><ul>{% for semaine in vacance.semaines %}<li>{{ semaine.nom }} · {{ semaine.debut }} au {{ semaine.fin }} · {% if semaine.reutilisee %}Réutilisée{% else %}Créée{% endif %}</li>{% endfor %}</ul></details>{% endif %}</td></tr>
+<tr><td>{{ vacance.nom }}</td><td>{{ vacance.debut|date:"d/m/Y" }}</td><td>{{ vacance.fin|date:"d/m/Y" }}</td><td>{% if vacance.periode_existante %}Réutilisée{% elif not vacance.creees %}Réutilisée{% elif vacance.reutilisees %}Réutilisée en partie{% else %}Créée (semaines){% endif %}{% if vacance.semaines %}<details><summary>{{ vacance.creees }} semaine(s) à créer · {{ vacance.reutilisees }} réutilisée(s)</summary><ul>{% for semaine in vacance.semaines %}<li>{{ semaine.nom }} · {{ semaine.debut_affichage }} au {{ semaine.fin_affichage }} · {% if semaine.reutilisee %}Réutilisée{% else %}Créée{% endif %}</li>{% endfor %}</ul></details>{% endif %}</td></tr>
 {% endfor %}{% for nom in calendrier_preview.vacances_sans_dates %}<tr><td>{{ nom }}</td><td colspan="2">Dates non disponibles</td><td>Aucune création prévue</td></tr>{% endfor %}</tbody></table>
 </section>
 {% else %}<p>Seul l’objet année scolaire sera créé. Les référentiels globaux existants resteront accessibles.</p>{% endif %}

@@ -167,6 +167,8 @@ def previsualiser_calendrier(cible, zone, calendrier, periodes_scolaires=(), vac
         for semaine in vacance["semaines"]:
             semaine["reutilisee"] = (date_value.fromisoformat(semaine["debut"]),
                                      date_value.fromisoformat(semaine["fin"])) in dates_existantes
+            semaine["debut_affichage"] = date_value.fromisoformat(semaine["debut"]).strftime("%d/%m/%Y")
+            semaine["fin_affichage"] = date_value.fromisoformat(semaine["fin"]).strftime("%d/%m/%Y")
         vacance["creees"] = sum(not s["reutilisee"] for s in vacance["semaines"])
         vacance["reutilisees"] = sum(s["reutilisee"] for s in vacance["semaines"])
     return {"scolaires": scolaires, "vacances": sorted(vacances, key=lambda v: v["debut"]),

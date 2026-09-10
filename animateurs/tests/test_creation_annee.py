@@ -391,7 +391,7 @@ class CreationAnneeTests(ConnexionTestCase):
         response = self.client.post(self.url, options)
         ete = next(v for v in response.context["calendrier_preview"]["vacances"] if v["nom"].startswith("Été"))
         self.assertEqual((ete["creees"], ete["reutilisees"]), (0, 1))
-        self.assertContains(response, "2027-07-09")
+        self.assertContains(response, "09/07/2027")
 
     def test_semaines_ete_recalculees_selectionnees_et_visibles_avant_confirmation(self):
         semaines_source = [
@@ -404,8 +404,8 @@ class CreationAnneeTests(ConnexionTestCase):
         source_avant = list(PeriodeScolaire.objects.filter(annee_scolaire="2025-2026").order_by("pk").values())
         response = self.client.post(self.url, self.identite())
         self.assertContains(response, "Semaines d’ouverture estivale à reprendre")
-        self.assertContains(response, "2027-07-05 au 2027-07-09")
-        self.assertContains(response, "2027-08-23 au 2027-08-27")
+        self.assertContains(response, "05/07/2027 au 09/07/2027")
+        self.assertContains(response, "23/08/2027 au 27/08/2027")
         options = self.options(response.context["jeton"])
         for semaine in response.context["options"].semaines_ete:
             if semaine["suggeree"]:
@@ -424,7 +424,7 @@ class CreationAnneeTests(ConnexionTestCase):
         self.assertTrue(all(date.fromisoformat(s["debut"]).weekday() == 0
                             and date.fromisoformat(s["fin"]) - date.fromisoformat(s["debut"]) == timedelta(days=4)
                             for s in ete["semaines"]))
-        self.assertNotContains(response, "2027-07-19 au 2027-07-23")
+        self.assertNotContains(response, "19/07/2027 au 23/07/2027")
         visibles = {(s["debut"], s["fin"]) for s in ete["semaines"]}
         response = self.client.post(self.url, {"action": "creer", "jeton": response.context["jeton"]})
         self.assertEqual(response.status_code, 302)
