@@ -8,10 +8,12 @@
 <button type="submit" name="action" value="continuer">Continuer</button>
 {% elif etape == "options" %}
 <h2>{{ cible.libelle }} à partir de {{ source.libelle }} — {{ source.get_statut_display }}</h2>
+<p>Zone scolaire : {{ form.cleaned_data.zone|default:"A" }} · Fonctionnement : {% if plan.mode_multisite %}multisite{% else %}mono-site{% endif %}</p>
 <input type="hidden" name="jeton" value="{{ jeton }}">
 {{ options.non_field_errors }}
 <p>Les lieux physiques, accueils, groupes d’âge et leurs réglages généraux sont partagés : ils restent disponibles sans duplication. La sélection ci-dessous limite uniquement les configurations annuelles copiées ; elle ne masque pas les autres lieux.</p>
 <p>Seuls les accueils déjà ouverts dans l’année source et couvrant toute l’année cible sont proposés. Les accueils terminés et groupes de séjour ne sont pas repris.</p>
+<p>Les groupes partagés concernés : {{ plan.groupes_partages|length }} · groupes locaux concernés : {{ plan.groupes_locaux|length }}.</p>
 {{ options.centres.as_field_group }}
 {{ options.accueils.as_field_group }}
 {{ options.categories.as_field_group }}
@@ -30,6 +32,7 @@
 <h3>Structure réutilisée, sans copie</h3>
 <p>{{ plan.centres|length }} lieu(x), {{ plan.accueils|length }} accueil(s) sélectionné(s). Groupes partagés conservés.</p>
 <ul>{% for centre in plan.centres %}<li>{{ centre }}</li>{% endfor %}{% for accueil in plan.accueils %}<li>{{ accueil }}</li>{% endfor %}</ul>
+{% if plan.accueils_ignores %}<p>Accueils ignorés car terminés ou non sélectionnés : {{ plan.accueils_ignores|length }}.</p>{% endif %}
 <h3>Éléments copiés</h3>
 <ul>{% for libelle, nombre in plan.resume %}<li>{{ libelle }} : {{ nombre }}</li>{% empty %}<li>Aucune catégorie sélectionnée.</li>{% endfor %}<li>Périodes calendaires : {{ plan.periodes|length }}</li></ul>
 <table><thead><tr><th>Période</th><th>Début cible</th><th>Fin cible</th></tr></thead><tbody>{% for periode, debut, fin in periodes_preview %}<tr><td>{{ periode.nom }} — zone {{ periode.zone }}</td><td>{{ debut }}</td><td>{{ fin }}</td></tr>{% endfor %}</tbody></table>

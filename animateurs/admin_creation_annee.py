@@ -46,7 +46,7 @@ def assistant(request, administration):
     initial = {"mode": "copie" if derniere else "vierge", "source": derniere}
     if derniere:
         debut = derniere.date_debut.year + 1
-        initial.update(libelle=f"{debut}-{debut + 1}", date_debut=date(debut, 9, 1), date_fin=date(debut + 1, 8, 31))
+        initial.update(libelle=f"{debut}-{debut + 1}", date_debut=date(debut, 9, 1), date_fin=date(debut + 1, 8, 31), zone="A")
     form = NouvelleAnneeForm(initial=initial)
     if request.method == "POST":
         action = request.POST.get("action")

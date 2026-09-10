@@ -3,11 +3,22 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
+from datetime import date as date_value
 
 from animateurs.models import (
     AccueilCentre, AnneeScolaire, BesoinEncadrement, BesoinQualification,
     Centre, Groupe, OuvertureCentrePeriode, PeriodeCalendrier,
 )
+from .calendrier_scolaire import CalendrierScolaireError, calculer_periodes_scolaires, recuperer_semaines
+
+
+def calendrier_officiel(libelle, zone):
+    """Retourne les périodes calculées par le service officiel, sans écriture."""
+    try:
+        semaines = recuperer_semaines(libelle, zone)
+    except CalendrierScolaireError:
+        return {"periodes": [], "semaines": []}
+    return {"periodes": calculer_periodes_scolaires(libelle, semaines), "semaines": semaines}
 
 
 CATEGORIES = {
@@ -37,6 +48,9 @@ def accueils_reutilisables(source, cible):
 
 def preparer_copie(cible, source, centres, accueils, categories, dates):
     """Construit le récapitulatif et les seules lignes autorisées à être copiées."""
+    from .multisite import multisite_actif
+    if not multisite_actif() and len(set(centres)) > 1:
+        raise ValidationError("Le mode mono-site ne permet de reprendre qu’un seul centre.")
     lignes = {}
     for code in categories:
         modele = CATEGORIES[code][0]
@@ -55,10 +69,22 @@ def preparer_copie(cible, source, centres, accueils, categories, dates):
             raise ValidationError(f"Les dates de « {periode.nom} » doivent être comprises dans la nouvelle année.")
         if not source.date_debut <= periode.debut <= periode.fin <= source.date_fin:
             raise ValidationError(f"La période source « {periode.nom} » dépasse les limites de l’année source.")
-    return {"lignes": lignes, "periodes": periodes, "dates": dates,
+    evenements = list(__import__("animateurs.models", fromlist=["Evenement"]).Evenement.objects.filter(
+        centre_id__in=centres,
+        groupe__type_groupe=Groupe.TYPE_STRUCTURE,
+    ).filter(Q(accueil_centre_id__in=accueils) | Q(accueil_centre__isnull=True)).prefetch_related("periodes_scolaires"))
+    accueils_tous = AccueilCentre.objects.filter(centre_id__in=centres)
+    accueils_repris = set(accueils)
+    groupes_partages = {e.groupe_id for e in evenements if e.groupe.portee == Groupe.PARTAGE}
+    groupes_locaux = {e.groupe_id for e in evenements if e.groupe.portee == Groupe.LOCAL}
+    return {"lignes": lignes, "periodes": periodes, "dates": dates, "evenements": evenements,
             "resume": [(CATEGORIES[code][1], len(items)) for code, items in lignes.items()],
             "centres": list(Centre.objects.filter(pk__in=centres)),
-            "accueils": list(AccueilCentre.objects.filter(pk__in=accueils, centre_id__in=centres))}
+            "accueils": list(AccueilCentre.objects.filter(pk__in=accueils, centre_id__in=centres)),
+            "accueils_ignores": list(accueils_tous.exclude(pk__in=accueils_repris)),
+            "groupes_partages": list(Groupe.objects.filter(pk__in=groupes_partages)),
+            "groupes_locaux": list(Groupe.objects.filter(pk__in=groupes_locaux)),
+            "mode_multisite": multisite_actif()}
 
 
 @transaction.atomic
@@ -71,16 +97,63 @@ def creer_annee(cible, plan=None):
     if plan is None:
         return cible
     correspondance = {}
+    calendrier = plan.get("calendrier_officiel") or {}
+    calendrier_officiel = calendrier.get("periodes", []) if isinstance(calendrier, dict) else calendrier
+    periodes_creees = set()
+    for entree in calendrier_officiel:
+        debut = date_value.fromisoformat(entree["debut"])
+        fin = date_value.fromisoformat(entree["fin"])
+        periode, _ = PeriodeCalendrier.objects.get_or_create(
+            categorie=PeriodeCalendrier.SCOLAIRE, annee_scolaire=cible.libelle,
+            zone=plan.get("zone", "A"), debut=debut, fin=fin,
+            defaults={"nom": entree["nom"]},
+        )
+        periodes_creees.add(periode.pk)
     for source in plan["periodes"]:
         debut, fin = plan["dates"][source.pk]
         periode = PeriodeCalendrier(
             categorie=source.categorie, nom=source.nom, zone=source.zone,
             annee_scolaire=cible.libelle, debut=debut, fin=fin,
         )
-        periode.full_clean()
-        periode.save()
+        periode, _ = PeriodeCalendrier.objects.get_or_create(
+            categorie=periode.categorie, annee_scolaire=periode.annee_scolaire,
+            zone=periode.zone, debut=periode.debut, fin=periode.fin,
+            defaults={"nom": periode.nom},
+        )
         periode.types_accueil.set(source.types_accueil.all())
         correspondance[source.pk] = periode.pk
+    # Les semaines officielles sont créées dans la cible, sans toucher à la source.
+    # leurs lignes datées sont recréées, jamais la définition du groupe.
+    from animateurs.models import PeriodeScolaire, TypeAccueil
+    type_vacances, _ = TypeAccueil.objects.get_or_create(code=TypeAccueil.VACANCES, defaults={"nom": "Vacances", "ordre": 10, "actif": True})
+    semaines = {}
+    for semaine_source in (calendrier.get("semaines", []) if isinstance(calendrier, dict) else []):
+        semaine, _ = PeriodeScolaire.objects.get_or_create(
+            nom=semaine_source.nom, annee_scolaire=cible.libelle, zone=plan.get("zone", "A"),
+            debut=semaine_source.debut, fin=semaine_source.fin,
+            defaults={"description_source": semaine_source.description_source,
+                      "ordre": semaine_source.numero, "type_accueil_id": type_vacances.pk if type_vacances else None},
+        )
+        semaines[(semaine_source.debut, semaine_source.fin)] = semaine
+    source_year = plan["periodes"][0].debut.year if plan["periodes"] else cible.date_debut.year - 1
+    decalage = cible.date_debut.year - source_year
+    for evenement in plan.get("evenements", []):
+        cibles = []
+        for source_semaine in evenement.periodes_scolaires.all():
+            try:
+                debut = source_semaine.debut.replace(year=source_semaine.debut.year + decalage)
+                fin = source_semaine.fin.replace(year=source_semaine.fin.year + decalage)
+            except ValueError:
+                continue
+            semaine, _ = PeriodeScolaire.objects.get_or_create(
+                nom=source_semaine.nom, annee_scolaire=cible.libelle,
+                zone=plan.get("zone", source_semaine.zone), debut=debut, fin=fin,
+                defaults={"description_source": source_semaine.description_source,
+                          "ordre": source_semaine.ordre, "type_accueil_id": source_semaine.type_accueil_id},
+            )
+            cibles.append(semaine)
+        if cibles:
+            evenement.periodes_scolaires.set(cibles)
     for code, lignes in plan["lignes"].items():
         modele, _, champs = CATEGORIES[code]
         for source in lignes:

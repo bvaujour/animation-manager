@@ -4,7 +4,8 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from .models import AnneeScolaire, Centre, PeriodeCalendrier
-from .services.creation_annee import CATEGORIES, accueils_reutilisables, preparer_copie
+from .services.creation_annee import CATEGORIES, accueils_reutilisables, preparer_copie, calendrier_officiel
+from .services.multisite import multisite_actif
 
 
 class SourceField(forms.ModelChoiceField):
@@ -13,17 +14,20 @@ class SourceField(forms.ModelChoiceField):
 
 
 class NouvelleAnneeForm(forms.ModelForm):
+    zone = forms.ChoiceField(label="Zone scolaire", choices=(("A", "Zone A"), ("B", "Zone B"), ("C", "Zone C")), initial="A", required=False)
     mode = forms.ChoiceField(label="Comment souhaitez-vous créer cette année scolaire ?", choices=(
         ("copie", "À partir d’une année existante"), ("vierge", "Créer une année vierge")), widget=forms.RadioSelect)
     source = SourceField(label="Année source (mode reprise uniquement)", queryset=AnneeScolaire.objects.all(), required=False)
 
     class Meta:
         model = AnneeScolaire
-        fields = ("libelle", "date_debut", "date_fin")
+        fields = ("libelle", "date_debut", "date_fin", "zone")
         widgets = {champ: forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d") for champ in ("date_debut", "date_fin")}
 
     def clean(self):
         data = super().clean()
+        if not data.get("zone"):
+            data["zone"] = "A"
         if data.get("mode") == "copie":
             source = data.get("source")
             if not source and data.get("date_debut"):
@@ -44,10 +48,16 @@ class RepriseAnneeForm(forms.Form):
     def __init__(self, *args, cible, source, **kwargs):
         super().__init__(*args, **kwargs)
         self.cible, self.source = cible, source
+        if not multisite_actif():
+            self.fields["centres"].queryset = self.fields["centres"].queryset.filter(pk=Centre.objects.order_by("pk").values_list("pk", flat=True).first())
         self.fields["accueils"].queryset = accueils_reutilisables(source, cible)
         self.periodes = list(PeriodeCalendrier.objects.filter(annee_scolaire=source.libelle).order_by("debut", "pk"))
         self.champs_dates = []
         decalage = cible.date_debut.year - source.date_debut.year
+        self.zone = self.source_zone = "A"
+        if self.periodes:
+            self.source_zone = self.periodes[0].zone
+        self.zone = self.initial.get("zone") or self.source_zone
         for periode in self.periodes:
             noms = []
             for borne in ("debut", "fin"):
@@ -70,6 +80,8 @@ class RepriseAnneeForm(forms.Form):
         try:
             self.plan = preparer_copie(self.cible, self.source,
                 [c.pk for c in data["centres"]], [a.pk for a in data["accueils"]], data["categories"], dates)
+            self.plan["zone"] = self.zone
+            self.plan["calendrier_officiel"] = calendrier_officiel(self.cible.libelle, self.zone)
         except TypeError:
             raise ValidationError("Renseignez les dates des périodes utilisées par les configurations sélectionnées.")
         return data
