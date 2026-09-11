@@ -59,7 +59,7 @@
                 <label class="form-check document-permanent-toggle"><input class="form-check-input" type="checkbox" id="doc-permanent" name="permanent"><span class="form-check-label">Document permanent</span></label>
                 <div class="field document-period-picker-field" id="doc-period-picker-field">
                     <span class="field-label" id="doc-semaines-title">Semaines concernées</span>
-                    {% include "partials/_week_picker.html" with picker_id="doc-semaines-picker" picker_class="document-weeks-picker" toggle_id="doc-semaines-toggle" label_id="doc-semaines-label" menu_id="doc-semaines-menu" tree_id="doc-semaines-tree" clear_id="doc-semaines-effacer" mode="multiple" placeholder="Choisir des semaines" title_id="doc-semaines-title" %}
+                    {% include "partials/_week_picker.html" with picker_id="doc-semaines-picker" picker_class="document-weeks-picker" toggle_id="doc-semaines-toggle" label_id="doc-semaines-label" menu_id="doc-semaines-menu" tree_id="doc-semaines-tree" clear_id="doc-semaines-effacer" mode="multiple" placeholder="Choisir des semaines" title_id="doc-semaines-title" lazy=True %}
                 </div>
                 <div class="field" id="doc-centres-field">
                     <span class="field-label">Centres concernés</span>
@@ -205,31 +205,103 @@
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/common/location-autocomplete.js' %}?v={{ asset_version }}"></script>
-<script src="{% static 'js/gestion.js' %}?v={{ asset_version }}"></script>
-<script src="{% static 'js/documents-management.js' %}?v={{ asset_version }}"></script>
+<script src="{% static 'js/gestion.js' %}?v={{ asset_version }}-gestion-lazy-2"></script>
+<script src="{% static 'js/documents-management.js' %}?v={{ asset_version }}-gestion-lazy-2"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-    GestionApp.mountCentres(document.getElementById("panel-centres"));
-    GestionApp.mountGroupes(document.getElementById("panel-groupes"));
-    GestionApp.mountQualifications(document.getElementById("panel-qualifications"));
-    GestionApp.mountPeriodes(document.getElementById("panel-periodes"));
-    GestionApp.mountPeriodesScolaires(document.getElementById("panel-periodes-scolaires"));
-    GestionApp.mountModalitesPeriscolaires(document.getElementById("panel-temps-periscolaires"));
-
     const root = document.getElementById("gestion-tabs").closest("main");
+    const references = new Map();
+    const instances = new Map();
+    const initialises = new Set();
+    const obsoletes = new Set();
+    window.GestionData = {
+        fetch(key, url, { force = false } = {}) {
+            if (force) references.delete(key);
+            if (!references.has(key)) {
+                const request = apiFetch(url);
+                references.set(key, request);
+                request.catch(() => {
+                    if (references.get(key) === request) references.delete(key);
+                });
+            }
+            return references.get(key);
+        },
+        invalidate(...keys) {
+            keys.forEach((key) => references.delete(key));
+            window.dispatchEvent(new CustomEvent("gestion:references-invalidated", { detail: { keys } }));
+        },
+    };
+
+    const modules = {
+        lieux: () => GestionApp.mountCentres(document.getElementById("panel-centres"), {
+            onChange: () => GestionData.invalidate("centres"),
+        }),
+        groupes: () => GestionApp.mountGroupes(document.getElementById("panel-groupes"), {
+            onChange: () => GestionData.invalidate("groupes-partages"),
+        }),
+        qualifications: () => GestionApp.mountQualifications(document.getElementById("panel-qualifications"), {
+            onChange: () => GestionData.invalidate("qualifications"),
+        }),
+        periodes: () => GestionApp.mountPeriodes(document.getElementById("panel-periodes"), {
+            onChange: () => GestionData.invalidate("periodes-scolaires"),
+        }),
+        "periodes-scolaires": () => GestionApp.mountPeriodesScolaires(document.getElementById("panel-periodes-scolaires")),
+        "temps-periscolaires": () => GestionApp.mountModalitesPeriscolaires(document.getElementById("panel-temps-periscolaires"), {
+            onChange: () => GestionData.invalidate("modalites-actives"),
+        }),
+        documents: () => DocumentsManagement.mount(document.getElementById("documents-management-app")),
+    };
+
+    function rafraichirOngletObsolete(nom) {
+        if (!obsoletes.has(nom)) return;
+        const instance = instances.get(nom);
+        const rafraichir = {
+            lieux: instance?.rafraichirReferentiels,
+            groupes: instance?.charger,
+            documents: instance?.rafraichirCentres,
+        }[nom];
+        if (!rafraichir) return;
+        obsoletes.delete(nom);
+        Promise.resolve(rafraichir()).catch(() => obsoletes.add(nom));
+    }
+
+    function monterOnglet(nom) {
+        if (!modules[nom]) return;
+        if (!initialises.has(nom)) {
+            initialises.add(nom);
+            obsoletes.delete(nom);
+            instances.set(nom, modules[nom]());
+            return;
+        }
+        rafraichirOngletObsolete(nom);
+    }
+
     initTabs(root);
 
-    const requestedTab = new URLSearchParams(window.location.search).get("onglet");
-    const requestedButton = root.querySelector(`.tab-btn[data-tab="${requestedTab}"]`);
-    if (requestedButton) requestedButton.click();
+    window.addEventListener("gestion:references-invalidated", (event) => {
+        const keys = event.detail.keys;
+        if (keys.includes("qualifications") || keys.includes("periodes-scolaires") || keys.includes("groupes-partages") || keys.includes("modalites-actives")) {
+            obsoletes.add("lieux");
+        }
+        if (keys.includes("centres")) {
+            obsoletes.add("groupes");
+            obsoletes.add("documents");
+        }
+    });
 
     root.querySelectorAll(".tab-btn").forEach((button) => {
         button.addEventListener("click", () => {
+            monterOnglet(button.dataset.tab);
             const url = new URL(window.location.href);
             url.searchParams.set("onglet", button.dataset.tab);
             window.history.replaceState({}, "", url);
         });
     });
+
+    const requestedTab = new URLSearchParams(window.location.search).get("onglet");
+    const requestedButton = root.querySelector(`.tab-btn[data-tab="${requestedTab}"]`);
+    if (requestedButton) requestedButton.click();
+    else monterOnglet(root.querySelector(".tab-btn.active")?.dataset.tab);
 
     const targetList = document.querySelector("[data-info-target-list]");
     const updateTargetList = () => {

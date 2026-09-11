@@ -9,6 +9,13 @@ const GestionApp = (function ()
 {
 let formFieldSequence = 0;
 
+	function referenceGestion(cle, url, options = {})
+	{
+		return window.GestionData?.fetch
+			? GestionData.fetch(cle, url, options)
+			: apiFetch(url);
+	}
+
 function identifiantChamp(prefix)
 	{
 		formFieldSequence += 1;
@@ -171,15 +178,15 @@ function bouton(label, classes, onClick)
 				}).then(() =>
 				{
 					afficherToast("Qualification modifiée.");
-					charger();
 					if (options.onChange) options.onChange();
+					charger();
 				}).catch((err) => { error.textContent = erreurMessage(err, "Modification impossible."); });
 			}, charger));
 		}
 
-		function charger()
+		function charger(force = false)
 		{
-			return apiFetch("/api/qualifications/").then((data) =>
+			return referenceGestion("qualifications", "/api/qualifications/", { force }).then((data) =>
 			{
 				qualifications = data;
 				list.innerHTML = "";
@@ -202,7 +209,7 @@ function bouton(label, classes, onClick)
 					{
 						if (!confirm(`Supprimer le diplôme ou statut "${escapeHtml(item.nom)}" ?`)) return;
 						apiFetch(`/api/qualifications/${item.id}/`, { method: "DELETE" })
-							.then(() => { afficherToast("Diplôme ou statut supprimé."); charger(); if (options.onChange) options.onChange(); })
+							.then(() => { afficherToast("Diplôme ou statut supprimé."); if (options.onChange) options.onChange(); charger(); })
 							.catch((err) => afficherToast(erreurMessage(err, "Suppression impossible."), true));
 					}));
 				}
@@ -226,7 +233,7 @@ function bouton(label, classes, onClick)
 						const diplome = diplomes.find((item) => Number(item.id) === diplomeId);
 						if (!diplome || Number(diplome.statut_id || 0) === Number(statut?.id || 0)) return;
 						apiFetch(`/api/qualifications/${diplome.id}/`, { method: "PATCH", body: JSON.stringify({ statut_id: statut?.id || null }) })
-							.then(() => { afficherToast(statut ? `${diplome.nom} ajouté à ${statut.nom}.` : `${diplome.nom} retiré de son statut.`); charger(); if (options.onChange) options.onChange(); })
+							.then(() => { afficherToast(statut ? `${diplome.nom} ajouté à ${statut.nom}.` : `${diplome.nom} retiré de son statut.`); if (options.onChange) options.onChange(); charger(); })
 							.catch((err) => afficherToast(erreurMessage(err, "Déplacement impossible."), true));
 					});
 				}
@@ -302,8 +309,8 @@ function bouton(label, classes, onClick)
 					iconeEl.value = "";
 					synchroniserChampsType(false, categorieEl.closest(".field"), iconeField, iconeEl);
 					afficherToast("Qualification ajoutée.");
-					charger();
 					if (options.onChange) options.onChange(nouvelle);
+					charger();
 				})
 				.catch((err) => { errorEl.textContent = erreurMessage(err, "Impossible d'ajouter ce diplôme ou statut."); });
 		});
@@ -315,7 +322,7 @@ function bouton(label, classes, onClick)
 	// ------------------------------------------------------------------
 	// Groupes partagés
 	// ------------------------------------------------------------------
-	function mountGroupes(container)
+	function mountGroupes(container, options = {})
 	{
 		let centresGroupes = [];
 		function porteeHtml(groupe = {}) {
@@ -384,9 +391,12 @@ function bouton(label, classes, onClick)
 			};
 		}
 
-		async function charger()
+		async function charger(force = false)
 		{
-			const [groupes, centres] = await Promise.all([apiFetch("/api/groupes-partages/"), apiFetch("/api/centres/")]);
+			const [groupes, centres] = await Promise.all([
+				referenceGestion("groupes-partages", "/api/groupes-partages/", { force }),
+				referenceGestion("centres", "/api/centres/", { force }),
+			]);
 			centresGroupes = centres;
 			if (!formulaire.querySelector(".group-scope")) formulaire.querySelector(".edit-grid").insertAdjacentHTML("beforeend", porteeHtml());
 			liste.innerHTML = groupes.map((groupe) => `
@@ -414,20 +424,20 @@ function bouton(label, classes, onClick)
 						if (payload.type_groupe === "sejour" && (!payload.date_debut_validite || !payload.date_fin_validite)) { ligne.querySelector(".shared-group-error").textContent = "Renseignez les dates de début et de fin du séjour."; return; }
 						if (!payload.type_accueil_codes.length) { ligne.querySelector(".shared-group-error").textContent = "Choisissez au moins Vacances ou Périscolaire."; return; }
 						apiFetch(`/api/groupes-partages/${groupe.id}/`, { method: "PATCH", body: JSON.stringify(payload) })
-							.then(() => { afficherToast("Groupe modifié dans tous ses lieux."); charger(); })
+							.then(() => { afficherToast("Groupe modifié dans tous ses lieux."); if (options.onChange) options.onChange(); charger(); })
 							.catch((err) => { ligne.querySelector(".shared-group-error").textContent = erreurMessage(err, "Modification impossible."); });
 					});
 				});
 				ligne.querySelector(".shared-group-delete").addEventListener("click", () => {
 					if (!confirm(`Supprimer le groupe « ${groupe.nom} » ?`)) return;
-					apiFetch(`/api/groupes-partages/${groupe.id}/`, { method: "DELETE" }).then(charger)
+					apiFetch(`/api/groupes-partages/${groupe.id}/`, { method: "DELETE" }).then(() => { if (options.onChange) options.onChange(); return charger(); })
 						.catch((err) => afficherToast(erreurMessage(err, "Suppression impossible."), true));
 				});
 			});
 		}
 
 		formulaire.querySelector(".shared-group-kind")?.addEventListener("change", () => actualiserValidite(formulaire));
-		apiFetch("/api/types-accueil/").then((types) => { typesAccueilStructure = types || []; actualiserTypesCreation(); actualiserValidite(formulaire); charger(); })
+		referenceGestion("types-accueil", "/api/types-accueil/").then((types) => { typesAccueilStructure = types || []; actualiserTypesCreation(); actualiserValidite(formulaire); charger(); })
 			.catch((err) => { liste.innerHTML = `<p class="form-error">${escapeHtml(erreurMessage(err, "Impossible de charger les types d’accueil."))}</p>`; });
 		formulaire.querySelector(".shared-group-submit").addEventListener("click", () => {
 			const payload = payloadDepuis(formulaire);
@@ -442,6 +452,7 @@ function bouton(label, classes, onClick)
 				actualiserValidite(formulaire);
 				actualiserTypesCreation();
 				afficherToast("Groupe ajouté.");
+				if (options.onChange) options.onChange();
 				charger();
 			}).catch((err) => { formulaire.querySelector(".shared-group-error").textContent = erreurMessage(err, "Ajout impossible."); });
 		});
@@ -1896,13 +1907,13 @@ function bouton(label, classes, onClick)
 				.catch((err) => { errorEl.textContent = erreurMessage(err, "Impossible d’ajouter ce lieu."); });
 		});
 
-		Promise.all([
-			apiFetch("/api/qualifications/"),
-			apiFetch("/api/periodes-scolaires/"),
-			apiFetch("/api/groupes-partages/"),
-			apiFetch("/api/types-accueil/"),
-			apiFetch("/api/modalites-periscolaires/"),
-			apiFetch("/api/periodes-calendrier/"),
+		const chargerReferentiels = () => Promise.all([
+			referenceGestion("qualifications", "/api/qualifications/"),
+			referenceGestion("periodes-scolaires", "/api/periodes-scolaires/"),
+			referenceGestion("groupes-partages", "/api/groupes-partages/"),
+			referenceGestion("types-accueil", "/api/types-accueil/"),
+			referenceGestion("modalites-actives", "/api/modalites-periscolaires/"),
+			referenceGestion("periodes-calendrier", "/api/periodes-calendrier/"),
 		])
 			.then(([qualifications, periodes, groupes, typesAccueil, modalites, referencesCalendrier]) =>
 			{
@@ -1922,7 +1933,8 @@ function bouton(label, classes, onClick)
 				if (!list.children.length)
 					list.innerHTML = `<p class="form-error gestion-load-error">${escapeHtml(erreurMessage(err, "Impossible d'initialiser la gestion des lieux et groupes."))}</p>`;
 			});
-		return { charger };
+		chargerReferentiels();
+		return { charger, rafraichirReferentiels: chargerReferentiels };
 	}
 
 
@@ -1930,20 +1942,20 @@ function bouton(label, classes, onClick)
 	// ------------------------------------------------------------------
 	// Temps périscolaires
 	// ------------------------------------------------------------------
-	function mountModalitesPeriscolaires(container)
+	function mountModalitesPeriscolaires(container, options = {})
 	{
 		if (!container) return null;
 		container.innerHTML = `<div class="periods-intro"><div><p class="section-title">Temps périscolaires</p><p>Référentiel commun des créneaux proposés dans les accueils Périscolaire.</p></div><button type="button" class="btn btn-primary perisco-time-new">+ Ajouter un temps</button></div><div class="perisco-time-form-host" hidden></div><div class="perisco-time-list"><p class="empty-note">Chargement…</p></div>`;
 		const list=container.querySelector(".perisco-time-list"); const host=container.querySelector(".perisco-time-form-host");
-		function ouvrir(item=null){host.hidden=false;host.innerHTML=`<div class="gestion-form perisco-time-form"><div class="wizard-fields"><label class="field"><span>Nom</span><input class="perisco-time-name" value="${escapeHtml(item?.nom||"")}" placeholder="ex : Aide aux devoirs"></label><label class="field"><span>Début par défaut</span><input type="time" class="perisco-time-start" value="${escapeHtml(item?.heure_debut||"")}"></label><label class="field"><span>Fin par défaut</span><input type="time" class="perisco-time-end" value="${escapeHtml(item?.heure_fin||"")}"></label></div><label class="wizard-switch"><input type="checkbox" class="perisco-time-full" ${item?.jour_entier?"checked":""}><span>Journée entière</span></label><p class="form-error perisco-time-error"></p><div class="edit-actions"><button type="button" class="btn btn-primary perisco-time-save">${item?"Enregistrer":"Créer le temps"}</button><button type="button" class="btn btn-ghost perisco-time-cancel">Annuler</button></div></div>`;host.querySelector(".perisco-time-cancel").addEventListener("click",()=>{host.hidden=true;host.innerHTML="";});host.querySelector(".perisco-time-save").addEventListener("click",async()=>{const err=host.querySelector(".perisco-time-error");const nom=host.querySelector(".perisco-time-name").value.trim();const heure_debut=host.querySelector(".perisco-time-start").value;const heure_fin=host.querySelector(".perisco-time-end").value;err.textContent="";if(!nom){err.textContent="Le nom est obligatoire.";return;}if((heure_debut&&!heure_fin)||(!heure_debut&&heure_fin)||(heure_debut&&heure_fin<=heure_debut)){err.textContent="Vérifiez les horaires.";return;}try{await apiFetch(item?`/api/modalites-periscolaires/${item.id}/`:"/api/modalites-periscolaires/",{method:item?"PATCH":"POST",body:JSON.stringify({nom,heure_debut,heure_fin,jour_entier:host.querySelector(".perisco-time-full").checked})});host.hidden=true;host.innerHTML="";afficherToast(item?"Temps périscolaire modifié.":"Temps périscolaire créé.");await charger();}catch(e){err.textContent=erreurMessage(e,"Enregistrement impossible.");}});}
-		async function charger(){const items=await apiFetch("/api/modalites-periscolaires/?tous=1");list.innerHTML=items.length?items.map((item)=>`<article class="perisco-time-card ${item.actif?"":"is-inactive"}" data-id="${item.id}"><div><span class="accueil-status">${item.actif?"Actif":"Archivé"}</span><strong>${escapeHtml(item.nom)}</strong><small>${escapeHtml(item.heure_debut&&item.heure_fin?`${item.heure_debut}–${item.heure_fin}`:"Horaires définis dans chaque accueil")}${item.jour_entier?" · journée entière":""}</small></div><div class="perisco-time-card-actions"><button type="button" class="btn btn-ghost perisco-time-edit">Modifier</button><button type="button" class="btn btn-secondary perisco-time-toggle">${item.actif?"Archiver":"Réactiver"}</button></div></article>`).join(""):'<p class="empty-note">Aucun temps périscolaire.</p>';list.querySelectorAll(".perisco-time-card").forEach((card)=>{const item=items.find((x)=>Number(x.id)===Number(card.dataset.id));card.querySelector(".perisco-time-edit").addEventListener("click",()=>ouvrir(item));card.querySelector(".perisco-time-toggle").addEventListener("click",async()=>{try{await apiFetch(`/api/modalites-periscolaires/${item.id}/`,{method:"PATCH",body:JSON.stringify({actif:!item.actif})});await charger();}catch(e){afficherToast(erreurMessage(e,"Modification impossible."),true);}});});}
+		function ouvrir(item=null){host.hidden=false;host.innerHTML=`<div class="gestion-form perisco-time-form"><div class="wizard-fields"><label class="field"><span>Nom</span><input class="perisco-time-name" value="${escapeHtml(item?.nom||"")}" placeholder="ex : Aide aux devoirs"></label><label class="field"><span>Début par défaut</span><input type="time" class="perisco-time-start" value="${escapeHtml(item?.heure_debut||"")}"></label><label class="field"><span>Fin par défaut</span><input type="time" class="perisco-time-end" value="${escapeHtml(item?.heure_fin||"")}"></label></div><label class="wizard-switch"><input type="checkbox" class="perisco-time-full" ${item?.jour_entier?"checked":""}><span>Journée entière</span></label><p class="form-error perisco-time-error"></p><div class="edit-actions"><button type="button" class="btn btn-primary perisco-time-save">${item?"Enregistrer":"Créer le temps"}</button><button type="button" class="btn btn-ghost perisco-time-cancel">Annuler</button></div></div>`;host.querySelector(".perisco-time-cancel").addEventListener("click",()=>{host.hidden=true;host.innerHTML="";});host.querySelector(".perisco-time-save").addEventListener("click",async()=>{const err=host.querySelector(".perisco-time-error");const nom=host.querySelector(".perisco-time-name").value.trim();const heure_debut=host.querySelector(".perisco-time-start").value;const heure_fin=host.querySelector(".perisco-time-end").value;err.textContent="";if(!nom){err.textContent="Le nom est obligatoire.";return;}if((heure_debut&&!heure_fin)||(!heure_debut&&heure_fin)||(heure_debut&&heure_fin<=heure_debut)){err.textContent="Vérifiez les horaires.";return;}try{await apiFetch(item?`/api/modalites-periscolaires/${item.id}/`:"/api/modalites-periscolaires/",{method:item?"PATCH":"POST",body:JSON.stringify({nom,heure_debut,heure_fin,jour_entier:host.querySelector(".perisco-time-full").checked})});host.hidden=true;host.innerHTML="";afficherToast(item?"Temps périscolaire modifié.":"Temps périscolaire créé.");if(options.onChange)options.onChange();await charger();}catch(e){err.textContent=erreurMessage(e,"Enregistrement impossible.");}});}
+		async function charger(){const items=await apiFetch("/api/modalites-periscolaires/?tous=1");list.innerHTML=items.length?items.map((item)=>`<article class="perisco-time-card ${item.actif?"":"is-inactive"}" data-id="${item.id}"><div><span class="accueil-status">${item.actif?"Actif":"Archivé"}</span><strong>${escapeHtml(item.nom)}</strong><small>${escapeHtml(item.heure_debut&&item.heure_fin?`${item.heure_debut}–${item.heure_fin}`:"Horaires définis dans chaque accueil")}${item.jour_entier?" · journée entière":""}</small></div><div class="perisco-time-card-actions"><button type="button" class="btn btn-ghost perisco-time-edit">Modifier</button><button type="button" class="btn btn-secondary perisco-time-toggle">${item.actif?"Archiver":"Réactiver"}</button></div></article>`).join(""):'<p class="empty-note">Aucun temps périscolaire.</p>';list.querySelectorAll(".perisco-time-card").forEach((card)=>{const item=items.find((x)=>Number(x.id)===Number(card.dataset.id));card.querySelector(".perisco-time-edit").addEventListener("click",()=>ouvrir(item));card.querySelector(".perisco-time-toggle").addEventListener("click",async()=>{try{await apiFetch(`/api/modalites-periscolaires/${item.id}/`,{method:"PATCH",body:JSON.stringify({actif:!item.actif})});if(options.onChange)options.onChange();await charger();}catch(e){afficherToast(erreurMessage(e,"Modification impossible."),true);}});});}
 		container.querySelector(".perisco-time-new").addEventListener("click",()=>ouvrir()); charger().catch((e)=>{list.innerHTML=`<p class="form-error">${escapeHtml(erreurMessage(e,"Chargement impossible."))}</p>`;}); return {charger};
 	}
 
 	// ------------------------------------------------------------------
 	// Périodes scolaires indépendantes
 	// ------------------------------------------------------------------
-	function mountPeriodes(container)
+	function mountPeriodes(container, options = {})
 	{
 		const typesAccueil = [["vacances", "Vacances"], ["periscolaire", "Périscolaire"], ["sejours", "Séjour"]];
 		const typeContexte = typesAccueil.some(([code]) => code === container.dataset.typeAccueilSelectionne)
@@ -2088,6 +2100,7 @@ function bouton(label, classes, onClick)
 				form.querySelector(".period-create-start").value = "";
 				form.querySelector(".period-create-end").value = "";
 				afficherToast("Période ajoutée.");
+				if (options.onChange) options.onChange();
 				await chargerBibliotheque();
 			} catch (err) { error.textContent = erreurMessage(err, "Ajout impossible."); }
 		}
@@ -2175,6 +2188,7 @@ function bouton(label, classes, onClick)
 					: "Toutes ces périodes étaient déjà enregistrées.");
 				previewData = null;
 				previewZone.innerHTML = "";
+				if (options.onChange) options.onChange();
 				await chargerBibliotheque();
 			}
 			catch (err)
@@ -2255,6 +2269,7 @@ function bouton(label, classes, onClick)
 								try {
 									await apiFetch(`/api/periodes-scolaires/${periode.id}/`, { method: "PATCH", body: JSON.stringify({ nom: row.querySelector(".period-edit-name").value.trim(), annee_scolaire: row.querySelector(".period-edit-year").value.trim(), zone: row.querySelector(".period-edit-zone").value, debut: row.querySelector(".period-edit-start").value, fin: row.querySelector(".period-edit-end").value, type_accueil: typeSelectionne(row, typeName) }) });
 									afficherToast("Période modifiée.");
+									if (options.onChange) options.onChange();
 									await chargerBibliotheque();
 								} catch (err) { row.querySelector(".period-edit-error").textContent = erreurMessage(err, "Modification impossible."); }
 							});
@@ -2266,6 +2281,7 @@ function bouton(label, classes, onClick)
 							{
 								await apiFetch(`/api/periodes-scolaires/${periode.id}/`, { method: "DELETE" });
 								afficherToast("Période supprimée.");
+								if (options.onChange) options.onChange();
 								await chargerBibliotheque();
 							}
 							catch (err)
@@ -2283,7 +2299,7 @@ function bouton(label, classes, onClick)
 
 		async function chargerBibliotheque()
 		{
-			savedPeriods = await apiFetch("/api/periodes-scolaires/");
+			savedPeriods = await referenceGestion("periodes-scolaires", "/api/periodes-scolaires/");
 			const current = filterYear.value;
 			const annees = [...new Set(savedPeriods.map((periode) => periode.annee_scolaire))].sort().reverse();
 			filterYear.innerHTML = '<option value="">Toutes les années</option>' + annees.map((annee) => `<option value="${escapeHtml(annee)}">${escapeHtml(annee)}</option>`).join("");

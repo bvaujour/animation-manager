@@ -570,7 +570,7 @@
         }
     });
     document.addEventListener("DOMContentLoaded", () => {
-        document.querySelectorAll("[data-week-picker]").forEach((root) => init(root));
+        document.querySelectorAll("[data-week-picker]:not([data-week-picker-lazy])").forEach((root) => init(root));
     });
 
     window.WeekPicker = {

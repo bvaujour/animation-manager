@@ -5,6 +5,7 @@
     data-week-picker-mode="{{ mode|default:'multiple' }}"
     data-week-picker-placeholder="{{ placeholder|default:'Choisir des semaines' }}"
     data-week-picker-default-current="true"
+    {% if lazy %}data-week-picker-lazy{% endif %}
     {% if generic_navigation %}data-week-picker-generic-navigation="true"{% endif %}
     {% if selected_ids %}data-week-picker-selected="{{ selected_ids }}"{% endif %}
 >

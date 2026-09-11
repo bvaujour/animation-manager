@@ -10,6 +10,7 @@ class ConfigurationLieuxUxTests(SimpleTestCase):
         super().setUpClass()
         cls.script = Path(settings.BASE_DIR, "static/js/gestion.js").read_text(encoding="utf-8")
         cls.styles = Path(settings.BASE_DIR, "static/css/gestion.css").read_text(encoding="utf-8")
+        cls.template = Path(settings.BASE_DIR, "templates/gestion.html").read_text(encoding="utf-8")
 
     def test_lieu_est_replie_et_dispose_d_un_bouton_d_ouverture(self):
         self.assertIn('class="lieu-accueils-block" hidden', self.script)
@@ -54,3 +55,21 @@ class ConfigurationLieuxUxTests(SimpleTestCase):
         self.assertNotIn('lieu-move-up', self.script)
         self.assertNotIn('lieu-move-down', self.script)
         self.assertNotIn('lieux-collapse-all', self.script)
+
+    def test_onglets_gestion_sont_montes_a_la_demande(self):
+        self.assertIn("const initialises = new Set();", self.template)
+        self.assertIn("const obsoletes = new Set();", self.template)
+        self.assertIn("function monterOnglet(nom)", self.template)
+        self.assertIn("if (!initialises.has(nom))", self.template)
+        self.assertIn("rafraichirOngletObsolete(nom);", self.template)
+        self.assertIn("else monterOnglet(root.querySelector(\".tab-btn.active\")?.dataset.tab);", self.template)
+        self.assertIn("documents: () => DocumentsManagement.mount", self.template)
+
+    def test_referentiels_gestion_partagent_une_promesse_et_s_invalident(self):
+        self.assertIn("const references = new Map();", self.template)
+        self.assertIn("references.set(key, request);", self.template)
+        self.assertIn("if (references.get(key) === request) references.delete(key);", self.template)
+        self.assertIn("GestionData.invalidate(\"qualifications\")", self.template)
+        self.assertIn("GestionData.invalidate(\"centres\")", self.template)
+        self.assertIn('obsoletes.add("groupes");', self.template)
+        self.assertNotIn('instances.get("groupes")?.charger?.();', self.template)

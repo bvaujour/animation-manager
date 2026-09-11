@@ -1,6 +1,8 @@
-document.addEventListener("DOMContentLoaded", () => {
-    const app = document.getElementById("documents-management-app");
+(() => {
+function mountDocuments(app) {
     if (!app) return;
+    if (app.dataset.documentsMounted) return app.documentsManagement;
+    app.dataset.documentsMounted = "1";
 
     const form = document.getElementById("form-upload");
     const grid = document.getElementById("documents-grid");
@@ -10,7 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const permanentInput = document.getElementById("doc-permanent");
     const periodPickerField = document.getElementById("doc-period-picker-field");
     const mainPickerRoot = document.getElementById("doc-semaines-picker");
-    const mainPicker = WeekPicker.get(mainPickerRoot);
+    const mainPicker = WeekPicker.init(mainPickerRoot);
     let periods = mainPicker?.periods || [];
     let centres = [];
 
@@ -251,8 +253,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     let initMainCentres;
-    async function initCentres() {
-        centres = await apiFetch("/api/centres/");
+    async function initCentres({ force = false } = {}) {
+        const source = window.GestionData?.["fetch"]
+            ? GestionData["fetch"]("centres", "/api/centres/", { force })
+            : apiFetch("/api/centres/");
+        centres = await source;
         initMainCentres = initCentreSelector(document.getElementById("doc-centres-field"));
     }
 
@@ -266,4 +271,11 @@ document.addEventListener("DOMContentLoaded", () => {
     initCentres().then(loadDocuments).catch((error) => {
         errorElement.textContent = erreurMessage(error, "Impossible de charger les centres.");
     });
-});
+    app.documentsManagement = {
+        rafraichirCentres: () => initCentres({ force: true }),
+    };
+    return app.documentsManagement;
+}
+
+window.DocumentsManagement = { mount: mountDocuments };
+})();
