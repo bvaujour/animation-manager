@@ -16,6 +16,7 @@ from .models import (
     Animateur,
     AccueilCentre,
     BesoinEncadrement,
+    BesoinQualification,
     Centre,
     Evenement,
     Groupe,
@@ -53,6 +54,7 @@ from .services.evenements import (
 )
 from .services.flottants import est_groupe_flottants, groupes_partages_visibles, groupes_visibles
 from .services.localisation import LocalisationError, resoudre_localisation
+from .services.parametres import get_parametres_structure
 from .services.serializers import centre_to_dict, evenement_to_dict, qualification_to_dict
 from .services.types_accueil import filtrer_semaines_contexte_travail
 
@@ -335,7 +337,35 @@ def api_centres(request):
         inclure_groupes = request.GET.get("include_groupes") == "1"
         animateur = None if est_direction(request.user) else getattr(request.user, "profil_animateur", None)
         tous_types = bool(est_direction(request.user) and request.GET.get("tous_types") == "1")
-        centres = Centre.objects.prefetch_related("types_accueil", "accueils__type_accueil")
+        if inclure_groupes:
+            # Cette réponse dispose de son propre chargement groupé plus bas.
+            centres = Centre.objects.prefetch_related("types_accueil", "accueils__type_accueil")
+        else:
+            besoins_encadrement = BesoinEncadrement.objects.select_related(
+                "type_accueil", "modalite_periscolaire", "periode_calendrier"
+            )
+            besoins_qualifications = BesoinQualification.objects.select_related(
+                "qualification", "modalite_periscolaire", "periode_calendrier"
+            )
+            groupes_payload = Evenement.objects.select_related("groupe").prefetch_related(
+                "periodes_scolaires",
+                Prefetch("besoins_encadrement", queryset=besoins_encadrement, to_attr="_centres_payload_besoins_encadrement"),
+                Prefetch("besoins_qualifications", queryset=besoins_qualifications, to_attr="_centres_payload_besoins_qualifications"),
+            ).order_by("ordre", "nom")
+            accueils_payload = AccueilCentre.objects.select_related("type_accueil").prefetch_related(
+                Prefetch("groupes", queryset=groupes_payload, to_attr="_centres_payload_groupes"),
+                Prefetch(
+                    "ouvertures_periodes",
+                    queryset=OuvertureCentrePeriode.objects.filter(actif=True).select_related(
+                        "modalite_periscolaire", "periode_calendrier"
+                    ).order_by("periode_calendrier__debut", "modalite_periscolaire__ordre", "jour_semaine"),
+                    to_attr="_centres_payload_ouvertures",
+                ),
+            )
+            centres = Centre.objects.prefetch_related(
+                "types_accueil",
+                Prefetch("accueils", queryset=accueils_payload, to_attr="_centres_payload_accueils"),
+            )
         code_type = request.session.get("type_accueil", "") if animateur is None and not tous_types else ""
         type_accueil_contexte = (
             TypeAccueil.objects.filter(code=code_type, actif=True).first()
@@ -396,23 +426,62 @@ def api_centres(request):
         elif not est_direction(request.user):
             centres = centres.none()
         if not inclure_groupes:
-            return JsonResponse([centre_to_dict(c) for c in centres], safe=False)
+            structure = get_parametres_structure(assurer_types=False)
+            return JsonResponse([centre_to_dict(c, structure=structure) for c in centres], safe=False)
+
+        besoins_encadrement = BesoinEncadrement.objects.select_related(
+            "type_accueil", "modalite_periscolaire", "periode_calendrier"
+        ).order_by(
+            "type_accueil__ordre", "modalite_periscolaire__ordre",
+            "periode_calendrier__debut", "id",
+        )
+        besoins_qualifications = BesoinQualification.objects.select_related(
+            "qualification", "modalite_periscolaire", "periode_calendrier"
+        ).order_by("qualification__nom", "qualification_id")
+        groupes_accueils_payload = Evenement.objects.select_related(
+            "groupe", "accueil_centre", "accueil_centre__type_accueil"
+        ).prefetch_related(
+            "periodes_scolaires",
+            Prefetch(
+                "besoins_encadrement",
+                queryset=besoins_encadrement,
+                to_attr="_centres_payload_besoins_encadrement",
+            ),
+            Prefetch(
+                "besoins_qualifications",
+                queryset=besoins_qualifications,
+                to_attr="_centres_payload_besoins_qualifications",
+            ),
+        ).order_by("ordre", "nom")
+        accueils_payload = AccueilCentre.objects.select_related("type_accueil").prefetch_related(
+            Prefetch("groupes", queryset=groupes_accueils_payload, to_attr="_centres_payload_groupes"),
+            Prefetch(
+                "ouvertures_periodes",
+                queryset=OuvertureCentrePeriode.objects.filter(actif=True).select_related(
+                    "modalite_periscolaire", "periode_calendrier"
+                ).order_by("periode_calendrier__debut", "modalite_periscolaire__ordre", "jour_semaine"),
+                to_attr="_centres_payload_ouvertures",
+            ),
+        )
 
         groupes_source = groupes_visibles(Evenement.objects.all()) if animateur is None else Evenement.objects.all()
         groupes = (
-            groupes_source.select_related("groupe", "accueil_centre", "accueil_centre__type_accueil").prefetch_related(
+            groupes_source.select_related(
+                "groupe",
+                "accueil_centre",
+                "accueil_centre__type_accueil",
+                "modalite_periscolaire",
+            ).prefetch_related(
                 "periodes_scolaires",
                 "types_accueil",
                 "dates_exclues",
-                "besoins_qualifications__qualification",
                 Prefetch(
                     "besoins_encadrement",
-                    queryset=BesoinEncadrement.objects.select_related(
-                        "type_accueil", "modalite_periscolaire", "periode_calendrier"
-                    ).order_by(
-                        "type_accueil__ordre", "modalite_periscolaire__ordre",
-                        "periode_calendrier__debut", "id",
-                    ),
+                    queryset=besoins_encadrement,
+                ),
+                Prefetch(
+                    "besoins_qualifications",
+                    queryset=besoins_qualifications,
                 ),
             )
             .annotate(nb_affectations=Count("affectations", distinct=True))
@@ -467,9 +536,15 @@ def api_centres(request):
 
         centres = Centre.objects.prefetch_related(
             "types_accueil",
-            "accueils__type_accueil",
-            "ouvertures_periodes__modalite_periscolaire",
-            "ouvertures_periodes__periode_calendrier",
+            Prefetch("accueils", queryset=accueils_payload, to_attr="_centres_payload_accueils"),
+            Prefetch(
+                "ouvertures_periodes",
+                queryset=OuvertureCentrePeriode.objects.select_related(
+                    "modalite_periscolaire",
+                    "periode_calendrier",
+                    "accueil_centre__type_accueil",
+                ),
+            ),
             Prefetch("evenements", queryset=groupes, to_attr="_groupes_planning"),
         )
         if animateur is not None:
@@ -482,9 +557,22 @@ def api_centres(request):
                 centres, type_accueil_contexte or code_type,
                 locals().get("debut_accueil"), locals().get("fin_accueil")
             )
+        centres = list(centres)
+        structure = None
+        for centre in centres:
+            for accueil in getattr(centre, "_centres_payload_accueils", []):
+                for groupe in getattr(accueil, "_centres_payload_groupes", []):
+                    regles = getattr(groupe, "_centres_payload_besoins_encadrement", [])
+                    if any(regle.mode_calcul == BesoinEncadrement.MODE_REGLEMENTAIRE for regle in regles):
+                        structure = get_parametres_structure(assurer_types=False)
+                        break
+                if structure is not None:
+                    break
+            if structure is not None:
+                break
         data = []
         for centre in centres:
-            item = centre_to_dict(centre)
+            item = centre_to_dict(centre, structure=structure)
             item["ouvertures_periscolaires"] = [
                 _ouverture_to_dict(ouverture)
                 for ouverture in centre.ouvertures_periodes.all()

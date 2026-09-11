@@ -73,11 +73,18 @@ def _qualifications_payload(qualifications, *, statut_resolu=None, statut_date_r
     }
 
 
-def contrat_to_dict(contrat):
+def contrat_to_dict(contrat, *, annees_cloturees=None):
     from .contrats import contrat_est_verrouille
+    historique_remunerations = getattr(
+        contrat,
+        "_animateurs_payload_historique_remunerations",
+        None,
+    )
+    if historique_remunerations is None:
+        historique_remunerations = contrat.historique_remunerations.all()
     return {
         "id": contrat.id,
-        "verrouille": contrat_est_verrouille(contrat),
+        "verrouille": contrat_est_verrouille(contrat, annees_cloturees=annees_cloturees),
         "animateur_id": contrat.animateur_id,
         "type_contrat": contrat.type_contrat,
         "type_contrat_ref_id": contrat.type_contrat_ref_id,
@@ -102,7 +109,7 @@ def contrat_to_dict(contrat):
         ),
         "historique_remunerations": [
             {"id": item.id, "date_effet": item.date_effet.isoformat(), "montant_mensuel": str(item.montant_mensuel), "origine": item.origine}
-            for item in contrat.historique_remunerations.all()
+            for item in historique_remunerations
         ],
         "statut": contrat.statut,
         "statut_libelle": contrat.libelle_statut,
@@ -206,7 +213,13 @@ def affectation_to_event(affectation):
     }
 
 
-def animateur_to_dict(animateur, *, date_reference=None, activation_url=None):
+def animateur_to_dict(
+    animateur,
+    *,
+    date_reference=None,
+    activation_url=None,
+    annees_cloturees=None,
+):
     qualifications = list(animateur.qualifications.all())
     statut_date = statut_pour_date(animateur, date_reference) if date_reference else statut_actuel(animateur)
     statut = statut_payload(qualifications, statut_resolu=statut_date)
@@ -278,7 +291,10 @@ def animateur_to_dict(animateur, *, date_reference=None, activation_url=None):
         "adresse": animateur.adresse,
         "numero_securite_sociale": animateur.numero_securite_sociale,
         "paie_jour": str(animateur.paie_jour) if animateur.paie_jour is not None else None,
-        "contrats": [contrat_to_dict(contrat) for contrat in contrats],
+        "contrats": [
+            contrat_to_dict(contrat, annees_cloturees=annees_cloturees)
+            for contrat in contrats
+        ],
         "historique_statuts": [historique_statut_to_dict(entree) for entree in historique_statuts],
         "age": animateur.age,
         # Couleur historique conservée en base, mais les interfaces utilisent
@@ -423,7 +439,7 @@ def _periodes_vacances_resume(periodes):
     return list(groupes.values())
 
 
-def _ratio_reglementaire_accueil(accueil, evenement, *, modalite=None, ouverture=None):
+def _ratio_reglementaire_accueil(accueil, evenement, *, modalite=None, ouverture=None, structure=None):
     """Délègue le taux affiché au même moteur que le calcul réglementaire."""
 
     from animateurs.services.categories_groupes import categorie_reglementaire_groupe
@@ -432,6 +448,12 @@ def _ratio_reglementaire_accueil(accueil, evenement, *, modalite=None, ouverture
     jour = _jour_dans_ouverture(ouverture) if ouverture is not None else None
     if accueil.type_accueil.code == TypeAccueil.PERISCOLAIRE and jour is None:
         return None
+    duree_accueil = None
+    if ouverture is not None:
+        debut = ouverture.heure_debut_effective
+        fin = ouverture.heure_fin_effective
+        if debut is not None and fin is not None:
+            duree_accueil = max(0, (fin.hour * 60 + fin.minute) - (debut.hour * 60 + debut.minute)) / 60
     return ratio_reglementaire(
         type_accueil=accueil.type_accueil,
         categorie_age=categorie_reglementaire_groupe(evenement),
@@ -439,10 +461,12 @@ def _ratio_reglementaire_accueil(accueil, evenement, *, modalite=None, ouverture
         jour=jour,
         modalite=modalite,
         accueil_centre=accueil,
+        structure=structure,
+        duree_accueil=duree_accueil,
     )
 
 
-def _resume_encadrement_groupes(accueil, groupes, ouvertures):
+def _resume_encadrement_groupes(accueil, groupes, ouvertures, *, structure=None):
     from animateurs.services.besoins_encadrement import regle_encadrement_effective
 
     resultats = []
@@ -451,10 +475,16 @@ def _resume_encadrement_groupes(accueil, groupes, ouvertures):
         ouvertures_par_modalite.setdefault(ouverture.modalite_periscolaire_id, []).append(ouverture)
 
     for evenement in groupes:
-        regles = [
-            regle for regle in evenement.besoins_encadrement.all()
-            if regle.type_accueil_id == accueil.type_accueil_id
-        ]
+        regles_prefetches = getattr(evenement, "_centres_payload_besoins_encadrement", None)
+        if regles_prefetches is None:
+            regles_prefetches = getattr(evenement, "_prefetched_objects_cache", {}).get(
+                "besoins_encadrement"
+            )
+        regles = (
+            [regle for regle in regles_prefetches if regle.type_accueil_id == accueil.type_accueil_id]
+            if regles_prefetches is not None
+            else list(evenement.besoins_encadrement.filter(type_accueil=accueil.type_accueil))
+        )
         ligne = {"nom": evenement.nom, "resume": "À configurer", "details": [], "exigences": []}
         if not regles:
             resultats.append(ligne)
@@ -499,7 +529,7 @@ def _resume_encadrement_groupes(accueil, groupes, ouvertures):
         elif modes == {BesoinEncadrement.MODE_REGLEMENTAIRE}:
             taux_contextes = []
             if accueil.type_accueil.code == TypeAccueil.VACANCES:
-                taux = _ratio_reglementaire_accueil(accueil, evenement)
+                taux = _ratio_reglementaire_accueil(accueil, evenement, structure=structure)
                 if taux:
                     taux_contextes.append(("", int(taux)))
             else:
@@ -519,7 +549,7 @@ def _resume_encadrement_groupes(accueil, groupes, ouvertures):
                         ):
                             continue
                         taux = _ratio_reglementaire_accueil(
-                            accueil, evenement, modalite=modalite, ouverture=ouverture
+                            accueil, evenement, modalite=modalite, ouverture=ouverture, structure=structure
                         )
                         if taux:
                             taux_par_ouverture.append((ouverture, int(taux)))
@@ -557,7 +587,7 @@ def _resume_encadrement_groupes(accueil, groupes, ouvertures):
                     taux = _ratio_reglementaire_accueil(
                         accueil, evenement,
                         modalite=regle.modalite_periscolaire if regle.modalite_periscolaire_id else None,
-                        ouverture=ouverture,
+                        ouverture=ouverture, structure=structure,
                     )
                     texte = "Calcul réglementaire" + (f" · 1 / {taux}" if taux else "")
                 if regle.effectif_enfants_reference is not None:
@@ -569,16 +599,22 @@ def _resume_encadrement_groupes(accueil, groupes, ouvertures):
     return resultats
 
 
-def _accueils_centre_payload(centre):
-    cache = getattr(centre, "_prefetched_objects_cache", {}).get("accueils")
-    accueils = list(cache) if cache is not None else list(centre.accueils.select_related("type_accueil").all())
+def _accueils_centre_payload(centre, *, structure=None):
+    accueils_precharges = getattr(centre, "_centres_payload_accueils", None)
+    if accueils_precharges is None:
+        accueils_precharges = getattr(centre, "_prefetched_objects_cache", {}).get("accueils")
+    accueils = list(accueils_precharges) if accueils_precharges is not None else list(
+        centre.accueils.select_related("type_accueil").all()
+    )
     resultats = []
     for accueil in accueils:
-        groupes = list(
-            accueil.groupes.select_related("groupe")
-            .prefetch_related("periodes_scolaires", "besoins_encadrement", "types_accueil")
-            .order_by("ordre", "nom")
-        )
+        groupes = list(getattr(
+            accueil,
+            "_centres_payload_groupes",
+            accueil.groupes.select_related("groupe").prefetch_related(
+                "periodes_scolaires", "besoins_encadrement", "types_accueil"
+            ).order_by("ordre", "nom"),
+        ))
         periodes = {}
         jours = set()
         modes = set()
@@ -586,15 +622,19 @@ def _accueils_centre_payload(centre):
             jours.update(int(numero) for numero in (groupe.jours_ouverts or []))
             for periode in groupe.periodes_scolaires.all():
                 periodes[periode.id] = periode
-            for besoin in groupe.besoins_encadrement.all():
+            for besoin in getattr(
+                groupe, "_centres_payload_besoins_encadrement", groupe.besoins_encadrement.all()
+            ):
                 if besoin.type_accueil_id != accueil.type_accueil_id:
                     continue
                 modes.add(besoin.mode_calcul)
-        ouvertures = list(
+        ouvertures = list(getattr(
+            accueil,
+            "_centres_payload_ouvertures",
             accueil.ouvertures_periodes.select_related("modalite_periscolaire", "periode_calendrier")
             .filter(actif=True)
-            .order_by("periode_calendrier__debut", "modalite_periscolaire__ordre", "jour_semaine")
-        )
+            .order_by("periode_calendrier__debut", "modalite_periscolaire__ordre", "jour_semaine"),
+        ))
         if accueil.type_accueil.code == TypeAccueil.PERISCOLAIRE:
             # Les jours du Périscolaire viennent des ouvertures réelles de
             # l'accueil, pas des anciens jours génériques portés par le groupe.
@@ -640,7 +680,9 @@ def _accueils_centre_payload(centre):
             "modalites_periscolaires": modalites,
             "modalites_noms": [modalite["nom"] for modalite in modalites],
             "encadrement_resume": encadrement,
-            "encadrement_groupes": _resume_encadrement_groupes(accueil, groupes, ouvertures),
+            "encadrement_groupes": _resume_encadrement_groupes(
+                accueil, groupes, ouvertures, structure=structure
+            ),
         })
     return resultats
 
@@ -649,9 +691,18 @@ def _resume_encadrement_moderne(evenement):
     """Résume l'encadrement sans consulter les champs historiques du groupe."""
 
     accueil = evenement.accueil_centre
-    regles = list(
-        evenement.besoins_encadrement.filter(type_accueil=accueil.type_accueil)
-        .select_related("modalite_periscolaire", "periode_calendrier")
+    regles_prefetches = getattr(evenement, "_centres_payload_besoins_encadrement", None)
+    if regles_prefetches is None:
+        regles_prefetches = getattr(evenement, "_prefetched_objects_cache", {}).get(
+            "besoins_encadrement"
+        )
+    regles = (
+        [regle for regle in regles_prefetches if regle.type_accueil_id == accueil.type_accueil_id]
+        if regles_prefetches is not None
+        else list(
+            evenement.besoins_encadrement.filter(type_accueil=accueil.type_accueil)
+            .select_related("modalite_periscolaire", "periode_calendrier")
+        )
     )
     if not regles:
         return "À configurer"
@@ -678,17 +729,35 @@ def _exigences_contextuelles_moderne(evenement):
     """Retourne uniquement les exigences rattachées au type de l'accueil."""
 
     accueil = evenement.accueil_centre
-    regles = list(
-        evenement.besoins_encadrement.filter(type_accueil=accueil.type_accueil)
-        .select_related("modalite_periscolaire", "periode_calendrier")
+    regles_prefetches = getattr(evenement, "_centres_payload_besoins_encadrement", None)
+    if regles_prefetches is None:
+        regles_prefetches = getattr(evenement, "_prefetched_objects_cache", {}).get(
+            "besoins_encadrement"
+        )
+    regles = (
+        [regle for regle in regles_prefetches if regle.type_accueil_id == accueil.type_accueil_id]
+        if regles_prefetches is not None
+        else list(
+            evenement.besoins_encadrement.filter(type_accueil=accueil.type_accueil)
+            .select_related("modalite_periscolaire", "periode_calendrier")
+        )
     )
     contextes_valides = {
         (regle.modalite_periscolaire_id, regle.periode_calendrier_id): regle
         for regle in regles
     }
-    besoins = evenement.besoins_qualifications.filter(
-        type_accueil=accueil.type_accueil,
-    ).select_related("qualification", "modalite_periscolaire", "periode_calendrier")
+    besoins_prefetches = getattr(evenement, "_centres_payload_besoins_qualifications", None)
+    if besoins_prefetches is None:
+        besoins_prefetches = getattr(evenement, "_prefetched_objects_cache", {}).get(
+            "besoins_qualifications"
+        )
+    besoins = (
+        [besoin for besoin in besoins_prefetches if besoin.type_accueil_id == accueil.type_accueil_id]
+        if besoins_prefetches is not None
+        else evenement.besoins_qualifications.filter(
+            type_accueil=accueil.type_accueil,
+        ).select_related("qualification", "modalite_periscolaire", "periode_calendrier")
+    )
     resultats = []
     for besoin in besoins:
         cle = (besoin.modalite_periscolaire_id, besoin.periode_calendrier_id)
@@ -707,7 +776,7 @@ def _exigences_contextuelles_moderne(evenement):
     return resultats
 
 
-def centre_to_dict(centre):
+def centre_to_dict(centre, *, structure=None):
     types = [type_accueil for type_accueil in centre.types_accueil.all() if type_accueil.actif]
     return {
         "id": centre.id,
@@ -724,7 +793,7 @@ def centre_to_dict(centre):
         "effectif_cible": centre.effectif_cible,
         "type_accueil_codes": [type_accueil.code for type_accueil in types],
         "types_accueil": [{"code": type_accueil.code, "nom": type_accueil.nom} for type_accueil in types],
-        "accueils": _accueils_centre_payload(centre),
+        "accueils": _accueils_centre_payload(centre, structure=structure),
         "ordre": centre.ordre,
     }
 

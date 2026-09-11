@@ -19,9 +19,12 @@ from django.utils.encoding import force_bytes
 from .models import (
     Affectation,
     AffiniteGroupeAnimateur,
+    AnneeScolaire,
     Animateur,
+    Contrat,
     Disponibilite,
     Formation,
+    HistoriqueRemunerationContrat,
     PeriodeScolaire,
     PreferenceCentre,
     Qualification,
@@ -125,13 +128,30 @@ def api_animateurs(request):
         if format_planning:
             animateurs = animateurs.only("id", "prenom", "nom", "telephone", "email", "actif")
         else:
-            affinites = AffiniteGroupeAnimateur.objects.select_related("evenement__centre")
+            affinites = AffiniteGroupeAnimateur.objects.select_related(
+                "evenement__centre",
+                "evenement__groupe",
+            )
+            historique_remunerations = HistoriqueRemunerationContrat.objects.only(
+                "id",
+                "contrat_id",
+                "date_effet",
+                "montant_mensuel",
+                "origine",
+            )
+            contrats = Contrat.objects.select_related("type_contrat_ref").prefetch_related(
+                Prefetch(
+                    "historique_remunerations",
+                    queryset=historique_remunerations,
+                    to_attr="_animateurs_payload_historique_remunerations",
+                )
+            )
             animateurs = animateurs.select_related(
                 "evenement_preferee__centre",
                 "utilisateur",
             ).prefetch_related(
                 Prefetch("affinites_groupes", queryset=affinites),
-                "contrats",
+                Prefetch("contrats", queryset=contrats),
             )
         if inclure_affectations:
             affectations = Affectation.objects.only("id", "animateur_id", "centre_id", "debut", "fin")
@@ -179,7 +199,21 @@ def api_animateurs(request):
                 for animateur in animateurs
             ]
         else:
-            resultat = [animateur_to_dict(animateur, activation_url=_activation_url(request, animateur)) for animateur in animateurs]
+            annees_cloturees = []
+            if any(animateur.contrats.all() for animateur in animateurs):
+                annees_cloturees = list(
+                    AnneeScolaire.objects.filter(statut=AnneeScolaire.Statut.CLOTUREE).only(
+                        "id", "date_debut", "date_fin"
+                    )
+                )
+            resultat = [
+                animateur_to_dict(
+                    animateur,
+                    activation_url=_activation_url(request, animateur),
+                    annees_cloturees=annees_cloturees,
+                )
+                for animateur in animateurs
+            ]
         return JsonResponse(resultat, safe=False)
 
     try:

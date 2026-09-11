@@ -1,5 +1,6 @@
 import datetime
 import json
+from decimal import Decimal
 from unittest import mock
 
 from django.db import connection
@@ -9,15 +10,21 @@ from django.utils import timezone
 
 from animateurs.models import (
     Affectation,
+    AnneeScolaire,
     Animateur,
     Centre,
+    Contrat,
     Disponibilite,
+    HistoriqueRemunerationContrat,
+    ParametresStructure,
     PreferenceCentre,
     Qualification,
+    TypeContrat,
 )
 from animateurs.tests.base import ConnexionTestCase
 from animateurs.tests.factories import creer_groupe
 from animateurs.services.flottants import ORDRE_GROUPE_FLOTTANTS
+from animateurs.services.serializers import centre_to_dict
 
 
 class PlanningApiTests(ConnexionTestCase):
@@ -312,6 +319,32 @@ class QualificationDefaultTests(ConnexionTestCase):
 
 
 class CentresGroupesPlanningApiTests(ConnexionTestCase):
+    def test_liste_simple_conserve_le_contrat_du_serialiseur_centre(self):
+        centre = Centre.objects.create(nom="Centre contrat", code="CONT", couleur="#123456")
+
+        response = self.client.get(reverse("api_centres"), {"tous_types": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        attendu = [centre_to_dict(item) for item in Centre.objects.order_by("ordre", "nom")]
+        self.assertEqual(response.json(), attendu)
+        self.assertEqual(response.json()[0]["id"], centre.id)
+
+    def test_liste_simple_garde_un_nombre_fixe_de_requetes(self):
+        ParametresStructure.objects.update_or_create(cle="principale", defaults={"multisite": True})
+        for index in range(12):
+            Centre.objects.create(nom=f"Centre simple {index:02d}", code=f"S{index:02d}", couleur="#123456")
+
+        with CaptureQueriesContext(connection) as contexte:
+            response = self.client.get(reverse("api_centres"), {"tous_types": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 12)
+        self.assertLessEqual(
+            len(contexte),
+            12,
+            f"Le chargement simple a effectué {len(contexte)} requêtes.",
+        )
+
     def test_liste_groupee_charge_les_centres_et_groupes_sans_effectifs_historiques(self):
         centre = Centre.objects.create(nom="Centre groupé", code="GRP", couleur="#123456")
         groupe, _ = creer_groupe(centre, nom="Maternels groupés")
@@ -348,6 +381,32 @@ class CentresGroupesPlanningApiTests(ConnexionTestCase):
             13,
             f"Le chargement groupé a effectué {len(contexte)} requêtes.",
         )
+
+    def test_liste_groupee_reste_constante_avec_plusieurs_centres_et_groupes(self):
+        centre = Centre.objects.create(nom="Centre initial", code="INIT", couleur="#123456")
+        creer_groupe(centre, nom="Groupe initial")
+
+        with CaptureQueriesContext(connection) as petit_contexte:
+            premiere_reponse = self.client.get(reverse("api_centres"), {"include_groupes": "1"})
+
+        for centre_index in range(6):
+            centre = Centre.objects.create(
+                nom=f"Centre échelle {centre_index:02d}",
+                code=f"EC{centre_index:02d}",
+                couleur="#123456",
+            )
+            for groupe_index in range(10):
+                creer_groupe(centre, nom=f"Groupe {centre_index:02d}-{groupe_index:02d}")
+
+        with CaptureQueriesContext(connection) as grand_contexte:
+            seconde_reponse = self.client.get(reverse("api_centres"), {"include_groupes": "1"})
+
+        self.assertEqual(premiere_reponse.status_code, 200)
+        self.assertEqual(seconde_reponse.status_code, 200)
+        self.assertEqual(len(premiere_reponse.json()), 1)
+        self.assertEqual(len(seconde_reponse.json()), 7)
+        self.assertLessEqual(len(grand_contexte), 13)
+        self.assertLessEqual(len(grand_contexte), len(petit_contexte) + 1)
 
 
 class AnimateurCentresHierarchisesApiTests(ConnexionTestCase):
@@ -519,6 +578,123 @@ class AnimateursListPerformanceTests(ConnexionTestCase):
                 debut=datetime.date(2027, 7, 1),
                 fin=datetime.date(2027, 7, 31),
             )
+
+    def creer_animateurs_avec_contrats(self, nombre, *, debut_index=0):
+        structure, _ = ParametresStructure.objects.get_or_create(cle="principale")
+        type_contrat, _ = TypeContrat.objects.get_or_create(
+            structure=structure,
+            code="cdd-test-performance",
+            defaults={
+                "nom": "CDD test performance",
+                "mode_remuneration": TypeContrat.MODE_MENSUALISE,
+            },
+        )
+        for index in range(debut_index, debut_index + nombre):
+            animateur = Animateur.objects.create(
+                prenom=f"Contrat {index:02d}",
+                nom="Performance",
+            )
+            for mois in (1, 2):
+                contrat = Contrat.objects.create(
+                    animateur=animateur,
+                    type_contrat=Contrat.TYPE_CDD,
+                    type_contrat_ref=type_contrat,
+                    date_debut=datetime.date(2025 + index, mois, 1),
+                    date_fin=datetime.date(2025 + index, mois, 28),
+                    salaire_mensuel_reference=Decimal("1800.00"),
+                )
+                HistoriqueRemunerationContrat.objects.create(
+                    contrat=contrat,
+                    date_effet=contrat.date_debut,
+                    montant_mensuel=Decimal("1800.00"),
+                )
+
+    def test_liste_contrats_conserve_le_payload_complet(self):
+        structure, _ = ParametresStructure.objects.get_or_create(cle="principale")
+        type_contrat = TypeContrat.objects.create(
+            structure=structure,
+            nom="CDD contractualisé",
+            code="cdd-contractualise",
+            mode_remuneration=TypeContrat.MODE_MENSUALISE,
+        )
+        animateur = Animateur.objects.create(prenom="Alice", nom="Contrat")
+        contrat = Contrat.objects.create(
+            animateur=animateur,
+            type_contrat=Contrat.TYPE_CDD,
+            type_contrat_ref=type_contrat,
+            date_debut=datetime.date(2040, 9, 1),
+            date_fin=datetime.date(2041, 8, 31),
+            salaire_mensuel_reference=Decimal("1800.00"),
+        )
+        remuneration = HistoriqueRemunerationContrat.objects.create(
+            contrat=contrat,
+            date_effet=contrat.date_debut,
+            montant_mensuel=Decimal("1800.00"),
+        )
+        AnneeScolaire.objects.create(
+            libelle="2040-2041",
+            date_debut=datetime.date(2040, 9, 1),
+            date_fin=datetime.date(2041, 8, 31),
+            statut=AnneeScolaire.Statut.CLOTUREE,
+        )
+
+        response = self.client.get(reverse("api_animateurs"), {"actif": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()[0]["contrats"]
+        self.assertEqual(payload, [{
+            "id": contrat.id,
+            "verrouille": True,
+            "animateur_id": animateur.id,
+            "type_contrat": type_contrat.code,
+            "type_contrat_ref_id": type_contrat.id,
+            "type_contrat_libelle": "CDD contractualisé",
+            "mode_paie": TypeContrat.MODE_MENSUALISE,
+            "date_debut": "2040-09-01",
+            "date_fin": "2041-08-31",
+            "taux_journalier_reference": None,
+            "salaire_mensuel_reference": "1800.00",
+            "mode_temps_travail": Contrat.TEMPS_NON_RENSEIGNE,
+            "heures_hebdomadaires": None,
+            "heures_mensuelles_reference": None,
+            "heures_annuelles_reference": None,
+            "mode_remuneration": Contrat.REMUNERATION_FIXE,
+            "annee_execution_initiale": None,
+            "date_effet_annee_execution": None,
+            "historique_remunerations": [{
+                "id": remuneration.id,
+                "date_effet": "2040-09-01",
+                "montant_mensuel": "1800.00",
+                "origine": HistoriqueRemunerationContrat.ORIGINE_MANUELLE,
+            }],
+            "statut": contrat.statut,
+            "statut_libelle": contrat.libelle_statut,
+            "cree_le": contrat.cree_le.isoformat(),
+            "modifie_le": contrat.modifie_le.isoformat(),
+        }])
+
+    def test_liste_avec_contrats_garde_un_nombre_fixe_de_requetes(self):
+        AnneeScolaire.objects.create(
+            libelle="2040-2041",
+            date_debut=datetime.date(2040, 9, 1),
+            date_fin=datetime.date(2041, 8, 31),
+            statut=AnneeScolaire.Statut.CLOTUREE,
+        )
+        self.creer_animateurs_avec_contrats(1)
+
+        with CaptureQueriesContext(connection) as petit_contexte:
+            premiere_reponse = self.client.get(reverse("api_animateurs"), {"actif": "1"})
+
+        self.creer_animateurs_avec_contrats(12, debut_index=1)
+        with CaptureQueriesContext(connection) as grand_contexte:
+            seconde_reponse = self.client.get(reverse("api_animateurs"), {"actif": "1"})
+
+        self.assertEqual(premiere_reponse.status_code, 200)
+        self.assertEqual(seconde_reponse.status_code, 200)
+        self.assertEqual(len(premiere_reponse.json()), 1)
+        self.assertEqual(len(seconde_reponse.json()), 13)
+        self.assertLessEqual(len(grand_contexte), 12)
+        self.assertLessEqual(len(grand_contexte), len(petit_contexte) + 1)
 
     def test_liste_utilise_un_nombre_fixe_de_requetes(self):
         self.creer_animateurs(25)

@@ -84,7 +84,7 @@ def duree_accueil_heures(centre, jour, modalite: ModalitePeriscolaire | None, ac
 
 def ratio_reglementaire(
     *, type_accueil, categorie_age, centre=None, jour=None, modalite=None,
-    structure=None, accueil_centre=None,
+    structure=None, accueil_centre=None, duree_accueil=None,
 ):
     """Retourne le nombre d'enfants par animateur pour le contexte demandé."""
 
@@ -103,10 +103,12 @@ def ratio_reglementaire(
     if code != TypeAccueil.PERISCOLAIRE:
         return None
 
-    duree = (
-        duree_accueil_heures(centre, jour, modalite, accueil_centre=accueil_centre)
-        if centre is not None and jour is not None else None
-    )
+    # Un appelant qui possède déjà l'ouverture (par exemple la sérialisation
+    # groupée des centres) peut fournir sa durée et éviter une nouvelle lecture
+    # de cette même ouverture. Le comportement historique reste inchangé.
+    duree = duree_accueil
+    if duree is None and centre is not None and jour is not None:
+        duree = duree_accueil_heures(centre, jour, modalite, accueil_centre=accueil_centre)
     court = duree is not None and duree <= 5
     pedt_applicable = bool(structure.pedt_actif)
     accueil_periscolaire = accueil_centre

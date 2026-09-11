@@ -8,10 +8,16 @@ from animateurs.services.statuts import statut_actuel, statut_pour_date
 CLE_STRUCTURE_COURANTE = "principale"
 
 
-def get_parametres_structure():
-    """Retourne une configuration persistée avec ses valeurs par défaut."""
+def get_parametres_structure(*, assurer_types=True):
+    """Retourne une configuration persistée avec ses valeurs par défaut.
+
+    Les lecteurs qui n'utilisent que les ratios peuvent éviter la vérification
+    des quatre types de contrat système : elle est sans rapport avec leur
+    calcul et n'a pas à se répéter dans une sérialisation groupée.
+    """
     parametres, _ = ParametresStructure.objects.get_or_create(cle=CLE_STRUCTURE_COURANTE)
-    assurer_types_contrats_systeme(parametres)
+    if assurer_types:
+        assurer_types_contrats_systeme(parametres)
     return parametres
 
 

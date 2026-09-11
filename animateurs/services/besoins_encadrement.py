@@ -72,7 +72,9 @@ def regle_encadrement_effective(
 ):
     if type_accueil is None:
         return None
-    regles_prefetches = getattr(evenement, "_prefetched_objects_cache", {}).get("besoins_encadrement")
+    regles_prefetches = getattr(evenement, "_centres_payload_besoins_encadrement", None)
+    if regles_prefetches is None:
+        regles_prefetches = getattr(evenement, "_prefetched_objects_cache", {}).get("besoins_encadrement")
     regles = (
         [regle for regle in regles_prefetches if regle.type_accueil_id == type_accueil.pk]
         if regles_prefetches is not None
