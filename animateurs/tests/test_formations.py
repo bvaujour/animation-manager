@@ -1,6 +1,7 @@
 import json
 import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -446,17 +447,19 @@ class FormationDisponibilitePlanningTests(ConnexionTestCase):
             debut=debut,
             fin=debut + datetime.timedelta(days=1),
         )
-        response = self.client.post(
-            reverse("api_formations"),
-            data=json.dumps({
-                "intitule": "BAFA approfondissement",
-                "animateur_ids": [self.animateur.id],
-                "date_debut": "2026-08-24",
-                "date_fin": "2026-08-26",
-                "statut": Formation.STATUT_PREVUE,
-            }),
-            content_type="application/json",
-        )
+        # La formation doit être active pour que l'API expose ses conflits.
+        with patch("animateurs.models.timezone.localdate", return_value=datetime.date(2026, 8, 25)):
+            response = self.client.post(
+                reverse("api_formations"),
+                data=json.dumps({
+                    "intitule": "BAFA approfondissement",
+                    "animateur_ids": [self.animateur.id],
+                    "date_debut": "2026-08-24",
+                    "date_fin": "2026-08-26",
+                    "statut": Formation.STATUT_PREVUE,
+                }),
+                content_type="application/json",
+            )
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["conflits"][0]["date"], "2026-08-25")
@@ -477,17 +480,19 @@ class FormationDisponibilitePlanningTests(ConnexionTestCase):
                 fin=debut + datetime.timedelta(days=1),
             )
 
-        response = self.client.post(
-            reverse("api_formations"),
-            data=json.dumps({
-                "intitule": "Formation sur deux semaines",
-                "animateur_ids": [self.animateur.id],
-                "date_debut": "2026-08-24",
-                "date_fin": "2026-09-01",
-                "statut": Formation.STATUT_PREVUE,
-            }),
-            content_type="application/json",
-        )
+        # La date est figée dans la période de formation pour rendre ce test pérenne.
+        with patch("animateurs.models.timezone.localdate", return_value=datetime.date(2026, 8, 25)):
+            response = self.client.post(
+                reverse("api_formations"),
+                data=json.dumps({
+                    "intitule": "Formation sur deux semaines",
+                    "animateur_ids": [self.animateur.id],
+                    "date_debut": "2026-08-24",
+                    "date_fin": "2026-09-01",
+                    "statut": Formation.STATUT_PREVUE,
+                }),
+                content_type="application/json",
+            )
 
         self.assertEqual(response.status_code, 201)
         liens = {item["date"]: item["planning_url"] for item in response.json()["conflits"]}

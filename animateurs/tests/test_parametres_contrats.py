@@ -1,6 +1,7 @@
 import datetime
 import json
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
@@ -79,7 +80,9 @@ class ReferentielsContratsTests(TestCase):
                 animateur=animateur, type_contrat_ref=self.type("permanent"),
                 type_contrat="permanent", date_debut=debut, date_fin=fin,
             )
-            self.assertEqual(contrat.statut, Contrat.STATUT_EN_COURS)
+            # Le statut est évalué à une date de référence simulée, dans la borne.
+            with patch("animateurs.models.timezone.localdate", return_value=datetime.date(2026, 8, 25)):
+                self.assertEqual(contrat.statut, Contrat.STATUT_EN_COURS)
 
     def test_applicabilite_des_bornes_ouvertes(self):
         sans_bornes = Contrat.objects.create(
