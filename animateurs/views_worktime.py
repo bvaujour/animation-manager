@@ -216,7 +216,7 @@ def _payload(request):
     try:
         return json.loads(request.body or "{}")
     except json.JSONDecodeError:
-        raise ValueError("Les données transmises sont invalides.")
+        raise ValueError("Les données transmises sont invalides.") from None
 
 
 def _enregistrer_reunion(request, reunion=None):
@@ -322,7 +322,7 @@ def api_preparation_travail(request):
             try:
                 nombre = Decimal(str(item.get("nombre_jours", "0")).replace(",", "."))
             except InvalidOperation:
-                raise ValueError("Le nombre de journées est invalide.")
+                raise ValueError("Le nombre de journées est invalide.") from None
             if nombre < 0 or nombre > 366:
                 raise ValueError("Le nombre de journées doit être compris entre 0 et 366.")
             remarque = str(item.get("remarque", "")).strip()[:240]

@@ -151,7 +151,7 @@ def _ajouter_preparation_paie(recap, periodes, debut, fin):
         dates_reunions = {
             datetime.date.fromisoformat(item) for item in ligne.get("dates_reunions_comptabilisees", [])
         }
-        for periode, montant in zip(periodes, montants):
+        for periode, montant in zip(periodes, montants, strict=True):
             jours = Decimal(sum(periode.debut <= jour <= periode.fin for jour in dates_affectations))
             jours += Decimal(sum(periode.debut <= jour <= periode.fin for jour in dates_reunions))
             if len(periodes) == 1:

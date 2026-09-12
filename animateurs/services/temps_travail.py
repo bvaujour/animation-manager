@@ -147,7 +147,7 @@ def selectionner_periodes(identifiants):
     try:
         ids = {int(valeur) for valeur in identifiants}
     except (TypeError, ValueError):
-        raise SelectionTempsTravailInvalide("La sélection de périodes est invalide.")
+        raise SelectionTempsTravailInvalide("La sélection de périodes est invalide.") from None
     if not ids:
         raise SelectionTempsTravailInvalide("Sélectionne au moins une période.")
     periodes = list(PeriodeScolaire.objects.filter(pk__in=ids).order_by("debut", "ordre", "id"))

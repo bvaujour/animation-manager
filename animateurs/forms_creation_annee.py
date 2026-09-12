@@ -127,8 +127,8 @@ class RepriseAnneeForm(forms.Form):
         try:
             self.plan = preparer_copie(self.cible, self.source,
                 [c.pk for c in data["centres"]], [a.pk for a in data["accueils"]], data["categories"], dates)
-        except TypeError:
-            raise ValidationError("Renseignez les dates des périodes utilisées par les configurations sélectionnées.")
+        except TypeError as exc:
+            raise ValidationError("Renseignez les dates des périodes utilisées par les configurations sélectionnées.") from exc
         self.plan["zone"] = self.zone
         self.plan["calendrier_officiel"] = self.calendrier_officiel
         self.plan["periodes_scolaires"] = [periode for periode in self.periodes_scolaires

@@ -139,7 +139,7 @@ def _valider_payload(data, formation=None):
     try:
         animateur_ids = {int(value) for value in data.get("animateur_ids", [])}
     except (TypeError, ValueError):
-        raise ValidationError("La sélection des animateurs est invalide.")
+        raise ValidationError("La sélection des animateurs est invalide.") from None
     animateurs = list(Animateur.objects.filter(id__in=animateur_ids).order_by("nom", "prenom"))
     if not animateur_ids or len(animateurs) != len(animateur_ids):
         raise ValidationError("Sélectionnez au moins un animateur valide.")
@@ -150,12 +150,12 @@ def _valider_payload(data, formation=None):
         try:
             qualification = Qualification.objects.get(pk=int(qualification_id))
         except (Qualification.DoesNotExist, TypeError, ValueError):
-            raise ValidationError("La qualification sélectionnée est invalide.")
+            raise ValidationError("La qualification sélectionnée est invalide.") from None
 
     try:
         document_ids = {int(value) for value in data.get("document_ids", [])}
     except (TypeError, ValueError):
-        raise ValidationError("La sélection des documents est invalide.")
+        raise ValidationError("La sélection des documents est invalide.") from None
     documents = list(Document.objects.filter(id__in=document_ids).order_by("titre", "id"))
     if len(documents) != len(document_ids):
         raise ValidationError("Un document sélectionné est introuvable.")
