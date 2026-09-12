@@ -40,7 +40,6 @@ from .services.calendrier_scolaire import (
 )
 from .services.centres import prochain_ordre_centre, reordonner_centres
 from .services.besoins_encadrement import (
-    besoins_contextuels_payload,
     enregistrer_besoins_contextuels,
 )
 from .services.accueils import centres_avec_accueil_sur_periode

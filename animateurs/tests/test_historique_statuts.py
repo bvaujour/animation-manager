@@ -2,7 +2,6 @@ import datetime
 import importlib
 import json
 from decimal import Decimal
-from unittest import mock
 
 from django.apps import apps
 from django.contrib.auth import get_user_model

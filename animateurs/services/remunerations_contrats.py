@@ -6,9 +6,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 
 from animateurs.models import (
-    BaremeApprentissage,
     Contrat,
-    ReferenceSMIC,
 )
 from animateurs.services.parametres import get_parametres_structure
 

@@ -5,7 +5,6 @@ from decimal import Decimal
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.test import Client, TestCase
 from django.urls import reverse
 

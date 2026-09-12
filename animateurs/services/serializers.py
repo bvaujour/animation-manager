@@ -533,7 +533,7 @@ def _resume_encadrement_groupes(accueil, groupes, ouvertures, *, structure=None)
                 if taux:
                     taux_contextes.append(("", int(taux)))
             else:
-                for modalite_id, lignes_ouverture in ouvertures_par_modalite.items():
+                for _, lignes_ouverture in ouvertures_par_modalite.items():
                     modalite = lignes_ouverture[0].modalite_periscolaire
                     taux_par_ouverture = []
                     for ouverture in lignes_ouverture:

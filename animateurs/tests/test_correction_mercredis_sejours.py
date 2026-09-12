@@ -10,7 +10,6 @@ from animateurs.models import (
     Document,
     EffectifEnfantsJour,
     Evenement,
-    ModalitePeriscolaire,
     ParticipantSejour,
     PeriodeCalendrier,
     PeriodeScolaire,

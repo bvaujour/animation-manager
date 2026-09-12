@@ -760,7 +760,7 @@ def api_attributions_primes(request):
             utilisateur=request.user,
         )
     except (ValueError, TypeError, json.JSONDecodeError, Animateur.DoesNotExist,
-            TypePrime.DoesNotExist, Centre.DoesNotExist) as exc:
+            TypePrime.DoesNotExist, Centre.DoesNotExist):
         return JsonResponse({"error": "Les données de la prime sont invalides."}, status=400)
     except Exception as exc:
         from django.core.exceptions import ValidationError

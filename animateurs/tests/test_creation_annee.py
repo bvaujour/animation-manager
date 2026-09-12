@@ -322,7 +322,7 @@ class CreationAnneeTests(ConnexionTestCase):
         self.assertFalse(AnneeScolaire.objects.filter(libelle="2026-2027").exists())
 
     def test_vacances_et_periodes_separees_reutilisation_et_confirmation(self):
-        scolaire = PeriodeCalendrier.objects.create(categorie="scolaire", nom="Rentrée locale", zone="A",
+        PeriodeCalendrier.objects.create(categorie="scolaire", nom="Rentrée locale", zone="A",
             annee_scolaire="2026-2027", debut=date(2026, 9, 1), fin=date(2026, 10, 16))
         toussaint = PeriodeCalendrier.objects.create(categorie="vacances", nom="Toussaint", zone="A",
             annee_scolaire="2026-2027", debut=date(2026, 10, 19), fin=date(2026, 10, 30))
@@ -330,7 +330,7 @@ class CreationAnneeTests(ConnexionTestCase):
             PeriodeScolaire.objects.create(nom="Semaine locale", zone="A", annee_scolaire="2026-2027",
                 debut=semaine.debut, fin=semaine.fin, periode_calendrier=toussaint)
         # L'été existant mais non sélectionné n'est pas repris automatiquement.
-        ete = PeriodeCalendrier.objects.create(categorie="vacances", nom="Été", zone="A",
+        PeriodeCalendrier.objects.create(categorie="vacances", nom="Été", zone="A",
             annee_scolaire="2026-2027", debut=date(2027, 7, 5), fin=date(2027, 8, 27))
         modeles = (AnneeScolaire, PeriodeCalendrier, PeriodeScolaire)
         avant = {m: list(m.objects.order_by("pk").values()) for m in modeles}

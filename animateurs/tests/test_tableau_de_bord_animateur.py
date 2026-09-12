@@ -182,7 +182,7 @@ class TableauDeBordAnimateurTests(TestCase):
             publie=True,
             tous_centres=False,
         ).centres.set([autre_centre])
-        programme_tous = Document.objects.create(
+        Document.objects.create(
             titre="Programme commun",
             fichier="documents/programme-commun.jpg",
             type_document=Document.TYPE_PROGRAMME_ACTIVITES,

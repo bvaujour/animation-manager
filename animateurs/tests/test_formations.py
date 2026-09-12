@@ -541,7 +541,7 @@ class FormationDashboardTests(ConnexionTestCase):
 
     def test_dashboard_signale_un_conflit(self):
         aujourd_hui = timezone.localdate()
-        formation = self._formation("Formation conflit", Formation.STATUT_EN_COURS, aujourd_hui, aujourd_hui)
+        self._formation("Formation conflit", Formation.STATUT_EN_COURS, aujourd_hui, aujourd_hui)
         centre = Centre.objects.create(nom="Centre dashboard", code="CD", couleur="#123456")
         groupe, _ = creer_groupe(centre, nom="Dashboard", debut=aujourd_hui)
         debut = timezone.make_aware(datetime.datetime.combine(aujourd_hui, datetime.time.min))
