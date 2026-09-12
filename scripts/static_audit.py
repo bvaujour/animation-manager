@@ -4,16 +4,24 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
 import sqlite3
 import sys
 from collections import Counter
 from pathlib import Path
 
+import django
+from django.template import TemplateDoesNotExist
+from django.template.loader import get_template
+
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "templates"
 STATIC = ROOT / "static"
 ERRORS: list[str] = []
+
+# L'audit ne doit pas créer les artefacts Python qu'il contrôle ensuite.
+sys.dont_write_bytecode = True
 
 
 def fail(message: str) -> None:
@@ -22,6 +30,20 @@ def fail(message: str) -> None:
 
 def relative(path: Path) -> str:
     return str(path.relative_to(ROOT))
+
+
+def template_is_available(reference: str) -> bool:
+    """Consulte les loaders Django pour inclure aussi ses templates internes."""
+    # Lancer ce script directement place ``scripts/`` dans sys.path, pas ROOT.
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    django.setup()
+    try:
+        get_template(reference)
+    except TemplateDoesNotExist:
+        return False
+    return True
 
 
 def check_python_syntax() -> int:
@@ -61,7 +83,7 @@ def check_template_references() -> tuple[int, set[str]]:
         template_count += 1
         text = path.read_text(encoding="utf-8")
         for reference in template_ref_pattern.findall(text):
-            if not (TEMPLATES / reference).is_file():
+            if not template_is_available(reference):
                 fail(f"Template manquant référencé par {relative(path)} : {reference}")
         for reference in static_ref_pattern.findall(text):
             static_references.add(reference)
@@ -74,7 +96,7 @@ def check_template_references() -> tuple[int, set[str]]:
     for path in (ROOT / "animateurs").glob("*.py"):
         text = path.read_text(encoding="utf-8")
         for reference in render_pattern.findall(text):
-            if not (TEMPLATES / reference).is_file():
+            if not template_is_available(reference):
                 fail(f"Template rendu mais absent dans {relative(path)} : {reference}")
 
     return template_count, static_references
