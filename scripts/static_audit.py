@@ -23,6 +23,25 @@ ERRORS: list[str] = []
 # L'audit ne doit pas créer les artefacts Python qu'il contrôle ensuite.
 sys.dont_write_bytecode = True
 
+# Le rail Direction conserve volontairement son comportement d'expansion PC
+# hors de la feuille structurelle. Cette liste autorise uniquement ses
+# sélecteurs documentés ; toute autre occurrence de .app-rail reste interdite.
+ALLOWED_LAYOUT_SELECTORS = {
+    "navigation-architecture.css": {
+        ".app-rail": (
+            "body.app-body:not(.animator-space-body):not(.login-body) > .app-rail",
+            "body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:hover, "
+            "body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:focus-within",
+            "body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:hover .app-rail-links, "
+            "body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:focus-within .app-rail-links",
+            "body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:hover .direction-nav-link, "
+            "body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:focus-within .direction-nav-link",
+            "body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:hover .direction-nav-label, "
+            "body.app-body:not(.animator-space-body):not(.login-body) > .app-rail:focus-within .direction-nav-label",
+        ),
+    },
+}
+
 
 def fail(message: str) -> None:
     ERRORS.append(message)
@@ -139,7 +158,11 @@ def check_css_architecture() -> int:
                 fail(f"Ancienne règle de navigation encore présente dans {relative(path)} : {token}")
         if path.name != "app-layout.css":
             for token in layout_tokens:
-                if token in text:
+                text_to_check = re.sub(r"\s+", " ", text)
+                allowed_selectors = ALLOWED_LAYOUT_SELECTORS.get(path.name, {}).get(token, ())
+                for selector in sorted(allowed_selectors, key=len, reverse=True):
+                    text_to_check = text_to_check.replace(selector, "")
+                if token in text_to_check:
                     fail(f"Layout global redéfini hors de app-layout.css dans {relative(path)} : {token}")
     return count
 
