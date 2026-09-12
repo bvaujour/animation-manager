@@ -2772,6 +2772,26 @@ class Document(models.Model):
         default=TYPE_CLASSIQUE,
         db_index=True,
     )
+    CATEGORIE_PEDAGOGIE_ACTIVITES = "pedagogie_activites"
+    CATEGORIE_ORGANISATION_PLANNING = "organisation_planning"
+    CATEGORIE_PROTOCOLS_SECURITE = "protocoles_securite"
+    CATEGORIE_ADMINISTRATIF = "administratif"
+    CATEGORIE_AUTRE = "autre"
+    CATEGORIE_CHOICES = (
+        (CATEGORIE_PEDAGOGIE_ACTIVITES, "Pédagogie & activités"),
+        (CATEGORIE_ORGANISATION_PLANNING, "Organisation & planning"),
+        (CATEGORIE_PROTOCOLS_SECURITE, "Protocoles & sécurité"),
+        (CATEGORIE_ADMINISTRATIF, "Administratif"),
+        (CATEGORIE_AUTRE, "Autre"),
+    )
+    categorie = models.CharField(
+        max_length=32,
+        choices=CATEGORIE_CHOICES,
+        default=CATEGORIE_AUTRE,
+        db_index=True,
+    )
+    important = models.BooleanField(default=False)
+    archive_le = models.DateTimeField(null=True, blank=True)
     permanent = models.BooleanField(
         default=True,
         help_text="Cocher si le document n'est lié à aucune période précise.",

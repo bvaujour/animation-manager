@@ -1,14 +1,27 @@
 import datetime
 import tempfile
+from importlib import import_module
 from unittest.mock import patch
 
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from animateurs.models import Affectation, Animateur, Centre, Document
+from animateurs.models import (
+    Affectation,
+    Animateur,
+    Centre,
+    Document,
+    Formation,
+    ModalitePeriscolaire,
+    PeriodeScolaire,
+    Sejour,
+    Sortie,
+    TypeAccueil,
+)
 from animateurs.services.documents import normaliser_nom_document, valider_periode_document
 from animateurs.tests.base import ConnexionTestCase
 from animateurs.tests.factories import creer_groupe
@@ -43,6 +56,140 @@ class NomDocumentTests(SimpleTestCase):
         for nom_original, nom_attendu in cas.items():
             with self.subTest(nom_original=nom_original):
                 self.assertEqual(normaliser_nom_document(nom_original), nom_attendu)
+
+
+class DocumentV2ModelTests(TestCase):
+    def creer_document(self, titre, **kwargs):
+        return Document.objects.create(titre=titre, fichier=f"documents/{titre}.pdf", **kwargs)
+
+    def test_valeurs_par_defaut_et_categories_disponibles(self):
+        document = self.creer_document("Par défaut")
+
+        self.assertEqual(document.categorie, Document.CATEGORIE_AUTRE)
+        self.assertFalse(document.important)
+        self.assertIsNone(document.archive_le)
+        self.assertEqual(
+            Document.CATEGORIE_CHOICES,
+            (
+                ("pedagogie_activites", "Pédagogie & activités"),
+                ("organisation_planning", "Organisation & planning"),
+                ("protocoles_securite", "Protocoles & sécurité"),
+                ("administratif", "Administratif"),
+                ("autre", "Autre"),
+            ),
+        )
+
+    def test_les_cinq_categories_sont_enregistrables(self):
+        categories = [choix for choix, _ in Document.CATEGORIE_CHOICES]
+        documents = [
+            self.creer_document(f"Catégorie {categorie}", categorie=categorie)
+            for categorie in categories
+        ]
+
+        self.assertEqual(
+            set(
+                Document.objects.filter(pk__in=[document.pk for document in documents]).values_list(
+                    "categorie", flat=True
+                )
+            ),
+            set(categories),
+        )
+
+    def test_categorie_reste_independante_de_la_portee_et_de_la_publication(self):
+        permanent = self.creer_document(
+            "Permanent organisation",
+            categorie=Document.CATEGORIE_ORGANISATION_PLANNING,
+            permanent=True,
+            publie=False,
+        )
+        lie_periode = self.creer_document(
+            "Période organisation",
+            categorie=Document.CATEGORIE_ORGANISATION_PLANNING,
+            permanent=False,
+            periode_debut=datetime.date(2030, 7, 1),
+            periode_fin=datetime.date(2030, 7, 5),
+            publie=True,
+        )
+
+        self.assertEqual(permanent.categorie, lie_periode.categorie)
+        self.assertTrue(permanent.permanent)
+        self.assertFalse(lie_periode.permanent)
+        self.assertFalse(permanent.publie)
+        self.assertTrue(lie_periode.publie)
+
+    def test_important_et_archive_le_sont_independants(self):
+        archive_le = timezone.now()
+        document = self.creer_document(
+            "Document important archivé",
+            important=True,
+            archive_le=archive_le,
+        )
+
+        self.assertTrue(document.important)
+        self.assertEqual(document.archive_le, archive_le)
+
+    def test_migration_classe_sans_perdre_les_relations_existantes(self):
+        type_accueil = TypeAccueil.objects.get(code="vacances")
+        centre = Centre.objects.create(nom="Centre migration", code="CM")
+        periode = PeriodeScolaire.objects.create(
+            nom="Été migration",
+            annee_scolaire="2030-2031",
+            zone="A",
+            debut=datetime.date(2030, 7, 1),
+            fin=datetime.date(2030, 7, 5),
+            type_accueil=type_accueil,
+        )
+        modalite = ModalitePeriscolaire.objects.create(code="migration", nom="Migration")
+        programme = self.creer_document(
+            "Programme historique",
+            type_document=Document.TYPE_PROGRAMME_ACTIVITES,
+            categorie=Document.CATEGORIE_AUTRE,
+            important=True,
+            archive_le=timezone.now(),
+        )
+        classique = self.creer_document(
+            "Document classique historique",
+            categorie=Document.CATEGORIE_PEDAGOGIE_ACTIVITES,
+            important=True,
+            archive_le=timezone.now(),
+        )
+        programme.periodes.add(periode)
+        programme.centres.add(centre)
+        programme.types_accueil.add(type_accueil)
+        programme.modalites_periscolaires.add(modalite)
+        sejour = Sejour.objects.create(nom="Séjour migration")
+        sortie = Sortie.objects.create(
+            nom="Sortie migration",
+            date=datetime.date(2030, 7, 2),
+            destination="Musée",
+        )
+        formation = Formation.objects.create(
+            intitule="Formation migration",
+            date_debut=datetime.date(2030, 7, 2),
+            date_fin=datetime.date(2030, 7, 3),
+        )
+        sejour.documents.add(programme)
+        sortie.documents.add(programme)
+        formation.documents.add(programme)
+
+        import_module("animateurs.migrations.0117_document_categories").classer_documents_existants(apps, None)
+
+        programme.refresh_from_db()
+        classique.refresh_from_db()
+        self.assertEqual(programme.categorie, Document.CATEGORIE_PEDAGOGIE_ACTIVITES)
+        self.assertEqual(classique.categorie, Document.CATEGORIE_AUTRE)
+        self.assertFalse(programme.important)
+        self.assertFalse(classique.important)
+        self.assertIsNone(programme.archive_le)
+        self.assertIsNone(classique.archive_le)
+        self.assertEqual(programme.type_document, Document.TYPE_PROGRAMME_ACTIVITES)
+        self.assertEqual(list(programme.periodes.values_list("pk", flat=True)), [periode.pk])
+        self.assertEqual(list(programme.centres.values_list("pk", flat=True)), [centre.pk])
+        self.assertEqual(list(programme.types_accueil.values_list("pk", flat=True)), [type_accueil.pk])
+        self.assertEqual(list(programme.modalites_periscolaires.values_list("pk", flat=True)), [modalite.pk])
+        self.assertEqual(list(programme.sejours.values_list("pk", flat=True)), [sejour.pk])
+        self.assertEqual(list(programme.sorties.values_list("pk", flat=True)), [sortie.pk])
+        self.assertEqual(list(programme.formations.values_list("pk", flat=True)), [formation.pk])
 
 
 class ApiAjoutDocumentTests(ConnexionTestCase):
