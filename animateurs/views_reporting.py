@@ -937,13 +937,59 @@ def api_documents(request):
                     if (document.tous_centres and document.permanent) or affectations_document.exists():
                         documents_visibles.append(document)
                 return JsonResponse([document_to_dict(d) for d in documents_visibles], safe=False)
-        return JsonResponse([document_to_dict(d) for d in documents_qs], safe=False)
+
+        vue = request.GET.get("vue", "").strip()
+        categorie = request.GET.get("categorie", "").strip()
+        centre_id = request.GET.get("centre_id", "").strip()
+        publie = request.GET.get("publie", "").strip().lower()
+        periode_id = request.GET.get("periode_id", "").strip()
+        if categorie:
+            if categorie not in dict(Document.CATEGORIE_CHOICES):
+                return JsonResponse({"error": "La catégorie est invalide."}, status=400)
+            documents_qs = documents_qs.filter(categorie=categorie)
+        if publie in {"true", "false"}:
+            documents_qs = documents_qs.filter(publie=publie == "true")
+        if centre_id:
+            try:
+                centre_id = int(centre_id)
+            except ValueError:
+                return JsonResponse({"error": "Le centre est invalide."}, status=400)
+            documents_qs = documents_qs.filter(Q(tous_centres=True) | Q(centres__id=centre_id))
+        if periode_id:
+            try:
+                periode = PeriodeScolaire.objects.get(pk=int(periode_id))
+            except (PeriodeScolaire.DoesNotExist, ValueError):
+                return JsonResponse({"error": "La période est invalide."}, status=400)
+        else:
+            periode = None
+        if vue == "periode":
+            documents_qs = documents_qs.filter(permanent=False, archive_le__isnull=True)
+            if periode is not None:
+                documents_qs = documents_qs.filter(
+                    Q(periodes=periode)
+                    | Q(periodes__isnull=True, periode_debut__lte=periode.fin, periode_fin__gte=periode.debut)
+                )
+        elif vue == "permanents":
+            documents_qs = documents_qs.filter(permanent=True, archive_le__isnull=True)
+        elif vue == "archives":
+            aujourd_hui = timezone.localdate()
+            historiques = Document.objects.filter(permanent=False).filter(
+                Q(periodes__isnull=False) | Q(periode_fin__lt=aujourd_hui)
+            ).exclude(periodes__fin__gte=aujourd_hui)
+            documents_qs = documents_qs.filter(Q(archive_le__isnull=False) | Q(pk__in=historiques))
+        elif vue:
+            return JsonResponse({"error": "La vue demandée est invalide."}, status=400)
+        return JsonResponse([document_to_dict(d) for d in documents_qs.distinct()], safe=False)
 
     titre = request.POST.get("titre", "").strip()
     type_document = request.POST.get("type_document", Document.TYPE_CLASSIQUE).strip()
     if type_document not in dict(Document.TYPE_DOCUMENT_CHOICES):
         return JsonResponse({"error": "Le type de document est invalide."}, status=400)
     fichier = request.FILES.get("fichier")
+    categorie = request.POST.get("categorie", Document.CATEGORIE_AUTRE).strip()
+    if categorie not in dict(Document.CATEGORIE_CHOICES):
+        return JsonResponse({"error": "La catégorie est invalide."}, status=400)
+    important = str(request.POST.get("important", "false")).lower() in {"1", "true", "on", "yes"}
     permanent = str(request.POST.get("permanent", "")).lower() in {"1", "true", "on", "yes"}
     periode_ids_bruts = request.POST.getlist("periode_ids") or request.POST.getlist("periode_ids[]")
     try:
@@ -994,6 +1040,8 @@ def api_documents(request):
             document = Document.objects.create(
                 titre=titre,
                 type_document=type_document,
+                categorie=categorie,
+                important=important,
                 publie=publie,
                 fichier=fichier,
                 permanent=permanent,
@@ -1046,8 +1094,15 @@ def api_document_detail(request, document_id):
     except json.JSONDecodeError:
         return JsonResponse({"error": "JSON invalide."}, status=400)
 
+    if "archive" in payload:
+        document.archive_le = timezone.now() if bool(payload["archive"]) else None
+        document.save(update_fields=["archive_le"])
+        return JsonResponse(document_to_dict(document))
+
     titre = str(payload.get("titre", document.titre)).strip()
     type_document = str(payload.get("type_document", document.type_document)).strip()
+    categorie = str(payload.get("categorie", document.categorie)).strip()
+    important = bool(payload.get("important", document.important))
     publie = bool(payload.get("publie", document.publie))
     permanent = bool(payload.get("permanent", document.permanent))
     tous_centres = bool(payload.get("tous_centres", document.tous_centres))
@@ -1067,6 +1122,8 @@ def api_document_detail(request, document_id):
         return JsonResponse({"error": "Le titre est obligatoire."}, status=400)
     if type_document not in dict(Document.TYPE_DOCUMENT_CHOICES):
         return JsonResponse({"error": "Le type de document est invalide."}, status=400)
+    if categorie not in dict(Document.CATEGORIE_CHOICES):
+        return JsonResponse({"error": "La catégorie est invalide."}, status=400)
 
     periodes = []
     periode_debut = None
@@ -1082,12 +1139,14 @@ def api_document_detail(request, document_id):
 
     document.titre = titre
     document.type_document = type_document
+    document.categorie = categorie
+    document.important = important
     document.publie = publie
     document.permanent = permanent
     document.periode_debut = periode_debut
     document.periode_fin = periode_fin
     document.tous_centres = tous_centres
-    document.save(update_fields=["titre", "type_document", "publie", "permanent", "periode_debut", "periode_fin", "tous_centres"])
+    document.save(update_fields=["titre", "type_document", "categorie", "important", "publie", "permanent", "periode_debut", "periode_fin", "tous_centres"])
     document.periodes.set(periodes)
     document.centres.set(centres)
 

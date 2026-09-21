@@ -1230,12 +1230,12 @@ body.app-body .calendar-sortie-marker {
    Documents
    -------------------------------------------------------------------------- */
 
-body.app-body :is(.documents-grid, .document-group-grid) {
+body.app-body .documents-shared-page :is(.documents-grid, .document-group-grid) {
   display: grid !important;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
 }
 
-body.app-body .document-card {
+body.app-body .documents-shared-page .document-card {
   display: grid !important;
   grid-template-columns: 28px minmax(0, 1fr) !important;
   align-items: start !important;
@@ -1243,7 +1243,7 @@ body.app-body .document-card {
   padding: 8px !important;
 }
 
-body.app-body .document-card :is(.document-icon, .document-card-icon, .document-file-type) {
+body.app-body .documents-shared-page .document-card :is(.document-icon, .document-card-icon, .document-file-type) {
   width: 28px !important;
   min-width: 28px !important;
   height: 28px !important;
@@ -1253,19 +1253,19 @@ body.app-body .document-card :is(.document-icon, .document-card-icon, .document-
   color: var(--site-primary) !important;
 }
 
-body.app-body .document-card :is(h3, h4, .document-title) {
+body.app-body .documents-shared-page .document-card :is(h3, h4, .document-title) {
   margin: 0 !important;
   font-size: .77rem !important;
   line-height: 1.2 !important;
 }
 
-body.app-body .document-card :is(p, small, .document-meta) {
+body.app-body .documents-shared-page .document-card :is(p, small, .document-meta) {
   color: var(--site-muted) !important;
   font-size: .65rem !important;
   line-height: 1.25 !important;
 }
 
-body.app-body .document-card :is(.document-actions, .document-card-actions) {
+body.app-body .documents-shared-page .document-card :is(.document-actions, .document-card-actions) {
   grid-column: 1 / -1 !important;
   width: 100% !important;
   display: flex !important;
@@ -2896,12 +2896,13 @@ body.page-planning.has-fixed-page-tabs #layout.planning-workspace {
   }
 
   /* Documents et cartes de listes. */
-  body.app-body :is(.documents-grid, .document-group-grid, .home-document-group-grid) {
+  body.app-body .documents-shared-page :is(.documents-grid, .document-group-grid),
+  body.app-body .home-document-group-grid {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  body.app-body .document-card-actions,
-  body.app-body .document-actions {
+  body.app-body .documents-shared-page .document-card-actions,
+  body.app-body .documents-shared-page .document-actions {
     width: 100% !important;
     display: flex !important;
     flex-direction: column !important;
@@ -2909,7 +2910,7 @@ body.page-planning.has-fixed-page-tabs #layout.planning-workspace {
     gap: 4px !important;
   }
 
-  body.app-body :is(.document-card-actions, .document-actions) > :is(a, button, .btn) {
+  body.app-body .documents-shared-page :is(.document-card-actions, .document-actions) > :is(a, button, .btn) {
     width: 100% !important;
   }
 

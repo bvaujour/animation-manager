@@ -114,6 +114,7 @@
 .emails-page{max-width:1100px}
 
 .document-publication-status{margin:0;font-size:.75rem;font-weight:700}.document-publication-status.is-published{color:#16784a}.document-publication-status.is-draft{color:#8a5a00}
+.documents-library-controls{display:grid;gap:10px;margin:0 0 16px}.documents-library-views,.documents-library-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:end}.documents-library-filters label{display:grid;gap:3px;font-size:.75rem;font-weight:700;min-width:150px}.documents-library-filters select{min-height:32px}.document-category-label{display:inline-flex;align-items:center;padding:2px 5px;border-radius:999px;background:color-mix(in srgb,var(--color-primary) 10%,var(--color-surface));color:var(--color-text);font-size:.64rem;font-weight:700}.document-scope-field,.document-visibility-field{min-width:210px}.document-scope-field .form-check,.document-visibility-field .form-check{display:flex}
 
 /* Documents : cartes stables et actions sans chevauchement */
 .document-period-picker-field[hidden],
@@ -186,8 +187,8 @@
 }
 .document-group-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
-  gap:8px;
+  grid-template-columns:1fr;
+  gap:5px;
 }
 .document-card{
   display:grid;
@@ -302,4 +303,112 @@
 .documents-shared-page .document-actions .btn{
   width:100%;
   justify-content:center;
+}
+
+/* Édition des documents : formulaire inline, sous la ligne active. */
+.document-editor-form{display:grid;gap:10px}
+.document-editor-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 12px}
+.document-editor-fields .field{min-width:0;margin-bottom:0!important}
+.document-editor-fields .field input:not([type="checkbox"]):not([type="radio"]),.document-editor-fields .field select{min-height:32px!important;padding:5px 8px!important;font-size:.82rem}
+.document-editor-title,.document-editor-options,.document-editor-periods,.document-editor-centres{grid-column:1/-1}
+.document-editor-options{display:flex;flex-wrap:wrap;gap:5px 14px}
+.document-editor-periods,.document-editor-centres{display:grid;gap:5px}
+.document-editor-centres .form-check{width:fit-content}
+.document-editor-form .editor-actions{display:flex;justify-content:flex-end;gap:7px;padding-top:9px;border-top:1px solid var(--color-border)}
+.document-editor-form .editor-actions .btn{width:auto}
+.gestion-documents .document-actions{padding:0!important}
+@media (max-width:640px){.document-editor-fields{grid-template-columns:1fr}.document-editor-form .editor-actions{display:grid;grid-template-columns:1fr}.document-editor-form .editor-actions .btn{width:100%}}
+
+/* Bibliothèque : liste dense sur écran large, cartes empilées sur mobile. */
+@media (min-width:720px){
+  .documents-grid{gap:10px}
+  .document-group h2{margin-bottom:5px}
+  .document-group-grid{grid-template-columns:minmax(0,1fr);gap:4px}
+  .document-card{
+    align-items:center;
+    gap:8px;
+    padding:6px 8px;
+    border-radius:7px;
+  }
+  .document-file-type{width:28px;height:28px;font-size:.56rem}
+  .document-actions{flex-wrap:nowrap;gap:3px;margin:0}
+  .document-actions .btn{min-height:26px;padding:3px 6px;font-size:.67rem}
+  .document-actions .btn-danger{width:26px;min-width:26px}
+}
+
+/* La bibliothèque ne doit jamais hériter de la grille multi-colonnes générique. */
+#documents-management-app .documents-grid{
+  display:flex;
+  flex-direction:column;
+  grid-template-columns:minmax(0,1fr);
+  align-items:stretch;
+}
+#documents-management-app .document-group{width:100%}
+#documents-management-app .document-group-grid{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  width:100%;
+}
+#documents-management-app .document-card{width:100%;box-sizing:border-box}
+
+#documents-management-app .document-card:has(.document-inline-editor){border-color:color-mix(in srgb,var(--color-primary) 38%,var(--color-border));background:var(--color-surface-sunken)}
+#documents-management-app .document-card:has(.document-inline-editor) .document-actions{display:none}
+#documents-management-app .document-inline-editor{
+  grid-column:1/-1;
+  margin:5px -8px -6px;
+  padding:10px 8px 8px;
+  border-top:1px solid var(--color-border);
+  border-right:0;
+  border-bottom:0;
+  border-left:0;
+  border-radius:0;
+  background:var(--color-surface);
+}
+#documents-management-app .document-inline-editor .document-editor-fields{grid-template-columns:minmax(220px,2fr) minmax(150px,1fr) minmax(170px,1fr)}
+#documents-management-app .document-inline-editor .document-editor-title{grid-column:auto}
+#documents-management-app .document-inline-editor .document-editor-options{grid-column:1/-1}
+@media (min-width:720px){
+  #documents-management-app .document-inline-editor{grid-row:auto}
+}
+@media (max-width:719px){
+  #documents-management-app .document-inline-editor .document-editor-fields{grid-template-columns:1fr}
+  #documents-management-app .document-inline-editor .document-editor-title{grid-column:1}
+}
+
+/* Ligne de lecture : quatre zones indépendantes, sans débordement sur les actions. */
+#documents-management-app .document-card{
+  grid-template-columns:30px minmax(0,1fr);
+  grid-template-areas:"type title" "meta meta" "actions actions";
+}
+#documents-management-app .document-file-type{grid-area:type}
+#documents-management-app .document-title{grid-area:title;min-width:0}
+#documents-management-app .document-card-meta{
+  grid-area:meta;
+  min-width:0;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-start;
+  gap:3px 5px;
+}
+#documents-management-app .document-card-meta > *{min-width:0}
+#documents-management-app .document-actions{grid-area:actions;justify-self:end}
+
+@media (min-width:720px) and (max-width:1023px){
+  #documents-management-app .document-card{
+    grid-template-columns:40px minmax(0,1fr) max-content;
+    grid-template-areas:"type title actions" "type meta actions";
+  }
+  #documents-management-app .document-actions{width:max-content;min-width:max-content;flex-wrap:nowrap}
+  #documents-management-app .document-card:has(.document-inline-editor){grid-template-areas:"type title actions" "type meta actions" "editor editor editor"}
+}
+
+@media (min-width:1024px){
+  #documents-management-app .document-card{
+    grid-template-columns:48px minmax(240px,.9fr) minmax(360px,1.1fr) max-content;
+    grid-template-areas:"type title meta actions";
+  }
+  #documents-management-app .document-file-type{justify-self:center}
+  #documents-management-app .document-card-meta{align-content:center;justify-content:flex-start}
+  #documents-management-app .document-actions{width:max-content;min-width:max-content;flex-wrap:nowrap}
+  #documents-management-app .document-card:has(.document-inline-editor){grid-template-areas:"type title meta actions" "editor editor editor editor"}
 }

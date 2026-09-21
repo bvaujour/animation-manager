@@ -234,6 +234,8 @@ class ApiAjoutDocumentTests(ConnexionTestCase):
             data={
                 "titre": "Programme semaine 1",
                 "type_document": Document.TYPE_PROGRAMME_ACTIVITES,
+                "categorie": Document.CATEGORIE_PEDAGOGIE_ACTIVITES,
+                "important": "true",
                 "permanent": "true",
                 "fichier": SimpleUploadedFile("programme.jpg", b"image", content_type="image/jpeg"),
             },
@@ -242,7 +244,10 @@ class ApiAjoutDocumentTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 201)
         document = Document.objects.get()
         self.assertEqual(document.type_document, Document.TYPE_PROGRAMME_ACTIVITES)
+        self.assertEqual(document.categorie, Document.CATEGORIE_PEDAGOGIE_ACTIVITES)
+        self.assertTrue(document.important)
         self.assertEqual(response.json()["type_document"], Document.TYPE_PROGRAMME_ACTIVITES)
+        self.assertEqual(response.json()["categorie"], Document.CATEGORIE_PEDAGOGIE_ACTIVITES)
 
         response = self.client.patch(
             reverse("api_document_detail", args=[document.id]),
@@ -337,3 +342,114 @@ class VisibiliteDocumentCentresTests(TestCase):
             {item["titre"] for item in response.json()},
             {"visible-tous", "visible-centre", "permanent-tous"},
         )
+
+
+class DocumentV2DirectionApiTests(ConnexionTestCase):
+    def setUp(self):
+        self.centre = Centre.objects.create(nom="Centre documents V2", code="DV2")
+        self.autre_centre = Centre.objects.create(nom="Autre centre V2", code="AV2")
+        type_accueil = TypeAccueil.objects.get(code="vacances")
+        self.periode = PeriodeScolaire.objects.create(
+            nom="Été V2", annee_scolaire="2030-2031", zone="A",
+            debut=datetime.date(2030, 7, 1), fin=datetime.date(2030, 7, 5), type_accueil=type_accueil,
+        )
+        self.autre_periode = PeriodeScolaire.objects.create(
+            nom="Été V2 semaine 2", annee_scolaire="2030-2031", zone="A",
+            debut=datetime.date(2030, 7, 8), fin=datetime.date(2030, 7, 12), type_accueil=type_accueil,
+        )
+
+    def creer_document(self, titre, **kwargs):
+        return Document.objects.create(titre=titre, fichier=f"documents/{titre}.pdf", **kwargs)
+
+    def test_gestion_documents_expose_les_vues_et_champs_v2(self):
+        response = self.client.get(reverse("gestion"), {"onglet": "documents"})
+
+        self.assertContains(response, "Documents de la période")
+        self.assertContains(response, "Permanents")
+        self.assertContains(response, "Archives")
+        self.assertContains(response, "Catégorie")
+        self.assertContains(response, "Lié à une période")
+        self.assertContains(response, "Publié à l’équipe")
+        self.assertContains(response, "Important")
+
+    def test_vue_periode_utilise_reellement_la_periode_selectionnee(self):
+        retenu = self.creer_document("Période retenue", permanent=False, periode_debut=self.periode.debut, periode_fin=self.periode.fin)
+        retenu.periodes.add(self.periode)
+        autre = self.creer_document("Autre période", permanent=False, periode_debut=self.autre_periode.debut, periode_fin=self.autre_periode.fin)
+        autre.periodes.add(self.autre_periode)
+        self.creer_document("Permanent", permanent=True)
+
+        response = self.client.get(reverse("api_documents"), {"vue": "periode", "periode_id": self.periode.pk})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["titre"] for item in response.json()], ["Période retenue"])
+
+    def test_vue_permanents_et_archives_distingueraient_les_documents(self):
+        permanent = self.creer_document("Protocole permanent", permanent=True)
+        passe = PeriodeScolaire.objects.create(
+            nom="Historique V2", annee_scolaire="2020-2021", zone="A",
+            debut=datetime.date(2020, 7, 1), fin=datetime.date(2020, 7, 5), type_accueil=TypeAccueil.objects.get(code="vacances"),
+        )
+        historique = self.creer_document("Document historique", permanent=False, periode_debut=passe.debut, periode_fin=passe.fin)
+        historique.periodes.add(passe)
+
+        permanents = self.client.get(reverse("api_documents"), {"vue": "permanents"}).json()
+        archives = self.client.get(reverse("api_documents"), {"vue": "archives"}).json()
+
+        self.assertEqual([item["id"] for item in permanents], [permanent.pk])
+        self.assertEqual([item["id"] for item in archives], [historique.pk])
+
+    def test_archivage_et_restauration_ne_suppriment_ni_fichier_ni_relations(self):
+        document = self.creer_document("À archiver")
+        document.centres.add(self.centre)
+        fichier = document.fichier.name
+
+        archive = self.client.patch(
+            reverse("api_document_detail", args=[document.pk]), data={"archive": True}, content_type="application/json"
+        )
+        document.refresh_from_db()
+        self.assertEqual(archive.status_code, 200)
+        self.assertIsNotNone(document.archive_le)
+        self.assertEqual(document.fichier.name, fichier)
+        self.assertEqual(list(document.centres.values_list("pk", flat=True)), [self.centre.pk])
+
+        restaure = self.client.patch(
+            reverse("api_document_detail", args=[document.pk]), data={"archive": False}, content_type="application/json"
+        )
+        document.refresh_from_db()
+        self.assertEqual(restaure.status_code, 200)
+        self.assertIsNone(document.archive_le)
+        self.assertEqual(document.fichier.name, fichier)
+        self.assertEqual(list(document.centres.values_list("pk", flat=True)), [self.centre.pk])
+
+    def test_filtres_categorie_centre_publication_et_important(self):
+        visible = self.creer_document(
+            "Important ciblé", categorie=Document.CATEGORIE_ADMINISTRATIF, important=True, publie=True
+        )
+        visible.centres.add(self.centre)
+        autre = self.creer_document(
+            "Autre ciblé", categorie=Document.CATEGORIE_ADMINISTRATIF, publie=False, tous_centres=False
+        )
+        autre.centres.add(self.autre_centre)
+
+        response = self.client.get(
+            reverse("api_documents"),
+            {"vue": "permanents", "categorie": "administratif", "centre_id": self.centre.pk, "publie": "true"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.json()], [visible.pk])
+        self.assertTrue(response.json()[0]["important"])
+        self.assertEqual(response.json()[0]["categorie"], Document.CATEGORIE_ADMINISTRATIF)
+
+    def test_programme_activites_reste_identifie_et_serialize_avec_la_categorie(self):
+        programme = self.creer_document(
+            "Programme intact", type_document=Document.TYPE_PROGRAMME_ACTIVITES,
+            categorie=Document.CATEGORIE_PEDAGOGIE_ACTIVITES,
+        )
+
+        response = self.client.get(reverse("api_documents"), {"vue": "permanents"})
+
+        programme_json = next(item for item in response.json() if item["id"] == programme.pk)
+        self.assertEqual(programme_json["type_document"], Document.TYPE_PROGRAMME_ACTIVITES)
+        self.assertEqual(programme_json["categorie"], Document.CATEGORIE_PEDAGOGIE_ACTIVITES)
