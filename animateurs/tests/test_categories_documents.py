@@ -97,7 +97,7 @@ class CategoriesDocumentsApiTests(ConnexionTestCase):
         utilisee = CategorieDocument.objects.get(code="pedagogie_activites")
         libre = CategorieDocument.objects.get(code="organisation_planning")
         Document.objects.create(
-            titre="Document lié", fichier="documents/lie.pdf", categorie="pedagogie_activites", categorie_ref=utilisee
+            titre="Document lié", fichier="documents/lie.pdf", categorie_ref=utilisee
         )
 
         categories = {item["code"]: item for item in self.client.get(self.list_url).json()}
@@ -153,7 +153,7 @@ class CategoriesDocumentsApiTests(ConnexionTestCase):
     def test_refuse_la_suppression_d_une_categorie_utilisee(self):
         categorie = CategorieDocument.objects.get(code="administratif")
         Document.objects.create(
-            titre="Document lié", fichier="documents/lie.pdf", categorie="administratif", categorie_ref=categorie
+            titre="Document lié", fichier="documents/lie.pdf", categorie_ref=categorie
         )
 
         response = self.client.delete(self.detail_url(categorie))

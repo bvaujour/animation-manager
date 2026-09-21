@@ -2753,6 +2753,7 @@ class DemandeMateriel(models.Model):
 class CategorieDocument(models.Model):
     """Référentiel préparant la personnalisation des catégories documentaires."""
 
+    CODE_AUTRE = "autre"
     nom = models.CharField(max_length=100)
     code = models.SlugField(max_length=32, unique=True)
     ordre = models.PositiveSmallIntegerField(default=0)
@@ -2787,24 +2788,6 @@ class Document(models.Model):
         max_length=32,
         choices=TYPE_DOCUMENT_CHOICES,
         default=TYPE_CLASSIQUE,
-        db_index=True,
-    )
-    CATEGORIE_PEDAGOGIE_ACTIVITES = "pedagogie_activites"
-    CATEGORIE_ORGANISATION_PLANNING = "organisation_planning"
-    CATEGORIE_PROTOCOLS_SECURITE = "protocoles_securite"
-    CATEGORIE_ADMINISTRATIF = "administratif"
-    CATEGORIE_AUTRE = "autre"
-    CATEGORIE_CHOICES = (
-        (CATEGORIE_PEDAGOGIE_ACTIVITES, "Pédagogie & activités"),
-        (CATEGORIE_ORGANISATION_PLANNING, "Organisation & planning"),
-        (CATEGORIE_PROTOCOLS_SECURITE, "Protocoles & sécurité"),
-        (CATEGORIE_ADMINISTRATIF, "Administratif"),
-        (CATEGORIE_AUTRE, "Autre"),
-    )
-    categorie = models.CharField(
-        max_length=32,
-        choices=CATEGORIE_CHOICES,
-        default=CATEGORIE_AUTRE,
         db_index=True,
     )
     categorie_ref = models.ForeignKey(

@@ -1617,8 +1617,8 @@ def _categorie_document_to_dict(item):
         "ordre": item.ordre,
         "active": item.active,
         "documents_count": documents_count,
-        "peut_desactiver": item.code != Document.CATEGORIE_AUTRE,
-        "peut_supprimer": item.code != Document.CATEGORIE_AUTRE and documents_count == 0,
+        "peut_desactiver": item.code != CategorieDocument.CODE_AUTRE,
+        "peut_supprimer": item.code != CategorieDocument.CODE_AUTRE and documents_count == 0,
     }
 
 
@@ -1668,7 +1668,7 @@ def api_categorie_document_detail(request, categorie_id):
         return JsonResponse({"error": "Catégorie de documents introuvable."}, status=404)
 
     if request.method == "DELETE":
-        if item.code == Document.CATEGORIE_AUTRE:
+        if item.code == CategorieDocument.CODE_AUTRE:
             return JsonResponse({"error": "La catégorie « Autre » ne peut pas être supprimée."}, status=400)
         if item.documents.exists():
             return JsonResponse(
@@ -1689,7 +1689,7 @@ def api_categorie_document_detail(request, categorie_id):
             update_fields.append("nom")
         if "active" in payload:
             active = bool(payload["active"])
-            if item.code == Document.CATEGORIE_AUTRE and not active:
+            if item.code == CategorieDocument.CODE_AUTRE and not active:
                 raise ValidationError("La catégorie « Autre » doit rester active.")
             item.active = active
             update_fields.append("active")

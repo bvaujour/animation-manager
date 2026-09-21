@@ -44,7 +44,7 @@ def _categorie_document_depuis_requete(categorie_id, categorie_code=None):
             return None
     if categorie_code not in (None, ""):
         return CategorieDocument.objects.filter(code=str(categorie_code).strip()).first()
-    return CategorieDocument.objects.filter(code=Document.CATEGORIE_AUTRE).first()
+    return CategorieDocument.objects.filter(code=CategorieDocument.CODE_AUTRE).first()
 
 # ---------------------------------------------------------------------------
 # API - Récapitulatif (statistiques pour la page de suivi)
@@ -969,7 +969,7 @@ def api_documents(request):
             categorie_ref = CategorieDocument.objects.filter(code=categorie).first()
             if categorie_ref is None:
                 return JsonResponse({"error": "La catégorie est invalide."}, status=400)
-            documents_qs = documents_qs.filter(Q(categorie_ref=categorie_ref) | Q(categorie_ref__isnull=True, categorie=categorie))
+            documents_qs = documents_qs.filter(categorie_ref=categorie_ref)
         if publie in {"true", "false"}:
             documents_qs = documents_qs.filter(publie=publie == "true")
         if centre_id:
@@ -1067,7 +1067,6 @@ def api_documents(request):
             document = Document.objects.create(
                 titre=titre,
                 type_document=type_document,
-                categorie=categorie_ref.code,
                 categorie_ref=categorie_ref,
                 important=important,
                 publie=publie,
@@ -1176,7 +1175,6 @@ def api_document_detail(request, document_id):
     document.type_document = type_document
     if categorie_change:
         document.categorie_ref = categorie_ref
-        document.categorie = categorie_ref.code
     document.important = important
     document.publie = publie
     document.permanent = permanent
@@ -1185,7 +1183,7 @@ def api_document_detail(request, document_id):
     document.tous_centres = tous_centres
     update_fields = ["titre", "type_document", "important", "publie", "permanent", "periode_debut", "periode_fin", "tous_centres"]
     if categorie_change:
-        update_fields.extend(["categorie", "categorie_ref"])
+        update_fields.append("categorie_ref")
     document.save(update_fields=update_fields)
     document.periodes.set(periodes)
     document.centres.set(centres)

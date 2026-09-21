@@ -1,9 +1,8 @@
 import datetime
 import tempfile
-from importlib import import_module
 from unittest.mock import patch
 
-from django.apps import apps
+from django.core.exceptions import FieldDoesNotExist
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models.deletion import ProtectedError
@@ -64,56 +63,28 @@ class DocumentV2ModelTests(TestCase):
     def creer_document(self, titre, **kwargs):
         return Document.objects.create(titre=titre, fichier=f"documents/{titre}.pdf", **kwargs)
 
-    def test_valeurs_par_defaut_et_categories_disponibles(self):
-        document = self.creer_document("Par défaut")
-
-        self.assertEqual(document.categorie, Document.CATEGORIE_AUTRE)
-        self.assertFalse(document.important)
-        self.assertIsNone(document.archive_le)
-        self.assertEqual(
-            Document.CATEGORIE_CHOICES,
-            (
-                ("pedagogie_activites", "Pédagogie & activités"),
-                ("organisation_planning", "Organisation & planning"),
-                ("protocoles_securite", "Protocoles & sécurité"),
-                ("administratif", "Administratif"),
-                ("autre", "Autre"),
-            ),
-        )
-
-    def test_les_cinq_categories_sont_enregistrables(self):
-        categories = [choix for choix, _ in Document.CATEGORIE_CHOICES]
-        documents = [
-            self.creer_document(f"Catégorie {categorie}", categorie=categorie)
-            for categorie in categories
-        ]
-
-        self.assertEqual(
-            set(
-                Document.objects.filter(pk__in=[document.pk for document in documents]).values_list(
-                    "categorie", flat=True
-                )
-            ),
-            set(categories),
-        )
+    def test_le_modele_ne_conserve_plus_de_champ_categorie_historique(self):
+        with self.assertRaises(FieldDoesNotExist):
+            Document._meta.get_field("categorie")
+        self.assertFalse(hasattr(Document, "CATEGORIE_CHOICES"))
 
     def test_categorie_reste_independante_de_la_portee_et_de_la_publication(self):
         permanent = self.creer_document(
             "Permanent organisation",
-            categorie=Document.CATEGORIE_ORGANISATION_PLANNING,
+            categorie_ref=CategorieDocument.objects.get(code="organisation_planning"),
             permanent=True,
             publie=False,
         )
         lie_periode = self.creer_document(
             "Période organisation",
-            categorie=Document.CATEGORIE_ORGANISATION_PLANNING,
+            categorie_ref=CategorieDocument.objects.get(code="organisation_planning"),
             permanent=False,
             periode_debut=datetime.date(2030, 7, 1),
             periode_fin=datetime.date(2030, 7, 5),
             publie=True,
         )
 
-        self.assertEqual(permanent.categorie, lie_periode.categorie)
+        self.assertEqual(permanent.categorie_ref_id, lie_periode.categorie_ref_id)
         self.assertTrue(permanent.permanent)
         self.assertFalse(lie_periode.permanent)
         self.assertFalse(permanent.publie)
@@ -130,7 +101,7 @@ class DocumentV2ModelTests(TestCase):
         self.assertTrue(document.important)
         self.assertEqual(document.archive_le, archive_le)
 
-    def test_migration_classe_sans_perdre_les_relations_existantes(self):
+    def test_relations_document_restent_independantes_de_la_categorie(self):
         type_accueil = TypeAccueil.objects.get(code="vacances")
         centre = Centre.objects.create(nom="Centre migration", code="CM")
         periode = PeriodeScolaire.objects.create(
@@ -145,13 +116,13 @@ class DocumentV2ModelTests(TestCase):
         programme = self.creer_document(
             "Programme historique",
             type_document=Document.TYPE_PROGRAMME_ACTIVITES,
-            categorie=Document.CATEGORIE_AUTRE,
+            categorie_ref=CategorieDocument.objects.get(code="autre"),
             important=True,
             archive_le=timezone.now(),
         )
         classique = self.creer_document(
             "Document classique historique",
-            categorie=Document.CATEGORIE_PEDAGOGIE_ACTIVITES,
+            categorie_ref=CategorieDocument.objects.get(code="pedagogie_activites"),
             important=True,
             archive_le=timezone.now(),
         )
@@ -174,16 +145,14 @@ class DocumentV2ModelTests(TestCase):
         sortie.documents.add(programme)
         formation.documents.add(programme)
 
-        import_module("animateurs.migrations.0117_document_categories").classer_documents_existants(apps, None)
-
         programme.refresh_from_db()
         classique.refresh_from_db()
-        self.assertEqual(programme.categorie, Document.CATEGORIE_PEDAGOGIE_ACTIVITES)
-        self.assertEqual(classique.categorie, Document.CATEGORIE_AUTRE)
-        self.assertFalse(programme.important)
-        self.assertFalse(classique.important)
-        self.assertIsNone(programme.archive_le)
-        self.assertIsNone(classique.archive_le)
+        self.assertEqual(programme.categorie_ref.code, "autre")
+        self.assertEqual(classique.categorie_ref.code, "pedagogie_activites")
+        self.assertTrue(programme.important)
+        self.assertTrue(classique.important)
+        self.assertIsNotNone(programme.archive_le)
+        self.assertIsNotNone(classique.archive_le)
         self.assertEqual(programme.type_document, Document.TYPE_PROGRAMME_ACTIVITES)
         self.assertEqual(list(programme.periodes.values_list("pk", flat=True)), [periode.pk])
         self.assertEqual(list(programme.centres.values_list("pk", flat=True)), [centre.pk])
@@ -209,72 +178,6 @@ class CategorieDocumentLotATests(TestCase):
             list(self.CATEGORIES_ATTENDUES),
         )
         self.assertFalse(CategorieDocument.objects.filter(active=False).exists())
-
-    def test_migration_rattache_chaque_valeur_historique_sans_modifier_le_document(self):
-        type_accueil = TypeAccueil.objects.get(code="vacances")
-        centre = Centre.objects.create(nom="Centre catégories", code="CC")
-        periode = PeriodeScolaire.objects.create(
-            nom="Été catégories",
-            annee_scolaire="2030-2031",
-            zone="A",
-            debut=datetime.date(2030, 7, 1),
-            fin=datetime.date(2030, 7, 5),
-            type_accueil=type_accueil,
-        )
-        modalite = ModalitePeriscolaire.objects.create(code="categories", nom="Catégories")
-        documents = {}
-        for code, _, _ in self.CATEGORIES_ATTENDUES:
-            document = Document.objects.create(
-                titre=f"Document {code}",
-                fichier=f"documents/{code}.pdf",
-                categorie=code,
-            )
-            documents[code] = document
-
-        document_reference = documents["pedagogie_activites"]
-        document_reference.periodes.add(periode)
-        document_reference.centres.add(centre)
-        document_reference.types_accueil.add(type_accueil)
-        document_reference.modalites_periscolaires.add(modalite)
-        sejour = Sejour.objects.create(nom="Séjour catégories")
-        sortie = Sortie.objects.create(nom="Sortie catégories", date=datetime.date(2030, 7, 2), destination="Musée")
-        formation = Formation.objects.create(
-            intitule="Formation catégories",
-            date_debut=datetime.date(2030, 7, 2),
-            date_fin=datetime.date(2030, 7, 3),
-        )
-        sejour.documents.add(document_reference)
-        sortie.documents.add(document_reference)
-        formation.documents.add(document_reference)
-        Document.objects.filter(pk__in=[document.pk for document in documents.values()]).update(categorie_ref=None)
-
-        import_module(
-            "animateurs.migrations.0118_categoriedocument_et_reference_temporaire"
-        ).creer_categories_et_rattacher_documents(apps, None)
-
-        for code, document in documents.items():
-            document.refresh_from_db()
-            self.assertEqual(document.categorie, code)
-            self.assertEqual(document.categorie_ref.code, code)
-            self.assertEqual(document.fichier.name, f"documents/{code}.pdf")
-
-        document_reference.refresh_from_db()
-        self.assertEqual(list(document_reference.periodes.values_list("pk", flat=True)), [periode.pk])
-        self.assertEqual(list(document_reference.centres.values_list("pk", flat=True)), [centre.pk])
-        self.assertEqual(list(document_reference.types_accueil.values_list("pk", flat=True)), [type_accueil.pk])
-        self.assertEqual(list(document_reference.modalites_periscolaires.values_list("pk", flat=True)), [modalite.pk])
-        self.assertEqual(list(document_reference.sejours.values_list("pk", flat=True)), [sejour.pk])
-        self.assertEqual(list(document_reference.sorties.values_list("pk", flat=True)), [sortie.pk])
-        self.assertEqual(list(document_reference.formations.values_list("pk", flat=True)), [formation.pk])
-
-    def test_migration_refuse_une_valeur_historique_inconnue(self):
-        document = Document.objects.create(titre="Valeur inconnue", fichier="documents/inconnue.pdf")
-        Document.objects.filter(pk=document.pk).update(categorie="inconnue", categorie_ref=None)
-
-        with self.assertRaisesRegex(RuntimeError, "Catégories Document historiques inconnues : inconnue"):
-            import_module(
-                "animateurs.migrations.0118_categoriedocument_et_reference_temporaire"
-            ).creer_categories_et_rattacher_documents(apps, None)
 
     def test_categorie_utilisee_est_protegee_et_le_renommage_ne_change_pas_le_code(self):
         categorie = CategorieDocument.objects.get(code="autre")
@@ -332,7 +235,7 @@ class ApiAjoutDocumentTests(ConnexionTestCase):
             data={
                 "titre": "Programme semaine 1",
                 "type_document": Document.TYPE_PROGRAMME_ACTIVITES,
-                "categorie": Document.CATEGORIE_PEDAGOGIE_ACTIVITES,
+                "categorie": "pedagogie_activites",
                 "important": "true",
                 "permanent": "true",
                 "fichier": SimpleUploadedFile("programme.jpg", b"image", content_type="image/jpeg"),
@@ -342,10 +245,10 @@ class ApiAjoutDocumentTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 201)
         document = Document.objects.get()
         self.assertEqual(document.type_document, Document.TYPE_PROGRAMME_ACTIVITES)
-        self.assertEqual(document.categorie, Document.CATEGORIE_PEDAGOGIE_ACTIVITES)
+        self.assertEqual(document.categorie_ref.code, "pedagogie_activites")
         self.assertTrue(document.important)
         self.assertEqual(response.json()["type_document"], Document.TYPE_PROGRAMME_ACTIVITES)
-        self.assertEqual(response.json()["categorie"], Document.CATEGORIE_PEDAGOGIE_ACTIVITES)
+        self.assertEqual(response.json()["categorie"], "pedagogie_activites")
 
         response = self.client.patch(
             reverse("api_document_detail", args=[document.id]),
@@ -372,7 +275,6 @@ class ApiAjoutDocumentTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 201)
         document = Document.objects.get(titre="Projet local")
         self.assertEqual(document.categorie_ref_id, categorie.pk)
-        self.assertEqual(document.categorie, "projets_locaux")
         self.assertEqual(response.json()["categorie_nom"], "Projets locaux")
         self.assertEqual(response.json()["categorie_code"], "projets_locaux")
 
@@ -559,11 +461,11 @@ class DocumentV2DirectionApiTests(ConnexionTestCase):
 
     def test_filtres_categorie_centre_publication_et_important(self):
         visible = self.creer_document(
-            "Important ciblé", categorie=Document.CATEGORIE_ADMINISTRATIF, important=True, publie=True
+            "Important ciblé", categorie_ref=CategorieDocument.objects.get(code="administratif"), important=True, publie=True
         )
         visible.centres.add(self.centre)
         autre = self.creer_document(
-            "Autre ciblé", categorie=Document.CATEGORIE_ADMINISTRATIF, publie=False, tous_centres=False
+            "Autre ciblé", categorie_ref=CategorieDocument.objects.get(code="administratif"), publie=False, tous_centres=False
         )
         autre.centres.add(self.autre_centre)
 
@@ -575,23 +477,23 @@ class DocumentV2DirectionApiTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["id"] for item in response.json()], [visible.pk])
         self.assertTrue(response.json()[0]["important"])
-        self.assertEqual(response.json()[0]["categorie"], Document.CATEGORIE_ADMINISTRATIF)
+        self.assertEqual(response.json()[0]["categorie"], "administratif")
 
     def test_programme_activites_reste_identifie_et_serialize_avec_la_categorie(self):
         programme = self.creer_document(
             "Programme intact", type_document=Document.TYPE_PROGRAMME_ACTIVITES,
-            categorie=Document.CATEGORIE_PEDAGOGIE_ACTIVITES,
+            categorie_ref=CategorieDocument.objects.get(code="pedagogie_activites"),
         )
 
         response = self.client.get(reverse("api_documents"), {"vue": "permanents"})
 
         programme_json = next(item for item in response.json() if item["id"] == programme.pk)
         self.assertEqual(programme_json["type_document"], Document.TYPE_PROGRAMME_ACTIVITES)
-        self.assertEqual(programme_json["categorie"], Document.CATEGORIE_PEDAGOGIE_ACTIVITES)
+        self.assertEqual(programme_json["categorie"], "pedagogie_activites")
 
     def test_serialisation_utilise_le_nom_configure_et_filtre_par_id(self):
         categorie = CategorieDocument.objects.create(nom="Référentiel renommé", code="referentiel_renomme", ordre=20)
-        document = self.creer_document("Document configurable", categorie="referentiel_renomme", categorie_ref=categorie)
+        document = self.creer_document("Document configurable", categorie_ref=categorie)
 
         response = self.client.get(reverse("api_documents"), {"vue": "permanents", "categorie_id": categorie.pk})
 
@@ -610,7 +512,7 @@ class DocumentV2DirectionApiTests(ConnexionTestCase):
 
     def test_modification_conserve_une_categorie_inactive_et_refuse_de_la_choisir(self):
         inactive = CategorieDocument.objects.create(nom="Ancienne catégorie", code="ancienne_categorie", ordre=20, active=False)
-        document = self.creer_document("Document inactif", categorie=inactive.code, categorie_ref=inactive)
+        document = self.creer_document("Document inactif", categorie_ref=inactive)
 
         response = self.client.patch(
             reverse("api_document_detail", args=[document.pk]),
@@ -632,7 +534,7 @@ class DocumentV2DirectionApiTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("inactive", response.json()["error"])
 
-    def test_modification_vers_une_categorie_active_synchronise_les_deux_champs(self):
+    def test_modification_vers_une_categorie_active_met_a_jour_la_reference(self):
         document = self.creer_document("Document à classer")
         categorie = CategorieDocument.objects.create(nom="Nouveaux projets", code="nouveaux_projets", ordre=20)
 
@@ -645,11 +547,10 @@ class DocumentV2DirectionApiTests(ConnexionTestCase):
         self.assertEqual(response.status_code, 200)
         document.refresh_from_db()
         self.assertEqual(document.categorie_ref_id, categorie.pk)
-        self.assertEqual(document.categorie, categorie.code)
 
     def test_filtre_par_id_retrouve_une_categorie_inactive_existante(self):
         inactive = CategorieDocument.objects.create(nom="Archives locales", code="archives_locales", ordre=20, active=False)
-        document = self.creer_document("Document archivé par catégorie", categorie=inactive.code, categorie_ref=inactive)
+        document = self.creer_document("Document archivé par catégorie", categorie_ref=inactive)
 
         response = self.client.get(reverse("api_documents"), {"vue": "permanents", "categorie_id": inactive.pk})
 
