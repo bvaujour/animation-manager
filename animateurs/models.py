@@ -2750,6 +2750,23 @@ class DemandeMateriel(models.Model):
         return f"{self.materiel} × {self.quantite} — {self.animateur}{centre}"
 
 
+class CategorieDocument(models.Model):
+    """Référentiel préparant la personnalisation des catégories documentaires."""
+
+    nom = models.CharField(max_length=100)
+    code = models.SlugField(max_length=32, unique=True)
+    ordre = models.PositiveSmallIntegerField(default=0)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("ordre", "nom")
+        verbose_name = "catégorie de document"
+        verbose_name_plural = "catégories de documents"
+
+    def __str__(self):
+        return self.nom
+
+
 class Document(models.Model):
     """Un document administratif consultable depuis l'application.
 
@@ -2789,6 +2806,14 @@ class Document(models.Model):
         choices=CATEGORIE_CHOICES,
         default=CATEGORIE_AUTRE,
         db_index=True,
+    )
+    categorie_ref = models.ForeignKey(
+        CategorieDocument,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="documents",
+        help_text="Référence temporaire pendant la migration des catégories documentaires.",
     )
     important = models.BooleanField(default=False)
     archive_le = models.DateTimeField(null=True, blank=True)

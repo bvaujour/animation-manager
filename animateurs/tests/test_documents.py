@@ -6,6 +6,7 @@ from unittest.mock import patch
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models.deletion import ProtectedError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -13,6 +14,7 @@ from django.utils import timezone
 from animateurs.models import (
     Affectation,
     Animateur,
+    CategorieDocument,
     Centre,
     Document,
     Formation,
@@ -190,6 +192,102 @@ class DocumentV2ModelTests(TestCase):
         self.assertEqual(list(programme.sejours.values_list("pk", flat=True)), [sejour.pk])
         self.assertEqual(list(programme.sorties.values_list("pk", flat=True)), [sortie.pk])
         self.assertEqual(list(programme.formations.values_list("pk", flat=True)), [formation.pk])
+
+
+class CategorieDocumentLotATests(TestCase):
+    CATEGORIES_ATTENDUES = (
+        ("pedagogie_activites", "Pédagogie & activités", 1),
+        ("organisation_planning", "Organisation & planning", 2),
+        ("protocoles_securite", "Protocoles & sécurité", 3),
+        ("administratif", "Administratif", 4),
+        ("autre", "Autre", 5),
+    )
+
+    def test_categories_initiales_sont_creees_actives_et_ordonnees(self):
+        self.assertEqual(
+            list(CategorieDocument.objects.values_list("code", "nom", "ordre")),
+            list(self.CATEGORIES_ATTENDUES),
+        )
+        self.assertFalse(CategorieDocument.objects.filter(active=False).exists())
+
+    def test_migration_rattache_chaque_valeur_historique_sans_modifier_le_document(self):
+        type_accueil = TypeAccueil.objects.get(code="vacances")
+        centre = Centre.objects.create(nom="Centre catégories", code="CC")
+        periode = PeriodeScolaire.objects.create(
+            nom="Été catégories",
+            annee_scolaire="2030-2031",
+            zone="A",
+            debut=datetime.date(2030, 7, 1),
+            fin=datetime.date(2030, 7, 5),
+            type_accueil=type_accueil,
+        )
+        modalite = ModalitePeriscolaire.objects.create(code="categories", nom="Catégories")
+        documents = {}
+        for code, _, _ in self.CATEGORIES_ATTENDUES:
+            document = Document.objects.create(
+                titre=f"Document {code}",
+                fichier=f"documents/{code}.pdf",
+                categorie=code,
+            )
+            documents[code] = document
+
+        document_reference = documents["pedagogie_activites"]
+        document_reference.periodes.add(periode)
+        document_reference.centres.add(centre)
+        document_reference.types_accueil.add(type_accueil)
+        document_reference.modalites_periscolaires.add(modalite)
+        sejour = Sejour.objects.create(nom="Séjour catégories")
+        sortie = Sortie.objects.create(nom="Sortie catégories", date=datetime.date(2030, 7, 2), destination="Musée")
+        formation = Formation.objects.create(
+            intitule="Formation catégories",
+            date_debut=datetime.date(2030, 7, 2),
+            date_fin=datetime.date(2030, 7, 3),
+        )
+        sejour.documents.add(document_reference)
+        sortie.documents.add(document_reference)
+        formation.documents.add(document_reference)
+        Document.objects.filter(pk__in=[document.pk for document in documents.values()]).update(categorie_ref=None)
+
+        import_module(
+            "animateurs.migrations.0118_categoriedocument_et_reference_temporaire"
+        ).creer_categories_et_rattacher_documents(apps, None)
+
+        for code, document in documents.items():
+            document.refresh_from_db()
+            self.assertEqual(document.categorie, code)
+            self.assertEqual(document.categorie_ref.code, code)
+            self.assertEqual(document.fichier.name, f"documents/{code}.pdf")
+
+        document_reference.refresh_from_db()
+        self.assertEqual(list(document_reference.periodes.values_list("pk", flat=True)), [periode.pk])
+        self.assertEqual(list(document_reference.centres.values_list("pk", flat=True)), [centre.pk])
+        self.assertEqual(list(document_reference.types_accueil.values_list("pk", flat=True)), [type_accueil.pk])
+        self.assertEqual(list(document_reference.modalites_periscolaires.values_list("pk", flat=True)), [modalite.pk])
+        self.assertEqual(list(document_reference.sejours.values_list("pk", flat=True)), [sejour.pk])
+        self.assertEqual(list(document_reference.sorties.values_list("pk", flat=True)), [sortie.pk])
+        self.assertEqual(list(document_reference.formations.values_list("pk", flat=True)), [formation.pk])
+
+    def test_migration_refuse_une_valeur_historique_inconnue(self):
+        document = Document.objects.create(titre="Valeur inconnue", fichier="documents/inconnue.pdf")
+        Document.objects.filter(pk=document.pk).update(categorie="inconnue", categorie_ref=None)
+
+        with self.assertRaisesRegex(RuntimeError, "Catégories Document historiques inconnues : inconnue"):
+            import_module(
+                "animateurs.migrations.0118_categoriedocument_et_reference_temporaire"
+            ).creer_categories_et_rattacher_documents(apps, None)
+
+    def test_categorie_utilisee_est_protegee_et_le_renommage_ne_change_pas_le_code(self):
+        categorie = CategorieDocument.objects.get(code="autre")
+        document = Document.objects.create(titre="Document protégé", fichier="documents/protege.pdf", categorie_ref=categorie)
+
+        categorie.nom = "Documents divers"
+        categorie.save(update_fields=["nom"])
+        categorie.refresh_from_db()
+        self.assertEqual(categorie.code, "autre")
+
+        with self.assertRaises(ProtectedError):
+            categorie.delete()
+        self.assertTrue(Document.objects.filter(pk=document.pk).exists())
 
 
 class ApiAjoutDocumentTests(ConnexionTestCase):
