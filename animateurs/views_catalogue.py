@@ -18,6 +18,8 @@ from .models import (
     BesoinEncadrement,
     BesoinQualification,
     Centre,
+    CategorieDocument,
+    Document,
     Evenement,
     Groupe,
     PeriodeScolaire,
@@ -1602,6 +1604,123 @@ def api_assistant_lieu_accueils(request):
 # ---------------------------------------------------------------------------
 # API - Référentiels Vacances / Périscolaire et ouvertures de centres
 # ---------------------------------------------------------------------------
+
+
+def _categorie_document_to_dict(item):
+    documents_count = getattr(item, "documents_count", None)
+    if documents_count is None:
+        documents_count = item.documents.count()
+    return {
+        "id": item.pk,
+        "nom": item.nom,
+        "code": item.code,
+        "ordre": item.ordre,
+        "active": item.active,
+        "documents_count": documents_count,
+        "peut_desactiver": item.code != Document.CATEGORIE_AUTRE,
+        "peut_supprimer": item.code != Document.CATEGORIE_AUTRE and documents_count == 0,
+    }
+
+
+def _nouveau_code_categorie_document(nom):
+    """Produit un code interne stable, sans exposer son édition à l'interface."""
+    base = slugify(nom)[:32] or "categorie"
+    code = base
+    index = 2
+    while CategorieDocument.objects.filter(code=code).exists():
+        suffixe = f"-{index}"
+        code = f"{base[:32 - len(suffixe)]}{suffixe}"
+        index += 1
+    return code
+
+
+@require_http_methods(["GET", "POST"])
+def api_categories_documents(request):
+    if request.method == "GET":
+        categories = CategorieDocument.objects.annotate(documents_count=Count("documents")).order_by("ordre", "nom", "id")
+        return JsonResponse([_categorie_document_to_dict(item) for item in categories], safe=False)
+
+    try:
+        payload = _payload_json(request)
+        nom = str(payload.get("nom", "") or "").strip()
+        if not nom:
+            raise ValidationError("Le nom de la catégorie est obligatoire.")
+        with transaction.atomic():
+            ordre = (CategorieDocument.objects.aggregate(max_ordre=Max("ordre"))["max_ordre"] or 0) + 10
+            item = CategorieDocument.objects.create(
+                nom=nom,
+                code=_nouveau_code_categorie_document(nom),
+                ordre=ordre,
+                active=True,
+            )
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+    except IntegrityError:
+        return JsonResponse({"error": "Impossible de générer un code de catégorie unique."}, status=409)
+    return JsonResponse(_categorie_document_to_dict(item), status=201)
+
+
+@require_http_methods(["PATCH", "DELETE"])
+def api_categorie_document_detail(request, categorie_id):
+    try:
+        item = CategorieDocument.objects.get(pk=categorie_id)
+    except CategorieDocument.DoesNotExist:
+        return JsonResponse({"error": "Catégorie de documents introuvable."}, status=404)
+
+    if request.method == "DELETE":
+        if item.code == Document.CATEGORIE_AUTRE:
+            return JsonResponse({"error": "La catégorie « Autre » ne peut pas être supprimée."}, status=400)
+        if item.documents.exists():
+            return JsonResponse(
+                {"error": "Cette catégorie est utilisée par des documents et ne peut pas être supprimée."},
+                status=409,
+            )
+        item.delete()
+        return JsonResponse({}, status=204)
+
+    try:
+        payload = _payload_json(request)
+        update_fields = []
+        if "nom" in payload:
+            nom = str(payload.get("nom", "") or "").strip()
+            if not nom:
+                raise ValidationError("Le nom de la catégorie est obligatoire.")
+            item.nom = nom
+            update_fields.append("nom")
+        if "active" in payload:
+            active = bool(payload["active"])
+            if item.code == Document.CATEGORIE_AUTRE and not active:
+                raise ValidationError("La catégorie « Autre » doit rester active.")
+            item.active = active
+            update_fields.append("active")
+        if update_fields:
+            item.save(update_fields=update_fields)
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+    return JsonResponse(_categorie_document_to_dict(item))
+
+
+@require_http_methods(["POST"])
+def api_categorie_document_deplacer(request, categorie_id):
+    try:
+        payload = _payload_json(request)
+        direction = payload.get("direction")
+        if direction not in {"haut", "bas"}:
+            raise ValidationError("Direction de déplacement invalide.")
+        with transaction.atomic():
+            categories = list(CategorieDocument.objects.select_for_update().order_by("ordre", "nom", "id"))
+            position = next((index for index, item in enumerate(categories) if item.pk == categorie_id), None)
+            if position is None:
+                return JsonResponse({"error": "Catégorie de documents introuvable."}, status=404)
+            cible = position - 1 if direction == "haut" else position + 1
+            if 0 <= cible < len(categories):
+                courant, voisin = categories[position], categories[cible]
+                courant.ordre, voisin.ordre = voisin.ordre, courant.ordre
+                courant.save(update_fields=["ordre"])
+                voisin.save(update_fields=["ordre"])
+    except ValidationError as exc:
+        return JsonResponse({"error": _message_validation(exc)}, status=400)
+    return JsonResponse([_categorie_document_to_dict(item) for item in CategorieDocument.objects.order_by("ordre", "nom", "id")], safe=False)
 
 
 @require_http_methods(["GET"])

@@ -1953,6 +1953,46 @@ function bouton(label, classes, onClick)
 	}
 
 	// ------------------------------------------------------------------
+	// Catégories de documents
+	// ------------------------------------------------------------------
+	function mountCategoriesDocuments(container)
+	{
+		if (!container) return null;
+		container.innerHTML = `<section class="document-categories"><div class="document-categories-head"><div><p class="section-title">Catégories de documents</p><p>Organisez le référentiel disponible pour la bibliothèque.</p></div><button type="button" class="btn btn-primary document-category-add">+ Ajouter une catégorie</button></div><div class="document-category-form-host" hidden></div><div class="document-category-list"><div class="document-category-list-header" aria-hidden="true"><span>Catégorie</span><span>Ordre</span><span>État</span><span>Actions</span></div><div class="document-category-items"><p class="empty-note">Chargement…</p></div></div></section>`;
+		const list = container.querySelector(".document-category-items");
+		const host = container.querySelector(".document-category-form-host");
+		const libelleDocumentsLies = (count) => `${count} document${count > 1 ? "s" : ""}`;
+		function ouvrir(item = null) {
+			host.hidden = false;
+			host.innerHTML = `<div class="gestion-form document-category-form"><label class="field"><span>Nom</span><input class="document-category-name" maxlength="100" value="${escapeHtml(item?.nom || "")}" required></label><p class="form-error document-category-error"></p><div class="edit-actions"><button type="button" class="btn btn-primary document-category-save">${item ? "Enregistrer" : "Ajouter"}</button><button type="button" class="btn btn-ghost document-category-cancel">Annuler</button></div></div>`;
+			host.querySelector(".document-category-cancel").addEventListener("click", () => { host.hidden = true; host.innerHTML = ""; });
+			host.querySelector(".document-category-save").addEventListener("click", async () => {
+				const error = host.querySelector(".document-category-error");
+				const nom = host.querySelector(".document-category-name").value.trim();
+				if (!nom) { error.textContent = "Le nom est obligatoire."; return; }
+				try {
+					await apiFetch(item ? `/api/categories-documents/${item.id}/` : "/api/categories-documents/", { method: item ? "PATCH" : "POST", body: JSON.stringify({ nom }) });
+					host.hidden = true; host.innerHTML = ""; afficherToast(item ? "Catégorie renommée." : "Catégorie ajoutée."); await charger();
+				} catch (err) { error.textContent = erreurMessage(err, "Enregistrement impossible."); }
+			});
+		}
+		async function charger() {
+			const items = await apiFetch("/api/categories-documents/");
+			list.innerHTML = items.length ? items.map((item, index) => { const suppressionIndisponible = !item.peut_supprimer; const raisonSuppression = item.code === "autre" ? "Catégorie protégée" : `Utilisée par ${libelleDocumentsLies(item.documents_count)}`; const boutonSuppression = suppressionIndisponible ? `<span class="document-category-delete-tooltip" tabindex="0" title="${escapeHtml(raisonSuppression)}" aria-label="${escapeHtml(raisonSuppression)}" aria-describedby="document-category-delete-tip-${item.id}"><button type="button" class="btn btn-danger btn-small document-category-delete" disabled aria-disabled="true">Supprimer</button><span id="document-category-delete-tip-${item.id}" class="document-category-delete-tooltip-text" role="tooltip">${escapeHtml(raisonSuppression)}</span></span>` : '<button type="button" class="btn btn-danger btn-small document-category-delete">Supprimer</button>'; return `<article class="document-category-row ${item.active ? "" : "is-inactive"}" data-id="${item.id}"><strong class="document-category-name">${escapeHtml(item.nom)}</strong><span class="document-category-order">${item.ordre}</span><span class="document-category-status"><span class="accueil-status">${item.active ? "Actif" : "Inactif"}</span></span><div class="document-category-actions"><button type="button" class="btn btn-ghost btn-small document-category-edit">Renommer</button><button type="button" class="btn btn-ghost btn-small document-category-move" data-direction="haut" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" class="btn btn-ghost btn-small document-category-move" data-direction="bas" ${index === items.length - 1 ? "disabled" : ""}>↓</button>${item.peut_desactiver ? `<button type="button" class="btn btn-secondary btn-small document-category-toggle">${item.active ? "Désactiver" : "Activer"}</button>` : ""}${boutonSuppression}</div></article>`; }).join("") : '<p class="empty-note">Aucune catégorie.</p>';
+			list.querySelectorAll(".document-category-row").forEach((row) => {
+				const item = items.find((entry) => Number(entry.id) === Number(row.dataset.id));
+				row.querySelector(".document-category-edit").addEventListener("click", () => ouvrir(item));
+				row.querySelectorAll(".document-category-move").forEach((button) => button.addEventListener("click", async () => { try { await apiFetch(`/api/categories-documents/${item.id}/deplacer/`, { method: "POST", body: JSON.stringify({ direction: button.dataset.direction }) }); await charger(); } catch (err) { afficherToast(erreurMessage(err, "Déplacement impossible."), true); } }));
+				row.querySelector(".document-category-toggle")?.addEventListener("click", async () => { try { await apiFetch(`/api/categories-documents/${item.id}/`, { method: "PATCH", body: JSON.stringify({ active: !item.active }) }); await charger(); } catch (err) { afficherToast(erreurMessage(err, "Modification impossible."), true); } });
+				row.querySelector(".document-category-delete")?.addEventListener("click", async () => { if (!item.peut_supprimer || !window.confirm(`Supprimer « ${item.nom} » ?`)) return; try { await apiFetch(`/api/categories-documents/${item.id}/`, { method: "DELETE" }); await charger(); } catch (err) { afficherToast(erreurMessage(err, "Suppression impossible."), true); } });
+			});
+		}
+		container.querySelector(".document-category-add").addEventListener("click", () => ouvrir());
+		charger().catch((err) => { list.innerHTML = `<p class="form-error">${escapeHtml(erreurMessage(err, "Chargement impossible."))}</p>`; });
+		return { charger };
+	}
+
+	// ------------------------------------------------------------------
 	// Périodes scolaires indépendantes
 	// ------------------------------------------------------------------
 	function mountPeriodes(container, options = {})
@@ -2344,5 +2384,5 @@ function bouton(label, classes, onClick)
 	}
 
 	// ------------------------------------------------------------------
-	return { mountCentres, mountGroupes, mountModalitesPeriscolaires, mountQualifications, mountPeriodes, mountPeriodesScolaires };
+	return { mountCentres, mountGroupes, mountModalitesPeriscolaires, mountCategoriesDocuments, mountQualifications, mountPeriodes, mountPeriodesScolaires };
 })();

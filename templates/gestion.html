@@ -22,6 +22,7 @@
         <button class="tab-btn" data-tab="periodes" type="button" role="tab">Périodes vacances</button>
         <button class="tab-btn" data-tab="periodes-scolaires" type="button" role="tab">Périodes scolaires</button>
         <button class="tab-btn" data-tab="temps-periscolaires" type="button" role="tab">Temps périscolaires</button>
+        <button class="tab-btn" data-tab="categories-documents" type="button" role="tab">Catégories de documents</button>
         <button class="tab-btn" data-tab="documents" type="button" role="tab">Documents</button>
         <button class="tab-btn" data-tab="informations" type="button" role="tab">Informations animateurs</button>
     </div>
@@ -43,6 +44,9 @@
     </div>
     <div class="tab-panel" data-panel="temps-periscolaires" hidden>
         <div id="panel-temps-periscolaires"></div>
+    </div>
+    <div class="tab-panel" data-panel="categories-documents" hidden>
+        <div id="panel-categories-documents"></div>
     </div>
     <div class="tab-panel" data-panel="documents" hidden>
         <section class="ui-card gestion-documents" id="documents-management-app">
@@ -211,7 +215,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/common/location-autocomplete.js' %}?v={{ asset_version }}"></script>
-<script src="{% static 'js/gestion.js' %}?v={{ asset_version }}-gestion-lazy-2"></script>
+<script src="{% static 'js/gestion.js' %}?v={{ asset_version }}-gestion-categories-v4"></script>
 <script src="{% static 'js/documents-management.js' %}?v={{ asset_version }}-gestion-lazy-2"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -255,6 +259,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "temps-periscolaires": () => GestionApp.mountModalitesPeriscolaires(document.getElementById("panel-temps-periscolaires"), {
             onChange: () => GestionData.invalidate("modalites-actives"),
         }),
+        "categories-documents": () => GestionApp.mountCategoriesDocuments(document.getElementById("panel-categories-documents")),
         documents: () => DocumentsManagement.mount(document.getElementById("documents-management-app")),
     };
 
