@@ -356,6 +356,43 @@ class ApiAjoutDocumentTests(ConnexionTestCase):
         document.refresh_from_db()
         self.assertEqual(document.type_document, Document.TYPE_CLASSIQUE)
 
+    def test_creation_par_categorie_configuree_synchronise_la_reference_et_le_code(self):
+        categorie = CategorieDocument.objects.create(nom="Projets locaux", code="projets_locaux", ordre=20)
+
+        response = self.client.post(
+            reverse("api_documents"),
+            data={
+                "titre": "Projet local",
+                "categorie_id": categorie.pk,
+                "permanent": "true",
+                "fichier": SimpleUploadedFile("projet.pdf", b"contenu", content_type="application/pdf"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        document = Document.objects.get(titre="Projet local")
+        self.assertEqual(document.categorie_ref_id, categorie.pk)
+        self.assertEqual(document.categorie, "projets_locaux")
+        self.assertEqual(response.json()["categorie_nom"], "Projets locaux")
+        self.assertEqual(response.json()["categorie_code"], "projets_locaux")
+
+    def test_creation_refuse_categorie_inactive_ou_inconnue(self):
+        inactive = CategorieDocument.objects.create(nom="Ancienne", code="ancienne", ordre=20, active=False)
+        donnees = {
+            "titre": "Document refusé",
+            "categorie_id": inactive.pk,
+            "permanent": "true",
+            "fichier": SimpleUploadedFile("refuse.pdf", b"contenu", content_type="application/pdf"),
+        }
+        response = self.client.post(reverse("api_documents"), data=donnees)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("inactive", response.json()["error"])
+
+        donnees["categorie_id"] = 999999
+        response = self.client.post(reverse("api_documents"), data=donnees)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("invalide", response.json()["error"])
+
     @patch("animateurs.views_reporting.Document.objects.create", side_effect=RuntimeError("bucket indisponible"))
     @patch("animateurs.views_reporting.logger.exception")
     def test_erreur_stockage_reste_simple_et_journalise_le_contexte(self, logger_mock, _create_mock):
@@ -551,3 +588,86 @@ class DocumentV2DirectionApiTests(ConnexionTestCase):
         programme_json = next(item for item in response.json() if item["id"] == programme.pk)
         self.assertEqual(programme_json["type_document"], Document.TYPE_PROGRAMME_ACTIVITES)
         self.assertEqual(programme_json["categorie"], Document.CATEGORIE_PEDAGOGIE_ACTIVITES)
+
+    def test_serialisation_utilise_le_nom_configure_et_filtre_par_id(self):
+        categorie = CategorieDocument.objects.create(nom="Référentiel renommé", code="referentiel_renomme", ordre=20)
+        document = self.creer_document("Document configurable", categorie="referentiel_renomme", categorie_ref=categorie)
+
+        response = self.client.get(reverse("api_documents"), {"vue": "permanents", "categorie_id": categorie.pk})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.json()], [document.pk])
+        item = response.json()[0]
+        self.assertEqual(item["categorie_id"], categorie.pk)
+        self.assertEqual(item["categorie_code"], "referentiel_renomme")
+        self.assertEqual(item["categorie_nom"], "Référentiel renommé")
+        self.assertTrue(item["categorie_active"])
+
+        categorie.nom = "Nouveau libellé"
+        categorie.save(update_fields=["nom"])
+        item = self.client.get(reverse("api_documents"), {"vue": "permanents", "categorie_id": categorie.pk}).json()[0]
+        self.assertEqual(item["categorie_libelle"], "Nouveau libellé")
+
+    def test_modification_conserve_une_categorie_inactive_et_refuse_de_la_choisir(self):
+        inactive = CategorieDocument.objects.create(nom="Ancienne catégorie", code="ancienne_categorie", ordre=20, active=False)
+        document = self.creer_document("Document inactif", categorie=inactive.code, categorie_ref=inactive)
+
+        response = self.client.patch(
+            reverse("api_document_detail", args=[document.pk]),
+            data={"titre": "Document inactif renommé", "permanent": True, "periode_ids": [], "tous_centres": True, "centre_ids": []},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        document.refresh_from_db()
+        self.assertEqual(document.categorie_ref_id, inactive.pk)
+
+        active = CategorieDocument.objects.get(code="autre")
+        active.active = False
+        active.save(update_fields=["active"])
+        response = self.client.patch(
+            reverse("api_document_detail", args=[document.pk]),
+            data={"categorie_id": active.pk, "permanent": True, "periode_ids": [], "tous_centres": True, "centre_ids": []},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("inactive", response.json()["error"])
+
+    def test_modification_vers_une_categorie_active_synchronise_les_deux_champs(self):
+        document = self.creer_document("Document à classer")
+        categorie = CategorieDocument.objects.create(nom="Nouveaux projets", code="nouveaux_projets", ordre=20)
+
+        response = self.client.patch(
+            reverse("api_document_detail", args=[document.pk]),
+            data={"categorie_id": categorie.pk, "permanent": True, "periode_ids": [], "tous_centres": True, "centre_ids": []},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        document.refresh_from_db()
+        self.assertEqual(document.categorie_ref_id, categorie.pk)
+        self.assertEqual(document.categorie, categorie.code)
+
+    def test_filtre_par_id_retrouve_une_categorie_inactive_existante(self):
+        inactive = CategorieDocument.objects.create(nom="Archives locales", code="archives_locales", ordre=20, active=False)
+        document = self.creer_document("Document archivé par catégorie", categorie=inactive.code, categorie_ref=inactive)
+
+        response = self.client.get(reverse("api_documents"), {"vue": "permanents", "categorie_id": inactive.pk})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.json()], [document.pk])
+        self.assertFalse(response.json()[0]["categorie_active"])
+
+
+class DocumentCategoriesInterfaceTests(SimpleTestCase):
+    def test_formulaire_et_filtre_sont_alimentes_par_le_referentiel(self):
+        from pathlib import Path
+
+        racine = Path(__file__).resolve().parents[2]
+        template = (racine / "templates" / "gestion.html").read_text(encoding="utf-8")
+        script = (racine / "static" / "js" / "documents-management.js").read_text(encoding="utf-8")
+
+        self.assertIn('name="categorie_id" disabled', template)
+        self.assertNotIn('<option value="pedagogie_activites">Pédagogie', template)
+        self.assertIn('apiFetch("/api/categories-documents/")', script)
+        self.assertIn('query.set(`${name}_id`', script)
+        self.assertIn('categorieParCode("pedagogie_activites", { activeOnly: true })', script)

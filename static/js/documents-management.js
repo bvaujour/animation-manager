@@ -11,14 +11,19 @@ function mountDocuments(app) {
     const errorElement = document.getElementById("doc-error");
     const permanentInput = document.getElementById("doc-permanent");
     const categoryInput = document.getElementById("doc-categorie");
+    const categoriesManageButton = document.getElementById("document-categories-manage");
+    const categoriesDialog = document.getElementById("document-categories-dialog");
+    const categoriesDialogContent = document.getElementById("document-categories-dialog-content");
     const importantInput = document.getElementById("doc-important");
     const periodPickerField = document.getElementById("doc-period-picker-field");
     const mainPickerRoot = document.getElementById("doc-semaines-picker");
     const mainPicker = WeekPicker.init(mainPickerRoot);
     let periods = mainPicker?.periods || [];
     let centres = [];
+    let categories = [];
     let activeView = "periode";
     let activeEditor = null;
+    let categoriesManager = null;
 
     const filters = {
         categorie: document.getElementById("documents-filter-categorie"),
@@ -26,6 +31,36 @@ function mountDocuments(app) {
         centre: document.getElementById("documents-filter-centre"),
         publie: document.getElementById("documents-filter-publie"),
     };
+
+    function categorieParCode(code, { activeOnly = false } = {}) {
+        return categories.find((categorie) => categorie.code === code && (!activeOnly || categorie.active));
+    }
+
+    function optionsCategories({ currentId = null, includeInactive = false } = {}) {
+        return categories
+            .filter((categorie) => categorie.active || includeInactive || Number(categorie.id) === Number(currentId))
+            .map((categorie) => {
+                const inactive = !categorie.active;
+                return `<option value="${categorie.id}" ${Number(categorie.id) === Number(currentId) ? "selected" : ""}>${escapeHtml(categorie.nom)}${inactive ? " (inactive)" : ""}</option>`;
+            })
+            .join("");
+    }
+
+    function remplirCategories() {
+        const autre = categorieParCode("autre", { activeOnly: true });
+        const categorieSelectionnee = categoryInput.value || autre?.id;
+        const filtreSelectionne = filters.categorie.value;
+        categoryInput.innerHTML = optionsCategories({ currentId: categorieSelectionnee });
+        categoryInput.disabled = !categories.some((categorie) => categorie.active);
+        filters.categorie.innerHTML = '<option value="">Toutes</option>' + optionsCategories({ includeInactive: true });
+        filters.categorie.value = [...filters.categorie.options].some((option) => option.value === filtreSelectionne) ? filtreSelectionne : "";
+        filters.categorie.disabled = false;
+    }
+
+    async function initCategories() {
+        categories = await apiFetch("/api/categories-documents/");
+        remplirCategories();
+    }
 
     function initCentreSelector(root, { tousCentres = true, centreIds = [] } = {}) {
         const selected = new Set((centreIds || []).map(Number));
@@ -108,7 +143,7 @@ function mountDocuments(app) {
                 <div class="document-editor-fields">
                     <label class="field document-editor-title"><span>Titre</span><input type="text" name="titre" value="${escapeHtml(documentItem.titre)}" required></label>
                     <label class="field"><span>Type de document</span><select name="type_document"><option value="classique" ${documentItem.type_document === "classique" ? "selected" : ""}>Document classique</option><option value="programme_activites" ${documentItem.type_document === "programme_activites" ? "selected" : ""}>Programme d'activités</option></select></label>
-                    <label class="field"><span>Catégorie</span><select name="categorie"><option value="pedagogie_activites" ${documentItem.categorie === "pedagogie_activites" ? "selected" : ""}>Pédagogie & activités</option><option value="organisation_planning" ${documentItem.categorie === "organisation_planning" ? "selected" : ""}>Organisation & planning</option><option value="protocoles_securite" ${documentItem.categorie === "protocoles_securite" ? "selected" : ""}>Protocoles & sécurité</option><option value="administratif" ${documentItem.categorie === "administratif" ? "selected" : ""}>Administratif</option><option value="autre" ${documentItem.categorie === "autre" ? "selected" : ""}>Autre</option></select></label>
+                    <label class="field"><span>Catégorie</span><select name="categorie_id">${optionsCategories({ currentId: documentItem.categorie_id })}</select></label>
                     <div class="document-editor-options">
                         <span class="field-label">Portée</span>
                         <label class="form-check"><input class="form-check-input" type="radio" name="portee" value="permanent" ${documentItem.permanent ? "checked" : ""}><span class="form-check-label">Permanent</span></label>
@@ -175,7 +210,7 @@ function mountDocuments(app) {
                         body: JSON.stringify({
                             titre: editor.elements.titre.value.trim(),
                             type_document: editor.elements.type_document.value,
-                            categorie: editor.elements.categorie.value,
+                            categorie_id: editor.elements.categorie_id.value,
                             important: editor.elements.important.checked,
                             permanent: isPermanent(),
                             periode_ids: isPermanent() ? [] : ids,
@@ -219,6 +254,7 @@ function mountDocuments(app) {
     }
 
     function displayDocuments(documents) {
+        activeEditor = null;
         grid.innerHTML = "";
         if (!documents.length) {
             grid.innerHTML = '<p class="empty-note">Aucun document pour l’instant.</p>';
@@ -255,7 +291,7 @@ function mountDocuments(app) {
             const periodeId = selectedPeriodId();
             if (periodeId) query.set("periode_id", periodeId);
             ["categorie", "centre", "publie"].forEach((name) => {
-                if (filters[name]?.value) query.set(`${name}_id`.replace("categorie_id", "categorie").replace("publie_id", "publie"), filters[name].value);
+                if (filters[name]?.value) query.set(`${name}_id`.replace("publie_id", "publie"), filters[name].value);
             });
             displayDocuments(await apiFetch(`/api/documents/?${query.toString()}`));
         } catch (error) {
@@ -286,7 +322,7 @@ function mountDocuments(app) {
         data.append("titre", titleInput.value.trim());
         data.append("fichier", file);
         data.append("type_document", document.getElementById("doc-type-document")?.value || "classique");
-        data.append("categorie", categoryInput?.value || "autre");
+        data.append("categorie_id", categoryInput?.value || "");
         data.append("important", importantInput?.checked ? "true" : "false");
         data.append("permanent", permanentInput.checked ? "true" : "false");
         data.append("publie", document.getElementById("doc-publie")?.checked ? "true" : "false");
@@ -317,9 +353,34 @@ function mountDocuments(app) {
 
     permanentInput?.addEventListener("change", () => setPickerVisibility({ permanent: permanentInput.checked }));
     document.getElementById("doc-type-document")?.addEventListener("change", (event) => {
-        if (event.target.value === "programme_activites" && categoryInput?.value === "autre") {
-            categoryInput.value = "pedagogie_activites";
+        const actuelle = categories.find((categorie) => String(categorie.id) === String(categoryInput?.value));
+        if (event.target.value === "programme_activites" && actuelle?.code === "autre") {
+            const pedagogie = categorieParCode("pedagogie_activites", { activeOnly: true });
+            if (pedagogie) categoryInput.value = String(pedagogie.id);
         }
+    });
+    async function rafraichirApresMutationCategorie() {
+        await initCategories();
+        await loadDocuments();
+    }
+
+    function ouvrirGestionCategories() {
+        if (!categoriesDialog || !categoriesDialogContent) return;
+        if (!categoriesManager) {
+            categoriesManager = GestionApp.mountCategoriesDocuments(categoriesDialogContent, {
+                embedded: true,
+                onChange: () => { rafraichirApresMutationCategorie().catch((error) => afficherToast(erreurMessage(error, "Impossible d’actualiser les documents."), true)); },
+            });
+        } else {
+            categoriesManager.charger().catch((error) => afficherToast(erreurMessage(error, "Chargement impossible."), true));
+        }
+        categoriesDialog.showModal();
+        categoriesDialog.querySelector("[data-close-document-categories-dialog]")?.focus();
+    }
+
+    categoriesManageButton?.addEventListener("click", ouvrirGestionCategories);
+    categoriesDialog?.querySelectorAll("[data-close-document-categories-dialog]").forEach((button) => {
+        button.addEventListener("click", () => categoriesDialog.close());
     });
     setPickerVisibility({ permanent: permanentInput?.checked });
 
@@ -339,11 +400,11 @@ function mountDocuments(app) {
         if (!filters.periode?.value) loadDocuments();
     });
 
-    initCentres().then(() => {
+    Promise.all([initCentres(), initCategories()]).then(() => {
         filters.centre.innerHTML = '<option value="">Tous les centres</option>' + centres.map((centre) => `<option value="${centre.id}">${escapeHtml(centre.nom)}</option>`).join("");
         return loadDocuments();
     }).catch((error) => {
-        errorElement.textContent = erreurMessage(error, "Impossible de charger les centres.");
+        errorElement.textContent = erreurMessage(error, "Impossible de charger les catégories ou les centres.");
     });
     app.documentsManagement = {
         rafraichirCentres: () => initCentres({ force: true }),

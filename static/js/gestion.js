@@ -1955,10 +1955,11 @@ function bouton(label, classes, onClick)
 	// ------------------------------------------------------------------
 	// Catégories de documents
 	// ------------------------------------------------------------------
-	function mountCategoriesDocuments(container)
+	function mountCategoriesDocuments(container, options = {})
 	{
 		if (!container) return null;
-		container.innerHTML = `<section class="document-categories"><div class="document-categories-head"><div><p class="section-title">Catégories de documents</p><p>Organisez le référentiel disponible pour la bibliothèque.</p></div><button type="button" class="btn btn-primary document-category-add">+ Ajouter une catégorie</button></div><div class="document-category-form-host" hidden></div><div class="document-category-list"><div class="document-category-list-header" aria-hidden="true"><span>Catégorie</span><span>Ordre</span><span>État</span><span>Actions</span></div><div class="document-category-items"><p class="empty-note">Chargement…</p></div></div></section>`;
+		const introduction = options.embedded ? "" : '<div><p class="section-title">Catégories de documents</p><p>Organisez le référentiel disponible pour la bibliothèque.</p></div>';
+		container.innerHTML = `<section class="document-categories${options.embedded ? " document-categories--embedded" : ""}"><div class="document-categories-head">${introduction}<button type="button" class="btn btn-primary document-category-add">+ Ajouter une catégorie</button></div><div class="document-category-form-host" hidden></div><div class="document-category-list"><div class="document-category-list-header" aria-hidden="true"><span>Catégorie</span><span>Ordre</span><span>État</span><span>Actions</span></div><div class="document-category-items"><p class="empty-note">Chargement…</p></div></div></section>`;
 		const list = container.querySelector(".document-category-items");
 		const host = container.querySelector(".document-category-form-host");
 		const libelleDocumentsLies = (count) => `${count} document${count > 1 ? "s" : ""}`;
@@ -1972,7 +1973,7 @@ function bouton(label, classes, onClick)
 				if (!nom) { error.textContent = "Le nom est obligatoire."; return; }
 				try {
 					await apiFetch(item ? `/api/categories-documents/${item.id}/` : "/api/categories-documents/", { method: item ? "PATCH" : "POST", body: JSON.stringify({ nom }) });
-					host.hidden = true; host.innerHTML = ""; afficherToast(item ? "Catégorie renommée." : "Catégorie ajoutée."); await charger();
+					host.hidden = true; host.innerHTML = ""; afficherToast(item ? "Catégorie renommée." : "Catégorie ajoutée."); await charger(); options.onChange?.();
 				} catch (err) { error.textContent = erreurMessage(err, "Enregistrement impossible."); }
 			});
 		}
@@ -1982,9 +1983,9 @@ function bouton(label, classes, onClick)
 			list.querySelectorAll(".document-category-row").forEach((row) => {
 				const item = items.find((entry) => Number(entry.id) === Number(row.dataset.id));
 				row.querySelector(".document-category-edit").addEventListener("click", () => ouvrir(item));
-				row.querySelectorAll(".document-category-move").forEach((button) => button.addEventListener("click", async () => { try { await apiFetch(`/api/categories-documents/${item.id}/deplacer/`, { method: "POST", body: JSON.stringify({ direction: button.dataset.direction }) }); await charger(); } catch (err) { afficherToast(erreurMessage(err, "Déplacement impossible."), true); } }));
-				row.querySelector(".document-category-toggle")?.addEventListener("click", async () => { try { await apiFetch(`/api/categories-documents/${item.id}/`, { method: "PATCH", body: JSON.stringify({ active: !item.active }) }); await charger(); } catch (err) { afficherToast(erreurMessage(err, "Modification impossible."), true); } });
-				row.querySelector(".document-category-delete")?.addEventListener("click", async () => { if (!item.peut_supprimer || !window.confirm(`Supprimer « ${item.nom} » ?`)) return; try { await apiFetch(`/api/categories-documents/${item.id}/`, { method: "DELETE" }); await charger(); } catch (err) { afficherToast(erreurMessage(err, "Suppression impossible."), true); } });
+				row.querySelectorAll(".document-category-move").forEach((button) => button.addEventListener("click", async () => { try { await apiFetch(`/api/categories-documents/${item.id}/deplacer/`, { method: "POST", body: JSON.stringify({ direction: button.dataset.direction }) }); await charger(); options.onChange?.(); } catch (err) { afficherToast(erreurMessage(err, "Déplacement impossible."), true); } }));
+				row.querySelector(".document-category-toggle")?.addEventListener("click", async () => { try { await apiFetch(`/api/categories-documents/${item.id}/`, { method: "PATCH", body: JSON.stringify({ active: !item.active }) }); await charger(); options.onChange?.(); } catch (err) { afficherToast(erreurMessage(err, "Modification impossible."), true); } });
+				row.querySelector(".document-category-delete")?.addEventListener("click", async () => { if (!item.peut_supprimer || !window.confirm(`Supprimer « ${item.nom} » ?`)) return; try { await apiFetch(`/api/categories-documents/${item.id}/`, { method: "DELETE" }); await charger(); options.onChange?.(); } catch (err) { afficherToast(erreurMessage(err, "Suppression impossible."), true); } });
 			});
 		}
 		container.querySelector(".document-category-add").addEventListener("click", () => ouvrir());

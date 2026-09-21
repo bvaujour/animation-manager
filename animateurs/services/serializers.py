@@ -953,14 +953,27 @@ def qualification_to_dict(qualification):
 def document_to_dict(document):
     periodes = list(document.periodes.all())
     centres = list(document.centres.all())
+    # La FK est désormais la référence fonctionnelle. Le repli ne concerne que
+    # d'éventuels enregistrements de transition qui n'auraient pas encore été
+    # rattachés (et préserve la lecture de données historiques).
+    categorie_ref = document.categorie_ref
+    categorie_code = categorie_ref.code if categorie_ref else document.categorie
+    categorie_nom = categorie_ref.nom if categorie_ref else document.get_categorie_display()
     return {
         "id": document.id,
         "titre": document.titre,
         "url": document.fichier.url,
         "type_document": document.type_document,
         "type_document_libelle": document.get_type_document_display(),
-        "categorie": document.categorie,
-        "categorie_libelle": document.get_categorie_display(),
+        # Alias historiques conservés pendant la transition. Ils sont dérivés
+        # de categorie_ref lorsque celle-ci existe.
+        "categorie": categorie_code,
+        "categorie_label": categorie_nom,
+        "categorie_libelle": categorie_nom,
+        "categorie_id": categorie_ref.pk if categorie_ref else None,
+        "categorie_code": categorie_code,
+        "categorie_nom": categorie_nom,
+        "categorie_active": categorie_ref.active if categorie_ref else None,
         "important": document.important,
         "archive_le": document.archive_le.isoformat() if document.archive_le else None,
         "archive": document.archive_le is not None,

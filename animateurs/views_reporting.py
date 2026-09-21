@@ -15,7 +15,7 @@ from django.views.decorators.http import require_http_methods
 
 from .access import est_direction
 from .models import (
-    Affectation, Animateur, AttributionPrime, Centre, Contrat, Document,
+    Affectation, Animateur, AttributionPrime, CategorieDocument, Centre, Contrat, Document,
     HistoriqueStatutAnimateur, PeriodeScolaire, PrimeJournalierePeriode, TypePrime,
 )
 from .services.dates import parse_to_aware_datetime
@@ -33,6 +33,18 @@ from .services.contrats import situation_contractuelle_pour_date
 from .services.parametres import prime_est_eligible
 from .services.statuts import statut_pour_date
 from .services.serializers import document_to_dict
+
+
+def _categorie_document_depuis_requete(categorie_id, categorie_code=None):
+    """Résout la catégorie configurée, avec l'ancien code en compatibilité."""
+    if categorie_id not in (None, ""):
+        try:
+            return CategorieDocument.objects.get(pk=int(categorie_id))
+        except (CategorieDocument.DoesNotExist, TypeError, ValueError):
+            return None
+    if categorie_code not in (None, ""):
+        return CategorieDocument.objects.filter(code=str(categorie_code).strip()).first()
+    return CategorieDocument.objects.filter(code=Document.CATEGORIE_AUTRE).first()
 
 # ---------------------------------------------------------------------------
 # API - Récapitulatif (statistiques pour la page de suivi)
@@ -918,7 +930,7 @@ def api_documents(request):
     soit le statut permanent, soit une période début/fin."""
 
     if request.method == "GET":
-        documents_qs = Document.objects.prefetch_related("periodes", "centres").all().order_by("-date_ajout")
+        documents_qs = Document.objects.select_related("categorie_ref").prefetch_related("periodes", "centres").all().order_by("-date_ajout")
         if not est_direction(request.user):
             animateur = getattr(request.user, "profil_animateur", None)
             if animateur is None:
@@ -939,14 +951,25 @@ def api_documents(request):
                 return JsonResponse([document_to_dict(d) for d in documents_visibles], safe=False)
 
         vue = request.GET.get("vue", "").strip()
+        categorie_id = request.GET.get("categorie_id", "").strip()
         categorie = request.GET.get("categorie", "").strip()
         centre_id = request.GET.get("centre_id", "").strip()
         publie = request.GET.get("publie", "").strip().lower()
         periode_id = request.GET.get("periode_id", "").strip()
-        if categorie:
-            if categorie not in dict(Document.CATEGORIE_CHOICES):
+        if categorie_id:
+            try:
+                categorie_pk = int(categorie_id)
+            except ValueError:
                 return JsonResponse({"error": "La catégorie est invalide."}, status=400)
-            documents_qs = documents_qs.filter(categorie=categorie)
+            if not CategorieDocument.objects.filter(pk=categorie_pk).exists():
+                return JsonResponse({"error": "La catégorie est invalide."}, status=400)
+            documents_qs = documents_qs.filter(categorie_ref_id=categorie_pk)
+        elif categorie:
+            # Paramètre historique toléré pendant la transition.
+            categorie_ref = CategorieDocument.objects.filter(code=categorie).first()
+            if categorie_ref is None:
+                return JsonResponse({"error": "La catégorie est invalide."}, status=400)
+            documents_qs = documents_qs.filter(Q(categorie_ref=categorie_ref) | Q(categorie_ref__isnull=True, categorie=categorie))
         if publie in {"true", "false"}:
             documents_qs = documents_qs.filter(publie=publie == "true")
         if centre_id:
@@ -986,9 +1009,13 @@ def api_documents(request):
     if type_document not in dict(Document.TYPE_DOCUMENT_CHOICES):
         return JsonResponse({"error": "Le type de document est invalide."}, status=400)
     fichier = request.FILES.get("fichier")
-    categorie = request.POST.get("categorie", Document.CATEGORIE_AUTRE).strip()
-    if categorie not in dict(Document.CATEGORIE_CHOICES):
+    categorie_ref = _categorie_document_depuis_requete(
+        request.POST.get("categorie_id"), request.POST.get("categorie"),
+    )
+    if categorie_ref is None:
         return JsonResponse({"error": "La catégorie est invalide."}, status=400)
+    if not categorie_ref.active:
+        return JsonResponse({"error": "Cette catégorie est inactive et ne peut pas être attribuée à un nouveau document."}, status=400)
     important = str(request.POST.get("important", "false")).lower() in {"1", "true", "on", "yes"}
     permanent = str(request.POST.get("permanent", "")).lower() in {"1", "true", "on", "yes"}
     periode_ids_bruts = request.POST.getlist("periode_ids") or request.POST.getlist("periode_ids[]")
@@ -1040,7 +1067,8 @@ def api_documents(request):
             document = Document.objects.create(
                 titre=titre,
                 type_document=type_document,
-                categorie=categorie,
+                categorie=categorie_ref.code,
+                categorie_ref=categorie_ref,
                 important=important,
                 publie=publie,
                 fichier=fichier,
@@ -1101,7 +1129,16 @@ def api_document_detail(request, document_id):
 
     titre = str(payload.get("titre", document.titre)).strip()
     type_document = str(payload.get("type_document", document.type_document)).strip()
-    categorie = str(payload.get("categorie", document.categorie)).strip()
+    categorie_change = "categorie_id" in payload or "categorie" in payload
+    categorie_ref = document.categorie_ref
+    if categorie_change:
+        categorie_ref = _categorie_document_depuis_requete(
+            payload.get("categorie_id"), payload.get("categorie"),
+        )
+        if categorie_ref is None:
+            return JsonResponse({"error": "La catégorie est invalide."}, status=400)
+        if not categorie_ref.active:
+            return JsonResponse({"error": "Cette catégorie est inactive et ne peut pas être attribuée."}, status=400)
     important = bool(payload.get("important", document.important))
     publie = bool(payload.get("publie", document.publie))
     permanent = bool(payload.get("permanent", document.permanent))
@@ -1122,8 +1159,6 @@ def api_document_detail(request, document_id):
         return JsonResponse({"error": "Le titre est obligatoire."}, status=400)
     if type_document not in dict(Document.TYPE_DOCUMENT_CHOICES):
         return JsonResponse({"error": "Le type de document est invalide."}, status=400)
-    if categorie not in dict(Document.CATEGORIE_CHOICES):
-        return JsonResponse({"error": "La catégorie est invalide."}, status=400)
 
     periodes = []
     periode_debut = None
@@ -1139,14 +1174,19 @@ def api_document_detail(request, document_id):
 
     document.titre = titre
     document.type_document = type_document
-    document.categorie = categorie
+    if categorie_change:
+        document.categorie_ref = categorie_ref
+        document.categorie = categorie_ref.code
     document.important = important
     document.publie = publie
     document.permanent = permanent
     document.periode_debut = periode_debut
     document.periode_fin = periode_fin
     document.tous_centres = tous_centres
-    document.save(update_fields=["titre", "type_document", "categorie", "important", "publie", "permanent", "periode_debut", "periode_fin", "tous_centres"])
+    update_fields = ["titre", "type_document", "important", "publie", "permanent", "periode_debut", "periode_fin", "tous_centres"]
+    if categorie_change:
+        update_fields.extend(["categorie", "categorie_ref"])
+    document.save(update_fields=update_fields)
     document.periodes.set(periodes)
     document.centres.set(centres)
 

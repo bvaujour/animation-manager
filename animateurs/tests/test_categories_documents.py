@@ -20,11 +20,14 @@ class CategoriesDocumentsApiTests(ConnexionTestCase):
     def move_url(self, categorie):
         return reverse("api_categorie_document_deplacer", args=[categorie.pk])
 
-    def test_affiche_les_cinq_categories_initiales_dans_configuration(self):
-        response = self.client.get(f"{reverse('gestion')}?onglet=categories-documents")
+    def test_affiche_les_cinq_categories_initiales_depuis_la_bibliotheque(self):
+        response = self.client.get(f"{reverse('gestion')}?onglet=documents")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Catégories de documents")
-        self.assertContains(response, 'data-tab="categories-documents"')
+        self.assertContains(response, "Gérer les catégories")
+        self.assertContains(response, 'id="document-categories-dialog"')
+        self.assertContains(response, 'id="document-categories-dialog-content"')
+        self.assertNotContains(response, 'data-tab="categories-documents"')
+        self.assertNotContains(response, 'data-panel="categories-documents"')
 
         categories = self.client.get(self.list_url).json()
         self.assertEqual(len(categories), 5)
@@ -32,16 +35,24 @@ class CategoriesDocumentsApiTests(ConnexionTestCase):
             "pedagogie_activites", "organisation_planning", "protocoles_securite", "administratif", "autre",
         ])
 
-    def test_onglet_monte_le_bon_panneau_avec_le_script_versionne(self):
+    def test_modal_monte_le_gestionnaire_unique_avec_les_scripts_versionnes(self):
         template = Path(settings.BASE_DIR, "templates/gestion.html").read_text(encoding="utf-8")
         script = Path(settings.BASE_DIR, "static/js/gestion.js").read_text(encoding="utf-8")
 
-        self.assertIn('data-tab="categories-documents"', template)
-        self.assertIn('data-panel="categories-documents"', template)
-        self.assertIn('id="panel-categories-documents"', template)
-        self.assertIn('GestionApp.mountCategoriesDocuments(document.getElementById("panel-categories-documents"))', template)
-        self.assertIn('gestion-categories-v4', template)
-        self.assertIn('function mountCategoriesDocuments(container)', script)
+        documents_script = Path(settings.BASE_DIR, "static/js/documents-management.js").read_text(encoding="utf-8")
+
+        self.assertNotIn('data-tab="categories-documents"', template)
+        self.assertNotIn('data-panel="categories-documents"', template)
+        self.assertNotIn('panel-categories-documents', template)
+        self.assertIn('id="document-categories-dialog"', template)
+        self.assertIn('gestion-categories-v5', template)
+        self.assertIn('documents-categories-v2', template)
+        self.assertIn('function mountCategoriesDocuments(container, options = {})', script)
+        self.assertIn('options.embedded', script)
+        self.assertIn('options.onChange?.()', script)
+        self.assertIn('GestionApp.mountCategoriesDocuments(categoriesDialogContent', documents_script)
+        self.assertIn('rafraichirApresMutationCategorie', documents_script)
+        self.assertIn('categoriesDialog.showModal()', documents_script)
         self.assertIn('class="document-category-list-header"', script)
         self.assertIn('class="document-category-name"', script)
         self.assertIn('class="document-category-status"', script)

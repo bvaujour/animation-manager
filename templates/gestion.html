@@ -22,7 +22,6 @@
         <button class="tab-btn" data-tab="periodes" type="button" role="tab">Périodes vacances</button>
         <button class="tab-btn" data-tab="periodes-scolaires" type="button" role="tab">Périodes scolaires</button>
         <button class="tab-btn" data-tab="temps-periscolaires" type="button" role="tab">Temps périscolaires</button>
-        <button class="tab-btn" data-tab="categories-documents" type="button" role="tab">Catégories de documents</button>
         <button class="tab-btn" data-tab="documents" type="button" role="tab">Documents</button>
         <button class="tab-btn" data-tab="informations" type="button" role="tab">Informations animateurs</button>
     </div>
@@ -45,9 +44,6 @@
     <div class="tab-panel" data-panel="temps-periscolaires" hidden>
         <div id="panel-temps-periscolaires"></div>
     </div>
-    <div class="tab-panel" data-panel="categories-documents" hidden>
-        <div id="panel-categories-documents"></div>
-    </div>
     <div class="tab-panel" data-panel="documents" hidden>
         <section class="ui-card gestion-documents" id="documents-management-app">
             <div class="ui-section-heading gestion-section-heading">
@@ -55,12 +51,13 @@
                     <h2>Bibliothèque de documents</h2>
                     <p>Ajoutez les fichiers utiles à l’équipe et associez-les aux semaines concernées.</p>
                 </div>
+                <button type="button" class="btn btn-ghost document-categories-manage" id="document-categories-manage">Gérer les catégories</button>
             </div>
             <form id="form-upload" class="ui-form upload-form">
                 <div class="field"><label for="doc-titre">Titre</label><input type="text" id="doc-titre" name="titre" placeholder="ex : Contrat type animateur" required></div>
                 <div class="field"><label for="doc-fichier">Fichier</label><input type="file" id="doc-fichier" name="fichier" required></div>
                 <div class="field"><label for="doc-type-document">Type de document</label><select id="doc-type-document" name="type_document"><option value="classique">Document classique</option><option value="programme_activites">Programme d'activités</option></select></div>
-                <div class="field"><label for="doc-categorie">Catégorie</label><select id="doc-categorie" name="categorie"><option value="pedagogie_activites">Pédagogie &amp; activités</option><option value="organisation_planning">Organisation &amp; planning</option><option value="protocoles_securite">Protocoles &amp; sécurité</option><option value="administratif">Administratif</option><option value="autre" selected>Autre</option></select></div>
+                <div class="field"><label for="doc-categorie">Catégorie</label><select id="doc-categorie" name="categorie_id" disabled><option value="">Chargement des catégories…</option></select></div>
                 <div class="field document-scope-field"><span class="field-label">Portée</span><label class="form-check"><input class="form-check-input" type="radio" name="doc_portee" value="periode" checked><span class="form-check-label">Lié à une période</span></label><label class="form-check"><input class="form-check-input" type="radio" id="doc-permanent" name="doc_portee" value="permanent"><span class="form-check-label">Permanent</span></label></div>
                 <div class="field document-period-picker-field" id="doc-period-picker-field">
                     <span class="field-label" id="doc-semaines-title">Semaines concernées</span>
@@ -80,10 +77,23 @@
             </form>
             <div class="documents-library-controls" aria-label="Vues et filtres des documents">
                 <div class="documents-library-views" role="tablist"><button class="btn btn-primary" type="button" data-documents-view="periode">Documents de la période</button><button class="btn btn-ghost" type="button" data-documents-view="permanents">Permanents</button><button class="btn btn-ghost" type="button" data-documents-view="archives">Archives</button></div>
-                <div class="documents-library-filters"><label>Catégorie<select id="documents-filter-categorie"><option value="">Toutes</option><option value="pedagogie_activites">Pédagogie &amp; activités</option><option value="organisation_planning">Organisation &amp; planning</option><option value="protocoles_securite">Protocoles &amp; sécurité</option><option value="administratif">Administratif</option><option value="autre">Autre</option></select></label><label>Période<select id="documents-filter-periode"><option value="">Période sélectionnée</option></select></label><label>Centre<select id="documents-filter-centre"><option value="">Tous les centres</option></select></label><label>Publication<select id="documents-filter-publie"><option value="">Toutes</option><option value="true">Publié à l’équipe</option><option value="false">Non publié à l’équipe</option></select></label></div>
+                <div class="documents-library-filters"><label>Catégorie<select id="documents-filter-categorie" disabled><option value="">Chargement des catégories…</option></select></label><label>Période<select id="documents-filter-periode"><option value="">Période sélectionnée</option></select></label><label>Centre<select id="documents-filter-centre"><option value="">Tous les centres</option></select></label><label>Publication<select id="documents-filter-publie"><option value="">Toutes</option><option value="true">Publié à l’équipe</option><option value="false">Non publié à l’équipe</option></select></label></div>
             </div>
             <div id="documents-grid" class="ui-grid documents-grid"></div>
         </section>
+        <dialog class="document-categories-dialog" id="document-categories-dialog" aria-labelledby="document-categories-dialog-title">
+            <div class="document-categories-dialog-card">
+                <header class="document-categories-dialog-header">
+                    <div>
+                        <h2 id="document-categories-dialog-title">Catégories de documents</h2>
+                        <p>Organisez les catégories disponibles pour la bibliothèque.</p>
+                    </div>
+                    <button type="button" class="modal-close" data-close-document-categories-dialog aria-label="Fermer">×</button>
+                </header>
+                <div class="document-categories-dialog-body" id="document-categories-dialog-content"></div>
+                <footer class="document-categories-dialog-footer"><button type="button" class="btn btn-ghost" data-close-document-categories-dialog>Fermer</button></footer>
+            </div>
+        </dialog>
     </div>
     <div class="tab-panel" data-panel="informations" hidden>
         <section class="ui-card gestion-informations" id="informations-animateurs-management">
@@ -215,8 +225,8 @@
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/common/location-autocomplete.js' %}?v={{ asset_version }}"></script>
-<script src="{% static 'js/gestion.js' %}?v={{ asset_version }}-gestion-categories-v4"></script>
-<script src="{% static 'js/documents-management.js' %}?v={{ asset_version }}-gestion-lazy-2"></script>
+<script src="{% static 'js/gestion.js' %}?v={{ asset_version }}-gestion-categories-v5"></script>
+<script src="{% static 'js/documents-management.js' %}?v={{ asset_version }}-documents-categories-v2"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     const root = document.getElementById("gestion-tabs").closest("main");
@@ -259,7 +269,6 @@ document.addEventListener("DOMContentLoaded", () => {
         "temps-periscolaires": () => GestionApp.mountModalitesPeriscolaires(document.getElementById("panel-temps-periscolaires"), {
             onChange: () => GestionData.invalidate("modalites-actives"),
         }),
-        "categories-documents": () => GestionApp.mountCategoriesDocuments(document.getElementById("panel-categories-documents")),
         documents: () => DocumentsManagement.mount(document.getElementById("documents-management-app")),
     };
 
