@@ -1,23 +1,27 @@
 """Endpoints consacrés aux modèles, contacts et envois d’e-mails."""
 
+import datetime
 import json
 import re
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db import DatabaseError, IntegrityError
+from django.db import DatabaseError, IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .models import (
+    Affectation,
     Animateur,
     ContactEmailExterne,
     Document,
     ModeleEmail,
     PeriodeScolaire,
+    PeriodeCalendrier,
     Qualification,
 )
+from .services.comptes import traiter_acces_compte
 from .services.emails import (
     ConfigurationEmailError,
     PiecesJointesError,
@@ -36,6 +40,107 @@ def _taille_document(document):
         return int(document.fichier.size)
     except (OSError, TypeError, ValueError):
         return None
+
+
+def _url_activation(request, animateur):
+    from base64 import urlsafe_b64encode
+    from django.contrib.auth.tokens import default_token_generator
+    from django.urls import reverse
+    from django.utils.encoding import force_bytes
+    utilisateur = animateur.utilisateur if animateur.utilisateur_id else None
+    if not utilisateur or utilisateur.has_usable_password():
+        return ""
+    uid = urlsafe_b64encode(force_bytes(utilisateur.pk)).decode().rstrip("=")
+    return request.build_absolute_uri(reverse("activation_compte", kwargs={
+        "uidb64": uid, "token": default_token_generator.make_token(utilisateur),
+    }))
+
+
+def _animateurs_affectes_periode(periode):
+    debut = timezone.make_aware(datetime.datetime.combine(periode.debut, datetime.time.min))
+    fin = timezone.make_aware(datetime.datetime.combine(periode.fin + datetime.timedelta(days=1), datetime.time.min))
+    return list(
+        Animateur.objects.filter(affectations__debut__lt=fin, affectations__fin__gt=debut)
+        .select_related("utilisateur").distinct().order_by("nom", "prenom")
+    )
+
+
+def _invitation_payload(request, animateur):
+    utilisateur = animateur.utilisateur if animateur.utilisateur_id else None
+    pending = bool(utilisateur and not utilisateur.has_usable_password())
+    activation_url = _url_activation(request, animateur) if pending else ""
+    sms = ""
+    if activation_url:
+        sms = (
+            f"Bonjour {animateur.prenom},\n\nTon accès au portail Animation Manager est prêt.\n"
+            f"Identifiant : {utilisateur.username}\nActive-le sous 3 jours : {activation_url}"
+        )
+    return {
+        "id": animateur.id, "prenom": animateur.prenom, "nom": animateur.nom,
+        "email": animateur.email, "telephone": animateur.telephone,
+        "etat": "actif" if utilisateur and utilisateur.has_usable_password() else ("attente" if pending else "sans_acces"),
+        "username": utilisateur.username if utilisateur else "", "activation_url": activation_url, "sms": sms,
+    }
+
+
+@require_http_methods(["GET", "POST"])
+def api_invitations_portail(request):
+    """Invitations d'une équipe affectée à une période, sans contexte global."""
+    periodes = list(PeriodeCalendrier.objects.filter(categorie=PeriodeCalendrier.VACANCES).order_by("debut"))
+    if request.method == "GET":
+        try:
+            periode_id = int(request.GET.get("periode_id", ""))
+        except (TypeError, ValueError):
+            periode_id = None
+        periode = next((item for item in periodes if item.pk == periode_id), None)
+        animateurs = _animateurs_affectes_periode(periode) if periode else []
+        lignes = [_invitation_payload(request, animateur) for animateur in animateurs]
+        return JsonResponse({
+            "periodes": [{"id": p.id, "libelle": f"{p.nom} {p.debut.year}", "debut": p.debut.isoformat(), "fin": p.fin.isoformat()} for p in periodes],
+            "periode_id": periode.pk if periode else None, "animateurs": lignes,
+            "synthese": {"affectes": len(lignes), "actifs": sum(x["etat"] == "actif" for x in lignes), "a_inviter": sum(x["etat"] == "sans_acces" for x in lignes)},
+        })
+
+    try:
+        payload = json.loads(request.body or "{}")
+        periode = PeriodeCalendrier.objects.get(pk=int(payload.get("periode_id")))
+        ids = list(dict.fromkeys(int(value) for value in payload.get("animateur_ids", [])))
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError, PeriodeCalendrier.DoesNotExist):
+        return JsonResponse({"error": "Période ou sélection invalide."}, status=400)
+    concernes = {item.id: item for item in _animateurs_affectes_periode(periode)}
+    if not ids or any(item not in concernes for item in ids):
+        return JsonResponse({"error": "La sélection doit contenir uniquement des animateurs affectés à cette période."}, status=400)
+    configuration = statut_configuration_email()
+    resultats = []
+    with transaction.atomic():
+        for identifiant in ids:
+            animateur = concernes[identifiant]
+            if not animateur.utilisateur_id:
+                traiter_acces_compte(animateur, {"create_access": True})
+            elif payload.get("regenerer") and not animateur.utilisateur.has_usable_password():
+                traiter_acces_compte(animateur, {"reset_password": True})
+            animateur.refresh_from_db()
+            item = _invitation_payload(request, animateur)
+            item["email_envoye"] = False
+            resultats.append(item)
+        if configuration["operationnel"]:
+            try:
+                with connexion_email() as connection:
+                    for item in resultats:
+                        animateur = concernes[item["id"]]
+                        if not animateur.email or not item["activation_url"]:
+                            continue
+                        envoyer_un_message(
+                            animateur=animateur,
+                            objet="Active ton accès Animation Manager",
+                            message="Bonjour {{ prenom }},\n\nTon affectation est disponible dans Animation Manager.\nIdentifiant : {{ identifiant }}\nActive ton compte sous 3 jours : {{ lien_activation }}",
+                            pieces=[], connection=connection,
+                            variables_supplementaires={"identifiant": item["username"], "lien_activation": item["activation_url"]},
+                        )
+                        item["email_envoye"] = True
+            except Exception as exc:
+                return JsonResponse({"error": f"Les accès ont été créés mais l’envoi e-mail a échoué : {str(exc)[:500]}"}, status=502)
+    return JsonResponse({"ok": True, "configuration_email": configuration, "resultats": resultats})
 
 
 

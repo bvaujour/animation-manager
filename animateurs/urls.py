@@ -83,6 +83,9 @@ from .views import (
     api_tableau_de_bord,
     api_statut_preparation_semaine,
     api_verification_export_planning,
+    publications_affectations,
+    affectation_a_confirmer,
+    apercu_portail_animateur,
     activation_compte,
     api_temps_travail,
     changer_mot_de_passe,
@@ -116,6 +119,7 @@ from .views_communications import (
     api_envois_email,
     api_modele_email_detail,
     api_modeles_email,
+    api_invitations_portail,
 )
 from .views_effectifs import (
     api_effectifs_enfants_groupe,
@@ -152,6 +156,9 @@ urlpatterns = [
     path("changer-mot-de-passe/", connexion_requise_page(changer_mot_de_passe), name="changer_mot_de_passe"),
     # --- Pages ---
     path("", connexion_requise_page(accueil), name="accueil"),
+    path("affectations-a-publier/", direction_requise(publications_affectations), name="publications_affectations"),
+    path("apercu-portail/", direction_requise(apercu_portail_animateur), name="apercu_portail_animateur"),
+    path("mon-affectation/<int:publication_id>/", connexion_requise_page(affectation_a_confirmer), name="affectation_a_confirmer"),
     path("api/mon-centre-affectation/", connexion_requise_page(api_mon_centre_affectation), name="api_mon_centre_affectation"),
     path("mon-profil/", connexion_requise_page(mon_profil), name="mon_profil"),
     path("plannings/", connexion_requise_page(plannings_animateur), name="plannings_animateur"),
@@ -423,6 +430,7 @@ urlpatterns = [
     path("api/documents/", lecture_partagee_api(api_documents), name="api_documents"),
     path("api/documents/<int:document_id>/", direction_requise_api(api_document_detail), name="api_document_detail"),
     path("api/envois-email/", direction_requise_api(api_envois_email), name="api_envois_email"),
+    path("api/invitations-portail/", direction_requise_api(api_invitations_portail), name="api_invitations_portail"),
     path("api/contacts-email/", direction_requise_api(api_contacts_email), name="api_contacts_email"),
     path(
         "api/contacts-email/<int:contact_id>/",

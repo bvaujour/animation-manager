@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}{% if gestion_onglet == "documents" or gestion_onglet == "informations" %}Communication{% else %}Configuration{% endif %}{% endblock %}
+{% block title %}{% if gestion_onglet == "documents" or gestion_onglet == "informations" or gestion_onglet == "invitations-portail" %}Communication{% else %}Configuration{% endif %}{% endblock %}
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/gestion.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/documents.css' %}?v={{ asset_version }}">
@@ -8,8 +8,8 @@
 {% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide gestion-page gestion-page-compact">
-    {% if gestion_onglet == "documents" or gestion_onglet == "informations" %}
-        {% include "partials/_page_header.html" with title="Communication" header_class="gestion-page-header" container_id="gestion-period-nav" previous_id="gestion-prev-week" today_id="gestion-current-week" next_id="gestion-next-week" label_id="gestion-visible-period" generic_navigation="true" %}
+    {% if gestion_onglet == "documents" or gestion_onglet == "informations" or gestion_onglet == "invitations-portail" %}
+        {% include "partials/_page_header.html" with title="Communication" header_class="gestion-page-header" picker_mode="none" %}
         {% include "partials/_direction_section_nav.html" with section="communication" active_item=gestion_onglet %}
     {% else %}
         {% include "partials/_page_header.html" with title="Configuration" header_class="gestion-page-header" picker_mode="none" %}
@@ -24,6 +24,7 @@
         <button class="tab-btn" data-tab="temps-periscolaires" type="button" role="tab">Temps périscolaires</button>
         <button class="tab-btn" data-tab="documents" type="button" role="tab">Documents</button>
         <button class="tab-btn" data-tab="informations" type="button" role="tab">Informations animateurs</button>
+        <button class="tab-btn" data-tab="invitations-portail" type="button" role="tab">Invitations portail</button>
     </div>
 
     <div class="tab-panel" data-panel="lieux">
@@ -221,12 +222,16 @@
             </div>
         </section>
     </div>
+    <div class="tab-panel" data-panel="invitations-portail" hidden>
+        <section id="invitations-portail-app" class="ui-card invitations-portail" data-api-url="{% url 'api_invitations_portail' %}" data-animateurs-api-url="{% url 'api_animateurs' %}"></section>
+    </div>
 </main>
 {% endblock %}
 {% block scripts %}
 <script src="{% static 'js/common/location-autocomplete.js' %}?v={{ asset_version }}"></script>
 <script src="{% static 'js/gestion.js' %}?v={{ asset_version }}-gestion-categories-v5"></script>
 <script src="{% static 'js/documents-management.js' %}?v={{ asset_version }}-documents-categories-v2"></script>
+<script src="{% static 'js/invitations-portail.js' %}?v={{ asset_version }}"></script>
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     const root = document.getElementById("gestion-tabs").closest("main");
@@ -270,6 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
             onChange: () => GestionData.invalidate("modalites-actives"),
         }),
         documents: () => DocumentsManagement.mount(document.getElementById("documents-management-app")),
+        "invitations-portail": () => InvitationsPortail.mount(document.getElementById("invitations-portail-app")),
     };
 
     function rafraichirOngletObsolete(nom) {

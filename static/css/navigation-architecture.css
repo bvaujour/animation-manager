@@ -58,6 +58,24 @@ body.app-body.has-fixed-page-tabs .app-page-tabs.direction-functional-tabs {
   color: var(--site-primary, #4969c7) !important;
 }
 
+.direction-subsection-nav {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -2px 0 8px;
+  padding: 0 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-sizing: border-box;
+}
+
+.direction-subsection-nav .direction-section-link {
+  min-height: 28px;
+  font-size: .72rem;
+}
+
 /* Le Planning reprend la présentation de la sous-navigation Direction,
    tout en conservant ses boutons, identifiants et attributs de mode. */
 body.app-body.page-planning .planning-tabs {

@@ -74,6 +74,7 @@
             <div class="dashboard-actions-grid">
                 <a id="action-effectifs" class="dashboard-action dashboard-action--blue" href="{% url 'planning' %}?mode=effectifs"><strong>＋</strong><span>Renseigner les effectifs</span></a>
                 <a id="action-affectations" class="dashboard-action dashboard-action--green" href="{% url 'planning' %}?mode=affectations"><strong>♟</strong><span>Gérer les affectations</span></a>
+                {% if periode_accueil_active and periode_accueil_active.periode_calendrier_id %}<a class="dashboard-action dashboard-action--pink" href="{% url 'publications_affectations' %}?periode_id={{ periode_accueil_active.periode_calendrier_id }}"><strong>✓</strong><span>Publier les affectations</span></a>{% endif %}
                 <a class="dashboard-action dashboard-action--purple" href="{% url 'employes' %}?nouveau=1"><strong>♙</strong><span>Ajouter un salarié</span></a>
                 <a class="dashboard-action dashboard-action--orange" href="{% url 'recapitulatif' %}"><strong>▥</strong><span>Temps &amp; paie</span></a>
                 <a class="dashboard-action dashboard-action--pink" href="{% url 'administration' %}?onglet=emails"><strong>✉</strong><span>Envoyer un e-mail</span></a>
@@ -133,6 +134,13 @@
         <img class="animator-welcome-mascot-img" src="{% static 'img/animateur/welcome-mascot.webp' %}" alt="" aria-hidden="true">
         <span class="animator-welcome-heart" aria-hidden="true">♡</span>
     </section>
+
+    {% if publication_affectation_a_confirmer %}
+    <section class="animator-assignment-alert" aria-label="Affectation à confirmer">
+        <div><strong>Affectation {{ publication_affectation_a_confirmer.publication.periode_calendrier.nom }} à confirmer</strong><span>Consulte ton centre, ton groupe et le message de la direction.</span></div>
+        <a class="btn btn-primary" href="{% url 'affectation_a_confirmer' publication_affectation_a_confirmer.pk %}">Voir mon affectation</a>
+    </section>
+    {% endif %}
 
     <section class="animator-home-cards animator-home-cards--showcase animator-home-cards--four-grid" aria-label="Synthèse de la semaine sélectionnée">
         <article class="animator-home-card animator-home-card--tile animator-home-card--planning {% if planning_publie %}is-active{% else %}is-empty{% endif %}">

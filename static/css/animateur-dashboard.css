@@ -197,6 +197,10 @@ body.animator-dashboard-body{
 .animator-today-card>header strong{color:var(--color-primary-dark);font-size:.9rem}
 .animator-today-card>header span{color:var(--color-text-muted);font-size:.7rem}
 .animator-today-work{padding:4px 8px;border-radius:999px;background:color-mix(in srgb,var(--color-primary) 12%,var(--color-surface));color:var(--color-primary-dark)!important;font-size:.62rem!important;font-weight:800}
+
+/* Confirmation d'affectation : composant autonome du portail, sans modifier le planning. */
+.animator-assignment-alert{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:14px 0;padding:16px;border:1px solid #b9c6ff;border-radius:16px;background:linear-gradient(135deg,#eef0ff,#fff);box-shadow:0 8px 20px rgba(65,88,247,.12)}
+.animator-assignment-alert strong,.animator-assignment-alert span{display:block}.animator-assignment-alert strong{font-size:1rem;color:#303f9f}.animator-assignment-alert span{margin-top:4px;color:#59657a;font-size:.8rem}.animator-assignment-detail{display:grid;gap:12px;padding:18px;border:1px solid var(--color-border);border-radius:18px;background:var(--color-surface)}.animator-assignment-detail h2,.animator-assignment-detail p{margin:0}.animator-assignment-detail article{display:grid;gap:4px;padding:12px;border-radius:12px;background:var(--color-surface-sunken)}.animator-assignment-detail article span{color:var(--color-text-muted);font-size:.84rem}.assignment-status{padding:9px 12px;border-radius:10px;font-weight:700}.assignment-status--confirmed{background:#e7f7ed;color:#246b42}@media(max-width:640px){.animator-assignment-alert{align-items:stretch;flex-direction:column}.animator-assignment-alert .btn{text-align:center}}
 .animator-today-main{display:grid;gap:10px;padding:13px}
 .animator-today-place{display:flex;align-items:center;gap:10px}
 .animator-today-place>span{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:color-mix(in srgb,var(--color-primary) 10%,var(--color-surface));color:var(--color-primary);font-size:1.35rem}

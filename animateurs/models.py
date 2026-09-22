@@ -2699,6 +2699,57 @@ class PublicationPlanning(models.Model):
         return f"Planning du {self.semaine_debut:%d/%m/%Y} — {statut}"
 
 
+class PublicationAffectationsPeriode(models.Model):
+    """Information d'affectation publiée pour une période calendaire.
+
+    Cette publication est volontairement indépendante de ``PublicationPlanning`` :
+    connaître son centre ne révèle pas le programme d'activités de la semaine.
+    """
+
+    periode_calendrier = models.OneToOneField(
+        "PeriodeCalendrier", on_delete=models.PROTECT, related_name="publication_affectations"
+    )
+    message = models.TextField(blank=True, default="")
+    publie = models.BooleanField(default=False, db_index=True)
+    publie_le = models.DateTimeField(null=True, blank=True)
+    publie_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="publications_affectations_periode",
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "publication d'affectations"
+        verbose_name_plural = "publications d'affectations"
+
+    def __str__(self):
+        return f"Affectations — {self.periode_calendrier}"
+
+
+class DestinatairePublicationAffectation(models.Model):
+    """Snapshot léger des animateurs informés, sans recopier leurs affectations."""
+
+    publication = models.ForeignKey(
+        PublicationAffectationsPeriode, on_delete=models.CASCADE, related_name="destinataires"
+    )
+    animateur = models.ForeignKey(
+        Animateur, on_delete=models.PROTECT, related_name="publications_affectations_recues"
+    )
+    confirme_le = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("publication", "animateur"), name="unique_destinataire_publication_affectation"
+            )
+        ]
+        ordering = ("animateur__nom", "animateur__prenom")
+
+    def __str__(self):
+        return f"{self.animateur} — {self.publication}"
+
+
 class DemandeMateriel(models.Model):
     """Demande de matériel créée par un animateur et traitée par la direction."""
 

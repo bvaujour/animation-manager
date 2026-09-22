@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Publier les affectations{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main class="page-shell page-shell--fluid assignment-publication-page">
+  <header class="page-header"><div><p class="page-kicker">Communication équipe</p><h1>Publier les affectations</h1></div><a class="btn btn-ghost" href="{% url 'accueil' %}">Retour</a></header>
+  <form method="get" class="ui-card assignment-period-picker"><label>Période<select name="periode_id" onchange="this.form.submit()">{% for item in periodes %}<option value="{{ item.pk }}"{% if item.pk == periode.pk %} selected{% endif %}>{{ item }}</option>{% endfor %}</select></label></form>
+  <section class="ui-card assignment-publication-card"><h2>{{ periode }}</h2>
+    {% if publication and publication.publie %}
+      <p class="assignment-status assignment-status--published">Publié le {{ publication.publie_le|date:'d/m/Y à H:i' }}. Le programme d’activités reste indépendant.</p>
+      <p>{{ publication.message }}</p>
+      <div class="assignment-recipient-list">{% for destinataire in destinataires %}<article><strong>{{ destinataire.animateur }}</strong><span>{% if not destinataire.animateur.utilisateur_id %}Sans compte portail{% elif destinataire.confirme_le %}Confirmé le {{ destinataire.confirme_le|date:'d/m à H:i' }}{% else %}Publié — en attente de confirmation{% endif %}</span></article>{% endfor %}</div>
+    {% else %}
+      <p>{{ animateurs_affectes|length }} animateur{{ animateurs_affectes|length|pluralize }} réellement affecté{{ animateurs_affectes|length|pluralize }}. La publication ne publiera pas le planning ni le programme.</p>
+      <div class="assignment-recipient-list">{% for animateur in animateurs_affectes %}<article><strong>{{ animateur }}</strong><span>{% if animateur.utilisateur_id %}Accès portail disponible{% else %}Sans compte portail — à activer dans Administration › Accès portail{% endif %}</span></article>{% empty %}<p>Aucune affectation sur cette période.</p>{% endfor %}</div>
+      <form method="post" class="assignment-message-form">{% csrf_token %}<input type="hidden" name="periode_id" value="{{ periode.pk }}"><label>Message d’information<textarea name="message" maxlength="2000" required placeholder="Ex. Tes affectations pour Toussaint sont disponibles."></textarea></label><button class="btn btn-primary" type="submit"{% if not animateurs_affectes %} disabled{% endif %}>Publier les affectations</button></form>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

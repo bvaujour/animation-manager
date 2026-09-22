@@ -10,6 +10,8 @@ from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.validators import validate_email
+from django.db import connection, transaction
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -22,10 +24,14 @@ from .models import (
     Animateur,
     AnneeScolaire,
     Centre,
+    DestinatairePublicationAffectation,
     DemandeMateriel,
     Evenement,
     InformationAnimateur,
     PeriodeScolaire,
+    PeriodeCalendrier,
+    PublicationAffectationsPeriode,
+    ResponsabiliteOperationnelle,
     StatutPreparationSemaine,
     TypeAccueil,
 )
@@ -36,6 +42,11 @@ from .services.planning_exports import generer_planning_excel, generer_planning_
 
 
 PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY = "portail_animateur_semaine"
+
+
+def _publication_affectations_disponible():
+    """Évite de bloquer le portail pendant le déploiement de sa migration."""
+    return PublicationAffectationsPeriode._meta.db_table in connection.introspection.table_names()
 
 
 def _semaine_portail_animateur(request):
@@ -285,6 +296,15 @@ def accueil(request):
                 "message_materiel": message_materiel,
                 "erreur_materiel": erreur_materiel,
             })
+            contexte["publication_affectation_a_confirmer"] = (
+                DestinatairePublicationAffectation.objects.filter(
+                    animateur=animateur, confirme_le__isnull=True, publication__publie=True
+                )
+                .select_related("publication__periode_calendrier")
+                .order_by("publication__periode_calendrier__debut")
+                .first()
+                if _publication_affectations_disponible() else None
+            )
     return render(request, "accueil.html", contexte)
 
 
@@ -328,6 +348,129 @@ def documents_animateur(request):
     if est_direction(request.user):
         return redirect("documents")
     return render(request, "documents_animateur.html", _contexte_portail_animateur(request, "documents_animateur"))
+
+
+def _affectations_periode(periode, animateur=None):
+    """Lit les affectations existantes d'une période, sans en créer de copie."""
+    debut = timezone.make_aware(datetime.datetime.combine(periode.debut, datetime.time.min))
+    fin = timezone.make_aware(datetime.datetime.combine(periode.fin + datetime.timedelta(days=1), datetime.time.min))
+    queryset = Affectation.objects.filter(debut__lt=fin, fin__gt=debut)
+    if animateur is not None:
+        queryset = queryset.filter(animateur=animateur)
+    return list(queryset.select_related("animateur__utilisateur", "centre", "evenement__groupe").order_by(
+        "animateur__nom", "animateur__prenom", "debut", "id"
+    ))
+
+
+def _details_affectations_periode(periode, animateur):
+    affectations = _affectations_periode(periode, animateur)
+    resultat = []
+    for affectation in affectations:
+        responsabilite = (
+            ResponsabiliteOperationnelle.objects.filter(
+                animateur=animateur, debut__lt=affectation.fin, fin__gt=affectation.debut
+            )
+            .select_related("fonction")
+            .order_by("debut")
+            .first()
+        )
+        resultat.append({"affectation": affectation, "role": responsabilite.fonction.nom if responsabilite else ""})
+    return resultat
+
+
+def publications_affectations(request):
+    """Publication direction des affectations de période, indépendante du planning."""
+    periode_id = request.GET.get("periode_id") or request.POST.get("periode_id")
+    periode = PeriodeCalendrier.objects.filter(pk=periode_id).first() if periode_id else None
+    periodes = PeriodeCalendrier.objects.filter(categorie=PeriodeCalendrier.VACANCES).order_by("debut")
+    if periode is None:
+        periode = periodes.filter(debut__gte=timezone.localdate()).first() or periodes.last()
+    if periode is None:
+        messages.error(request, "Aucune période de vacances n'est disponible.")
+        return redirect("accueil")
+
+    publication = PublicationAffectationsPeriode.objects.filter(periode_calendrier=periode).first()
+    affectations = _affectations_periode(periode)
+    animateurs = []
+    deja_vus = set()
+    for affectation in affectations:
+        if affectation.animateur_id not in deja_vus:
+            animateurs.append(affectation.animateur)
+            deja_vus.add(affectation.animateur_id)
+
+    if request.method == "POST":
+        message = request.POST.get("message", "").strip()
+        if not message:
+            messages.error(request, "Le message d'information est obligatoire.")
+        elif publication and publication.publie:
+            messages.error(request, "Cette publication est déjà envoyée ; ses destinataires sont conservés.")
+        else:
+            with transaction.atomic():
+                publication, _ = PublicationAffectationsPeriode.objects.get_or_create(periode_calendrier=periode)
+                publication.message = message
+                publication.publie = True
+                publication.publie_le = timezone.now()
+                publication.publie_par = request.user
+                publication.save()
+                DestinatairePublicationAffectation.objects.bulk_create(
+                    [DestinatairePublicationAffectation(publication=publication, animateur=animateur) for animateur in animateurs],
+                    ignore_conflicts=True,
+                )
+            messages.success(request, "Les affectations ont été publiées sans publier le programme.")
+            return redirect(f"{request.path}?periode_id={periode.pk}")
+
+    destinataires = []
+    if publication:
+        destinataires = list(publication.destinataires.select_related("animateur__utilisateur").all())
+    return render(request, "publications_affectations.html", {
+        "active_page": "accueil", "periode": periode, "periodes": periodes,
+        "publication": publication, "animateurs_affectes": animateurs, "destinataires": destinataires,
+    })
+
+
+def affectation_a_confirmer(request, publication_id):
+    """Un animateur ne peut consulter et confirmer que sa propre publication."""
+    if est_direction(request.user):
+        return redirect("publications_affectations")
+    animateur = getattr(request.user, "profil_animateur", None)
+    destinataire = (
+        DestinatairePublicationAffectation.objects.filter(
+            pk=publication_id, animateur=animateur, publication__publie=True
+        ).select_related("publication__periode_calendrier").first()
+    )
+    if destinataire is None:
+        raise PermissionDenied
+    if request.method == "POST" and destinataire.confirme_le is None:
+        destinataire.confirme_le = timezone.now()
+        destinataire.save(update_fields=["confirme_le"])
+        messages.success(request, "Ta confirmation a bien été enregistrée.")
+        return redirect("affectation_a_confirmer", publication_id=destinataire.pk)
+    return render(request, "affectation_a_confirmer.html", {
+        "active_page": "accueil", "destinataire": destinataire,
+        "details": _details_affectations_periode(destinataire.publication.periode_calendrier, animateur),
+    })
+
+
+def apercu_portail_animateur(request):
+    """Vue direction en lecture seule, fondée sur le vrai service portail."""
+    animateurs = Animateur.objects.select_related("utilisateur").order_by("nom", "prenom")
+    animateur = animateurs.filter(pk=request.GET.get("animateur_id")).first() or animateurs.first()
+    if animateur is None:
+        messages.error(request, "Aucun animateur n'est disponible pour l'aperçu.")
+        return redirect("accueil")
+    date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
+    contexte = generer_tableau_de_bord_animateur(animateur, date_reference)
+    contexte.update({
+        "active_page": "accueil", "animateurs_apercu": animateurs,
+        "apercu_portail": True,
+        "publication_affectation_a_confirmer": (
+            DestinatairePublicationAffectation.objects.filter(
+                animateur=animateur, confirme_le__isnull=True, publication__publie=True
+            ).select_related("publication__periode_calendrier").order_by("publication__periode_calendrier__debut").first()
+            if _publication_affectations_disponible() else None
+        ),
+    })
+    return render(request, "apercu_portail_animateur.html", contexte)
 
 
 @never_cache
@@ -687,7 +830,7 @@ def gestion(request):
         {
             "active_page": "gestion",
             "gestion_onglet": onglet,
-            "masquer_selecteurs_configuration": onglet not in {"documents", "informations"},
+            "masquer_selecteurs_configuration": True,
             "informations_animateurs": InformationAnimateur.objects.select_related("auteur").prefetch_related("animateurs"),
             "information_editee": information_editee,
             "information_editee_ids": [item.pk for item in information_editee.animateurs.all()] if information_editee else [],

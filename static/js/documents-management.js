@@ -277,12 +277,7 @@ function mountDocuments(app) {
     }
 
     function selectedPeriodId() {
-        const navigation = WeekPicker.get("gestion-period-nav");
-        const selected = periods.find((period) => (
-            String(period.debut) <= String(navigation?.activeDate || "")
-            && String(navigation?.activeDate || "") <= String(period.fin)
-        ));
-        return filters.periode?.value || selected?.id || "";
+        return filters.periode?.value || "";
     }
 
     async function loadDocuments() {
@@ -386,7 +381,7 @@ function mountDocuments(app) {
 
     mainPickerRoot?.addEventListener("week-picker:ready", (event) => {
         periods = event.detail.periods || [];
-        filters.periode.innerHTML = '<option value="">Période sélectionnée</option>' + periods.map((period) => `<option value="${period.id}">${escapeHtml(period.libelle || period.nom)}</option>`).join("");
+        filters.periode.innerHTML = '<option value="">Toutes les périodes</option>' + periods.map((period) => `<option value="${period.id}">${escapeHtml(period.libelle || period.nom)}</option>`).join("");
     });
     if (mainPicker?.ready) periods = mainPicker.periods;
     document.querySelectorAll("[data-documents-view]").forEach((button) => button.addEventListener("click", () => {
@@ -396,10 +391,6 @@ function mountDocuments(app) {
         loadDocuments();
     }));
     Object.values(filters).forEach((filter) => filter?.addEventListener("change", loadDocuments));
-    window.addEventListener("animation-manager:week-change", () => {
-        if (!filters.periode?.value) loadDocuments();
-    });
-
     Promise.all([initCentres(), initCategories()]).then(() => {
         filters.centre.innerHTML = '<option value="">Tous les centres</option>' + centres.map((centre) => `<option value="${centre.id}">${escapeHtml(centre.nom)}</option>`).join("");
         return loadDocuments();
