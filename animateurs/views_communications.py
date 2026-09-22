@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import logging
 import re
 
 from django.core.exceptions import ValidationError
@@ -28,11 +29,15 @@ from .services.emails import (
     charger_pieces_jointes,
     connexion_email,
     envoyer_un_message,
+    message_erreur_envoi,
     rendre_variables_email,
     statut_configuration_email,
     variables_email_disponibles,
 )
 from .services.serializers import document_to_dict
+
+
+logger = logging.getLogger(__name__)
 
 
 def _taille_document(document):
@@ -485,17 +490,29 @@ def api_envois_email(request):
     ]
 
     adresses_invalides = []
+    destinataires_valides = []
+    resultats = []
+    echecs = 0
     for item in destinataires:
         personne = item["objet"]
         try:
             validate_email(personne.email)
         except ValidationError:
             adresses_invalides.append(f"{personne.prenom} {personne.nom}".strip())
-    if adresses_invalides:
+            resultats.append({
+                "type": item["type"], "id": item["id"],
+                "nom": f"{personne.prenom} {personne.nom}".strip(),
+                "email": personne.email, "statut": "echec",
+                "erreur": "Adresse e-mail absente ou invalide.",
+            })
+            echecs += 1
+        else:
+            destinataires_valides.append(item)
+    if adresses_invalides and not destinataires_valides:
         return JsonResponse({"error": "Adresse e-mail absente ou invalide pour : " + ", ".join(adresses_invalides) + "."}, status=400)
 
     emails_utilises = {}
-    for item in destinataires:
+    for item in destinataires_valides:
         personne = item["objet"]
         cle_email = personne.email.strip().casefold()
         emails_utilises.setdefault(cle_email, []).append(f"{personne.prenom} {personne.nom}".strip())
@@ -513,12 +530,10 @@ def api_envois_email(request):
     except PiecesJointesError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
 
-    resultats = []
     envoyes = 0
-    echecs = 0
     try:
         with connexion_email() as connection:
-            for item in destinataires:
+            for item in destinataires_valides:
                 personne = item["objet"]
                 objet_rendu = rendre_variables_email(objet, personne, semaines_reference).strip()
                 message_rendu = rendre_variables_email(message, personne, semaines_reference).strip()
@@ -535,8 +550,12 @@ def api_envois_email(request):
                     erreur_detail = ""
                     envoyes += 1
                 except Exception as exc:
+                    logger.warning(
+                        "Échec d’envoi e-mail individuel (type=%s, id=%s, exception=%s)",
+                        item["type"], item["id"], type(exc).__name__,
+                    )
                     statut = "echec"
-                    erreur_detail = str(exc)[:1000] or "Erreur d'envoi inconnue."
+                    erreur_detail = message_erreur_envoi(exc)
                     echecs += 1
                 resultats.append({
                     "type": item["type"],
@@ -550,8 +569,9 @@ def api_envois_email(request):
         return JsonResponse({"error": str(exc)}, status=503)
     except Exception as exc:
         deja_traites = {(r["type"], r["id"]) for r in resultats}
-        erreur_connexion = str(exc)[:1000] or "Connexion au serveur e-mail impossible."
-        for item in destinataires:
+        logger.warning("Échec de connexion e-mail (exception=%s)", type(exc).__name__)
+        erreur_connexion = message_erreur_envoi(exc)
+        for item in destinataires_valides:
             if (item["type"], item["id"]) in deja_traites:
                 continue
             personne = item["objet"]

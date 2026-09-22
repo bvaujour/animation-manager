@@ -586,7 +586,11 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             resultat.hidden = false;
             resultat.className = `email-resultat ${reponse.nombre_echecs ? "warning" : "success"}`;
-            resultat.textContent = `${reponse.nombre_envoyes} e-mail${reponse.nombre_envoyes > 1 ? "s" : ""} envoyé${reponse.nombre_envoyes > 1 ? "s" : ""}${reponse.mode_test ? " en mode test" : ""}${reponse.nombre_echecs ? `, ${reponse.nombre_echecs} en échec` : ""}.`;
+            const echecs = (reponse.resultats || []).filter((item) => item.statut === "echec");
+            const detailsEchecs = echecs.length
+                ? ` ${echecs.map((item) => `${item.nom} : ${item.erreur || "Erreur d’envoi inconnue."}`).join(" · ")}`
+                : "";
+            resultat.textContent = `${reponse.nombre_envoyes} e-mail${reponse.nombre_envoyes > 1 ? "s" : ""} envoyé${reponse.nombre_envoyes > 1 ? "s" : ""}${reponse.mode_test ? " en mode test" : ""}${reponse.nombre_echecs ? `, ${reponse.nombre_echecs} en échec` : ""}.${detailsEchecs}`;
             if (!reponse.nombre_echecs) {
                 form.reset();
                 selecteurSemaines()?.clear();

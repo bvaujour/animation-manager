@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import mimetypes
 import re
+import smtplib
+import socket
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -43,6 +45,23 @@ class ConfigurationEmailError(RuntimeError):
 
 class PiecesJointesError(ValueError):
     """Les documents demandés ne peuvent pas être joints au message."""
+
+
+def message_erreur_envoi(exc: Exception) -> str:
+    """Retourne un motif exploitable sans exposer une réponse SMTP sensible."""
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return "Authentification SMTP refusée. Vérifiez le compte ou le mot de passe d’application."
+    if isinstance(exc, smtplib.SMTPSenderRefused):
+        return "Le serveur SMTP a refusé l’expéditeur configuré."
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        return "Le serveur SMTP a refusé l’adresse du destinataire."
+    if isinstance(exc, smtplib.SMTPDataError):
+        return "Le serveur SMTP a refusé le contenu du message."
+    if isinstance(exc, (smtplib.SMTPException, TimeoutError, socket.timeout, OSError)):
+        return "Erreur de communication avec le serveur SMTP."
+    if isinstance(exc, ValueError):
+        return str(exc)[:300] or "Message invalide."
+    return "Erreur d’envoi inconnue."
 
 
 def statut_configuration_email() -> dict:

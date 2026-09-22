@@ -1,6 +1,8 @@
 import datetime
 import json
+import smtplib
 import tempfile
+from unittest.mock import patch
 
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -449,6 +451,60 @@ class ConfigurationEmailProductionTests(ConnexionTestCase):
         )
         self.assertEqual(response.status_code, 503)
         self.assertIn("production", response.json()["error"].lower())
+
+
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DEFAULT_FROM_EMAIL="Gestion animation <planning@example.fr>",
+    EMAIL_REPLY_TO="direction@example.fr",
+    DEBUG=True,
+)
+class EnvoiEmailRobustesseTests(ConnexionTestCase):
+    def setUp(self):
+        self.valide = Animateur.objects.create(prenom="Alice", nom="Valide", email="alice@example.fr")
+        self.invalide = Animateur.objects.create(prenom="Bob", nom="Invalide", email="adresse-invalide")
+
+    def _envoyer(self, ids):
+        return self.client.post(
+            "/api/envois-email/",
+            data=json.dumps({
+                "animateur_ids": ids,
+                "document_ids": [],
+                "objet": "Bonjour {{prenom}}",
+                "message": "Message pour {{prenom}}.",
+            }),
+            content_type="application/json",
+        )
+
+    def test_envoi_simple_injecte_les_variables_en_backend_memoire(self):
+        response = self._envoyer([self.valide.pk])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["nombre_envoyes"], 1)
+        self.assertEqual(mail.outbox[0].subject, "Bonjour Alice")
+        self.assertEqual(mail.outbox[0].body, "Message pour Alice.")
+
+    def test_destinataire_invalide_n_empeche_pas_l_envoi_des_autres(self):
+        response = self._envoyer([self.valide.pk, self.invalide.pk])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["nombre_envoyes"], 1)
+        self.assertEqual(response.json()["nombre_echecs"], 1)
+        self.assertEqual(len(mail.outbox), 1)
+        echec = next(item for item in response.json()["resultats"] if item["id"] == self.invalide.pk)
+        self.assertEqual(echec["erreur"], "Adresse e-mail absente ou invalide.")
+
+    @patch("animateurs.views_communications.envoyer_un_message")
+    def test_erreur_smtp_est_categorisee_sans_exposer_son_contenu(self, envoyer):
+        envoyer.side_effect = smtplib.SMTPAuthenticationError(535, b"secret-smtp-response")
+
+        response = self._envoyer([self.valide.pk])
+
+        self.assertEqual(response.status_code, 200)
+        resultat = response.json()["resultats"][0]
+        self.assertEqual(resultat["statut"], "echec")
+        self.assertEqual(resultat["erreur"], "Authentification SMTP refusée. Vérifiez le compte ou le mot de passe d’application.")
+        self.assertNotIn("secret-smtp-response", response.content.decode())
 
 
 class ModeleEmailApiTests(ConnexionTestCase):
