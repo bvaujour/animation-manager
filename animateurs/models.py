@@ -2737,6 +2737,8 @@ class DestinatairePublicationAffectation(models.Model):
         Animateur, on_delete=models.PROTECT, related_name="publications_affectations_recues"
     )
     confirme_le = models.DateTimeField(null=True, blank=True, db_index=True)
+    retire_le = models.DateTimeField(null=True, blank=True, db_index=True)
+    instantane_affectations = models.JSONField(default=list, blank=True)
 
     class Meta:
         constraints = [

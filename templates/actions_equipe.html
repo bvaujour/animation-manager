@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Actions équipe{% endblock %}
+{% block content %}
+<main class="page-shell page-shell--fluid assignment-publication-page">
+  {% include "partials/_direction_section_nav.html" with section="communication" active_item="actions-equipe" %}
+  <header class="page-header"><div><p class="page-kicker">Communication équipe</p><h1>Actions équipe</h1></div></header>
+  <form method="get" class="ui-card assignment-period-picker"><label>Période<select name="periode_id" onchange="this.form.submit()">{% for item in periodes %}<option value="{{ item.pk }}"{% if item.pk == periode.pk %} selected{% endif %}>{{ item }}</option>{% endfor %}</select></label></form>
+  {% if periode %}
+  <section class="ui-card assignment-publication-card"><h2>{{ periode }}</h2>
+    <p><strong>{{ suivi.total }} concernés</strong> · {{ suivi.confirmes }} confirmés · {{ suivi.en_attente }} en attente · {{ suivi.sans_acces }} sans accès portail</p>
+    <a class="btn btn-primary" href="{% url 'publications_affectations' %}?periode_id={{ periode.pk }}">{% if suivi.publication %}Voir / republier les affectations{% else %}Publier les affectations{% endif %}</a>
+    {% if suivi.publication %}<div class="assignment-recipient-list">{% for destinataire in suivi.destinataires %}<article><strong>{{ destinataire.animateur }}</strong><span>{% if destinataire.retire_le %}N’est plus concerné{% elif not destinataire.animateur.utilisateur_id or not destinataire.animateur.utilisateur.is_active %}Sans accès portail{% elif destinataire.confirme_le %}Confirmé le {{ destinataire.confirme_le|date:'d/m à H:i' }}{% else %}En attente de confirmation{% endif %}</span></article>{% endfor %}</div>{% else %}<p>Aucune affectation n’a encore été publiée pour cette période.</p>{% endif %}
+  </section>{% endif %}
+</main>
+{% endblock %}

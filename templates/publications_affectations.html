@@ -16,6 +16,7 @@
       <div class="assignment-recipient-list">{% for animateur in animateurs_affectes %}<article><strong>{{ animateur }}</strong><span>{% if animateur.utilisateur_id %}Accès portail disponible{% else %}Sans compte portail — à activer dans Administration › Accès portail{% endif %}</span></article>{% empty %}<p>Aucune affectation sur cette période.</p>{% endfor %}</div>
       <form method="post" class="assignment-message-form">{% csrf_token %}<input type="hidden" name="periode_id" value="{{ periode.pk }}"><label>Message d’information<textarea name="message" maxlength="2000" required placeholder="Ex. Tes affectations pour Toussaint sont disponibles."></textarea></label><button class="btn btn-primary" type="submit"{% if not animateurs_affectes %} disabled{% endif %}>Publier les affectations</button></form>
     {% endif %}
+    {% if publication and publication.publie %}<form method="post" class="assignment-message-form">{% csrf_token %}<input type="hidden" name="periode_id" value="{{ periode.pk }}"><label>Message d’information<textarea name="message" maxlength="2000" required>{{ publication.message }}</textarea></label><button class="btn btn-secondary" type="submit">Republier les affectations</button></form>{% endif %}
   </section>
 </main>
 {% endblock %}

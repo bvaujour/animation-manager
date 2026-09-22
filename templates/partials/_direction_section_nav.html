@@ -21,6 +21,7 @@ Paramètres attendus : section, active_item.
     <a class="direction-section-link{% if active_item == 'informations' %} active{% endif %}" href="{% url 'gestion' %}?onglet=informations"{% if active_item == 'informations' %} aria-current="page"{% endif %}>Infos équipe</a>
     <a class="direction-section-link{% if active_item == 'documents' %} active{% endif %}" href="{% url 'gestion' %}?onglet=documents"{% if active_item == 'documents' %} aria-current="page"{% endif %}>Documents</a>
     <a class="direction-section-link{% if active_item == 'invitations-portail' %} active{% endif %}" href="{% url 'gestion' %}?onglet=invitations-portail"{% if active_item == 'invitations-portail' %} aria-current="page"{% endif %}>Invitations portail</a>
+    <a class="direction-section-link{% if active_item == 'actions-equipe' %} active{% endif %}" href="{% url 'actions_equipe' %}"{% if active_item == 'actions-equipe' %} aria-current="page"{% endif %}>Actions équipe</a>
     <a class="direction-section-link" href="{% url 'apercu_portail_animateur' %}">Aperçu portail</a>
 </nav>
 {% endif %}

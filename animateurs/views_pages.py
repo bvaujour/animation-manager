@@ -36,6 +36,7 @@ from .models import (
     TypeAccueil,
 )
 from .services.animateur_dashboard import generer_tableau_de_bord_animateur
+from .services.actions_equipe import actions_actives_animateur, instantane_affectations, suivi_actions_affectations
 from .services.comptes import valider_mot_de_passe
 from .services.dashboard import generer_tableau_de_bord
 from .services.planning_exports import generer_planning_excel, generer_planning_pdf, horaires_manquants_export
@@ -319,6 +320,7 @@ def accueil(request):
                 .first()
                 if _publication_affectations_disponible() else None
             )
+            contexte["actions_a_faire_count"] = len(actions_actives_animateur(animateur))
             _ajouter_contexte_apercu(contexte, animateur, apercu)
     return render(request, "accueil.html", contexte)
 
@@ -338,6 +340,7 @@ def _contexte_portail_animateur(request, active_page):
         )
         _navigation_semaine_portail(request, contexte["semaine"])
         contexte["semaine_active"] = contexte["semaine"]["debut"]
+        contexte["actions_a_faire_count"] = len(actions_actives_animateur(animateur))
     return _ajouter_contexte_apercu(contexte, animateur, apercu)
 
 
@@ -417,8 +420,6 @@ def publications_affectations(request):
         message = request.POST.get("message", "").strip()
         if not message:
             messages.error(request, "Le message d'information est obligatoire.")
-        elif publication and publication.publie:
-            messages.error(request, "Cette publication est déjà envoyée ; ses destinataires sont conservés.")
         else:
             with transaction.atomic():
                 publication, _ = PublicationAffectationsPeriode.objects.get_or_create(periode_calendrier=periode)
@@ -427,11 +428,28 @@ def publications_affectations(request):
                 publication.publie_le = timezone.now()
                 publication.publie_par = request.user
                 publication.save()
-                DestinatairePublicationAffectation.objects.bulk_create(
-                    [DestinatairePublicationAffectation(publication=publication, animateur=animateur) for animateur in animateurs],
-                    ignore_conflicts=True,
-                )
-            messages.success(request, "Les affectations ont été publiées sans publier le programme.")
+                existants = {item.animateur_id: item for item in publication.destinataires.all()}
+                ids_animateurs = {animateur.pk for animateur in animateurs}
+                for animateur in animateurs:
+                    instantane = instantane_affectations(periode, animateur)
+                    destinataire = existants.get(animateur.pk)
+                    if destinataire is None:
+                        DestinatairePublicationAffectation.objects.create(
+                            publication=publication, animateur=animateur, instantane_affectations=instantane
+                        )
+                    elif destinataire.instantane_affectations != instantane:
+                        destinataire.instantane_affectations = instantane
+                        destinataire.confirme_le = None
+                        destinataire.retire_le = None
+                        destinataire.save(update_fields=["instantane_affectations", "confirme_le", "retire_le"])
+                    elif destinataire.retire_le is not None:
+                        destinataire.retire_le = None
+                        destinataire.save(update_fields=["retire_le"])
+                for animateur_id, destinataire in existants.items():
+                    if animateur_id not in ids_animateurs and destinataire.retire_le is None:
+                        destinataire.retire_le = timezone.now()
+                        destinataire.save(update_fields=["retire_le"])
+            messages.success(request, "Les affectations ont été publiées. Les confirmations inchangées sont conservées.")
             return redirect(f"{request.path}?periode_id={periode.pk}")
 
     destinataires = []
@@ -464,9 +482,37 @@ def affectation_a_confirmer(request, publication_id):
         return redirect("affectation_a_confirmer", publication_id=destinataire.pk)
     contexte = {
         "active_page": "accueil", "destinataire": destinataire,
-        "details": _details_affectations_periode(destinataire.publication.periode_calendrier, animateur),
+        # Publications antérieures à l'ajout de l'instantané restent lisibles;
+        # toute nouvelle publication utilise exclusivement sa copie figée.
+        "details": destinataire.instantane_affectations or instantane_affectations(
+            destinataire.publication.periode_calendrier, animateur
+        ),
     }
     return render(request, "affectation_a_confirmer.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
+
+
+def actions_a_faire(request):
+    """Liste les interventions personnelles encore attendues."""
+    animateur, apercu = resoudre_portail_consulte(request)
+    if est_direction(request.user) and not apercu:
+        return redirect("accueil")
+    contexte = _contexte_portail_animateur(request, "actions_a_faire")
+    contexte["actions"] = actions_actives_animateur(animateur) if animateur else []
+    return render(request, "actions_a_faire.html", contexte)
+
+
+def actions_equipe(request):
+    """Suivi direction des actions d'affectations publiées."""
+    periode_id = request.GET.get("periode_id")
+    periodes = PeriodeCalendrier.objects.filter(categorie=PeriodeCalendrier.VACANCES).order_by("debut")
+    periode = periodes.filter(pk=periode_id).first() if periode_id else None
+    if periode is None:
+        periode = periodes.filter(debut__gte=timezone.localdate()).first() or periodes.last()
+    suivi = suivi_actions_affectations(periode) if periode else suivi_actions_affectations(type("P", (), {"publication_affectations": None})())
+    return render(request, "actions_equipe.html", {
+        "active_page": "gestion", "gestion_onglet": "actions-equipe", "masquer_selecteurs_configuration": True,
+        "periodes": periodes, "periode": periode, "suivi": suivi,
+    })
 
 
 def apercu_portail_animateur(request):
@@ -594,6 +640,7 @@ def demandes_materiel(request):
             "erreur": erreur,
             "semaine": semaine_portail,
             "semaine_active": semaine_portail["debut"] if semaine_portail else None,
+            "actions_a_faire_count": len(actions_actives_animateur(animateur)) if animateur else 0,
     }
     return render(request, "demandes_materiel.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
 
@@ -658,6 +705,7 @@ def mon_profil(request):
             "erreur": erreur,
             "action": action,
             "semaine_active": semaine_active,
+            "actions_a_faire_count": len(actions_actives_animateur(animateur)) if animateur else 0,
     }
     return render(request, "mon_profil.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
 

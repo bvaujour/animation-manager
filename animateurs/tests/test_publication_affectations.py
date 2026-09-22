@@ -68,6 +68,131 @@ class PublicationAffectationsPeriodeTests(TestCase):
         self.assertIsNone(bob.confirme_le)
         self.assertEqual(self.client.get(reverse("affectation_a_confirmer", args=[bob.pk])).status_code, 403)
 
+    def _publier(self, periode=None, message="Message publié"):
+        self.client.force_login(self.direction)
+        response = self.client.post(reverse("publications_affectations"), {
+            "periode_id": (periode or self.periode).pk, "message": message,
+        })
+        self.assertEqual(response.status_code, 302)
+        return PublicationAffectationsPeriode.objects.get(periode_calendrier=periode or self.periode)
+
+    def test_actions_a_faire_liste_toutes_les_affectations_et_le_compteur(self):
+        seconde_periode = PeriodeCalendrier.objects.create(
+            categorie=PeriodeCalendrier.VACANCES, nom="Noël 2026", annee_scolaire="2026-2027",
+            zone="A", debut=datetime.date(2026, 12, 21), fin=datetime.date(2026, 12, 25),
+        )
+        centre = Centre.objects.get(code="TEST")
+        evenement = Evenement.objects.get(centre=centre)
+        Affectation.objects.create(
+            animateur=self.alice, centre=centre, evenement=evenement,
+            debut=datetime.datetime(2026, 12, 21, tzinfo=datetime.timezone.utc),
+            fin=datetime.datetime(2026, 12, 26, tzinfo=datetime.timezone.utc),
+        )
+        self._publier()
+        self._publier(seconde_periode)
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("actions_a_faire"))
+        self.assertContains(response, "Affectation Toussaint 2026 à confirmer")
+        self.assertContains(response, "Affectation Noël 2026 à confirmer")
+        self.assertEqual(response.context["actions_a_faire_count"], 2)
+        self.assertContains(response, "À faire (2)")
+
+    def test_confirmation_fait_disparaitre_l_action_sans_effacer_le_suivi(self):
+        publication = self._publier()
+        destinataire = publication.destinataires.get(animateur=self.alice)
+        self.client.force_login(self.user)
+        self.client.post(reverse("affectation_a_confirmer", args=[destinataire.pk]))
+        self.assertNotContains(self.client.get(reverse("actions_a_faire")), "Toussaint 2026")
+        destinataire.refresh_from_db()
+        self.assertIsNotNone(destinataire.confirme_le)
+        self.client.force_login(self.direction)
+        suivi = self.client.get(reverse("actions_equipe"), {"periode_id": self.periode.pk})
+        self.assertContains(suivi, "1 confirmés")
+
+    def test_instantane_reste_identique_apres_modification_du_planning(self):
+        publication = self._publier()
+        destinataire = publication.destinataires.get(animateur=self.alice)
+        instantane = destinataire.instantane_affectations
+        self.assertEqual(instantane[0]["centre"], "Centre test")
+        autre_centre = Centre.objects.create(nom="Centre modifié", code="MOD")
+        groupe = Groupe.objects.create(nom="Autre groupe")
+        evenement = Evenement.objects.create(centre=autre_centre, groupe=groupe, nom="Autre groupe", jours_ouverts=[0])
+        affectation = Affectation.objects.filter(animateur=self.alice).first()
+        affectation.centre = autre_centre
+        affectation.evenement = evenement
+        affectation.save(update_fields=["centre", "evenement"])
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("affectation_a_confirmer", args=[destinataire.pk]))
+        self.assertContains(response, "Centre test")
+        self.assertNotContains(response, "Centre modifié")
+
+    def test_republication_inchangee_conserve_confirmation_et_modification_ciblee_la_reinitialise(self):
+        publication = self._publier()
+        alice = publication.destinataires.get(animateur=self.alice)
+        bob = publication.destinataires.get(animateur=self.bob)
+        self.client.force_login(self.user)
+        self.client.post(reverse("affectation_a_confirmer", args=[alice.pk]))
+        alice.refresh_from_db()
+        confirme_le = alice.confirme_le
+
+        self._publier(message="Message republication")
+        alice.refresh_from_db()
+        self.assertEqual(alice.confirme_le, confirme_le)
+
+        autre_centre = Centre.objects.create(nom="Centre Alice", code="ALICE")
+        groupe = Groupe.objects.create(nom="Groupe Alice")
+        evenement = Evenement.objects.create(centre=autre_centre, groupe=groupe, nom="Groupe Alice", jours_ouverts=[0])
+        affectation = Affectation.objects.filter(animateur=self.alice).first()
+        affectation.centre = autre_centre
+        affectation.evenement = evenement
+        affectation.save(update_fields=["centre", "evenement"])
+        self._publier(message="Message republication 2")
+        alice.refresh_from_db()
+        bob.refresh_from_db()
+        self.assertIsNone(alice.confirme_le)
+        self.assertIsNone(bob.confirme_le)
+
+    def test_republication_ajoute_un_nouvel_animateur_sans_effacer_les_destinataires(self):
+        publication = self._publier()
+        charlie = Animateur.objects.create(prenom="Charlie", nom="Nouveau")
+        centre = Centre.objects.get(code="TEST")
+        evenement = Evenement.objects.get(centre=centre)
+        Affectation.objects.create(
+            animateur=charlie, centre=centre, evenement=evenement,
+            debut=datetime.datetime(2026, 10, 19, tzinfo=datetime.timezone.utc),
+            fin=datetime.datetime(2026, 10, 24, tzinfo=datetime.timezone.utc),
+        )
+        self._publier(message="Message republication")
+        self.assertEqual(publication.destinataires.count(), 3)
+        self.assertTrue(publication.destinataires.filter(animateur=charlie, confirme_le__isnull=True).exists())
+
+    def test_actions_equipe_distingue_confirmation_attente_et_sans_acces(self):
+        publication = self._publier()
+        alice = publication.destinataires.get(animateur=self.alice)
+        self.client.force_login(self.user)
+        self.client.post(reverse("affectation_a_confirmer", args=[alice.pk]))
+        self.client.force_login(self.direction)
+        response = self.client.get(reverse("actions_equipe"), {"periode_id": self.periode.pk})
+        self.assertContains(response, "2 concernés")
+        self.assertContains(response, "1 confirmés")
+        self.assertContains(response, "1 en attente")
+        self.assertContains(response, "1 sans accès portail")
+
+    def test_apercu_voit_les_actions_sans_pouvoir_confirmer(self):
+        publication = self._publier()
+        destinataire = publication.destinataires.get(animateur=self.alice)
+        self.client.force_login(self.direction)
+        url = reverse("actions_a_faire") + f"?apercu_portail=1&animateur_id={self.alice.pk}"
+        response = self.client.get(url)
+        self.assertContains(response, "Affectation Toussaint 2026 à confirmer")
+        confirmation = self.client.post(
+            reverse("affectation_a_confirmer", args=[destinataire.pk])
+            + f"?apercu_portail=1&animateur_id={self.alice.pk}"
+        )
+        self.assertEqual(confirmation.status_code, 403)
+
     def test_destinataire_sans_compte_peut_confirmer_apres_activation(self):
         publication = PublicationAffectationsPeriode.objects.create(
             periode_calendrier=self.periode, message="Message", publie=True, publie_par=self.direction
@@ -83,7 +208,8 @@ class PublicationAffectationsPeriodeTests(TestCase):
 
         self.client.force_login(self.bob.utilisateur)
         accueil = self.client.get(reverse("accueil"), {"semaine": "2026-10-19"})
-        self.assertContains(accueil, "Affectation Toussaint 2026 à confirmer")
+        self.assertContains(accueil, "1 action à faire")
+        self.assertContains(accueil, reverse("actions_a_faire"))
         detail = self.client.get(reverse("affectation_a_confirmer", args=[destinataire.pk]))
         self.assertContains(detail, "Centre test")
         self.assertEqual(self.client.post(reverse("affectation_a_confirmer", args=[destinataire.pk])).status_code, 302)

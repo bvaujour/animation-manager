@@ -136,15 +136,10 @@
         <span class="animator-welcome-heart" aria-hidden="true">♡</span>
     </section>
 
-    {% if publication_affectation_a_confirmer and not apercu_portail %}
+    {% if actions_a_faire_count %}
     <section class="animator-assignment-alert" aria-label="Affectation à confirmer">
-        <div><strong>Affectation {{ publication_affectation_a_confirmer.publication.periode_calendrier.nom }} à confirmer</strong><span>Consulte ton centre, ton groupe et le message de la direction.</span></div>
-        <a class="btn btn-primary" href="{% url 'affectation_a_confirmer' publication_affectation_a_confirmer.pk %}">Voir mon affectation</a>
-    </section>
-    {% elif publication_affectation_a_confirmer and apercu_portail %}
-    <section class="animator-assignment-alert" aria-label="Affectation à confirmer">
-        <div><strong>Affectation {{ publication_affectation_a_confirmer.publication.periode_calendrier.nom }} à confirmer</strong><span>Aperçu uniquement : la direction ne peut pas confirmer à la place de l’animateur.</span></div>
-        <a class="btn btn-secondary" href="{% url 'publications_affectations' %}?periode_id={{ publication_affectation_a_confirmer.publication.periode_calendrier.pk }}">Gérer l’affectation</a>
+        <div><strong>{{ actions_a_faire_count }} action{{ actions_a_faire_count|pluralize }} à faire</strong><span>Consulte tes actions en attente.</span></div>
+        <a class="btn {% if apercu_portail %}btn-secondary{% else %}btn-primary{% endif %}" href="{% url 'actions_a_faire' %}{{ apercu_query_prefix|default:'' }}">Voir mes actions</a>
     </section>
     {% endif %}
 
