@@ -114,18 +114,6 @@
     <div id="dashboard-loading" class="dashboard-loading" role="status" aria-live="polite">Mise à jour du tableau de bord…</div>
 </main>
 {% else %}
-<section class="portal-preview-banner" aria-label="Mode aperçu portail animateur">
-    <strong>Aperçu du portail de {{ animateur.prenom }} {{ animateur.nom }} — vous êtes connecté en tant que direction</strong>
-    <form class="portal-preview-selector" method="get">
-        <label for="apercu-animateur">Changer d’animateur
-            <select id="apercu-animateur" name="animateur_id" onchange="this.form.submit()">
-                {% for candidat in animateurs_apercu %}<option value="{{ candidat.pk }}"{% if candidat.pk == animateur.pk %} selected{% endif %}>{{ candidat.prenom }} {{ candidat.nom }}</option>{% endfor %}
-            </select>
-        </label>
-        <input type="hidden" name="semaine" value="{{ semaine.debut|date:'Y-m-d' }}">
-    </form>
-    <a class="btn btn-secondary" href="{% url 'accueil' %}">Quitter l’aperçu</a>
-</section>
 {% if not animateur.utilisateur_id %}<p class="portal-preview-account-warning">Compte portail non activé — aperçu de ce que cet animateur verra après activation</p>{% endif %}
 <main id="main-content" class="animator-dashboard animator-dashboard--mobile-showcase" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
     <header class="animator-mobile-header animator-portal-header animator-portal-header--accueil">
@@ -177,7 +165,7 @@
                 <img src="{% if planning_publie %}{% static 'img/animateur/planning-active.webp' %}{% else %}{% static 'img/animateur/planning-empty.webp' %}{% endif %}" alt="" aria-hidden="true">
             </div>
             <p class="animator-home-tile-state">{% if planning_publie %}Le planning de cette semaine est disponible.{% else %}Le planning de cette semaine n’est pas encore publié.{% endif %}</p>
-            <a class="animator-home-card-link animator-home-card-link--planning" href="{% url 'plannings_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir mes plannings <span aria-hidden="true">›</span></a>
+            <a class="animator-home-card-link animator-home-card-link--planning" href="{% url 'plannings_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}">Voir mes plannings <span aria-hidden="true">›</span></a>
         </article>
 
         <article class="animator-home-card animator-home-card--tile animator-home-card--documents {% if infos_documents_count %}is-active{% else %}is-empty{% endif %}">
@@ -195,7 +183,7 @@
                 {% if infos_documents_count %}<span class="animator-home-count-badge animator-home-count-badge--documents">{{ infos_documents_count }}</span>{% endif %}
             </div>
             <p class="animator-home-tile-state">{% if infos_documents_count %}<strong>{{ infos_documents_count }}</strong> document{{ infos_documents_count|pluralize }} à consulter.{% else %}Aucun document à consulter.{% endif %}</p>
-            <a class="animator-home-card-link animator-home-card-link--documents" href="{% url 'documents_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir les documents <span aria-hidden="true">›</span></a>
+            <a class="animator-home-card-link animator-home-card-link--documents" href="{% url 'documents_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}">Voir les documents <span aria-hidden="true">›</span></a>
         </article>
 
         <article class="animator-home-card animator-home-card--tile animator-home-card--infos {% if infos_infos_count %}is-active{% else %}is-empty{% endif %}">
@@ -213,7 +201,7 @@
                 {% if infos_infos_count %}<span class="animator-home-count-badge animator-home-count-badge--infos">{{ infos_infos_count }}</span>{% endif %}
             </div>
             <p class="animator-home-tile-state">{% if infos_infos_important_count == 1 and infos_infos_count == 1 %}<strong>1</strong> information importante.{% elif infos_infos_count %}<strong>{{ infos_infos_count }}</strong> information{{ infos_infos_count|pluralize }} à consulter.{% else %}Aucune information pour cette période.{% endif %}</p>
-            <a class="animator-home-card-link animator-home-card-link--infos" href="{% url 'infos_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir les infos <span aria-hidden="true">›</span></a>
+            <a class="animator-home-card-link animator-home-card-link--infos" href="{% url 'infos_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}">Voir les infos <span aria-hidden="true">›</span></a>
         </article>
 
         <article class="animator-home-card animator-home-card--tile animator-home-card--sorties {% if infos_sorties_count %}is-active{% else %}is-empty{% endif %}">
@@ -231,7 +219,7 @@
             <p class="animator-home-tile-state">
                 {% if infos_sorties_count %}<strong>{{ infos_sorties_count }}</strong> sortie{{ infos_sorties_count|pluralize }} cette semaine.{% if sorties.0.nom %}<br><span>{{ sorties.0.nom }} · {{ sorties.0.date_libelle }}</span>{% endif %}{% else %}Aucune sortie cette semaine.{% endif %}
             </p>
-            <a class="animator-home-card-link animator-home-card-link--sorties" href="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}">Voir {% if infos_sorties_count == 1 %}la sortie{% else %}les sorties{% endif %} <span aria-hidden="true">›</span></a>
+            <a class="animator-home-card-link animator-home-card-link--sorties" href="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}">Voir {% if infos_sorties_count == 1 %}la sortie{% else %}les sorties{% endif %} <span aria-hidden="true">›</span></a>
         </article>
     </section>
 {% comment %}Les blocs historiques sont désormais répartis dans les espaces dédiés.{% endcomment %}

@@ -15,7 +15,7 @@
     data-personal-calendar="true"
     data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}"
     data-animator-planning-page="true"
-    data-sorties-url="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}"
+    data-sorties-url="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}"
 >
     <header class="animator-mobile-header animator-portal-header">
         <div class="animator-mobile-title-wrap animator-portal-title-wrap">
@@ -23,9 +23,9 @@
             <span class="animator-mobile-title-spark" aria-hidden="true"><i></i><i></i><i></i></span>
         </div>
         <nav class="animator-week-navigation animator-week-navigation--inline" aria-label="Navigation des semaines">
-            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}" aria-label="Semaine précédente">‹</a>
             <div><strong>{{ semaine.libelle }}</strong></div>
-            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}" aria-label="Semaine suivante">›</a>
         </nav>
     </header>
 

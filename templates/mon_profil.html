@@ -31,7 +31,7 @@
                     <h2>Mes coordonnées</h2>
                 </div>
             </div>
-            <form method="post" class="profile-edit-form" novalidate>
+            {% if not apercu_portail %}<form method="post" class="profile-edit-form" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="coordonnees">
                 <label class="field-group">
@@ -49,10 +49,10 @@
                 <div class="profile-form-actions">
                     <button type="submit" class="btn btn-primary">Enregistrer mes coordonnées</button>
                 </div>
-            </form>
+            </form>{% else %}<p class="animator-readonly-note">Lecture seule : les coordonnées ne peuvent pas être modifiées depuis un aperçu.</p>{% endif %}
         </section>
 
-        <section class="ui-card fiche-section fiche-card">
+        {% if not apercu_portail %}<section class="ui-card fiche-section fiche-card">
             <div class="section-heading-compact">
                 <div>
                     <p class="employee-card-label">Sécurité</p>
@@ -86,10 +86,10 @@
         <form method="post" action="{% url 'logout' %}" class="profile-form-actions">
             {% csrf_token %}
             <button type="submit" class="btn btn-secondary">Déconnexion</button>
-        </form>
+        </form>{% endif %}
     {% else %}
         <section class="ui-card fiche-card"><p class="empty-note">Profil introuvable. Contacte la direction.</p></section>
     {% endif %}
 </main>
 {% endblock %}
-{% block scripts %}{% if animateur %}<script src="{% static 'js/mes-disponibilites.js' %}?v={{ asset_version }}"></script>{% endif %}{% endblock %}
+{% block scripts %}{% if animateur and not apercu_portail %}<script src="{% static 'js/mes-disponibilites.js' %}?v={{ asset_version }}"></script>{% endif %}{% endblock %}

@@ -72,6 +72,8 @@ def disponibilites_personnelles_api(view):
     def wrapper(request, animateur_id, *args, **kwargs):
         if not request.user.is_authenticated:
             return _refus_json("Connexion requise.", 401)
+        if request.GET.get("apercu_portail") == "1":
+            return _refus_json("L’aperçu est strictement en lecture seule.")
         if est_direction(request.user):
             return view(request, animateur_id, *args, **kwargs)
         profil = profil_utilisateur(request.user)

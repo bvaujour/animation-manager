@@ -10,9 +10,9 @@
     <header class="animator-mobile-header animator-portal-header">
         <div class="animator-portal-title-wrap"><h1>Matériel</h1></div>
         <nav class="animator-week-navigation animator-week-navigation--inline" aria-label="Navigation des semaines">
-            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}" aria-label="Semaine précédente">‹</a>
             <div><strong>{{ semaine.libelle }}</strong></div>
-            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}" aria-label="Semaine suivante">›</a>
         </nav>
     </header>
     {% endif %}
@@ -20,7 +20,7 @@
     {% if message %}<p class="material-feedback material-feedback--success" role="status">{{ message }}</p>{% endif %}
     {% if erreur %}<p class="material-feedback material-feedback--error" role="alert">{{ erreur }}</p>{% endif %}
 
-    {% if not direction %}
+    {% if not direction and not apercu_portail %}
     <section class="ui-card material-form-card">
         <div class="ui-section-heading"><div><h2>Nouvelle demande</h2></div></div>
         {% if animateur %}
@@ -91,12 +91,12 @@
                         {% endif %}
                     </form>
                     {% endif %}
-                    <form method="post" onsubmit="return confirm('Supprimer définitivement cette demande ?');">
+                    {% if not apercu_portail %}<form method="post" onsubmit="return confirm('Supprimer définitivement cette demande ?');">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="supprimer">
                         <input type="hidden" name="demande_id" value="{{ demande.id }}">
                         <button class="btn btn-danger btn-small" type="submit">Supprimer</button>
-                    </form>
+                    </form>{% endif %}
                 </div>
             </article>
             {% endfor %}

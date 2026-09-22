@@ -44,6 +44,30 @@ from .services.planning_exports import generer_planning_excel, generer_planning_
 PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY = "portail_animateur_semaine"
 
 
+def resoudre_portail_consulte(request, forcer_apercu=False):
+    """Retourne l'animateur consulté sans jamais remplacer l'utilisateur connecté."""
+    apercu = est_direction(request.user) and (forcer_apercu or request.GET.get("apercu_portail") == "1")
+    if apercu:
+        try:
+            animateur_id = int(request.GET.get("animateur_id", ""))
+        except (TypeError, ValueError):
+            return None, False
+        return Animateur.objects.select_related("utilisateur").filter(pk=animateur_id).first(), True
+    return getattr(request.user, "profil_animateur", None), False
+
+
+def _ajouter_contexte_apercu(contexte, animateur, apercu):
+    if apercu:
+        contexte.update({
+            "apercu_portail": True,
+            "animateurs_apercu": Animateur.objects.select_related("utilisateur").order_by("nom", "prenom"),
+            "apercu_query_suffix": f"&apercu_portail=1&animateur_id={animateur.pk}",
+            "apercu_query_prefix": f"?apercu_portail=1&animateur_id={animateur.pk}",
+            "masquer_selecteurs_configuration": True,
+        })
+    return contexte
+
+
 def _publication_affectations_disponible():
     """Évite de bloquer le portail pendant le déploiement de sa migration."""
     return PublicationAffectationsPeriode._meta.db_table in connection.introspection.table_names()
@@ -227,12 +251,14 @@ def _centre_affectation_animateur(animateur, jour):
 
 def accueil(request):
     contexte = {"active_page": "accueil"}
-    if not est_direction(request.user):
-        animateur = getattr(request.user, "profil_animateur", None)
+    animateur, apercu = resoudre_portail_consulte(request, forcer_apercu=request.path.endswith("apercu-portail/"))
+    if not est_direction(request.user) or apercu:
         contexte["animateur"] = animateur
         message_materiel = ""
         erreur_materiel = ""
 
+        if request.method == "POST" and apercu:
+            raise PermissionDenied("L’aperçu est strictement en lecture seule.")
         if request.method == "POST" and request.POST.get("module") == "materiel":
             action = request.POST.get("action", "creer")
             if animateur is None:
@@ -305,12 +331,13 @@ def accueil(request):
                 .first()
                 if _publication_affectations_disponible() else None
             )
+            _ajouter_contexte_apercu(contexte, animateur, apercu)
     return render(request, "accueil.html", contexte)
 
 
 def _contexte_portail_animateur(request, active_page):
     """Contexte partagé par les espaces animateur dépendant d'une semaine."""
-    animateur = getattr(request.user, "profil_animateur", None)
+    animateur, apercu = resoudre_portail_consulte(request)
     contexte = {"active_page": active_page, "animateur": animateur}
     if animateur is not None:
         date_reference = _semaine_portail_animateur(request)
@@ -323,29 +350,29 @@ def _contexte_portail_animateur(request, active_page):
         )
         _navigation_semaine_portail(request, contexte["semaine"])
         contexte["semaine_active"] = contexte["semaine"]["debut"]
-    return contexte
+    return _ajouter_contexte_apercu(contexte, animateur, apercu)
 
 
 def plannings_animateur(request):
-    if est_direction(request.user):
+    if est_direction(request.user) and request.GET.get("apercu_portail") != "1":
         return redirect("planning")
     return render(request, "plannings_animateur.html", _contexte_portail_animateur(request, "plannings"))
 
 
 def infos_animateur(request):
-    if est_direction(request.user):
+    if est_direction(request.user) and request.GET.get("apercu_portail") != "1":
         return redirect("documents")
     return render(request, "infos_animateur.html", _contexte_portail_animateur(request, "infos"))
 
 
 def sorties_animateur(request):
-    if est_direction(request.user):
+    if est_direction(request.user) and request.GET.get("apercu_portail") != "1":
         return redirect("sorties")
     return render(request, "sorties_animateur.html", _contexte_portail_animateur(request, "sorties_animateur"))
 
 
 def documents_animateur(request):
-    if est_direction(request.user):
+    if est_direction(request.user) and request.GET.get("apercu_portail") != "1":
         return redirect("documents")
     return render(request, "documents_animateur.html", _contexte_portail_animateur(request, "documents_animateur"))
 
@@ -430,9 +457,9 @@ def publications_affectations(request):
 
 def affectation_a_confirmer(request, publication_id):
     """Un animateur ne peut consulter et confirmer que sa propre publication."""
-    if est_direction(request.user):
+    animateur, apercu = resoudre_portail_consulte(request)
+    if est_direction(request.user) and not apercu:
         return redirect("publications_affectations")
-    animateur = getattr(request.user, "profil_animateur", None)
     destinataire = (
         DestinatairePublicationAffectation.objects.filter(
             pk=publication_id, animateur=animateur, publication__publie=True
@@ -440,51 +467,28 @@ def affectation_a_confirmer(request, publication_id):
     )
     if destinataire is None:
         raise PermissionDenied
+    if request.method != "GET" and apercu:
+        raise PermissionDenied("L’aperçu est strictement en lecture seule.")
     if request.method == "POST" and destinataire.confirme_le is None:
         destinataire.confirme_le = timezone.now()
         destinataire.save(update_fields=["confirme_le"])
         messages.success(request, "Ta confirmation a bien été enregistrée.")
         return redirect("affectation_a_confirmer", publication_id=destinataire.pk)
-    return render(request, "affectation_a_confirmer.html", {
+    contexte = {
         "active_page": "accueil", "destinataire": destinataire,
         "details": _details_affectations_periode(destinataire.publication.periode_calendrier, animateur),
-    })
+    }
+    return render(request, "affectation_a_confirmer.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
 
 
 def apercu_portail_animateur(request):
     """Vue direction en lecture seule, fondée sur le vrai service portail."""
-    animateurs = Animateur.objects.select_related("utilisateur").order_by("nom", "prenom")
-    animateur = animateurs.filter(pk=request.GET.get("animateur_id")).first() or animateurs.first()
-    if animateur is None:
-        messages.error(request, "Aucun animateur n'est disponible pour l'aperçu.")
-        return redirect("accueil")
-    date_reference = _semaine_portail_animateur(request)
-    contexte = generer_tableau_de_bord_animateur(animateur, date_reference)
-    _navigation_semaine_portail(request, contexte["semaine"])
-    contexte.update({
-        "semaine_active": contexte["semaine"]["debut"],
-        "planning_jours_affectes": sum(1 for jour in contexte["jours"] if jour.get("travaille")),
-        "infos_sorties_count": len(contexte["sorties"]),
-        "infos_documents_count": len(contexte["documents"]),
-        "infos_reunions_count": len(contexte["reunions"]),
-        "infos_infos_count": len(contexte.get("informations", [])),
-        "infos_infos_important_count": sum(
-            1 for information in contexte.get("informations", []) if information.est_importante
-        ),
-    })
-    contexte.update({
-        "active_page": "accueil", "animateurs_apercu": animateurs,
-        "apercu_portail": True,
-        "apercu_query_suffix": f"&animateur_id={animateur.pk}",
-        "masquer_selecteurs_configuration": True,
-        "publication_affectation_a_confirmer": (
-            DestinatairePublicationAffectation.objects.filter(
-                animateur=animateur, confirme_le__isnull=True, publication__publie=True
-            ).select_related("publication__periode_calendrier").order_by("publication__periode_calendrier__debut").first()
-            if _publication_affectations_disponible() else None
-        ),
-    })
-    return render(request, "accueil.html", contexte)
+    if not request.GET.get("animateur_id"):
+        return render(request, "apercu_portail_animateur.html", {
+            "active_page": "gestion",
+            "animateurs_apercu": Animateur.objects.select_related("utilisateur").order_by("nom", "prenom"),
+        })
+    return accueil(request)
 
 
 @never_cache
@@ -499,11 +503,13 @@ def api_mon_centre_affectation(request):
 
 def demandes_materiel(request):
     """Traitement des demandes côté direction; côté animateur tout est sur le tableau de bord."""
-    direction = est_direction(request.user)
-    animateur = getattr(request.user, "profil_animateur", None)
+    animateur, apercu = resoudre_portail_consulte(request)
+    direction = est_direction(request.user) and not apercu
     message = ""
     erreur = ""
 
+    if request.method != "GET" and apercu:
+        raise PermissionDenied("L’aperçu est strictement en lecture seule.")
     if request.method == "POST":
         action = request.POST.get("action", "creer")
 
@@ -590,10 +596,7 @@ def demandes_materiel(request):
         semaine_portail = generer_tableau_de_bord_animateur(animateur, date_reference)["semaine"]
         _navigation_semaine_portail(request, semaine_portail)
 
-    return render(
-        request,
-        "demandes_materiel.html",
-        {
+    contexte = {
             "active_page": "materiel",
             "direction": direction,
             "animateur": animateur,
@@ -603,21 +606,22 @@ def demandes_materiel(request):
             "erreur": erreur,
             "semaine": semaine_portail,
             "semaine_active": semaine_portail["debut"] if semaine_portail else None,
-        },
-    )
+    }
+    return render(request, "demandes_materiel.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
 
 
 def mon_profil(request):
     """Consultation et mise à jour des coordonnées du compte animateur."""
-    if est_direction(request.user):
+    animateur, apercu = resoudre_portail_consulte(request)
+    if est_direction(request.user) and not apercu:
         return redirect("employes")
-
-    animateur = getattr(request.user, "profil_animateur", None)
     semaine_active = parse_date(request.session.get(PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY, ""))
     message = ""
     erreur = ""
     action = ""
 
+    if request.method != "GET" and apercu:
+        raise PermissionDenied("L’aperçu est strictement en lecture seule.")
     if request.method == "POST" and animateur is not None:
         action = request.POST.get("action", "coordonnees")
 
@@ -659,18 +663,15 @@ def mon_profil(request):
                 update_session_auth_hash(request, request.user)
                 message = "Ton mot de passe a bien été modifié."
 
-    return render(
-        request,
-        "mon_profil.html",
-        {
+    contexte = {
             "active_page": "mon_profil",
             "animateur": animateur,
             "message": message,
             "erreur": erreur,
             "action": action,
             "semaine_active": semaine_active,
-        },
-    )
+    }
+    return render(request, "mon_profil.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
 
 
 @never_cache

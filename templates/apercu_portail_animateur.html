@@ -1,15 +1,19 @@
 {% extends "base.html" %}
-{% load static %}
 {% block title %}Aperçu portail animateur{% endblock %}
-{% block page_styles %}<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}"><link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}">{% endblock %}
 {% block content %}
-<main class="page-shell page-shell--fluid portal-preview-page">
-  <section class="portal-preview-banner"><strong>Aperçu du portail de {{ animateur.prenom }} {{ animateur.nom }} — vous êtes connecté en tant que direction</strong><a class="btn btn-ghost" href="{% url 'accueil' %}">Quitter l’aperçu</a></section>
-  {% if not animateur.utilisateur_id %}<p class="portal-preview-account-warning">Compte portail non activé — aperçu de ce que cet animateur verra après activation</p>{% endif %}
-  <form method="get" class="ui-card portal-preview-selector"><label>Animateur<select name="animateur_id" onchange="this.form.submit()">{% for item in animateurs_apercu %}<option value="{{ item.pk }}"{% if item.pk == animateur.pk %} selected{% endif %}>{{ item.prenom }} {{ item.nom }}</option>{% endfor %}</select></label><input type="hidden" name="semaine" value="{{ semaine.debut|date:'Y-m-d' }}"></form>
-  {% if publication_affectation_a_confirmer %}<section class="animator-assignment-alert"><div><strong>Affectation {{ publication_affectation_a_confirmer.publication.periode_calendrier.nom }} à confirmer</strong><span>Aperçu uniquement : la direction ne peut pas confirmer à la place de l’animateur.</span></div><a class="btn btn-secondary" href="{% url 'publications_affectations' %}?periode_id={{ publication_affectation_a_confirmer.publication.periode_calendrier.pk }}">Gérer l’affectation</a></section>{% endif %}
-  <section class="ui-card"><header><h1>Accueil</h1><p>{{ semaine.libelle }}</p></header><div class="portal-preview-days">{% for jour in jours %}<article><strong>{{ jour.jour }} {{ jour.date|date:'d/m' }}</strong>{% if jour.travaille %}<span>{{ jour.centre }} · {{ jour.groupe }}</span>{% if jour.responsabilite %}<small>{{ jour.responsabilite }}</small>{% endif %}{% else %}<span>Pas d’affectation publiée pour cette semaine.</span>{% endif %}</article>{% endfor %}</div></section>
-  <section class="ui-card"><h2>Informations visibles</h2>{% for information in informations %}<article><strong>{{ information.titre }}</strong><p>{{ information.message }}</p></article>{% empty %}<p>Aucune information visible.</p>{% endfor %}<a class="btn btn-ghost" href="{% url 'gestion' %}?onglet=informations">Gérer les informations et documents</a></section>
-  <section class="portal-preview-actions"><a class="btn btn-ghost" href="{% url 'planning' %}">Modifier l’affectation</a><a class="btn btn-ghost" href="{% url 'administration' %}?onglet=comptes-animateurs">Gérer l’accès portail</a></section>
+<main class="page-shell page-shell--narrow portal-preview-page">
+  <section class="ui-card">
+    <header class="ui-section-heading"><div><h1>Aperçu portail animateur</h1><p>Choisissez un animateur puis ouvrez son portail en lecture seule.</p></div></header>
+    <form method="get" target="_blank" rel="noopener noreferrer" class="portal-preview-selector">
+      <label for="apercu-animateur">Animateur
+        <select id="apercu-animateur" name="animateur_id" required>
+          <option value="">Choisir un animateur</option>
+          {% for animateur in animateurs_apercu %}<option value="{{ animateur.pk }}">{{ animateur.prenom }} {{ animateur.nom }} — {% if animateur.utilisateur_id and animateur.utilisateur.is_active %}Compte portail actif{% else %}Compte portail non activé{% endif %}</option>{% endfor %}
+        </select>
+      </label>
+      <input type="hidden" name="apercu_portail" value="1">
+      <button class="btn btn-primary" type="submit">Ouvrir son portail en aperçu ↗</button>
+    </form>
+  </section>
 </main>
 {% endblock %}

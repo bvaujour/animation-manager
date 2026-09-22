@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from animateurs.models import (
     Affectation, Animateur, Centre, DestinatairePublicationAffectation,
@@ -103,6 +103,21 @@ class PublicationAffectationsPeriodeTests(TestCase):
         response = self.client.get(reverse("apercu_portail_animateur"), {"animateur_id": self.bob.pk})
         self.assertRedirects(response, reverse("accueil"))
 
+    def test_direction_ouvre_un_lanceur_apercu_sans_animateur(self):
+        self.client.force_login(self.direction)
+        response = self.client.get(reverse("apercu_portail_animateur"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ouvrir son portail en aperçu")
+        self.assertContains(response, "Compte portail actif")
+        self.assertNotContains(response, 'id="dashboard-root"')
+
+    def test_lanceur_apercu_ouvre_le_portail_dans_un_nouvel_onglet(self):
+        self.client.force_login(self.direction)
+        response = self.client.get(reverse("apercu_portail_animateur"))
+        self.assertContains(response, 'target="_blank"', html=False)
+        self.assertContains(response, 'rel="noopener noreferrer"', html=False)
+        self.assertContains(response, 'name="apercu_portail" value="1"', html=False)
+
     def test_direction_peut_previsualiser_un_animateur_sans_compte(self):
         PublicationPlanning.objects.create(semaine_debut=datetime.date(2026, 10, 19), publie=True)
         self.client.force_login(self.direction)
@@ -151,6 +166,75 @@ class PublicationAffectationsPeriodeTests(TestCase):
             response = self.client.get(reverse("apercu_portail_animateur"), {"animateur_id": self.alice.pk})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Aperçu du portail de Alice Martin")
+
+    def _url_apercu(self, route, **params):
+        params.update(apercu_portail="1", animateur_id=self.alice.pk, semaine="2026-10-19")
+        return reverse(route) + "?" + urlencode(params)
+
+    def test_direction_parcourt_le_portail_complet_en_apercu_sans_impersonation(self):
+        self.client.force_login(self.direction)
+        for route, titre in (
+            ("apercu_portail_animateur", "Accueil"), ("plannings_animateur", "Plannings"),
+            ("infos_animateur", "Infos"), ("sorties_animateur", "Sorties"),
+            ("documents_animateur", "Documents"), ("demandes_materiel", "Matériel"),
+            ("mon_profil", "Mon profil"),
+        ):
+            with self.subTest(route=route):
+                url = self._url_apercu(route)
+                if route == "apercu_portail_animateur":
+                    url = reverse(route) + "?" + urlencode({"animateur_id": self.alice.pk, "semaine": "2026-10-19"})
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, titre)
+                self.assertContains(response, "Mode direction · Lecture seule")
+                self.assertContains(response, "apercu_portail=1")
+                self.assertContains(response, f"animateur_id={self.alice.pk}")
+                self.assertContains(response, 'class="app-body animator-space-body')
+                self.assertEqual(response.wsgi_request.user.pk, self.direction.pk)
+
+    def test_animateur_ne_peut_pas_previsualiser_un_autre_animateur(self):
+        self.client.force_login(self.user)
+        response = self.client.get(self._url_apercu("infos_animateur", animateur_id=self.bob.pk))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["animateur"].pk, self.alice.pk)
+        self.assertFalse(response.context.get("apercu_portail", False))
+
+    def test_apercu_conserve_l_animateur_dans_navigation_semaine(self):
+        self.client.force_login(self.direction)
+        response = self.client.get(self._url_apercu("plannings_animateur"))
+        self.assertContains(response, "semaine=2026-10-12&amp;apercu_portail=1")
+        self.assertContains(response, f"animateur_id={self.alice.pk}")
+
+    def test_ecritures_personnelles_sont_refusees_en_apercu(self):
+        publication = PublicationAffectationsPeriode.objects.create(
+            periode_calendrier=self.periode, message="Message", publie=True, publie_par=self.direction
+        )
+        destinataire = DestinatairePublicationAffectation.objects.create(publication=publication, animateur=self.alice)
+        self.client.force_login(self.direction)
+        ecritures = (
+            ("post", self._url_apercu("mon_profil"), {"action": "coordonnees", "email": "change@example.test"}),
+            ("post", self._url_apercu("demandes_materiel"), {"action": "creer", "materiel": "Ballons"}),
+            ("post", reverse("affectation_a_confirmer", args=[destinataire.pk]) + "?apercu_portail=1&animateur_id=" + str(self.alice.pk), {}),
+            ("put", reverse("api_disponibilites", args=[self.alice.pk]) + "?apercu_portail=1&animateur_id=" + str(self.alice.pk), {"jours_disponibles": []}),
+        )
+        for methode, url, data in ecritures:
+            with self.subTest(url=url):
+                if methode == "put":
+                    response = self.client.put(url, data, content_type="application/json")
+                else:
+                    response = self.client.post(url, data)
+                self.assertEqual(response.status_code, 403)
+        self.alice.refresh_from_db()
+        destinataire.refresh_from_db()
+        self.assertEqual(self.alice.email, "")
+        self.assertIsNone(destinataire.confirme_le)
+
+    def test_animateur_normal_conserve_ses_ecritures_personnelles(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("mon_profil"), {"action": "coordonnees", "email": "alice@example.test"})
+        self.assertEqual(response.status_code, 200)
+        self.alice.refresh_from_db()
+        self.assertEqual(self.alice.email, "alice@example.test")
 
     def test_navigation_communication_est_hierarchisee_sans_selecteur_global(self):
         self.client.force_login(self.direction)

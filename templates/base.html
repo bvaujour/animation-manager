@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="{% static 'css/app-layout.css' %}?v={{ asset_version }}-anim-mobile-v4">
     <link rel="stylesheet" href="{% static 'css/navigation-architecture.css' %}?v={{ asset_version }}">
 </head>
-<body class="app-body{% if request.user.is_authenticated and not utilisateur_est_direction %} animator-space-body{% endif %} {% block body_class %}{% endblock %}">
+<body class="app-body{% if request.user.is_authenticated %}{% if not utilisateur_est_direction or apercu_portail %} animator-space-body{% endif %}{% endif %} {% block body_class %}{% endblock %}">
     {% csrf_token %}
     {% if utilisateur_est_direction and active_page != "employes" and active_page != "recapitulatif" and active_page != "formations" and active_page != "parametres" and not masquer_selecteurs_configuration %}
         {% if active_page != "accueil" and active_page != "planning" and active_page != "temps_travail" and active_page != "sorties" and active_page != "materiel" %}
@@ -24,6 +24,21 @@
         {% endif %}
     {% endif %}
     {% include "partials/_nav.html" with active=active_page %}
+    {% if apercu_portail %}
+    <section class="portal-preview-banner" aria-label="Mode aperçu portail animateur">
+        <strong>Aperçu du portail de {{ animateur.prenom }} {{ animateur.nom }} — Mode direction · Lecture seule</strong>
+        <form class="portal-preview-selector" method="get">
+            <label for="apercu-animateur">Changer d’animateur
+                <select id="apercu-animateur" name="animateur_id" onchange="this.form.submit()">
+                    {% for candidat in animateurs_apercu %}<option value="{{ candidat.pk }}"{% if candidat.pk == animateur.pk %} selected{% endif %}>{{ candidat.prenom }} {{ candidat.nom }}</option>{% endfor %}
+                </select>
+            </label>
+            <input type="hidden" name="apercu_portail" value="1">
+            {% if semaine_active %}<input type="hidden" name="semaine" value="{{ semaine_active|date:'Y-m-d' }}">{% endif %}
+        </form>
+        <a class="btn btn-secondary" href="{% url 'accueil' %}">Quitter l’aperçu</a>
+    </section>
+    {% endif %}
     {% block content %}{% endblock %}
 
     <script src="{% static 'js/ui.js' %}?v={{ asset_version }}"></script>

@@ -11,9 +11,9 @@
     <header class="animator-mobile-header animator-portal-header">
         <div class="animator-portal-title-wrap"><h1>Infos</h1></div>
         <nav class="animator-week-navigation animator-week-navigation--inline" aria-label="Navigation des semaines">
-            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}" aria-label="Semaine précédente">‹</a>
             <div><strong>{{ semaine.libelle }}</strong></div>
-            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}" aria-label="Semaine suivante">›</a>
         </nav>
     </header>
 
