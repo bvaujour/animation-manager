@@ -95,7 +95,7 @@ class PublicationAffectationsPeriodeTests(TestCase):
         self.client.force_login(self.direction)
         response = self.client.get(reverse("apercu_portail_animateur"), {"animateur_id": self.alice.pk, "semaine": "2026-10-19"})
         self.assertContains(response, "Aperçu du portail de Alice Martin")
-        self.assertContains(response, "Centre test")
+        self.assertEqual(response.context["jours"][0]["centre"], "Centre test")
         self.assertEqual(response.wsgi_request.user, self.direction)
 
     def test_animateur_ne_peut_pas_ouvrir_l_apercu(self):
@@ -109,10 +109,41 @@ class PublicationAffectationsPeriodeTests(TestCase):
         response = self.client.get(reverse("apercu_portail_animateur"), {"animateur_id": self.bob.pk, "semaine": "2026-10-19"})
         self.assertContains(response, "Compte portail non activé")
         self.assertContains(response, "Bob Durand")
-        self.assertContains(response, "Centre test")
+        self.assertEqual(response.context["jours"][0]["centre"], "Centre test")
         self.assertContains(response, reverse("administration") + "?onglet=comptes-animateurs")
         self.bob.refresh_from_db()
         self.assertIsNone(self.bob.utilisateur)
+
+    def test_apercu_navigue_entre_semaines_en_conservant_l_animateur(self):
+        PublicationPlanning.objects.create(semaine_debut=datetime.date(2026, 10, 19), publie=True)
+        self.client.force_login(self.direction)
+        semaines = [datetime.date(2026, 10, 12), datetime.date(2026, 10, 19), datetime.date(2026, 10, 26)]
+        with patch("animateurs.views_pages._semaines_vacances_ouvertes", return_value=semaines):
+            response = self.client.get(
+                reverse("apercu_portail_animateur"),
+                {"animateur_id": self.alice.pk, "semaine": "2026-10-19"},
+            )
+        self.assertEqual(response.context["animateur"].pk, self.alice.pk)
+        self.assertEqual(response.context["semaine"]["debut"], semaines[1])
+        self.assertEqual(response.context["semaine"]["precedente"], semaines[0])
+        self.assertEqual(response.context["semaine"]["suivante"], semaines[2])
+        self.assertContains(response, f"animateur_id={self.alice.pk}")
+        self.assertEqual(response.context["jours"][0]["centre"], "Centre test")
+
+    def test_apercu_est_strictement_en_lecture_seule(self):
+        self.client.force_login(self.user)
+        portail = self.client.get(reverse("accueil"), {"semaine": "2026-10-19"})
+        self.assertNotContains(portail, "Affectations visibles cette semaine")
+
+        self.client.force_login(self.direction)
+        response = self.client.get(
+            reverse("apercu_portail_animateur"),
+            {"animateur_id": self.alice.pk, "semaine": "2026-10-19"},
+        )
+        self.assertNotContains(response, "Affectations visibles cette semaine")
+        self.assertNotContains(response, "J’ai pris connaissance")
+        self.assertNotContains(response, "enregistrer-disponibilites")
+        self.assertNotContains(response, "material-dashboard-section")
 
     def test_apercu_reste_accessible_si_la_migration_publication_n_est_pas_encore_appliquee(self):
         self.client.force_login(self.direction)

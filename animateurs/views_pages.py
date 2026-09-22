@@ -458,11 +458,25 @@ def apercu_portail_animateur(request):
     if animateur is None:
         messages.error(request, "Aucun animateur n'est disponible pour l'aperçu.")
         return redirect("accueil")
-    date_reference = parse_date(request.GET.get("semaine", "")) or timezone.localdate()
+    date_reference = _semaine_portail_animateur(request)
     contexte = generer_tableau_de_bord_animateur(animateur, date_reference)
+    _navigation_semaine_portail(request, contexte["semaine"])
+    contexte.update({
+        "semaine_active": contexte["semaine"]["debut"],
+        "planning_jours_affectes": sum(1 for jour in contexte["jours"] if jour.get("travaille")),
+        "infos_sorties_count": len(contexte["sorties"]),
+        "infos_documents_count": len(contexte["documents"]),
+        "infos_reunions_count": len(contexte["reunions"]),
+        "infos_infos_count": len(contexte.get("informations", [])),
+        "infos_infos_important_count": sum(
+            1 for information in contexte.get("informations", []) if information.est_importante
+        ),
+    })
     contexte.update({
         "active_page": "accueil", "animateurs_apercu": animateurs,
         "apercu_portail": True,
+        "apercu_query_suffix": f"&animateur_id={animateur.pk}",
+        "masquer_selecteurs_configuration": True,
         "publication_affectation_a_confirmer": (
             DestinatairePublicationAffectation.objects.filter(
                 animateur=animateur, confirme_le__isnull=True, publication__publie=True
@@ -470,7 +484,7 @@ def apercu_portail_animateur(request):
             if _publication_affectations_disponible() else None
         ),
     })
-    return render(request, "apercu_portail_animateur.html", contexte)
+    return render(request, "accueil.html", contexte)
 
 
 @never_cache

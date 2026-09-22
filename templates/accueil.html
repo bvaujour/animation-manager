@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Tableau de bord{% endblock %}
-{% block body_class %}{% if utilisateur_est_direction %}dashboard-body{% else %}animator-dashboard-body animator-home-body{% endif %}{% endblock %}
-{% block extra_head %}{% if not utilisateur_est_direction %}<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>{% endif %}{% endblock %}
+{% block body_class %}{% if utilisateur_est_direction and not apercu_portail %}dashboard-body{% else %}animator-dashboard-body animator-home-body{% endif %}{% endblock %}
+{% block extra_head %}{% if not utilisateur_est_direction or apercu_portail %}<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>{% endif %}{% endblock %}
 {% block page_styles %}
-{% if utilisateur_est_direction %}
+{% if utilisateur_est_direction and not apercu_portail %}
 <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}-period-ready-4">
 {% else %}
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
@@ -15,7 +15,7 @@
 {% endif %}
 {% endblock %}
 {% block content %}
-{% if utilisateur_est_direction %}
+{% if utilisateur_est_direction and not apercu_portail %}
 <main id="dashboard-root" tabindex="-1" class="page-shell page-shell--fluid dashboard-page" data-api-url="{% url 'api_tableau_de_bord' %}" data-preparation-status-url="{% url 'api_statut_preparation_semaine' %}" data-can-force-preparation="{% if request.user.is_superuser %}true{% else %}false{% endif %}" data-type-accueil="{{ type_accueil_selectionne }}"{% if type_accueil_selectionne == "vacances" and periode_accueil_active %} data-periode-accueil-debut="{{ periode_accueil_active.debut|date:'Y-m-d' }}" data-periode-accueil-fin="{{ periode_accueil_active.fin|date:'Y-m-d' }}" data-periode-accueil-libelle="{{ periode_accueil_active.libelle_selection }}"{% endif %}>
     {% include "partials/_page_header.html" with title="Tableau de bord" header_class="dashboard-header" context_selector=True week_aria_label="Choix de la période du tableau de bord" container_id="dashboard-period-nav" previous_id="dashboard-prev-week" today_id="dashboard-current-week" next_id="dashboard-next-week" label_id="dashboard-visible-period" %}
 
@@ -114,6 +114,19 @@
     <div id="dashboard-loading" class="dashboard-loading" role="status" aria-live="polite">Mise à jour du tableau de bord…</div>
 </main>
 {% else %}
+<section class="portal-preview-banner" aria-label="Mode aperçu portail animateur">
+    <strong>Aperçu du portail de {{ animateur.prenom }} {{ animateur.nom }} — vous êtes connecté en tant que direction</strong>
+    <form class="portal-preview-selector" method="get">
+        <label for="apercu-animateur">Changer d’animateur
+            <select id="apercu-animateur" name="animateur_id" onchange="this.form.submit()">
+                {% for candidat in animateurs_apercu %}<option value="{{ candidat.pk }}"{% if candidat.pk == animateur.pk %} selected{% endif %}>{{ candidat.prenom }} {{ candidat.nom }}</option>{% endfor %}
+            </select>
+        </label>
+        <input type="hidden" name="semaine" value="{{ semaine.debut|date:'Y-m-d' }}">
+    </form>
+    <a class="btn btn-secondary" href="{% url 'accueil' %}">Quitter l’aperçu</a>
+</section>
+{% if not animateur.utilisateur_id %}<p class="portal-preview-account-warning">Compte portail non activé — aperçu de ce que cet animateur verra après activation</p>{% endif %}
 <main id="main-content" class="animator-dashboard animator-dashboard--mobile-showcase" data-personal-calendar="true" data-calendar-date="{{ semaine.debut|date:'Y-m-d' }}">
     <header class="animator-mobile-header animator-portal-header animator-portal-header--accueil">
         <div class="animator-mobile-title-wrap animator-portal-title-wrap">
@@ -121,9 +134,9 @@
             <span class="animator-mobile-title-spark" aria-hidden="true"><i></i><i></i><i></i></span>
         </div>
         <nav class="animator-week-navigation animator-week-navigation--inline" aria-label="Navigation des semaines">
-            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}" aria-label="Semaine précédente">‹</a>
+            <a href="?semaine={{ semaine.precedente|date:'Y-m-d' }}{{ apercu_query_suffix }}" aria-label="Semaine précédente">‹</a>
             <div><strong>{{ semaine.libelle }}</strong></div>
-            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}" aria-label="Semaine suivante">›</a>
+            <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}{{ apercu_query_suffix }}" aria-label="Semaine suivante">›</a>
         </nav>
     </header>
 
@@ -135,10 +148,15 @@
         <span class="animator-welcome-heart" aria-hidden="true">♡</span>
     </section>
 
-    {% if publication_affectation_a_confirmer %}
+    {% if publication_affectation_a_confirmer and not apercu_portail %}
     <section class="animator-assignment-alert" aria-label="Affectation à confirmer">
         <div><strong>Affectation {{ publication_affectation_a_confirmer.publication.periode_calendrier.nom }} à confirmer</strong><span>Consulte ton centre, ton groupe et le message de la direction.</span></div>
         <a class="btn btn-primary" href="{% url 'affectation_a_confirmer' publication_affectation_a_confirmer.pk %}">Voir mon affectation</a>
+    </section>
+    {% elif publication_affectation_a_confirmer and apercu_portail %}
+    <section class="animator-assignment-alert" aria-label="Affectation à confirmer">
+        <div><strong>Affectation {{ publication_affectation_a_confirmer.publication.periode_calendrier.nom }} à confirmer</strong><span>Aperçu uniquement : la direction ne peut pas confirmer à la place de l’animateur.</span></div>
+        <a class="btn btn-secondary" href="{% url 'publications_affectations' %}?periode_id={{ publication_affectation_a_confirmer.publication.periode_calendrier.pk }}">Gérer l’affectation</a>
     </section>
     {% endif %}
 
@@ -252,12 +270,14 @@
                 <span>·</span>
                 <strong>{{ disponibilites.jours_libres }}</strong> libre{{ disponibilites.jours_libres|pluralize }}
             </p>
-            <details class="animator-inline-editor">
+            {% if apercu_portail %}
+            <p class="animator-readonly-note">Lecture seule : les disponibilités ne peuvent pas être modifiées depuis un aperçu.</p>
+            {% else %}<details class="animator-inline-editor">
                 <summary>Modifier mes disponibilités</summary>
                 <p id="disponibilites-status" class="form-error" role="status"></p>
                 <div id="mes-disponibilites-root"></div>
                 <button id="enregistrer-disponibilites" class="btn btn-primary" type="button">Enregistrer</button>
-            </details>
+            </details>{% endif %}
         </article>
 
         <article class="animator-panel animator-compact-card animator-documents-card">
@@ -289,13 +309,12 @@
             <div>
                 <span class="animator-profile-summary-avatar">{{ animateur.prenom|first }}{{ animateur.nom|first }}</span>
                 <p><strong>{{ animateur.prenom }} {{ animateur.nom }}</strong><small>{{ animateur.email|default:'E-mail non renseigné' }}</small><small>{{ animateur.telephone|default:'Téléphone non renseigné' }}</small></p>
-                <a href="{% url 'mon_profil' %}">Consulter ma fiche</a>
+                {% if not apercu_portail %}<a href="{% url 'mon_profil' %}">Consulter ma fiche</a>{% endif %}
             </div>
         </article>
     </section>
 
-
-    <section id="materiel" class="ui-card material-dashboard-section" aria-labelledby="material-dashboard-title">
+    {% if not apercu_portail %}<section id="materiel" class="ui-card material-dashboard-section" aria-labelledby="material-dashboard-title">
         <div class="ui-section-heading"><h2 id="material-dashboard-title">Demandes de matériel</h2></div>
         {% if message_materiel %}<p class="material-feedback material-feedback--success" role="status">{{ message_materiel }}</p>{% endif %}
         {% if erreur_materiel %}<p class="material-feedback material-feedback--error" role="alert">{{ erreur_materiel }}</p>{% endif %}
@@ -349,13 +368,17 @@
             </article>
             {% empty %}<p class="animator-empty-state">Aucune demande pour le moment.</p>{% endfor %}
         </div>
-    </section>
+    </section>{% endif %}
 
     <footer class="animator-dashboard-footer">
         <span aria-hidden="true">ⓘ</span>
         <p>Les informations affichées proviennent du planning, des sorties et des documents renseignés par la direction.</p>
     </footer>
     {% endif %}
+    {% if apercu_portail %}<nav class="portal-preview-actions" aria-label="Raccourcis direction">
+        <a class="btn btn-ghost" href="{% url 'planning' %}">Modifier l’affectation</a>
+        <a class="btn btn-ghost" href="{% url 'administration' %}?onglet=comptes-animateurs">Gérer l’accès portail</a>
+    </nav>{% endif %}
 </main>
 {% endif %}
 {% endblock %}
