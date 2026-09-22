@@ -14,8 +14,17 @@
         return `${normaliseDate(start)}|${normaliseDate(end)}|${String(modalite || "")}|${suffixe}`;
     }
 
+    function ajouterContexteApercuPortail(query) {
+        const contexte = new URLSearchParams(window.location.search);
+        if (contexte.get("apercu_portail") === "1" && contexte.get("animateur_id")) {
+            query.set("apercu_portail", "1");
+            query.set("animateur_id", contexte.get("animateur_id"));
+        }
+        return query;
+    }
+
     function fetchCentresWithGroups(start = null, end = null) {
-        const query = new URLSearchParams({ include_groupes: "1" });
+        const query = ajouterContexteApercuPortail(new URLSearchParams({ include_groupes: "1" }));
         if (start) query.set("start", normaliseDate(start));
         if (end) query.set("end", normaliseDate(end));
         // Le créneau choisi dans Planning détermine aussi le besoin d'équipe
@@ -30,7 +39,9 @@
         const key = cacheKey(start, end, modalite);
         if (force) eventsCache.delete(key);
         if (!eventsCache.has(key)) {
-            const query = new URLSearchParams({ start: String(start), end: String(end) });
+            const query = ajouterContexteApercuPortail(
+                new URLSearchParams({ start: String(start), end: String(end) })
+            );
             if (modalite) query.set("modalite_periscolaire", modalite);
             const request = apiFetch(`/api/planning/?${query.toString()}`)
                 .catch((error) => {
@@ -52,7 +63,7 @@
         const key = cacheKey(debut, fin, modalite, `${typeAccueil || ""}|${inclureReferences ? "refs" : "reels"}`);
         if (force) effectifsCache.delete(key);
         if (!effectifsCache.has(key)) {
-            const query = new URLSearchParams({ debut, fin });
+            const query = ajouterContexteApercuPortail(new URLSearchParams({ debut, fin }));
             if (modalite) query.set("modalite_periscolaire", modalite);
             if (typeAccueil) query.set("type_accueil", typeAccueil);
             if (inclureReferences) query.set("inclure_references", "1");
@@ -76,7 +87,7 @@
         const key = cacheKey(debut, fin);
         if (force) sortiesCache.delete(key);
         if (!sortiesCache.has(key)) {
-            const query = new URLSearchParams({ start: debut, end: fin });
+            const query = ajouterContexteApercuPortail(new URLSearchParams({ start: debut, end: fin }));
             const request = apiFetch(`/api/calendrier/sorties/?${query.toString()}`, { cache: "no-store" })
                 .then((data) => data?.sorties || [])
                 .catch((error) => {

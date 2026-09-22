@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.cache import never_cache
 
-from .access import est_direction
+from .access import est_direction, resoudre_portail_consulte
 from .models import (
     Affectation,
     Animateur,
@@ -42,18 +42,6 @@ from .services.planning_exports import generer_planning_excel, generer_planning_
 
 
 PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY = "portail_animateur_semaine"
-
-
-def resoudre_portail_consulte(request, forcer_apercu=False):
-    """Retourne l'animateur consulté sans jamais remplacer l'utilisateur connecté."""
-    apercu = est_direction(request.user) and (forcer_apercu or request.GET.get("apercu_portail") == "1")
-    if apercu:
-        try:
-            animateur_id = int(request.GET.get("animateur_id", ""))
-        except (TypeError, ValueError):
-            return None, False
-        return Animateur.objects.select_related("utilisateur").filter(pk=animateur_id).first(), True
-    return getattr(request.user, "profil_animateur", None), False
 
 
 def _ajouter_contexte_apercu(contexte, animateur, apercu):

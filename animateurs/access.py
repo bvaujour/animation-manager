@@ -5,6 +5,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.http import JsonResponse
 from django.shortcuts import redirect
 
+from .models import Animateur
+
 
 def _refus_json(message="Accès réservé à la direction.", status=403):
     return JsonResponse({"error": message}, status=status)
@@ -22,6 +24,20 @@ def profil_utilisateur(user):
 def est_direction(user):
     """Les fonctions de gestion sont réservées aux superusers."""
     return bool(getattr(user, "is_authenticated", False) and getattr(user, "is_superuser", False))
+
+
+def resoudre_portail_consulte(request, forcer_apercu=False):
+    """Retourne l'animateur du portail consulté sans changer la session."""
+    apercu = est_direction(request.user) and (
+        forcer_apercu or request.GET.get("apercu_portail") == "1"
+    )
+    if apercu:
+        try:
+            animateur_id = int(request.GET.get("animateur_id", ""))
+        except (TypeError, ValueError):
+            return None, False
+        return Animateur.objects.select_related("utilisateur").filter(pk=animateur_id).first(), True
+    return profil_utilisateur(request.user), False
 
 
 def connexion_requise_page(view):

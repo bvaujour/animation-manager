@@ -12,7 +12,7 @@ from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
-from .access import est_direction
+from .access import est_direction, resoudre_portail_consulte
 from .models import EffectifEnfantsJour, Evenement, ModalitePeriscolaire, TypeAccueil
 from .services.accueils import valider_contexte_accueil
 from .services.effectifs import enregistrer_nombre_effectif, ratio_encadrement_contexte
@@ -127,17 +127,17 @@ def api_effectifs_enfants_plage(request):
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     queryset = _filtrer_effectifs_contexte(queryset, type_accueil, modalite)
-    direction = est_direction(request.user)
+    animateur_portail, apercu_portail = resoudre_portail_consulte(request)
+    direction = est_direction(request.user) and not apercu_portail
     if not direction:
-        animateur = getattr(request.user, "profil_animateur", None)
-        if animateur is None:
+        if animateur_portail is None:
             queryset = queryset.none()
         else:
             # Le lieu visible dépend de la semaine demandée : une ancienne
             # affectation dans un autre centre ne doit pas exposer ses effectifs.
             debut_dt = timezone.make_aware(datetime.combine(debut, datetime.min.time()))
             fin_dt = timezone.make_aware(datetime.combine(fin, datetime.min.time()))
-            centre_ids = animateur.affectations.filter(
+            centre_ids = animateur_portail.affectations.filter(
                 debut__lt=fin_dt,
                 fin__gt=debut_dt,
             ).values_list("centre_id", flat=True).distinct()

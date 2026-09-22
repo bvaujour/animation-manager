@@ -10,7 +10,7 @@ from django.utils.dateparse import parse_date, parse_time
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .access import est_direction
+from .access import est_direction, resoudre_portail_consulte
 from .models import (
     QUALIFICATION_ICON_CHOICES,
     Animateur,
@@ -336,8 +336,9 @@ def api_centres(request):
 
     if request.method == "GET":
         inclure_groupes = request.GET.get("include_groupes") == "1"
-        animateur = None if est_direction(request.user) else getattr(request.user, "profil_animateur", None)
-        tous_types = bool(est_direction(request.user) and request.GET.get("tous_types") == "1")
+        animateur, apercu_portail = resoudre_portail_consulte(request)
+        direction = est_direction(request.user) and not apercu_portail
+        tous_types = bool(direction and request.GET.get("tous_types") == "1")
         if inclure_groupes:
             # Cette réponse dispose de son propre chargement groupé plus bas.
             centres = Centre.objects.prefetch_related("types_accueil", "accueils__type_accueil")
@@ -424,7 +425,7 @@ def api_centres(request):
                 affectations_personnelles = affectations_personnelles.filter(debut__lt=fin, fin__gt=debut)
             centre_ids = affectations_personnelles.values_list("centre_id", flat=True).distinct()
             centres = centres.filter(id__in=centre_ids)
-        elif not est_direction(request.user):
+        elif not direction:
             centres = centres.none()
         if not inclure_groupes:
             structure = get_parametres_structure(assurer_types=False)
@@ -490,7 +491,7 @@ def api_centres(request):
         )
         if animateur is not None:
             groupes = groupes.filter(centre_id__in=centre_ids).distinct()
-        elif not est_direction(request.user):
+        elif not direction:
             groupes = groupes.none()
         elif code_type in TYPES_ACCUEIL_STRUCTURE:
             groupes = groupes.filter(types_accueil__code=code_type).distinct()
@@ -550,7 +551,7 @@ def api_centres(request):
         )
         if animateur is not None:
             centres = centres.filter(id__in=centre_ids)
-        elif not est_direction(request.user):
+        elif not direction:
             centres = centres.none()
         elif code_type in TYPES_ACCUEIL_STRUCTURE:
             centres = centres.filter(types_accueil__code=code_type).distinct()

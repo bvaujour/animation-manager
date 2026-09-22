@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .access import est_direction
+from .access import est_direction, resoudre_portail_consulte
 from .models import (
     Affectation,
     AccueilCentre,
@@ -162,8 +162,11 @@ def api_planning(request):
     start = request.GET.get("start")
     end = request.GET.get("end")
 
+    animateur_portail, apercu_portail = resoudre_portail_consulte(request)
+    portail_personnel = not est_direction(request.user) or apercu_portail
+
     responsabilites_personnelles = ResponsabiliteOperationnelle.objects.none()
-    if not est_direction(request.user):
+    if portail_personnel:
         date_reference = None
         try:
             if start:
@@ -217,13 +220,12 @@ def api_planning(request):
     if modalite is not None:
         affectations = affectations.filter(modalite_periscolaire=modalite)
 
-    if not est_direction(request.user):
-        animateur = getattr(request.user, "profil_animateur", None)
-        if animateur is None:
+    if portail_personnel:
+        if animateur_portail is None:
             return JsonResponse([], safe=False)
-        affectations_personnelles = animateur.affectations.all()
+        affectations_personnelles = animateur_portail.affectations.all()
         responsabilites_personnelles = ResponsabiliteOperationnelle.objects.filter(
-            animateur=animateur, fournit_temps_travail=True
+            animateur=animateur_portail, fournit_temps_travail=True
         ).select_related("animateur", "fonction", "centre", "accueil_centre")
         if start and end:
             try:
@@ -290,7 +292,7 @@ def api_planning(request):
             if responsabilite_correspond_affectation(item, affectation)
         ][:1]
     events = [affectation_to_event(a) for a in affectations]
-    if not est_direction(request.user):
+    if portail_personnel:
         if centre_id:
             responsabilites_personnelles = responsabilites_personnelles.filter(
                 Q(centre_id=centre_id) | Q(accueil_centre__centre_id=centre_id)
