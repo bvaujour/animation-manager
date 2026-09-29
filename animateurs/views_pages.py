@@ -344,10 +344,17 @@ def accueil(request):
                 .first()
                 if _publication_affectations_disponible() else None
             )
-            contexte["actions_a_faire"] = actions_actives_animateur(animateur)
-            contexte["actions_a_faire_count"] = len(contexte["actions_a_faire"])
+            _ajouter_actions_portail(contexte, animateur)
             _ajouter_contexte_apercu(contexte, animateur, apercu)
     return render(request, "accueil.html", contexte)
+
+
+def _ajouter_actions_portail(contexte, animateur):
+    """Expose une seule fois les actions personnelles au layout du portail."""
+    actions = actions_actives_animateur(animateur) if animateur is not None else []
+    contexte["actions_a_faire"] = actions
+    contexte["actions_a_faire_count"] = len(actions)
+    contexte["action_a_faire_prioritaire"] = actions[0] if actions else None
 
 
 def _contexte_portail_animateur(request, active_page):
@@ -365,7 +372,7 @@ def _contexte_portail_animateur(request, active_page):
         )
         _navigation_semaine_portail(request, contexte["semaine"])
         contexte["semaine_active"] = contexte["semaine"]["debut"]
-        contexte["actions_a_faire_count"] = len(actions_actives_animateur(animateur))
+        _ajouter_actions_portail(contexte, animateur)
     return _ajouter_contexte_apercu(contexte, animateur, apercu)
 
 
@@ -582,7 +589,7 @@ def actions_a_faire(request):
     if est_direction(request.user) and not apercu:
         return redirect("accueil")
     contexte = _contexte_portail_animateur(request, "actions_a_faire")
-    contexte["actions"] = actions_actives_animateur(animateur) if animateur else []
+    contexte["actions"] = contexte.get("actions_a_faire", [])
     return render(request, "actions_a_faire.html", contexte)
 
 
@@ -725,8 +732,8 @@ def demandes_materiel(request):
             "erreur": erreur,
             "semaine": semaine_portail,
             "semaine_active": semaine_portail["debut"] if semaine_portail else None,
-            "actions_a_faire_count": len(actions_actives_animateur(animateur)) if animateur else 0,
     }
+    _ajouter_actions_portail(contexte, animateur)
     return render(request, "demandes_materiel.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
 
 
@@ -790,8 +797,8 @@ def mon_profil(request):
             "erreur": erreur,
             "action": action,
             "semaine_active": semaine_active,
-            "actions_a_faire_count": len(actions_actives_animateur(animateur)) if animateur else 0,
     }
+    _ajouter_actions_portail(contexte, animateur)
     return render(request, "mon_profil.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
 
 

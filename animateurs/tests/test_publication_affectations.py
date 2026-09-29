@@ -14,7 +14,7 @@ from animateurs.models import (
     PublicationPlanning, SignalementAffectationPublication,
 )
 from animateurs.services.comptes import creer_compte_animateur
-from animateurs.services.actions_equipe import instantane_affectations
+from animateurs.services.actions_equipe import actions_actives_animateur, instantane_affectations
 
 
 class PublicationAffectationsPeriodeTests(TestCase):
@@ -98,10 +98,70 @@ class PublicationAffectationsPeriodeTests(TestCase):
 
         self.client.force_login(self.user)
         response = self.client.get(reverse("actions_a_faire"))
-        self.assertContains(response, "Nouvelle affectation à confirmer", count=2)
+        self.assertContains(response, "Nouvelle affectation à confirmer")
         self.assertEqual(response.context["actions_a_faire_count"], 2)
         self.assertContains(response, 'class="animator-actions-count"', html=False)
         self.assertContains(response, ">2</span>", html=False)
+
+    def test_bandeau_partage_est_visible_sur_accueil_planning_et_documents(self):
+        publication = self._publier()
+        destinataire = publication.destinataires.get(animateur=self.alice)
+        self.client.force_login(self.user)
+
+        for vue in ("accueil", "plannings_animateur", "documents_animateur"):
+            response = self.client.get(reverse(vue), {"semaine": "2026-10-19"})
+            self.assertContains(response, 'aria-label="Action prioritaire"')
+            self.assertContains(response, "Nouvelle affectation à confirmer")
+            self.assertContains(response, reverse("affectation_a_confirmer", args=[destinataire.pk]))
+
+    def test_absence_action_ne_rend_pas_le_bandeau_partage(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("accueil"), {"semaine": "2026-10-19"})
+        self.assertNotContains(response, 'aria-label="Action prioritaire"')
+
+    def test_priorite_bandeau_annulation_puis_modification_puis_nouvelle_affectation(self):
+        publication = self._publier()
+        modifiee = publication.destinataires.get(animateur=self.alice)
+        modifiee.instantane_modifie_le = datetime.datetime(2026, 9, 29, 21, 15, tzinfo=datetime.timezone.utc)
+        modifiee.save(update_fields=["instantane_modifie_le"])
+
+        periode_nouvelle = PeriodeCalendrier.objects.create(
+            categorie=PeriodeCalendrier.VACANCES, nom="Noël 2026", annee_scolaire="2026-2027",
+            zone="A", debut=datetime.date(2026, 12, 21), fin=datetime.date(2026, 12, 25),
+        )
+        nouvelle_publication = PublicationAffectationsPeriode.objects.create(
+            periode_calendrier=periode_nouvelle, publie=True, publie_par=self.direction
+        )
+        DestinatairePublicationAffectation.objects.create(
+            publication=nouvelle_publication, animateur=self.alice,
+            instantane_affectations=[{"centre": "Centre test"}], instantane_affectations_est_fige=True,
+        )
+
+        periode_annulee = PeriodeCalendrier.objects.create(
+            categorie=PeriodeCalendrier.VACANCES, nom="Hiver 2027", annee_scolaire="2026-2027",
+            zone="A", debut=datetime.date(2027, 2, 8), fin=datetime.date(2027, 2, 12),
+        )
+        publication_annulee = PublicationAffectationsPeriode.objects.create(
+            periode_calendrier=periode_annulee, publie=True, publie_par=self.direction
+        )
+        date_annulation = datetime.datetime(2026, 9, 29, 21, 15, tzinfo=datetime.timezone.utc)
+        DestinatairePublicationAffectation.objects.create(
+            publication=publication_annulee, animateur=self.alice, retire_le=date_annulation,
+            annulation_notifiee_le=date_annulation,
+        )
+
+        actions = actions_actives_animateur(self.alice)
+        self.assertEqual(
+            [action["type"] for action in actions],
+            [
+                "annulation_affectation_a_prendre_en_compte",
+                "affectation_modifiee_a_reconfirmer",
+                "nouvelle_affectation_a_confirmer",
+            ],
+        )
+        self.client.force_login(self.user)
+        accueil = self.client.get(reverse("accueil"), {"semaine": "2026-10-19"})
+        self.assertContains(accueil, "Votre affectation pour Hiver 2027 a été annulée")
 
     def test_confirmation_fait_disparaitre_l_action_sans_effacer_le_suivi(self):
         publication = self._publier()
@@ -620,7 +680,9 @@ class PublicationAffectationsPeriodeTests(TestCase):
         self.client.force_login(self.direction)
         url = reverse("actions_a_faire") + f"?apercu_portail=1&animateur_id={self.alice.pk}"
         response = self.client.get(url)
+        self.assertContains(response, 'aria-label="Action prioritaire"')
         self.assertContains(response, "Nouvelle affectation à confirmer")
+        self.assertContains(response, f"apercu_portail=1&amp;animateur_id={self.alice.pk}")
         confirmation = self.client.post(
             reverse("affectation_a_confirmer", args=[destinataire.pk])
             + f"?apercu_portail=1&animateur_id={self.alice.pk}"

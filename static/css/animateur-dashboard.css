@@ -1009,7 +1009,7 @@ body.animator-dashboard-body .animator-home-outing-smile {
 /* ===== Accueil animateur — passe téléphone compact / objectif sans scroll ===== */
 @media (max-width:799px){
   body.animator-dashboard-body.animator-space-body{
-    overflow:hidden!important;
+    overflow:hidden;
   }
   body.animator-dashboard-body .animator-dashboard--mobile-showcase{
     box-sizing:border-box;
@@ -1772,12 +1772,21 @@ body.animator-dashboard-body .animator-home-outing-smile {
 
 /* ===== Accueil animateur mobile v4 : espace récupéré + pictos plus présents ===== */
 @media (max-width:799px){
-  /* L'en-tête fixe contient désormais la semaine : seuls le bandeau et les 4 cartes occupent la page. */
+  /* Trois blocs sans action ; le bandeau actif ajoute une ligne dans le flux. */
   body.animator-dashboard-body .animator-dashboard--mobile-showcase{
-    grid-template-rows:auto minmax(0,1fr)!important;
+    grid-template-rows:auto auto minmax(0,1fr);
     gap:6px!important;
-    height:calc(100dvh - var(--app-fixed-header-height,48px) - var(--site-mobile-nav-size,58px) - env(safe-area-inset-bottom,0px))!important;
+    height:calc(100dvh - var(--app-fixed-header-height,48px) - var(--site-mobile-nav-size,58px) - env(safe-area-inset-bottom,0px));
     padding:6px 8px 6px!important;
+  }
+  body.animator-dashboard-body .animator-dashboard--mobile-showcase.animator-dashboard--with-action-banner{
+    grid-template-rows:auto auto auto minmax(0,1fr);
+    height:auto;
+    min-height:calc(100dvh - var(--app-fixed-header-height,48px) - var(--site-mobile-nav-size,58px) - env(safe-area-inset-bottom,0px));
+    overflow:visible;
+  }
+  body.animator-dashboard-body.animator-space-body.animator-home-body.animator-home-body--with-action-banner{
+    overflow:auto;
   }
 
   /* Bandeau bienvenue encore plus compact : identité visuelle conservée, hauteur minimisée. */
@@ -1895,10 +1904,10 @@ body.animator-dashboard-body .animator-home-outing-smile {
 /* Le verrouillage sans scroll concerne uniquement l'accueil compact, pas les autres pages du portail. */
 @media (max-width:799px){
   body.animator-dashboard-body.animator-space-body:not(.animator-home-body){
-    overflow:auto!important;
+    overflow:auto;
   }
   body.animator-dashboard-body.animator-space-body.animator-home-body{
-    overflow:hidden!important;
+    overflow:hidden;
   }
 }
 

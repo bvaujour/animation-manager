@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Matériel{% endblock %}
-{% block page_styles %}<link rel="stylesheet" href="{% static 'css/demandes-materiel.css' %}?v={{ asset_version }}">{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/demandes-materiel.css' %}?v={{ asset_version }}"><link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-actions-banner">{% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--wide material-page">
     {% if direction %}
@@ -16,6 +16,8 @@
         </nav>
     </header>
     {% endif %}
+
+    {% if not direction %}{% include "partials/_animateur_actions_banner.html" %}{% endif %}
 
     {% if message %}<p class="material-feedback material-feedback--success" role="status">{{ message }}</p>{% endif %}
     {% if erreur %}<p class="material-feedback material-feedback--error" role="alert">{{ erreur }}</p>{% endif %}

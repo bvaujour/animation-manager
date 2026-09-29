@@ -4,10 +4,12 @@
 {% block page_styles %}
 <link rel="stylesheet" href="{% static 'css/animateurs.css' %}?v={{ asset_version }}">
 <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-actions-banner">
 {% endblock %}
 {% block content %}
 <main id="main-content" class="page-shell page-shell--medium employee-detail-page profile-self-service-page">
     {% include "partials/_page_header.html" with title="Mon profil" picker_mode="none" %}
+    {% include "partials/_animateur_actions_banner.html" %}
 
     {% if animateur %}
         {% if message %}<div class="ui-alert ui-alert--success" role="status">{{ message }}</div>{% endif %}

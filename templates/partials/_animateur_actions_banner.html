@@ -1,0 +1,10 @@
+{% if action_a_faire_prioritaire %}
+<section class="animator-assignment-alert animator-assignment-alert--{{ action_a_faire_prioritaire.type }}" aria-label="Action prioritaire">
+    <div>
+        <strong>{{ actions_a_faire_count }} action{{ actions_a_faire_count|pluralize }} à faire</strong>
+        <span class="animator-assignment-alert-title">{{ action_a_faire_prioritaire.titre }}</span>
+        <span>{{ action_a_faire_prioritaire.periode.nom }} · {{ action_a_faire_prioritaire.libelle_date }} {{ action_a_faire_prioritaire.date_action|date:'d/m à H:i' }}</span>
+    </div>
+    <a class="btn {% if apercu_portail %}btn-secondary{% else %}btn-primary{% endif %}" href="{% url 'affectation_a_confirmer' action_a_faire_prioritaire.id %}{{ apercu_query_prefix|default:'' }}">Consulter</a>
+</section>
+{% endif %}

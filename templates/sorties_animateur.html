@@ -15,6 +15,7 @@
             <a href="?semaine={{ semaine.suivante|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}" aria-label="Semaine suivante">›</a>
         </nav>
     </header>
+    {% include "partials/_animateur_actions_banner.html" %}
     <section class="animator-panel animator-wide-card"><div class="animator-card-list">
         {% for sortie in sorties %}<article id="sortie-{{ sortie.id }}" class="animator-list-item animator-list-item--outing"><span class="animator-list-date">{{ sortie.date|date:'D' }}<strong>{{ sortie.date|date:'d' }}</strong></span><div><strong>{{ sortie.nom }}</strong><small>{% if sortie.horaire %}{{ sortie.horaire }}{% endif %}{% if sortie.destination %} · {{ sortie.destination }}{% endif %}</small>{% if sortie.responsabilite %}<em>{{ sortie.responsabilite }}</em>{% endif %}</div></article>{% empty %}<p class="animator-empty-state">Aucune sortie cette semaine.</p>{% endfor %}
     </div></section>
