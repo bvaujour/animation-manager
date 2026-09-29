@@ -2740,6 +2740,7 @@ class DestinatairePublicationAffectation(models.Model):
     retire_le = models.DateTimeField(null=True, blank=True, db_index=True)
     annulation_notifiee_le = models.DateTimeField(null=True, blank=True, db_index=True)
     annulation_prise_en_compte_le = models.DateTimeField(null=True, blank=True, db_index=True)
+    instantane_modifie_le = models.DateTimeField(null=True, blank=True, db_index=True)
     instantane_affectations = models.JSONField(default=list, blank=True)
     # Distingue une liste vide réellement figée d'une ligne créée avant les
     # instantanés, pour laquelle aucune photo de la publication n'existe.

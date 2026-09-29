@@ -9,15 +9,39 @@ from __future__ import annotations
 
 import datetime
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 
 from django.utils import timezone
 
-from animateurs.models import Affectation, DestinatairePublicationAffectation, ResponsabiliteOperationnelle
+from animateurs.models import (
+    Affectation, DestinatairePublicationAffectation, HoraireAffectationJour,
+    ResponsabiliteOperationnelle,
+)
+
+
+def _normaliser_detail_affectation(detail):
+    """Rend comparables les instantanés créés avant les nouveaux champs."""
+    normalise = dict(detail)
+    for cle in (
+        "type_accueil_code", "modalite_periscolaire", "modalite_periscolaire_code",
+    ):
+        normalise.setdefault(cle, "")
+    normalise["horaires"] = sorted(
+        normalise.get("horaires", []),
+        key=lambda horaire: json.dumps(horaire, sort_keys=True, ensure_ascii=False, separators=(",", ":")),
+    )
+    return normalise
 
 
 def _signature_affectation(detail):
-    return json.dumps(detail, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(_normaliser_detail_affectation(detail), sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def instantanes_affectations_equivalents(ancien, nouveau):
+    """Compare le contenu métier, sans dépendre des clés ajoutées ni de l'ordre."""
+    return Counter(_signature_affectation(detail) for detail in ancien) == Counter(
+        _signature_affectation(detail) for detail in nouveau
+    )
 
 
 def details_affectations_avec_statut(destinataire):
@@ -84,9 +108,19 @@ def instantane_affectations(periode, animateur):
     fin = timezone.make_aware(datetime.datetime.combine(periode.fin + datetime.timedelta(days=1), datetime.time.min))
     affectations = (
         Affectation.objects.filter(animateur=animateur, debut__lt=fin, fin__gt=debut)
-        .select_related("centre", "evenement__groupe", "type_accueil")
+        .select_related("centre", "evenement__groupe", "type_accueil", "modalite_periscolaire")
         .order_by("debut", "fin", "id")
     )
+    affectations = list(affectations)
+    horaires_par_affectation = defaultdict(list)
+    for horaire in HoraireAffectationJour.objects.filter(
+        affectation__in=affectations, date__gte=periode.debut, date__lte=periode.fin
+    ).order_by("affectation_id", "date"):
+        horaires_par_affectation[horaire.affectation_id].append({
+            "date": horaire.date.isoformat(),
+            "heure_arrivee": horaire.heure_arrivee.isoformat(),
+            "heure_depart": horaire.heure_depart.isoformat(),
+        })
     responsabilites = list(
         ResponsabiliteOperationnelle.objects.filter(
             animateur=animateur, debut__lt=fin, fin__gt=debut
@@ -112,9 +146,14 @@ def instantane_affectations(periode, animateur):
             "groupe": affectation.evenement.nom,
             "tranche_age": groupe.get_categorie_age_reglementaire_display(),
             "type_accueil": affectation.type_accueil.nom if affectation.type_accueil_id else "",
+            "type_accueil_code": affectation.type_accueil.code if affectation.type_accueil_id else "",
+            "modalite_periscolaire": affectation.modalite_periscolaire.nom if affectation.modalite_periscolaire_id else "",
+            "modalite_periscolaire_code": affectation.modalite_periscolaire.code if affectation.modalite_periscolaire_id else "",
             "role": role,
+            "horaires": horaires_par_affectation[affectation.pk],
         })
-    return resultat
+    # Le JSON publié doit être indépendant de l'ordre technique de création.
+    return sorted(resultat, key=_signature_affectation)
 
 
 def actions_actives_animateur(animateur):
@@ -138,16 +177,29 @@ def actions_actives_animateur(animateur):
                 "titre": f"Votre affectation pour {destinataire.publication.periode_calendrier.nom} a été annulée",
                 "periode": destinataire.publication.periode_calendrier,
                 "destinataire": destinataire,
+                "date_action": destinataire.annulation_notifiee_le,
+                "libelle_date": "Annulée le",
             })
         elif destinataire.retire_le is None and affectations_restent_a_confirmer(destinataire):
+            est_modifiee = destinataire.instantane_modifie_le is not None
             actions.append({
-                "type": "affectation_a_confirmer",
+                "type": "affectation_modifiee_a_reconfirmer" if est_modifiee else "nouvelle_affectation_a_confirmer",
                 "id": destinataire.pk,
-                "titre": f"Affectation {destinataire.publication.periode_calendrier.nom} à confirmer",
+                "titre": "Affectation modifiée à reconfirmer" if est_modifiee else "Nouvelle affectation à confirmer",
                 "periode": destinataire.publication.periode_calendrier,
                 "destinataire": destinataire,
+                "date_action": destinataire.instantane_modifie_le if est_modifiee else destinataire.publication.publie_le,
+                "libelle_date": "Mise à jour le" if est_modifiee else "Publiée le",
             })
-    return actions
+    priorites = {
+        "annulation_affectation_a_prendre_en_compte": 0,
+        "affectation_modifiee_a_reconfirmer": 1,
+        "nouvelle_affectation_a_confirmer": 2,
+    }
+    return sorted(
+        actions,
+        key=lambda action: (priorites[action["type"]], action["periode"].debut, action["id"]),
+    )
 
 
 def nombre_actions_actives(animateur):

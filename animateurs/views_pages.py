@@ -42,7 +42,8 @@ from .models import (
 from .services.animateur_dashboard import generer_tableau_de_bord_animateur
 from .services.actions_equipe import (
     actions_actives_animateur, affectations_restent_a_confirmer, detail_legacy_indisponible,
-    details_affectations_avec_statut, instantane_affectations, suivi_actions_affectations,
+    details_affectations_avec_statut, instantane_affectations, instantanes_affectations_equivalents,
+    suivi_actions_affectations,
 )
 from .services.comptes import valider_mot_de_passe
 from .services.dashboard import generer_tableau_de_bord
@@ -343,7 +344,8 @@ def accueil(request):
                 .first()
                 if _publication_affectations_disponible() else None
             )
-            contexte["actions_a_faire_count"] = len(actions_actives_animateur(animateur))
+            contexte["actions_a_faire"] = actions_actives_animateur(animateur)
+            contexte["actions_a_faire_count"] = len(contexte["actions_a_faire"])
             _ajouter_contexte_apercu(contexte, animateur, apercu)
     return render(request, "accueil.html", contexte)
 
@@ -464,11 +466,15 @@ def publications_affectations(request):
                         )
                     elif (
                         not destinataire.instantane_affectations_est_fige
-                        or destinataire.instantane_affectations != instantane
+                        or not instantanes_affectations_equivalents(destinataire.instantane_affectations, instantane)
                         or destinataire.retire_le is not None
                         or destinataire.annulation_notifiee_le is not None
                     ):
                         est_reaffectation = destinataire.retire_le is not None
+                        instantane_reellement_modifie = (
+                            destinataire.instantane_affectations_est_fige
+                            and not instantanes_affectations_equivalents(destinataire.instantane_affectations, instantane)
+                        )
                         details_confirmes = [] if est_reaffectation else details_affectations_avec_statut(destinataire)
                         destinataire.instantane_affectations = instantane
                         destinataire.instantane_affectations_confirmees = [
@@ -480,7 +486,10 @@ def publications_affectations(request):
                         destinataire.instantane_affectations_est_fige = True
                         destinataire.annulation_notifiee_le = None
                         destinataire.annulation_prise_en_compte_le = None
-                        destinataire.save(update_fields=["instantane_affectations", "instantane_affectations_est_fige", "instantane_affectations_confirmees", "confirme_le", "retire_le", "annulation_notifiee_le", "annulation_prise_en_compte_le"])
+                        destinataire.instantane_modifie_le = (
+                            publication.publie_le if instantane_reellement_modifie and not est_reaffectation else None
+                        )
+                        destinataire.save(update_fields=["instantane_affectations", "instantane_affectations_est_fige", "instantane_affectations_confirmees", "confirme_le", "retire_le", "annulation_notifiee_le", "annulation_prise_en_compte_le", "instantane_modifie_le"])
                     elif destinataire.retire_le is not None:
                         destinataire.retire_le = None
                         destinataire.save(update_fields=["retire_le"])

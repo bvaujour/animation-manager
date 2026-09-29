@@ -136,12 +136,12 @@
         <span class="animator-welcome-heart" aria-hidden="true">♡</span>
     </section>
 
-    {% if actions_a_faire_count %}
-    <section class="animator-assignment-alert" aria-label="Affectation à confirmer">
-        <div><strong>{{ actions_a_faire_count }} action{{ actions_a_faire_count|pluralize }} à faire</strong><span>Consulte tes actions en attente.</span></div>
-        <a class="btn {% if apercu_portail %}btn-secondary{% else %}btn-primary{% endif %}" href="{% url 'actions_a_faire' %}{{ apercu_query_prefix|default:'' }}">Voir mes actions</a>
+    {% if actions_a_faire_count %}{% with action=actions_a_faire.0 %}
+    <section class="animator-assignment-alert animator-assignment-alert--{{ action.type }}" aria-label="Action prioritaire">
+        <div><strong>{{ actions_a_faire_count }} action{{ actions_a_faire_count|pluralize }} à faire</strong><span class="animator-assignment-alert-title">{{ action.titre }}</span><span>{{ action.periode.nom }} · {{ action.libelle_date }} {{ action.date_action|date:'d/m à H:i' }}</span></div>
+        <a class="btn {% if apercu_portail %}btn-secondary{% else %}btn-primary{% endif %}" href="{% url 'affectation_a_confirmer' action.id %}{{ apercu_query_prefix|default:'' }}">Consulter</a>
     </section>
-    {% endif %}
+    {% endwith %}{% endif %}
 
     <section class="animator-home-cards animator-home-cards--showcase animator-home-cards--four-grid" aria-label="Synthèse de la semaine sélectionnée">
         <article class="animator-home-card animator-home-card--tile animator-home-card--planning {% if planning_publie %}is-active{% else %}is-empty{% endif %}">
