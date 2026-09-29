@@ -1,11 +1,13 @@
 """Pages HTML, tableau de bord et exports administratifs."""
 
+import copy
 import datetime
 import json
 from base64 import urlsafe_b64decode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login, update_session_auth_hash
+from django.contrib.auth.views import LoginView
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
@@ -14,6 +16,7 @@ from django.db import connection, transaction
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.cache import never_cache
@@ -32,17 +35,37 @@ from .models import (
     PeriodeCalendrier,
     PublicationAffectationsPeriode,
     ResponsabiliteOperationnelle,
+    SignalementAffectationPublication,
     StatutPreparationSemaine,
     TypeAccueil,
 )
 from .services.animateur_dashboard import generer_tableau_de_bord_animateur
-from .services.actions_equipe import actions_actives_animateur, instantane_affectations, suivi_actions_affectations
+from .services.actions_equipe import (
+    actions_actives_animateur, affectations_restent_a_confirmer, detail_legacy_indisponible,
+    details_affectations_avec_statut, instantane_affectations, suivi_actions_affectations,
+)
 from .services.comptes import valider_mot_de_passe
 from .services.dashboard import generer_tableau_de_bord
 from .services.planning_exports import generer_planning_excel, generer_planning_pdf, horaires_manquants_export
 
 
 PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY = "portail_animateur_semaine"
+
+
+class ConnexionAnimateurView(LoginView):
+    """Priorise les actions portail seulement après une connexion ordinaire."""
+
+    template_name = "registration/login.html"
+
+    def get_success_url(self):
+        # LoginView valide déjà la destination ``next`` avant de la retourner.
+        next_url = self.get_redirect_url()
+        if next_url:
+            return next_url
+        animateur = Animateur.objects.filter(utilisateur=self.request.user).first()
+        if animateur is not None and actions_actives_animateur(animateur):
+            return reverse("actions_a_faire")
+        return super().get_success_url()
 
 
 def _ajouter_contexte_apercu(contexte, animateur, apercu):
@@ -435,20 +458,38 @@ def publications_affectations(request):
                     destinataire = existants.get(animateur.pk)
                     if destinataire is None:
                         DestinatairePublicationAffectation.objects.create(
-                            publication=publication, animateur=animateur, instantane_affectations=instantane
+                            publication=publication, animateur=animateur,
+                            instantane_affectations=instantane,
+                            instantane_affectations_est_fige=True,
                         )
-                    elif destinataire.instantane_affectations != instantane:
+                    elif (
+                        not destinataire.instantane_affectations_est_fige
+                        or destinataire.instantane_affectations != instantane
+                        or destinataire.retire_le is not None
+                        or destinataire.annulation_notifiee_le is not None
+                    ):
+                        est_reaffectation = destinataire.retire_le is not None
+                        details_confirmes = [] if est_reaffectation else details_affectations_avec_statut(destinataire)
                         destinataire.instantane_affectations = instantane
-                        destinataire.confirme_le = None
+                        destinataire.instantane_affectations_confirmees = [
+                            {cle: valeur for cle, valeur in detail.items() if cle != "statut_confirmation"}
+                            for detail in details_confirmes if detail["statut_confirmation"] == "confirmee"
+                        ]
+                        destinataire.confirme_le = None if est_reaffectation or affectations_restent_a_confirmer(destinataire) else destinataire.confirme_le
                         destinataire.retire_le = None
-                        destinataire.save(update_fields=["instantane_affectations", "confirme_le", "retire_le"])
+                        destinataire.instantane_affectations_est_fige = True
+                        destinataire.annulation_notifiee_le = None
+                        destinataire.annulation_prise_en_compte_le = None
+                        destinataire.save(update_fields=["instantane_affectations", "instantane_affectations_est_fige", "instantane_affectations_confirmees", "confirme_le", "retire_le", "annulation_notifiee_le", "annulation_prise_en_compte_le"])
                     elif destinataire.retire_le is not None:
                         destinataire.retire_le = None
                         destinataire.save(update_fields=["retire_le"])
                 for animateur_id, destinataire in existants.items():
                     if animateur_id not in ids_animateurs and destinataire.retire_le is None:
                         destinataire.retire_le = timezone.now()
-                        destinataire.save(update_fields=["retire_le"])
+                        destinataire.annulation_notifiee_le = timezone.now()
+                        destinataire.annulation_prise_en_compte_le = None
+                        destinataire.save(update_fields=["retire_le", "annulation_notifiee_le", "annulation_prise_en_compte_le"])
             messages.success(request, "Les affectations ont été publiées. Les confirmations inchangées sont conservées.")
             return redirect(f"{request.path}?periode_id={periode.pk}")
 
@@ -475,18 +516,53 @@ def affectation_a_confirmer(request, publication_id):
         raise PermissionDenied
     if request.method != "GET" and apercu:
         raise PermissionDenied("L’aperçu est strictement en lecture seule.")
-    if request.method == "POST" and destinataire.confirme_le is None:
-        destinataire.confirme_le = timezone.now()
-        destinataire.save(update_fields=["confirme_le"])
-        messages.success(request, "Ta confirmation a bien été enregistrée.")
-        return redirect("affectation_a_confirmer", publication_id=destinataire.pk)
+    details = details_affectations_avec_statut(destinataire)
+    nombre_a_confirmer = sum(detail["statut_confirmation"] == "a_confirmer" for detail in details)
+    detail_indisponible = detail_legacy_indisponible(destinataire)
+    annulation_notifiee = destinataire.annulation_notifiee_le is not None
+    annulation_a_prendre_en_compte = annulation_notifiee and destinataire.annulation_prise_en_compte_le is None
+    a_confirmer = bool(nombre_a_confirmer) and not detail_indisponible and not annulation_notifiee
+    if request.method == "POST" and annulation_a_prendre_en_compte:
+        if request.POST.get("action") == "prendre_en_compte_annulation":
+            destinataire.annulation_prise_en_compte_le = timezone.now()
+            destinataire.save(update_fields=["annulation_prise_en_compte_le"])
+            messages.success(request, "Tu as bien pris connaissance de l’annulation de ton affectation.")
+            return redirect("affectation_a_confirmer", publication_id=destinataire.pk)
+    elif request.method == "POST" and a_confirmer:
+        if request.POST.get("action") == "signaler":
+            contenu = request.POST.get("contenu", "").strip()
+            if not contenu:
+                messages.error(request, "Écris ton message avant de l’envoyer.")
+            else:
+                SignalementAffectationPublication.objects.create(
+                    destinataire=destinataire,
+                    contenu=contenu,
+                    instantane_affectations=copy.deepcopy(destinataire.instantane_affectations),
+                )
+                messages.success(request, "Ton message a bien été envoyé à la direction. Ton affectation reste à confirmer.")
+                return redirect("affectation_a_confirmer", publication_id=destinataire.pk)
+        else:
+            # Ne pas transformer une lecture legacy reconstruite en faux
+            # instantané : seule une publication déjà figée peut être mémorisée
+            # ligne par ligne comme confirmée.
+            if destinataire.instantane_affectations_est_fige:
+                destinataire.instantane_affectations_confirmees = copy.deepcopy(destinataire.instantane_affectations)
+            destinataire.confirme_le = timezone.now()
+            update_fields = ["confirme_le"]
+            if destinataire.instantane_affectations_est_fige:
+                update_fields.append("instantane_affectations_confirmees")
+            destinataire.save(update_fields=update_fields)
+            messages.success(request, "Ta confirmation a bien été enregistrée.")
+            return redirect("affectation_a_confirmer", publication_id=destinataire.pk)
     contexte = {
         "active_page": "accueil", "destinataire": destinataire,
-        # Publications antérieures à l'ajout de l'instantané restent lisibles;
-        # toute nouvelle publication utilise exclusivement sa copie figée.
-        "details": destinataire.instantane_affectations or instantane_affectations(
-            destinataire.publication.periode_calendrier, animateur
-        ),
+        "details": details,
+        "a_confirmer": a_confirmer,
+        "detail_indisponible": detail_indisponible,
+        "annulation_notifiee": annulation_notifiee,
+        "annulation_a_prendre_en_compte": annulation_a_prendre_en_compte,
+        "nombre_a_confirmer": nombre_a_confirmer,
+        "signalements": destinataire.signalements.all(),
     }
     return render(request, "affectation_a_confirmer.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
 

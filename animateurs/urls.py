@@ -83,6 +83,7 @@ from .views import (
     api_tableau_de_bord,
     api_statut_preparation_semaine,
     api_verification_export_planning,
+    ConnexionAnimateurView,
     publications_affectations,
     affectation_a_confirmer,
     actions_a_faire,
@@ -148,7 +149,7 @@ from .views_sorties import (
 )
 
 urlpatterns = [
-    path("connexion/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
+    path("connexion/", ConnexionAnimateurView.as_view(), name="login"),
     path("mot-de-passe-oublie/", auth_views.PasswordResetView.as_view(template_name="registration/password_reset_form.html", email_template_name="registration/password_reset_email.txt", subject_template_name="registration/password_reset_subject.txt"), name="password_reset"),
     path("mot-de-passe-oublie/envoye/", auth_views.PasswordResetDoneView.as_view(template_name="registration/password_reset_done.html"), name="password_reset_done"),
     path("mot-de-passe-oublie/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(template_name="registration/password_reset_confirm.html"), name="password_reset_confirm"),

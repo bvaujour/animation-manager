@@ -4103,3 +4103,23 @@ body.animator-space-body{
     font-size:.57rem!important;
   }
 }
+
+/* Signal discret mais visible des actions personnelles en attente. */
+body.animator-space-body .animator-actions-link--pending{
+  color:#5f47d8;
+  background:rgba(108,85,202,.10);
+}
+body.animator-space-body .animator-actions-count{
+  display:inline-grid;
+  min-width:1.25em;
+  height:1.25em;
+  place-items:center;
+  margin-left:4px;
+  padding:0 3px;
+  border-radius:999px;
+  color:#fff;
+  background:#684cf5;
+  font-size:.72em;
+  font-weight:800;
+  line-height:1;
+}

@@ -8,10 +8,63 @@ fournisseurs (par exemple une demande de modification de disponibilités).
 from __future__ import annotations
 
 import datetime
+import json
+from collections import Counter
 
 from django.utils import timezone
 
 from animateurs.models import Affectation, DestinatairePublicationAffectation, ResponsabiliteOperationnelle
+
+
+def _signature_affectation(detail):
+    return json.dumps(detail, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def details_affectations_avec_statut(destinataire):
+    """Retourne le détail publié, en distinguant les lignes déjà validées.
+
+    La comparaison porte sur le contenu figé complet, avec un compteur pour
+    gérer aussi deux lignes identiques sans attribuer deux fois une validation.
+    Les destinataires antérieurs aux instantanés restent consultables grâce à
+    une reconstruction de lecture seule ; elle n'est jamais enregistrée.
+    """
+    instantane = destinataire.instantane_affectations
+    if not destinataire.instantane_affectations_est_fige:
+        instantane = instantane_affectations(
+            destinataire.publication.periode_calendrier, destinataire.animateur
+        )
+    confirmes = destinataire.instantane_affectations_confirmees
+    if not confirmes and destinataire.confirme_le is not None:
+        # Compatibilité avec les confirmations réalisées avant ce suivi fin,
+        # y compris les lignes sans instantané historique.
+        confirmes = instantane
+    restants = Counter(_signature_affectation(detail) for detail in confirmes)
+    resultat = []
+    for detail in instantane:
+        signature = _signature_affectation(detail)
+        est_confirmee = restants[signature] > 0
+        if est_confirmee:
+            restants[signature] -= 1
+        resultat.append({**detail, "statut_confirmation": "confirmee" if est_confirmee else "a_confirmer"})
+    return resultat
+
+
+def affectations_restent_a_confirmer(destinataire):
+    # Une ancienne publication ne contient pas forcément de détail. Son
+    # destinataire peut confirmer l'information reçue seulement si son détail
+    # reste reconstructible, sans prétendre reconstituer un instantané.
+    if not destinataire.instantane_affectations_est_fige:
+        return destinataire.confirme_le is None and bool(details_affectations_avec_statut(destinataire))
+    return any(detail["statut_confirmation"] == "a_confirmer" for detail in details_affectations_avec_statut(destinataire))
+
+
+def detail_legacy_indisponible(destinataire):
+    """Indique une ancienne publication non confirmée sans détail lisible."""
+    return (
+        not destinataire.instantane_affectations_est_fige
+        and destinataire.confirme_le is None
+        and not details_affectations_avec_statut(destinataire)
+    )
 
 
 def _jours_couverts(debut, fin):
@@ -68,21 +121,33 @@ def actions_actives_animateur(animateur):
     """Actions ouvertes de l'animateur, prêtes à être rendues par le portail."""
     destinataires = (
         DestinatairePublicationAffectation.objects.filter(
-            animateur=animateur, confirme_le__isnull=True, retire_le__isnull=True, publication__publie=True
+            animateur=animateur, publication__publie=True
         )
         .select_related("publication__periode_calendrier")
         .order_by("publication__periode_calendrier__debut", "pk")
     )
-    return [
-        {
-            "type": "affectation_a_confirmer",
-            "id": destinataire.pk,
-            "titre": f"Affectation {destinataire.publication.periode_calendrier.nom} à confirmer",
-            "periode": destinataire.publication.periode_calendrier,
-            "destinataire": destinataire,
-        }
-        for destinataire in destinataires
-    ]
+    actions = []
+    for destinataire in destinataires:
+        if (
+            destinataire.annulation_notifiee_le is not None
+            and destinataire.annulation_prise_en_compte_le is None
+        ):
+            actions.append({
+                "type": "annulation_affectation_a_prendre_en_compte",
+                "id": destinataire.pk,
+                "titre": f"Votre affectation pour {destinataire.publication.periode_calendrier.nom} a été annulée",
+                "periode": destinataire.publication.periode_calendrier,
+                "destinataire": destinataire,
+            })
+        elif destinataire.retire_le is None and affectations_restent_a_confirmer(destinataire):
+            actions.append({
+                "type": "affectation_a_confirmer",
+                "id": destinataire.pk,
+                "titre": f"Affectation {destinataire.publication.periode_calendrier.nom} à confirmer",
+                "periode": destinataire.publication.periode_calendrier,
+                "destinataire": destinataire,
+            })
+    return actions
 
 
 def nombre_actions_actives(animateur):
@@ -94,15 +159,36 @@ def suivi_actions_affectations(periode):
     publication = getattr(periode, "publication_affectations", None)
     if publication is None:
         return {"publication": None, "destinataires": [], "total": 0, "confirmes": 0, "en_attente": 0, "sans_acces": 0}
-    destinataires = list(publication.destinataires.select_related("animateur__utilisateur").all())
+    destinataires = list(
+        publication.destinataires.select_related("animateur__utilisateur").prefetch_related("signalements").all()
+    )
+    for destinataire in destinataires:
+        # Attribut d'affichage éphémère : aucune donnée legacy n'est modifiée.
+        destinataire.detail_indisponible = detail_legacy_indisponible(destinataire)
+        destinataire.annulation_en_attente = (
+            destinataire.annulation_notifiee_le is not None
+            and destinataire.annulation_prise_en_compte_le is None
+        )
     actifs = [item for item in destinataires if item.retire_le is None]
-    confirmes = sum(item.confirme_le is not None for item in actifs)
+    indisponibles = sum(item.detail_indisponible for item in actifs)
+    confirmes = sum(
+        not item.detail_indisponible and not affectations_restent_a_confirmer(item)
+        for item in actifs
+    )
     sans_acces = sum(not item.animateur.utilisateur_id or not item.animateur.utilisateur.is_active for item in actifs)
+    annulations_en_attente = sum(item.annulation_en_attente for item in destinataires)
+    annulations_prises_en_compte = sum(
+        item.annulation_notifiee_le is not None and item.annulation_prise_en_compte_le is not None
+        for item in destinataires
+    )
     return {
         "publication": publication,
         "destinataires": destinataires,
         "total": len(actifs),
         "confirmes": confirmes,
-        "en_attente": len(actifs) - confirmes,
+        "en_attente": len(actifs) - confirmes - indisponibles,
+        "indisponibles": indisponibles,
         "sans_acces": sans_acces,
+        "annulations_en_attente": annulations_en_attente,
+        "annulations_prises_en_compte": annulations_prises_en_compte,
     }

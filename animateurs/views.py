@@ -36,6 +36,7 @@ from .views_catalogue import (
     api_qualifications,
 )
 from .views_pages import (
+    ConnexionAnimateurView,
     accueil,
     activation_compte,
     administration,

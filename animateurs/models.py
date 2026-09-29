@@ -2738,7 +2738,13 @@ class DestinatairePublicationAffectation(models.Model):
     )
     confirme_le = models.DateTimeField(null=True, blank=True, db_index=True)
     retire_le = models.DateTimeField(null=True, blank=True, db_index=True)
+    annulation_notifiee_le = models.DateTimeField(null=True, blank=True, db_index=True)
+    annulation_prise_en_compte_le = models.DateTimeField(null=True, blank=True, db_index=True)
     instantane_affectations = models.JSONField(default=list, blank=True)
+    # Distingue une liste vide réellement figée d'une ligne créée avant les
+    # instantanés, pour laquelle aucune photo de la publication n'existe.
+    instantane_affectations_est_fige = models.BooleanField(default=False)
+    instantane_affectations_confirmees = models.JSONField(default=list, blank=True)
 
     class Meta:
         constraints = [
@@ -2750,6 +2756,32 @@ class DestinatairePublicationAffectation(models.Model):
 
     def __str__(self):
         return f"{self.animateur} — {self.publication}"
+
+
+class SignalementAffectationPublication(models.Model):
+    """Message conservé dans l'historique d'une affectation publiée.
+
+    Le lien porte volontairement sur le destinataire de publication : il
+    conserve donc l'animateur et l'instantané concernés, même si le planning
+    courant est ensuite modifié ou republié.
+    """
+
+    destinataire = models.ForeignKey(
+        DestinatairePublicationAffectation,
+        on_delete=models.CASCADE,
+        related_name="signalements",
+    )
+    contenu = models.TextField(max_length=2000)
+    instantane_affectations = models.JSONField(default=list, blank=True)
+    envoye_le = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("envoye_le", "pk")
+        verbose_name = "signalement sur affectation publiée"
+        verbose_name_plural = "signalements sur affectations publiées"
+
+    def __str__(self):
+        return f"Signalement de {self.destinataire.animateur} — {self.destinataire.publication}"
 
 
 class DemandeMateriel(models.Model):
