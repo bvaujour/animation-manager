@@ -32,6 +32,17 @@
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="cloturer"><button class="btn btn-secondary" type="submit">Clôturer la campagne</button></form>
     </section>
   {% endif %}
+  {% if campagne.statut != 'brouillon' %}
+    <section class="ui-card availability-responses">
+      <header class="availability-responses-heading"><h2>Réponses</h2><p>{{ resume_demandes.envoyees }} réponse{{ resume_demandes.envoyees|pluralize }} envoyée{{ resume_demandes.envoyees|pluralize }} · {{ resume_demandes.brouillons }} brouillon{{ resume_demandes.brouillons|pluralize }} · {{ resume_demandes.a_renseigner }} à renseigner</p></header>
+      <div class="availability-response-rows">
+        {% for demande in demandes %}
+          <article class="availability-response-row"><strong>{{ demande.animateur.prenom }} {{ demande.animateur.nom }}</strong><span class="availability-response-status availability-response-status--{{ demande.statut }}">{{ demande.get_statut_display }}</span>{% if demande.envoyee_le %}<time datetime="{{ demande.envoyee_le|date:'c' }}">{{ demande.envoyee_le|date:'d/m/Y à H:i' }}</time>{% endif %}{% if demande.peut_voir_reponse %}<a class="btn btn-ghost btn-small" href="{% url 'campagne_disponibilite_reponse' campagne.pk demande.pk %}">Voir la réponse</a>{% endif %}</article>
+        {% empty %}<p class="empty-note">Aucune demande n’a encore été créée.</p>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
 </main>
 {% endblock %}
 {% block scripts %}{% if campagne.statut == 'brouillon' %}<script src="{% static 'js/campagnes-disponibilites.js' %}?v={{ asset_version }}"></script>{% endif %}{% endblock %}

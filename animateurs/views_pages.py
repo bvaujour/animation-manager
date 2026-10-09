@@ -461,6 +461,7 @@ def _resume_reponse_disponibilites(propositions):
         "journees": sum(p.creneau == PropositionDisponibiliteDate.JOURNEE for p in propositions),
         "matins": sum(p.creneau == PropositionDisponibiliteDate.MATIN for p in propositions),
         "apres_midis": sum(p.creneau == PropositionDisponibiliteDate.APRES_MIDI for p in propositions),
+        "indisponibles": sum(p.creneau == PropositionDisponibiliteDate.INDISPONIBLE for p in propositions),
         "zero_disponibilite": bool(propositions) and all(
             p.creneau == PropositionDisponibiliteDate.INDISPONIBLE for p in propositions
         ),
@@ -988,6 +989,22 @@ def campagne_disponibilite_detail(request, campagne_id):
         periode for periode in periodes_futures if periode.type_accueil.code == TypeAccueil.VACANCES
     ]
     periodes_autres = [periode for periode in periodes_futures if periode not in periodes_vacances]
+    demandes = sorted(
+        campagne.demandes.all(), key=lambda demande: (demande.animateur.nom, demande.animateur.prenom, demande.pk)
+    )
+    statuts_reponse = {
+        DemandeDisponibilite.ENVOYEE,
+        DemandeDisponibilite.A_CORRIGER,
+        DemandeDisponibilite.VALIDEE,
+        DemandeDisponibilite.REFUSEE,
+    }
+    for demande in demandes:
+        demande.peut_voir_reponse = demande.statut in statuts_reponse
+    resume_demandes = {
+        "envoyees": sum(demande.peut_voir_reponse for demande in demandes),
+        "brouillons": sum(demande.statut == DemandeDisponibilite.BROUILLON for demande in demandes),
+        "a_renseigner": sum(demande.statut == DemandeDisponibilite.A_RENSEIGNER for demande in demandes),
+    }
     return render(request, "campagne_disponibilite_detail.html", {
         "active_page": "gestion", "gestion_onglet": "disponibilites", "campagne": campagne,
         "blocs": blocs,
@@ -1000,6 +1017,48 @@ def campagne_disponibilite_detail(request, campagne_id):
         "animateurs": Animateur.objects.filter(actif=True).order_by("nom", "prenom"),
         "destinataire_ids": set(campagne.destinataires.values_list("id", flat=True)),
         "nombre_dates": campagne.dates.count(),
+        "demandes": demandes,
+        "resume_demandes": resume_demandes,
+    })
+
+
+def campagne_disponibilite_reponse(request, campagne_id, demande_id):
+    """Lecture direction d'une réponse envoyée, sans aucune action de traitement."""
+    if request.method != "GET":
+        raise PermissionDenied("Cette consultation est strictement en lecture seule.")
+    campagne = get_object_or_404(CampagneDisponibilite, pk=campagne_id)
+    demande = get_object_or_404(
+        DemandeDisponibilite.objects.select_related("animateur", "campagne").prefetch_related(
+            "propositions__date_campagne__bloc"
+        ),
+        pk=demande_id,
+        campagne=campagne,
+        statut__in=(
+            DemandeDisponibilite.ENVOYEE,
+            DemandeDisponibilite.A_CORRIGER,
+            DemandeDisponibilite.VALIDEE,
+            DemandeDisponibilite.REFUSEE,
+        ),
+    )
+    blocs, propositions = _groupes_reponse_disponibilites(demande)
+    resume = _resume_reponse_disponibilites(propositions)
+    elements_resume = [
+        (resume["journees"], "journée"),
+        (resume["matins"], "matin"),
+        (resume["apres_midis"], "après-midi"),
+        (resume["indisponibles"], "indisponible"),
+    ]
+    resume["libelle_direction"] = " · ".join(
+        f"{nombre} {libelle}{'s' if nombre > 1 and libelle != 'après-midi' else ''}"
+        for nombre, libelle in elements_resume if nombre
+    ) or "Aucune disponibilité renseignée"
+    return render(request, "campagne_disponibilite_reponse_detail.html", {
+        "active_page": "gestion",
+        "gestion_onglet": "disponibilites",
+        "campagne": campagne,
+        "demande": demande,
+        "blocs_reponse": blocs,
+        "resume_reponse": resume,
     })
 
 

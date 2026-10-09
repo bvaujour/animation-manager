@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Réponse disponibilités{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main class="page-shell page-shell--fluid availability-response-detail-page">
+  {% include "partials/_direction_section_nav.html" with section="communication" active_item="disponibilites" %}
+  <header class="page-header availability-response-detail-header"><div><p class="page-kicker">Réponse disponibilités</p><h1>{{ demande.animateur.prenom }} {{ demande.animateur.nom }} <span>· {{ campagne.nom }}</span></h1><p>{% if demande.envoyee_le %}Envoyée le {{ demande.envoyee_le|date:'d/m/Y à H:i' }}{% else %}{{ demande.get_statut_display }}{% endif %}</p></div><a class="btn btn-ghost" href="{% url 'campagne_disponibilite_detail' campagne.pk %}">Retour à la campagne</a></header>
+  <section class="ui-card availability-response-overview"><h2>Résumé</h2><p>{{ resume_reponse.libelle_direction }}</p></section>
+  {% if demande.commentaire_animateur %}<section class="ui-card availability-response-comment"><h2>Commentaire de l’animateur</h2><p>{{ demande.commentaire_animateur|linebreaksbr }}</p></section>{% endif %}
+  <section class="ui-card availability-response-detail-blocks">
+    {% for item in blocs_reponse %}
+      <section class="availability-response-detail-block"><header><h2>{{ item.bloc.libelle }}</h2><span>{{ item.bloc.get_mode_saisie_display }}</span></header><div class="availability-response-detail-dates">{% for groupe in item.groupes %}{% for proposition in groupe.propositions %}<div><time datetime="{{ proposition.date|date:'Y-m-d' }}">{{ proposition.date|date:'D d M' }}</time><strong>{{ proposition.get_creneau_display }}</strong></div>{% endfor %}{% endfor %}</div></section>
+    {% endfor %}
+  </section>
+</main>
+{% endblock %}
