@@ -45,6 +45,12 @@ class CampagnesDisponibilitesDirectionTests(TestCase):
         response = self.client.get(self._url(campagne))
         self.assertContains(response, "Disponibilités")
         self.assertContains(response, "Invitations portail")
+        self.assertContains(response, "Paramètres")
+        self.assertContains(response, "Rechercher un animateur")
+        self.assertContains(response, "Tout sélectionner")
+        self.assertContains(response, "+ Période scolaire")
+        self.assertContains(response, "+ Dates manuelles")
+        self.assertContains(response, "Ouvrir la campagne")
         self.assertEqual(campagne.statut, CampagneDisponibilite.BROUILLON)
 
     def test_plusieurs_blocs_periodes_et_dates_exactes_persistes(self):
