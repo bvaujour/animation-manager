@@ -14,7 +14,8 @@ from collections import Counter, defaultdict
 from django.utils import timezone
 
 from animateurs.models import (
-    Affectation, DestinatairePublicationAffectation, HoraireAffectationJour,
+    Affectation, CampagneDisponibilite, DemandeDisponibilite,
+    DestinatairePublicationAffectation, HoraireAffectationJour,
     ResponsabiliteOperationnelle,
 )
 
@@ -191,14 +192,42 @@ def actions_actives_animateur(animateur):
                 "date_action": destinataire.instantane_modifie_le if est_modifiee else destinataire.publication.publie_le,
                 "libelle_date": "Mise à jour le" if est_modifiee else "Publiée le",
             })
+    # Les demandes de disponibilités restent leurs propres objets métier. Elles
+    # rejoignent ici le contrat commun du portail, sans créer de modèle Action.
+    demandes = DemandeDisponibilite.objects.filter(
+        animateur=animateur,
+        campagne__statut=CampagneDisponibilite.OUVERTE,
+        statut__in=(
+            DemandeDisponibilite.A_RENSEIGNER,
+            DemandeDisponibilite.BROUILLON,
+        ),
+    ).select_related("campagne").order_by("campagne__ouverte_le", "pk")
+    for demande in demandes:
+        est_brouillon = demande.statut == DemandeDisponibilite.BROUILLON
+        actions.append({
+            "type": "disponibilites_a_terminer" if est_brouillon else "disponibilites_a_renseigner",
+            "id": demande.pk,
+            "titre": "Disponibilités à terminer" if est_brouillon else "Disponibilités à renseigner",
+            "sous_titre": f"Campagne : {demande.campagne.nom}",
+            "libelle_action": "Continuer" if est_brouillon else "Répondre",
+            "date_action": demande.campagne.ouverte_le or demande.cree_le,
+            "tri_date": demande.campagne.ouverte_le or demande.cree_le,
+            "est_demande_disponibilite": True,
+        })
     priorites = {
         "annulation_affectation_a_prendre_en_compte": 0,
         "affectation_modifiee_a_reconfirmer": 1,
         "nouvelle_affectation_a_confirmer": 2,
+        "disponibilites_a_renseigner": 3,
+        "disponibilites_a_terminer": 3,
     }
     return sorted(
         actions,
-        key=lambda action: (priorites[action["type"]], action["periode"].debut, action["id"]),
+        key=lambda action: (
+            priorites[action["type"]],
+            action["tri_date"] if "tri_date" in action else action["periode"].debut,
+            action["id"],
+        ),
     )
 
 

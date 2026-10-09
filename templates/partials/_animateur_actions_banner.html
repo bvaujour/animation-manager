@@ -3,8 +3,8 @@
     <div>
         <strong>{{ actions_a_faire_count }} action{{ actions_a_faire_count|pluralize }} à faire</strong>
         <span class="animator-assignment-alert-title">{{ action_a_faire_prioritaire.titre }}</span>
-        <span>{{ action_a_faire_prioritaire.periode.nom }} · {{ action_a_faire_prioritaire.libelle_date }} {{ action_a_faire_prioritaire.date_action|date:'d/m à H:i' }}</span>
+        {% if action_a_faire_prioritaire.est_demande_disponibilite %}<span>{{ action_a_faire_prioritaire.sous_titre }}</span>{% else %}<span>{{ action_a_faire_prioritaire.periode.nom }} · {{ action_a_faire_prioritaire.libelle_date }} {{ action_a_faire_prioritaire.date_action|date:'d/m à H:i' }}</span>{% endif %}
     </div>
-    <a class="btn {% if apercu_portail %}btn-secondary{% else %}btn-primary{% endif %}" href="{% url 'affectation_a_confirmer' action_a_faire_prioritaire.id %}{{ apercu_query_prefix|default:'' }}">Consulter</a>
+    {% if action_a_faire_prioritaire.est_demande_disponibilite %}<a class="btn {% if apercu_portail %}btn-secondary{% else %}btn-primary{% endif %}" href="{% url 'demande_disponibilite_repondre' action_a_faire_prioritaire.id %}{{ apercu_query_prefix|default:'' }}">{{ action_a_faire_prioritaire.libelle_action }}</a>{% else %}<a class="btn {% if apercu_portail %}btn-secondary{% else %}btn-primary{% endif %}" href="{% url 'affectation_a_confirmer' action_a_faire_prioritaire.id %}{{ apercu_query_prefix|default:'' }}">Consulter</a>{% endif %}
 </section>
 {% endif %}

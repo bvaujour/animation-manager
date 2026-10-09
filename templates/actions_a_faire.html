@@ -9,7 +9,7 @@
   {% include "partials/_animateur_actions_banner.html" %}
   <section class="animator-assignment-detail" aria-label="Actions en attente">
     {% for action in actions %}
-      <article><strong>{{ action.titre }}</strong><span>{{ action.periode.nom }} · {{ action.libelle_date }} {{ action.date_action|date:'d/m/Y à H:i' }}</span><a class="btn btn-primary" href="{% url 'affectation_a_confirmer' action.id %}{{ apercu_query_prefix|default:'' }}">Consulter</a></article>
+      <article><strong>{{ action.titre }}</strong>{% if action.est_demande_disponibilite %}<span>{{ action.sous_titre }}</span><a class="btn btn-primary" href="{% url 'demande_disponibilite_repondre' action.id %}{{ apercu_query_prefix|default:'' }}">{{ action.libelle_action }}</a>{% else %}<span>{{ action.periode.nom }} · {{ action.libelle_date }} {{ action.date_action|date:'d/m/Y à H:i' }}</span><a class="btn btn-primary" href="{% url 'affectation_a_confirmer' action.id %}{{ apercu_query_prefix|default:'' }}">Consulter</a>{% endif %}</article>
     {% empty %}
       <p>Aucune action en attente.</p>
     {% endfor %}
