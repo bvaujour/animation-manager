@@ -177,19 +177,25 @@ def cloturer_campagne(campagne):
 
 
 @transaction.atomic
-def creer_demande_modification(animateur, propositions, *, commentaire_animateur="", demande_precedente=None):
+def creer_demande_modification(
+    animateur, propositions, *, commentaire_animateur="", demande_precedente=None,
+    dates_campagne=None,
+):
     """Crée un brouillon indépendant portant seulement sur les dates voulues.
 
     ``propositions`` est un mapping ``date -> creneau``. L'instantané
     officiel est pris ici, avant toute modification éventuelle du brouillon.
     """
     valeurs = dict(propositions)
+    dates_campagne = dict(dates_campagne or {})
     if not valeurs:
         raise ValidationError("Une demande de modification doit contenir au moins une date.")
     if any(not isinstance(jour, datetime.date) for jour in valeurs):
         raise ValidationError("Les dates de disponibilité sont invalides.")
     if any(valeur not in dict(PropositionDisponibiliteDate.CRENEAUX) for valeur in valeurs.values()):
         raise ValidationError("Un créneau de disponibilité est invalide.")
+    if any(jour not in valeurs or date_campagne.date != jour for jour, date_campagne in dates_campagne.items()):
+        raise ValidationError("Les dates de campagne de la correction sont invalides.")
     demande = DemandeDisponibilite.objects.create(
         animateur=animateur,
         nature=DemandeDisponibilite.MODIFICATION,
@@ -203,7 +209,7 @@ def creer_demande_modification(animateur, propositions, *, commentaire_animateur
     )
     PropositionDisponibiliteDate.objects.bulk_create([
         PropositionDisponibiliteDate(
-            demande=demande, date=jour, creneau=valeurs[jour],
+            demande=demande, date_campagne=dates_campagne.get(jour), date=jour, creneau=valeurs[jour],
             etait_disponible=_est_officiellement_disponible(officielles, jour),
         )
         for jour in jours
@@ -279,7 +285,7 @@ def refuser_demande(demande, *, traite_par, commentaire_direction=""):
     return demande
 
 
-def creer_version_correction(demande, propositions, *, commentaire_animateur=""):
+def creer_version_correction(demande, propositions, *, commentaire_animateur="", dates_campagne=None):
     """Crée une nouvelle version plutôt que de rouvrir une réponse figée."""
     if demande.statut != DemandeDisponibilite.A_CORRIGER:
         raise ValidationError("Une nouvelle version est possible après une demande de correction.")
@@ -288,6 +294,7 @@ def creer_version_correction(demande, propositions, *, commentaire_animateur="")
         propositions,
         commentaire_animateur=commentaire_animateur,
         demande_precedente=demande,
+        dates_campagne=dates_campagne,
     )
 
 
@@ -303,10 +310,15 @@ def demander_correction_et_creer_version(demande, *, traite_par, commentaire_dir
         proposition.date: proposition.creneau
         for proposition in demande.propositions.select_for_update().all()
     }
+    dates_campagne = {
+        proposition.date: proposition.date_campagne
+        for proposition in demande.propositions.select_related("date_campagne").all()
+        if proposition.date_campagne_id
+    }
     originale = demander_correction(
         demande, traite_par=traite_par, commentaire_direction=commentaire_direction.strip()
     )
-    return creer_version_correction(originale, propositions)
+    return creer_version_correction(originale, propositions, dates_campagne=dates_campagne)
 
 
 def analyser_application_demande(demande):

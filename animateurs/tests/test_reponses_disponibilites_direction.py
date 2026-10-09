@@ -137,6 +137,10 @@ class ReponsesDisponibilitesDirectionTests(TestCase):
         self.assertEqual(correction.statut, DemandeDisponibilite.BROUILLON)
         self.assertIsNone(correction.campagne_id)
         self.assertEqual(
+            list(correction.propositions.values_list("date_campagne_id", flat=True)),
+            list(self.envoyee.propositions.values_list("date_campagne_id", flat=True)),
+        )
+        self.assertEqual(
             list(correction.propositions.values_list("date", "creneau")),
             list(self.envoyee.propositions.values_list("date", "creneau")),
         )
@@ -146,6 +150,13 @@ class ReponsesDisponibilitesDirectionTests(TestCase):
         page = self.client.get(reverse("demande_disponibilite_repondre", args=[correction.pk]))
         self.assertContains(page, "Correction demandée")
         self.assertContains(page, "Vérifie les mercredis.")
+        journee = correction.propositions.get(date=self.date_journee.date)
+        self.assertNotIn("Matin", page.content.decode().split(f'name=\"creneau_{journee.pk}\"', 1)[1].split("</article>", 1)[0])
+        self.client.post(reverse("demande_disponibilite_repondre", args=[correction.pk]), {
+            "action": "brouillon", f"creneau_{journee.pk}": PropositionDisponibiliteDate.MATIN,
+        })
+        journee.refresh_from_db()
+        self.assertEqual(journee.creneau, PropositionDisponibiliteDate.JOURNEE)
 
     def test_validation_refus_et_actions_equipe(self):
         self.assertEqual(actions_disponibilites_a_traiter(), [self.envoyee])

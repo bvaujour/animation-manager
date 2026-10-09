@@ -1026,11 +1026,22 @@ def campagne_disponibilite_detail(request, campagne_id):
         DemandeDisponibilite.REFUSEE,
     }
     for demande in demandes:
-        demande.peut_voir_reponse = demande.statut in statuts_reponse
+        courante = demande
+        suivante = courante.versions_suivantes.order_by("cree_le", "pk").first()
+        while suivante is not None:
+            courante = suivante
+            suivante = courante.versions_suivantes.order_by("cree_le", "pk").first()
+        demande.version_courante = courante
+        demande.peut_voir_reponse = courante.statut in statuts_reponse
+        demande.libelle_statut = (
+            "Correction en cours"
+            if courante.nature == DemandeDisponibilite.MODIFICATION and courante.statut == DemandeDisponibilite.BROUILLON
+            else ("Nouvelle réponse reçue" if courante is not demande and courante.statut == DemandeDisponibilite.ENVOYEE else courante.get_statut_display())
+        )
     resume_demandes = {
         "envoyees": sum(demande.peut_voir_reponse for demande in demandes),
-        "brouillons": sum(demande.statut == DemandeDisponibilite.BROUILLON for demande in demandes),
-        "a_renseigner": sum(demande.statut == DemandeDisponibilite.A_RENSEIGNER for demande in demandes),
+        "brouillons": sum(demande.version_courante.statut == DemandeDisponibilite.BROUILLON for demande in demandes),
+        "a_renseigner": sum(demande.version_courante.statut == DemandeDisponibilite.A_RENSEIGNER for demande in demandes),
     }
     return render(request, "campagne_disponibilite_detail.html", {
         "active_page": "gestion", "gestion_onglet": "disponibilites", "campagne": campagne,
