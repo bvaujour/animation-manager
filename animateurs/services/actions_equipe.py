@@ -19,7 +19,9 @@ from animateurs.models import (
     DestinatairePublicationAffectation, HoraireAffectationJour,
     PropositionDisponibiliteDate, ResponsabiliteOperationnelle,
 )
-from animateurs.services.demandes_disponibilites import campagne_origine_demande
+from animateurs.services.demandes_disponibilites import (
+    campagne_origine_demande, demande_modification_autonome_active,
+)
 
 
 def _normaliser_detail_affectation(detail):
@@ -196,27 +198,34 @@ def actions_actives_animateur(animateur):
             })
     # Les demandes de disponibilités restent leurs propres objets métier. Elles
     # rejoignent ici le contrat commun du portail, sans créer de modèle Action.
-    demandes = DemandeDisponibilite.objects.filter(
-        Q(
-            campagne__statut=CampagneDisponibilite.OUVERTE,
-            statut__in=(DemandeDisponibilite.A_RENSEIGNER, DemandeDisponibilite.BROUILLON),
-        ) | Q(
-            campagne__isnull=True,
-            nature=DemandeDisponibilite.MODIFICATION,
-            statut=DemandeDisponibilite.BROUILLON,
-            demande_precedente__statut=DemandeDisponibilite.A_CORRIGER,
-        ),
+    demandes = list(DemandeDisponibilite.objects.filter(
+        campagne__statut=CampagneDisponibilite.OUVERTE,
+        statut__in=(DemandeDisponibilite.A_RENSEIGNER, DemandeDisponibilite.BROUILLON),
         animateur=animateur,
-    ).select_related("campagne", "demande_precedente__campagne").order_by("cree_le", "pk")
+    ).select_related("campagne", "demande_precedente__campagne").order_by("cree_le", "pk"))
+    # Une correction créée après une réponse de campagne est hors campagne,
+    # mais garde son contexte via la chaîne historique.
+    for correction in DemandeDisponibilite.objects.filter(
+        animateur=animateur,
+        campagne__isnull=True,
+        nature=DemandeDisponibilite.MODIFICATION,
+        statut=DemandeDisponibilite.BROUILLON,
+        demande_precedente__statut=DemandeDisponibilite.A_CORRIGER,
+    ).select_related("demande_precedente__campagne").order_by("cree_le", "pk"):
+        if campagne_origine_demande(correction) is not None:
+            demandes.append(correction)
+    demande_autonome = demande_modification_autonome_active(animateur)
+    if demande_autonome is not None and demande_autonome.statut == DemandeDisponibilite.BROUILLON:
+        demandes.append(demande_autonome)
     for demande in demandes:
-        est_correction = demande.campagne_id is None
+        est_correction = demande.campagne_id is None and demande.demande_precedente_id is not None
         est_brouillon = demande.statut == DemandeDisponibilite.BROUILLON
         campagne_origine = campagne_origine_demande(demande)
         actions.append({
-            "type": "disponibilites_a_corriger" if est_correction else ("disponibilites_a_terminer" if est_brouillon else "disponibilites_a_renseigner"),
+            "type": "disponibilites_a_corriger" if est_correction else ("modification_disponibilites_a_terminer" if demande.campagne_id is None else ("disponibilites_a_terminer" if est_brouillon else "disponibilites_a_renseigner")),
             "id": demande.pk,
-            "titre": "Disponibilités à corriger" if est_correction else ("Disponibilités à terminer" if est_brouillon else "Disponibilités à renseigner"),
-            "sous_titre": f"Campagne : {campagne_origine.nom}" if campagne_origine else "Demande de correction",
+            "titre": "Disponibilités à corriger" if est_correction else ("Modification de disponibilités à terminer" if demande.campagne_id is None else ("Disponibilités à terminer" if est_brouillon else "Disponibilités à renseigner")),
+            "sous_titre": f"Campagne : {campagne_origine.nom}" if campagne_origine else ("Demande de correction" if est_correction else "Demande de modification"),
             "libelle_action": "Corriger" if est_correction else ("Continuer" if est_brouillon else "Répondre"),
             "date_action": demande.cree_le,
             "tri_date": demande.cree_le,
@@ -227,6 +236,7 @@ def actions_actives_animateur(animateur):
         "affectation_modifiee_a_reconfirmer": 1,
         "nouvelle_affectation_a_confirmer": 2,
         "disponibilites_a_corriger": 3,
+        "modification_disponibilites_a_terminer": 4,
         "disponibilites_a_renseigner": 4,
         "disponibilites_a_terminer": 4,
     }

@@ -212,6 +212,7 @@
             <a class="animator-home-card-link animator-home-card-link--sorties" href="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}">Voir {% if infos_sorties_count == 1 %}la sortie{% else %}les sorties{% endif %} <span aria-hidden="true">›</span></a>
         </article>
     </section>
+    {% include "partials/_disponibilites_officielles.html" %}
 {% comment %}Les blocs historiques sont désormais répartis dans les espaces dédiés.{% endcomment %}
     {% if False %}
 
@@ -239,24 +240,7 @@
             </div>
         </article>
 
-        <article class="animator-panel animator-compact-card animator-availability-card disponibilites-card" data-animateur-id="{{ animateur.id }}">
-            <header class="animator-panel-header"><h2>Mes disponibilités</h2></header>
-            <p class="animator-availability-line">
-                <strong>{{ disponibilites.jours_disponibles }}</strong> disponible{{ disponibilites.jours_disponibles|pluralize }}
-                <span>·</span>
-                <strong>{{ disponibilites.jours_travailles }}</strong> affecté{{ disponibilites.jours_travailles|pluralize }}
-                <span>·</span>
-                <strong>{{ disponibilites.jours_libres }}</strong> libre{{ disponibilites.jours_libres|pluralize }}
-            </p>
-            {% if apercu_portail %}
-            <p class="animator-readonly-note">Lecture seule : les disponibilités ne peuvent pas être modifiées depuis un aperçu.</p>
-            {% else %}<details class="animator-inline-editor">
-                <summary>Modifier mes disponibilités</summary>
-                <p id="disponibilites-status" class="form-error" role="status"></p>
-                <div id="mes-disponibilites-root"></div>
-                <button id="enregistrer-disponibilites" class="btn btn-primary" type="button">Enregistrer</button>
-            </details>{% endif %}
-        </article>
+        {% include "partials/_disponibilites_officielles.html" %}
 
         <article class="animator-panel animator-compact-card animator-documents-card">
             <header class="animator-panel-header"><h2>Documents</h2></header>

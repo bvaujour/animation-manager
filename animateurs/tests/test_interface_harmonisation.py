@@ -371,7 +371,6 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             "static/js/animateurs.js",
             "static/js/documents-management.js",
             "static/js/documents-partages.js",
-            "static/js/mes-disponibilites.js",
             "static/js/planning.js",
             "static/js/common/week-picker.js",
         ]
@@ -412,16 +411,12 @@ class InterfaceHarmonisationTests(ConnexionTestCase):
             for classe in classes:
                 self.assertIn(classe, contenu, fichier)
 
-    def test_les_disponibilites_sont_une_liste_chronologique_centree_sur_la_semaine_courante(self):
+    def test_ancien_editeur_direct_des_disponibilites_n_est_plus_charge(self):
         template = (Path(settings.BASE_DIR) / "templates/mes_disponibilites.html").read_text(encoding="utf-8")
-        script = (Path(settings.BASE_DIR) / "static/js/mes-disponibilites.js").read_text(encoding="utf-8")
-
         self.assertIn('picker_mode="none"', template)
-        self.assertIn('<article class="availability-period availability-week-card', script)
-        self.assertNotIn('<details class="availability-period"', script)
-        self.assertIn("sort((a, b) => a.debut.localeCompare(b.debut))", script)
-        self.assertIn("periode.debut <= aujourdHui && periode.fin >= aujourdHui", script)
-        self.assertIn("scrollIntoView({block:", script)
+        self.assertIn("_disponibilites_officielles.html", template)
+        self.assertNotIn("enregistrer-disponibilites", template)
+        self.assertFalse((Path(settings.BASE_DIR) / "static/js/mes-disponibilites.js").exists())
 
     def test_le_script_email_definit_l_affichage_de_configuration(self):
         contenu = (Path(settings.BASE_DIR) / "static/js/emails.js").read_text(encoding="utf-8")

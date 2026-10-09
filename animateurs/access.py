@@ -84,6 +84,12 @@ def lecture_partagee_api(view):
 
 
 def disponibilites_personnelles_api(view):
+    """Lecture personnelle, écriture réservée à la direction.
+
+    Les disponibilités officielles alimentent directement le planning. Un
+    animateur peut les consulter, mais ses modifications passent désormais par
+    une ``DemandeDisponibilite`` traitée par la direction.
+    """
     @wraps(view)
     def wrapper(request, animateur_id, *args, **kwargs):
         if not request.user.is_authenticated:
@@ -95,5 +101,9 @@ def disponibilites_personnelles_api(view):
         profil = profil_utilisateur(request.user)
         if profil is None or profil.pk != animateur_id:
             return _refus_json("Tu peux uniquement modifier tes propres disponibilités.")
+        if request.method != "GET":
+            return _refus_json(
+                "Les disponibilités officielles sont modifiées après validation par la direction."
+            )
         return view(request, animateur_id, *args, **kwargs)
     return wrapper

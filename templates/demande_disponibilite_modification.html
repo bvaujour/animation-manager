@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Demander une modification{% endblock %}
+{% block body_class %}animator-dashboard-body availability-response-body{% endblock %}
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/demande-disponibilite.css' %}?v={{ asset_version }}">
+{% endblock %}
+{% block content %}
+<main id="main-content" class="availability-response-page">
+    <header class="availability-response-header">
+        <p class="availability-response-eyebrow">Mes disponibilités officielles restent inchangées</p>
+        <h1>Demander une modification</h1>
+        <p class="availability-response-help">Choisis les jours où tu souhaites être disponible. La direction devra valider cette demande.</p>
+    </header>
+    <form method="post" class="availability-response-form">
+        {% csrf_token %}
+        {% for item in periodes_modification %}
+        <section class="availability-block">
+            <div class="availability-block-heading"><h2>{{ item.periode.nom }}</h2></div>
+            <div class="availability-date-list availability-date-list--direct">
+                {% for jour in item.jours %}
+                <label class="availability-date">
+                    <span><strong>{{ jour.date|date:"l j F" }}</strong><small>Journée entière</small></span>
+                    <input type="checkbox" name="jour_{{ jour.date|date:'Y-m-d' }}" value="journee"{% if jour.creneau == 'journee' %} checked{% endif %}>
+                    <span>Disponible</span>
+                </label>
+                {% endfor %}
+            </div>
+        </section>
+        {% empty %}<p class="availability-response-notice">Aucune date actuelle ou future n’est disponible dans le calendrier.</p>{% endfor %}
+        <section class="availability-comment">
+            <label for="commentaire_animateur">Une précision à ajouter ?</label>
+            <textarea id="commentaire_animateur" name="commentaire_animateur" rows="3">{{ demande.commentaire_animateur }}</textarea>
+        </section>
+        <div class="availability-submit">
+            <button type="submit" class="availability-draft" name="action" value="brouillon">Enregistrer le brouillon</button>
+            <button type="submit" class="availability-send" name="action" value="envoyer">Envoyer la demande</button>
+        </div>
+    </form>
+</main>
+{% endblock %}

@@ -63,7 +63,11 @@ from .services.demandes_disponibilites import (
     appliquer_demande_validee,
     cloturer_campagne,
     demander_correction_et_creer_version,
+    demande_modification_autonome_active,
+    enregistrer_modification_autonome,
     envoyer_demande,
+    jours_modification_autonome_autorises,
+    obtenir_ou_creer_brouillon_modification_autonome,
     ouvrir_campagne,
     refuser_demande,
     campagne_origine_demande,
@@ -365,6 +369,7 @@ def accueil(request):
                 if _publication_affectations_disponible() else None
             )
             _ajouter_actions_portail(contexte, animateur)
+            _ajouter_disponibilites_personnelles(contexte, animateur)
             _ajouter_contexte_apercu(contexte, animateur, apercu)
     return render(request, "accueil.html", contexte)
 
@@ -375,6 +380,18 @@ def _ajouter_actions_portail(contexte, animateur):
     contexte["actions_a_faire"] = actions
     contexte["actions_a_faire_count"] = len(actions)
     contexte["action_a_faire_prioritaire"] = actions[0] if actions else None
+
+
+def _ajouter_disponibilites_personnelles(contexte, animateur):
+    """Expose l'officiel et, séparément, l'éventuelle demande autonome."""
+    if animateur is None:
+        contexte["disponibilites_officielles"] = []
+        contexte["demande_modification_active"] = None
+        return
+    contexte["disponibilites_officielles"] = list(
+        animateur.disponibilites.order_by("debut", "fin", "pk")
+    )
+    contexte["demande_modification_active"] = demande_modification_autonome_active(animateur)
 
 
 def _contexte_portail_animateur(request, active_page):
@@ -393,6 +410,7 @@ def _contexte_portail_animateur(request, active_page):
         _navigation_semaine_portail(request, contexte["semaine"])
         contexte["semaine_active"] = contexte["semaine"]["debut"]
         _ajouter_actions_portail(contexte, animateur)
+        _ajouter_disponibilites_personnelles(contexte, animateur)
     return _ajouter_contexte_apercu(contexte, animateur, apercu)
 
 
@@ -502,14 +520,13 @@ def _enregistrer_brouillon_disponibilites(demande, donnees, commentaire):
         valeur = donnees.get(f"creneau_{proposition.pk}", proposition.creneau)
         bloc = proposition.date_campagne.bloc if proposition.date_campagne_id else None
         if valeur not in valeurs_autorisees or (
-            bloc is not None
-            and bloc.mode_saisie == CampagneDisponibiliteBloc.JOURNEE
-            and valeur not in {
-                PropositionDisponibiliteDate.NON_RENSEIGNE,
-                PropositionDisponibiliteDate.INDISPONIBLE,
-                PropositionDisponibiliteDate.JOURNEE,
-            }
-        ):
+            (bloc is None and demande.nature == DemandeDisponibilite.MODIFICATION)
+            or (bloc is not None and bloc.mode_saisie == CampagneDisponibiliteBloc.JOURNEE)
+        ) and valeur not in {
+            PropositionDisponibiliteDate.NON_RENSEIGNE,
+            PropositionDisponibiliteDate.INDISPONIBLE,
+            PropositionDisponibiliteDate.JOURNEE,
+        }:
             raise ValidationError("Une valeur de disponibilité est invalide.")
         if valeur != proposition.creneau:
             proposition.creneau = valeur
@@ -590,6 +607,79 @@ def demande_disponibilite_repondre(request, demande_id):
         "demande_precedente": demande.demande_precedente,
     })
     return render(request, "demande_disponibilite_repondre.html", retour)
+
+
+def demande_disponibilite_modifier(request):
+    """Prépare une modification autonome sans jamais écrire l'officiel."""
+    if est_direction(request.user) and request.GET.get("apercu_portail") != "1":
+        return redirect("campagnes_disponibilites")
+    animateur, apercu = resoudre_portail_consulte(request)
+    if animateur is None:
+        raise PermissionDenied("Aucun profil animateur n’est associé à ce compte.")
+    active = demande_modification_autonome_active(animateur)
+    if active is not None and active.demande_precedente_id:
+        return redirect("demande_disponibilite_repondre", demande_id=active.pk)
+    if active is not None and active.statut == DemandeDisponibilite.ENVOYEE:
+        return redirect("mon_profil")
+    if apercu:
+        raise PermissionDenied("L’aperçu est strictement en lecture seule.")
+    demande, _ = obtenir_ou_creer_brouillon_modification_autonome(animateur)
+
+    jours_autorises = jours_modification_autonome_autorises()
+    periodes = []
+    for periode in PeriodeScolaire.objects.filter(fin__gte=timezone.localdate()).order_by("debut", "ordre", "pk"):
+        jours = [
+            periode.debut + datetime.timedelta(days=offset)
+            for offset in range((periode.fin - periode.debut).days + 1)
+            if periode.debut + datetime.timedelta(days=offset) in jours_autorises
+        ]
+        if jours:
+            periodes.append({"periode": periode, "jours": jours})
+
+    propositions = {p.date: p for p in demande.propositions.all()}
+    officielles = list(animateur.disponibilites.all())
+    def est_officielle(jour):
+        return any(plage.debut <= jour <= plage.fin for plage in officielles)
+
+    if request.method == "POST":
+        try:
+            faux_jours = []
+            for cle in request.POST:
+                if cle.startswith("jour_"):
+                    jour = parse_date(cle.removeprefix("jour_"))
+                    if jour is None or jour not in jours_autorises:
+                        faux_jours.append(cle)
+            if faux_jours:
+                raise ValidationError("Une date demandée est passée ou ne fait pas partie des périodes autorisées.")
+            souhaits = {
+                jour: (PropositionDisponibiliteDate.JOURNEE if f"jour_{jour.isoformat()}" in request.POST else PropositionDisponibiliteDate.INDISPONIBLE)
+                for jour in jours_autorises
+            }
+            enregistrer_modification_autonome(demande, souhaits)
+            demande.commentaire_animateur = request.POST.get("commentaire_animateur", "").strip()
+            demande.save(update_fields=["commentaire_animateur"])
+            if request.POST.get("action") == "envoyer":
+                envoyer_demande(demande)
+                messages.success(request, "Ta demande de modification a été envoyée.")
+                return redirect("mon_profil")
+            messages.success(request, "Brouillon enregistré.")
+        except (ValidationError, DemandeDisponibiliteIncomplete) as exc:
+            messages.error(request, exc.messages[0] if isinstance(exc, ValidationError) else str(exc))
+        return redirect("demande_disponibilite_modifier")
+
+    for item in periodes:
+        choix = []
+        for jour in item["jours"]:
+            proposition = propositions.get(jour)
+            choix.append({
+                "date": jour,
+                "creneau": proposition.creneau if proposition is not None
+                else (PropositionDisponibiliteDate.JOURNEE if est_officielle(jour) else PropositionDisponibiliteDate.INDISPONIBLE),
+            })
+        item["jours"] = choix
+    contexte = _contexte_portail_animateur(request, "disponibilites_modification")
+    contexte.update({"demande": demande, "periodes_modification": periodes})
+    return render(request, "demande_disponibilite_modification.html", contexte)
 
 
 def _affectations_periode(periode, animateur=None):
@@ -1060,23 +1150,8 @@ def campagne_disponibilite_detail(request, campagne_id):
     })
 
 
-def campagne_disponibilite_reponse(request, campagne_id, demande_id):
-    """Consultation et traitement direction d'une réponse envoyée."""
-    campagne = get_object_or_404(CampagneDisponibilite, pk=campagne_id)
-    demande = get_object_or_404(
-        DemandeDisponibilite.objects.select_related("animateur", "campagne").prefetch_related(
-            "propositions__date_campagne__bloc"
-        ),
-        pk=demande_id,
-        statut__in=(
-            DemandeDisponibilite.ENVOYEE,
-            DemandeDisponibilite.A_CORRIGER,
-            DemandeDisponibilite.VALIDEE,
-            DemandeDisponibilite.REFUSEE,
-        ),
-    )
-    if campagne_origine_demande(demande) != campagne:
-        raise Http404("Cette demande n’appartient pas à la campagne.")
+def _detail_demande_disponibilite_direction(request, demande, campagne=None):
+    """Moteur commun de consultation/traitement, avec ou sans campagne."""
     if request.method == "POST":
         commentaire = request.POST.get("commentaire_direction", "").strip()
         try:
@@ -1101,7 +1176,9 @@ def campagne_disponibilite_reponse(request, campagne_id, demande_id):
             messages.error(request, "Cette réponse contient des demi-journées non applicables aux disponibilités officielles.")
         except (ValidationError, DemandeDisponibiliteIncomplete) as exc:
             messages.error(request, exc.messages[0] if isinstance(exc, ValidationError) else str(exc))
-        return redirect("campagne_disponibilite_reponse", campagne_id=campagne.pk, demande_id=demande.pk)
+        if campagne is not None:
+            return redirect("campagne_disponibilite_reponse", campagne_id=campagne.pk, demande_id=demande.pk)
+        return redirect("demande_disponibilite_traiter", demande_id=demande.pk)
     blocs, propositions = _groupes_reponse_disponibilites(demande)
     resume = _resume_reponse_disponibilites(propositions)
     elements_resume = [
@@ -1125,6 +1202,45 @@ def campagne_disponibilite_reponse(request, campagne_id, demande_id):
         "impact": impact,
         "peut_traiter": demande.statut == DemandeDisponibilite.ENVOYEE,
     })
+
+
+def campagne_disponibilite_reponse(request, campagne_id, demande_id):
+    """Consultation et traitement direction d'une réponse de campagne."""
+    campagne = get_object_or_404(CampagneDisponibilite, pk=campagne_id)
+    demande = get_object_or_404(
+        DemandeDisponibilite.objects.select_related("animateur", "campagne").prefetch_related(
+            "propositions__date_campagne__bloc"
+        ),
+        pk=demande_id,
+        statut__in=(
+            DemandeDisponibilite.ENVOYEE,
+            DemandeDisponibilite.A_CORRIGER,
+            DemandeDisponibilite.VALIDEE,
+            DemandeDisponibilite.REFUSEE,
+        ),
+    )
+    if campagne_origine_demande(demande) != campagne:
+        raise Http404("Cette demande n’appartient pas à la campagne.")
+    return _detail_demande_disponibilite_direction(request, demande, campagne)
+
+
+def demande_disponibilite_traiter(request, demande_id):
+    """Traitement direction d'une demande autonome sans campagne."""
+    demande = get_object_or_404(
+        DemandeDisponibilite.objects.select_related("animateur", "campagne").prefetch_related(
+            "propositions__date_campagne__bloc"
+        ),
+        pk=demande_id,
+        campagne__isnull=True,
+        nature=DemandeDisponibilite.MODIFICATION,
+        statut__in=(
+            DemandeDisponibilite.ENVOYEE,
+            DemandeDisponibilite.A_CORRIGER,
+            DemandeDisponibilite.VALIDEE,
+            DemandeDisponibilite.REFUSEE,
+        ),
+    )
+    return _detail_demande_disponibilite_direction(request, demande)
 
 
 def apercu_portail_animateur(request):
@@ -1319,6 +1435,7 @@ def mon_profil(request):
             "semaine_active": semaine_active,
     }
     _ajouter_actions_portail(contexte, animateur)
+    _ajouter_disponibilites_personnelles(contexte, animateur)
     return render(request, "mon_profil.html", _ajouter_contexte_apercu(contexte, animateur, apercu))
 
 

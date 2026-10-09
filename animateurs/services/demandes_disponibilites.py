@@ -15,9 +15,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from animateurs.models import (
+    Animateur,
     CampagneDisponibilite,
     DemandeDisponibilite,
     Disponibilite,
+    PeriodeScolaire,
     PropositionDisponibiliteDate,
 )
 
@@ -61,6 +63,125 @@ def campagne_origine_demande(demande):
             return courante.campagne
         courante = courante.demande_precedente
     return None
+
+
+def version_courante_demande(demande):
+    """Suit une chaîne de versions sans supposer qu'elle est bien formée."""
+    courante = demande
+    deja_vues = set()
+    while courante is not None and courante.pk not in deja_vues:
+        deja_vues.add(courante.pk)
+        suivante = courante.versions_suivantes.order_by("cree_le", "pk").first()
+        if suivante is None:
+            return courante
+        courante = suivante
+    return demande
+
+
+def demande_modification_autonome_active(animateur, *, verrouiller=False):
+    """Retourne l'unique chaîne autonome encore en cours pour un animateur.
+
+    Une correction de campagne est volontairement exclue : sa racine porte une
+    campagne, tandis qu'une demande spontanée commence hors campagne.
+    """
+    racines = DemandeDisponibilite.objects.filter(
+        animateur=animateur,
+        nature=DemandeDisponibilite.MODIFICATION,
+        campagne__isnull=True,
+        demande_precedente__isnull=True,
+    ).order_by("cree_le", "pk")
+    if verrouiller:
+        racines = racines.select_for_update()
+    for racine in racines:
+        courante = version_courante_demande(racine)
+        if courante.statut in {DemandeDisponibilite.BROUILLON, DemandeDisponibilite.ENVOYEE}:
+            return courante
+    return None
+
+
+def jours_modification_autonome_autorises(*, aujourd_hui=None):
+    """Jours ouvrés présents ou futurs issus du calendrier scolaire connu."""
+    aujourd_hui = aujourd_hui or timezone.localdate()
+    jours = set()
+    for periode in PeriodeScolaire.objects.filter(fin__gte=aujourd_hui).order_by("debut", "ordre", "pk"):
+        jour = max(periode.debut, aujourd_hui)
+        while jour <= periode.fin:
+            if jour.weekday() < 5:
+                jours.add(jour)
+            jour += datetime.timedelta(days=1)
+    return jours
+
+
+@transaction.atomic
+def obtenir_ou_creer_brouillon_modification_autonome(animateur):
+    """Sérialise la création afin que deux clics ne créent pas deux brouillons."""
+    animateur = Animateur.objects.select_for_update().get(pk=animateur.pk)
+    demande = demande_modification_autonome_active(animateur, verrouiller=True)
+    if demande is not None:
+        return demande, False
+    return DemandeDisponibilite.objects.create(
+        animateur=animateur,
+        nature=DemandeDisponibilite.MODIFICATION,
+        statut=DemandeDisponibilite.BROUILLON,
+    ), True
+
+
+@transaction.atomic
+def enregistrer_modification_autonome(demande, souhaits):
+    """Met à jour un brouillon autonome en ne gardant que le vrai différentiel.
+
+    Le snapshot d'une ligne déjà créée reste immuable ; seuls les nouveaux
+    écarts prennent l'état officiel observé au moment de leur apparition.
+    """
+    demande = DemandeDisponibilite.objects.select_for_update().get(pk=demande.pk)
+    if (
+        demande.nature != DemandeDisponibilite.MODIFICATION
+        or demande.campagne_id
+        or demande.demande_precedente_id
+        or demande.statut != DemandeDisponibilite.BROUILLON
+    ):
+        raise ValidationError("Cette demande de modification ne peut pas être modifiée.")
+    jours_autorises = jours_modification_autonome_autorises()
+    if set(souhaits) - jours_autorises:
+        raise ValidationError("Une date demandée est passée ou ne fait pas partie des périodes autorisées.")
+    if any(valeur not in {PropositionDisponibiliteDate.JOURNEE, PropositionDisponibiliteDate.INDISPONIBLE} for valeur in souhaits.values()):
+        raise ValidationError("Une demande autonome accepte uniquement des journées entières.")
+
+    existantes = {proposition.date: proposition for proposition in demande.propositions.select_for_update()}
+    dates = sorted(set(souhaits) | set(existantes))
+    officielles = list(Disponibilite.objects.filter(
+        animateur=demande.animateur,
+        debut__lte=dates[-1] if dates else timezone.localdate(),
+        fin__gte=dates[0] if dates else timezone.localdate(),
+    )) if dates else []
+    for jour in dates:
+        est_disponible = _est_officiellement_disponible(officielles, jour)
+        souhait = souhaits.get(jour, PropositionDisponibiliteDate.JOURNEE if est_disponible else PropositionDisponibiliteDate.INDISPONIBLE)
+        proposition = existantes.get(jour)
+        if proposition is not None:
+            # La référence d'un brouillon existant est son snapshot, jamais
+            # l'officiel relu aujourd'hui : sinon une modification concurrente
+            # pourrait effacer le conflit à l'insu de l'animateur.
+            choix_initial = (
+                PropositionDisponibiliteDate.JOURNEE if proposition.etait_disponible
+                else PropositionDisponibiliteDate.INDISPONIBLE
+            )
+            if souhait == choix_initial:
+                proposition.delete()
+            elif proposition.creneau != souhait:
+                proposition.creneau = souhait
+                proposition.save(update_fields=["creneau"])
+            continue
+        if (souhait == PropositionDisponibiliteDate.JOURNEE) == est_disponible:
+            continue
+        if proposition is None:
+            PropositionDisponibiliteDate.objects.create(
+                demande=demande,
+                date=jour,
+                creneau=souhait,
+                etait_disponible=est_disponible,
+            )
+    return demande
 
 
 def _est_officiellement_disponible(plages, jour):

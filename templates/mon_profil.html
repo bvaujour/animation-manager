@@ -79,12 +79,7 @@
             </form>
         </section>
 
-        <section class="ui-card fiche-section fiche-card disponibilites-card" data-animateur-id="{{ animateur.id }}">
-            <div class="section-heading-compact"><div><p class="employee-card-label">Disponibilités</p><h2>Mes disponibilités</h2></div></div>
-            <p id="disponibilites-status" class="form-error" role="status"></p>
-            <div id="mes-disponibilites-root"></div>
-            <div class="fiche-actions"><button id="enregistrer-disponibilites" class="btn btn-primary" type="button">Enregistrer mes disponibilités</button></div>
-        </section>
+        {% include "partials/_disponibilites_officielles.html" %}
         <form method="post" action="{% url 'logout' %}" class="profile-form-actions">
             {% csrf_token %}
             <button type="submit" class="btn btn-secondary">Déconnexion</button>
@@ -94,4 +89,4 @@
     {% endif %}
 </main>
 {% endblock %}
-{% block scripts %}{% if animateur and not apercu_portail %}<script src="{% static 'js/mes-disponibilites.js' %}?v={{ asset_version }}"></script>{% endif %}{% endblock %}
+{% block scripts %}{% endblock %}

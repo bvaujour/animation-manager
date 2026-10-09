@@ -2469,7 +2469,14 @@ class PropositionDisponibiliteDate(models.Model):
     def clean(self):
         super().clean()
         if self.date_campagne_id:
-            if self.demande.campagne_id != self.date_campagne.campagne_id:
+            campagne_origine = self.demande.campagne
+            precedente = self.demande.demande_precedente
+            deja_vues = set()
+            while campagne_origine is None and precedente is not None and precedente.pk not in deja_vues:
+                deja_vues.add(precedente.pk)
+                campagne_origine = precedente.campagne
+                precedente = precedente.demande_precedente
+            if campagne_origine != self.date_campagne.campagne:
                 raise ValidationError({"date_campagne": "La date doit appartenir à la campagne de la demande."})
             if self.date != self.date_campagne.date:
                 raise ValidationError({"date": "La date doit correspondre à la date de campagne."})
@@ -2478,6 +2485,11 @@ class PropositionDisponibiliteDate(models.Model):
                 and self.creneau not in {self.NON_RENSEIGNE, self.INDISPONIBLE, self.JOURNEE}
             ):
                 raise ValidationError({"creneau": "Ce bloc accepte uniquement une réponse à la journée."})
+        elif (
+            self.demande.nature == DemandeDisponibilite.MODIFICATION
+            and self.creneau not in {self.NON_RENSEIGNE, self.INDISPONIBLE, self.JOURNEE}
+        ):
+            raise ValidationError({"creneau": "Une demande autonome accepte uniquement une réponse à la journée."})
         if (
             self.demande.statut not in {DemandeDisponibilite.A_RENSEIGNER, DemandeDisponibilite.BROUILLON}
             and self.creneau == self.NON_RENSEIGNE

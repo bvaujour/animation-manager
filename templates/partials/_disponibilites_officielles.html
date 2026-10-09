@@ -1,0 +1,24 @@
+<section class="animator-panel animator-compact-card animator-availability-card">
+    <header class="animator-panel-header"><h2>Mes disponibilités officielles</h2></header>
+    {% if disponibilites_officielles %}
+    <ul class="animator-card-list">
+        {% for disponibilite in disponibilites_officielles %}
+        <li class="animator-list-item"><strong>{{ disponibilite.debut|date:"d/m/Y" }}</strong><small>{% if disponibilite.debut != disponibilite.fin %}au {{ disponibilite.fin|date:"d/m/Y" }}{% else %}Journée entière{% endif %}</small></li>
+        {% endfor %}
+    </ul>
+    {% else %}<p class="animator-empty-state">Aucune disponibilité officielle enregistrée.</p>{% endif %}
+
+    {% if demande_modification_active %}
+        {% if demande_modification_active.demande_precedente_id %}
+        <p class="animator-readonly-note">Une correction est demandée.</p>
+        <a class="btn btn-primary" href="{% url 'demande_disponibilite_repondre' demande_modification_active.pk %}{% if apercu_query_prefix %}{{ apercu_query_prefix }}{% endif %}">Corriger</a>
+        {% elif demande_modification_active.statut == demande_modification_active.BROUILLON %}
+        <p class="animator-readonly-note">Une demande de modification est en cours.</p>
+        <a class="btn btn-primary" href="{% url 'demande_disponibilite_modifier' %}">Continuer</a>
+        {% elif demande_modification_active.statut == demande_modification_active.ENVOYEE %}
+        <p class="animator-readonly-note">Demande envoyée · en attente de traitement par la direction.</p>
+        {% endif %}
+    {% elif not apercu_portail %}
+    <a class="btn btn-primary" href="{% url 'demande_disponibilite_modifier' %}">Demander une modification</a>
+    {% else %}<p class="animator-readonly-note">Lecture seule : les demandes ne peuvent pas être créées depuis un aperçu.</p>{% endif %}
+</section>
