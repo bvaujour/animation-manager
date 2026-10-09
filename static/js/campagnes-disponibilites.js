@@ -40,5 +40,17 @@ document.addEventListener("DOMContentLoaded", () => {
     root.querySelectorAll("[data-close-add]").forEach((button) => {
         button.addEventListener("click", () => { button.closest("details").open = false; });
     });
+    const periodCheckboxes = [...root.querySelectorAll("[data-period-checkbox]")];
+    const periodSubmit = root.querySelector("[data-add-periods]");
+    const updatePeriodSelection = () => {
+        const count = periodCheckboxes.filter((checkbox) => checkbox.checked).length;
+        if (!periodSubmit) return;
+        periodSubmit.disabled = count === 0;
+        periodSubmit.textContent = count
+            ? `Ajouter ${count} période${count > 1 ? "s" : ""} sélectionnée${count > 1 ? "s" : ""}`
+            : "Ajouter les périodes sélectionnées";
+    };
+    periodCheckboxes.forEach((checkbox) => checkbox.addEventListener("change", updatePeriodSelection));
+    updatePeriodSelection();
     updateRecipientCount();
 });

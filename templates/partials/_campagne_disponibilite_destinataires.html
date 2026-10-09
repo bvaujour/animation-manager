@@ -1,0 +1,23 @@
+<section class="ui-card availability-recipients">
+  <details class="availability-recipients-details"{% if not destinataire_ids %} open{% endif %}>
+    <summary>Animateurs destinataires <span>— <b data-recipient-count>{{ destinataire_ids|length }}</b> sélectionné{{ destinataire_ids|length|pluralize }}</span></summary>
+    <div class="availability-recipients-content">
+      <div class="availability-recipient-actions">
+        <button type="button" class="btn btn-ghost btn-small" data-select-all>Tout sélectionner</button>
+        <button type="button" class="btn btn-ghost btn-small" data-clear-all>Tout désélectionner</button>
+      </div>
+      <input class="availability-recipient-search" type="search" placeholder="Rechercher un animateur" aria-label="Rechercher un animateur" data-recipient-search>
+      <div class="availability-recipient-list" aria-label="Liste des animateurs destinataires">
+        {% for animateur in animateurs %}
+          <label class="availability-recipient" data-recipient-name="{{ animateur.prenom }} {{ animateur.nom }}">
+            <input form="campaign-settings-form" type="checkbox" name="animateur_ids" value="{{ animateur.id }}"{% if animateur.id in destinataire_ids %} checked{% endif %}>
+            <span>{{ animateur.prenom }} {{ animateur.nom }}</span>
+          </label>
+        {% empty %}
+          <p class="empty-note">Aucun animateur actif.</p>
+        {% endfor %}
+      </div>
+      <div class="availability-settings-save"><button form="campaign-settings-form" class="btn btn-primary" type="submit">Enregistrer le brouillon</button></div>
+    </div>
+  </details>
+</section>

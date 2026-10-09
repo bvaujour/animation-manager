@@ -811,6 +811,47 @@ def _dates_manuelles(valeur):
     return sorted(dates)
 
 
+def _ajouter_periode_disponibilite(campagne, periode, mode_saisie, dates_existantes):
+    """Copie une période source dans le brouillon, sans dupliquer ses dates."""
+    bloc = CampagneDisponibiliteBloc.objects.create(
+        campagne=campagne, libelle=periode.categorie_vacances or periode.nom,
+        ordre=campagne.blocs.count() + 1, mode_saisie=mode_saisie,
+    )
+    jours = [
+        periode.debut + datetime.timedelta(days=index)
+        for index in range((periode.fin - periode.debut).days + 1)
+        if (periode.debut + datetime.timedelta(days=index)).weekday() < 5
+    ]
+    nouvelles = [jour for jour in jours if jour not in dates_existantes]
+    if not nouvelles:
+        bloc.delete()
+        return False
+    CampagneDisponibiliteDate.objects.bulk_create([
+        CampagneDisponibiliteDate(
+            campagne=campagne, bloc=bloc, date=jour, ordre=index,
+            periode_scolaire_source=periode,
+        ) for index, jour in enumerate(nouvelles, start=1)
+    ])
+    dates_existantes.update(nouvelles)
+    return True
+
+
+def _groupes_periodes_disponibilite(periodes, periodes_deja_ajoutees, *, vacances):
+    """Prépare des libellés de sélection sans modifier les sources calendaires."""
+    groupes = {}
+    for periode in periodes:
+        periode.deja_ajoutee = periode.pk in periodes_deja_ajoutees
+        semaine = re.search(r"Semaine\s+(\d+)", periode.nom, flags=re.IGNORECASE)
+        periode.libelle_semaine = f"Semaine {semaine.group(1)}" if semaine else f"Semaine du {periode.debut:%d/%m}"
+        if vacances:
+            libelle = f"{periode.categorie_vacances} {periode.debut.year}"
+        else:
+            reference = periode.periode_calendrier
+            libelle = reference.nom if reference is not None else periode.nom
+        groupes.setdefault(libelle, []).append(periode)
+    return [{"libelle": libelle, "periodes": elements} for libelle, elements in groupes.items()]
+
+
 def campagne_disponibilite_detail(request, campagne_id):
     """Édite un brouillon ; une campagne ouverte reste strictement en lecture seule."""
     try:
@@ -851,34 +892,27 @@ def campagne_disponibilite_detail(request, campagne_id):
                 campagne.save(update_fields=["nom", "date_limite_reponse", "validation_direction_requise"])
                 campagne.destinataires.set(animateurs)
                 messages.success(request, "Brouillon enregistré.")
-            elif action == "ajouter_periode":
-                periode = PeriodeScolaire.objects.get(pk=request.POST.get("periode_id"))
+            elif action in {"ajouter_periode", "ajouter_periodes"}:
                 mode_saisie = request.POST.get("mode_saisie", CampagneDisponibiliteBloc.JOURNEE)
                 if mode_saisie not in dict(CampagneDisponibiliteBloc.MODES_SAISIE):
                     raise ValidationError("Le mode de saisie est invalide.")
-                bloc = CampagneDisponibiliteBloc.objects.create(
-                    campagne=campagne, libelle=periode.categorie_vacances or periode.nom,
-                    ordre=campagne.blocs.count() + 1, mode_saisie=mode_saisie,
-                )
-                # La période existante reste une provenance ; seuls les jours
-                # ouvrés sont copiés dans la campagne, qui devient autonome.
-                jours = [
-                    periode.debut + datetime.timedelta(days=index)
-                    for index in range((periode.fin - periode.debut).days + 1)
-                    if (periode.debut + datetime.timedelta(days=index)).weekday() < 5
-                ]
+                identifiants = request.POST.getlist("periode_ids") if action == "ajouter_periodes" else [request.POST.get("periode_id")]
+                identifiants = {int(value) for value in identifiants if value}
+                if not identifiants:
+                    raise ValidationError("Sélectionne au moins une période.")
+                periodes_selectionnees = list(PeriodeScolaire.objects.filter(
+                    pk__in=identifiants, fin__gte=timezone.localdate()
+                ).order_by("debut", "ordre", "id"))
+                if len(periodes_selectionnees) != len(identifiants):
+                    raise ValidationError("Une période sélectionnée n’est plus disponible.")
                 existantes = set(campagne.dates.values_list("date", flat=True))
-                nouvelles = [jour for jour in jours if jour not in existantes]
-                if not nouvelles:
-                    bloc.delete()
+                ajoutees = [
+                    periode for periode in periodes_selectionnees
+                    if _ajouter_periode_disponibilite(campagne, periode, mode_saisie, existantes)
+                ]
+                if not ajoutees:
                     raise ValidationError("Toutes les dates de cette période sont déjà dans la campagne.")
-                CampagneDisponibiliteDate.objects.bulk_create([
-                    CampagneDisponibiliteDate(
-                        campagne=campagne, bloc=bloc, date=jour, ordre=index,
-                        periode_scolaire_source=periode,
-                    ) for index, jour in enumerate(nouvelles, start=1)
-                ])
-                messages.success(request, "Période ajoutée au brouillon.")
+                messages.success(request, "Période ajoutée au brouillon." if len(ajoutees) == 1 else "Périodes ajoutées au brouillon.")
             elif action == "ajouter_dates":
                 libelle = request.POST.get("libelle_bloc", "").strip() or "Dates personnalisées"
                 mode_saisie = request.POST.get("mode_saisie", CampagneDisponibiliteBloc.JOURNEE)
@@ -933,12 +967,36 @@ def campagne_disponibilite_detail(request, campagne_id):
         "destinataires", "blocs__dates", "demandes__animateur"
     ).get(pk=campagne.pk)
     blocs = list(campagne.blocs.all())
+    jours_courts = ("L", "Ma", "Me", "J", "V", "S", "D")
+    mois_courts = ("jan.", "fév.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc.")
     for bloc in blocs:
         bloc.dates_campagne = list(bloc.dates.all())
+        un_seul_mois = len({item.date.month for item in bloc.dates_campagne}) == 1
+        for index, item in enumerate(bloc.dates_campagne):
+            suffixe_mois = index == len(bloc.dates_campagne) - 1 or not un_seul_mois
+            item.libelle_recapitulatif = (
+                f"{jours_courts[item.date.weekday()]} {item.date.day}"
+                f"{f' {mois_courts[item.date.month - 1]}' if suffixe_mois else ''}"
+            )
+    periodes_deja_ajoutees = set(campagne.dates.exclude(
+        periode_scolaire_source__isnull=True
+    ).values_list("periode_scolaire_source_id", flat=True))
+    periodes_futures = list(PeriodeScolaire.objects.select_related(
+        "type_accueil", "periode_calendrier"
+    ).filter(fin__gte=timezone.localdate()).order_by("debut", "ordre", "id"))
+    periodes_vacances = [
+        periode for periode in periodes_futures if periode.type_accueil.code == TypeAccueil.VACANCES
+    ]
+    periodes_autres = [periode for periode in periodes_futures if periode not in periodes_vacances]
     return render(request, "campagne_disponibilite_detail.html", {
         "active_page": "gestion", "gestion_onglet": "disponibilites", "campagne": campagne,
         "blocs": blocs,
-        "periodes": PeriodeScolaire.objects.order_by("debut", "ordre", "id"),
+        "periodes_vacances_groupes": _groupes_periodes_disponibilite(
+            periodes_vacances, periodes_deja_ajoutees, vacances=True
+        ),
+        "periodes_autres_groupes": _groupes_periodes_disponibilite(
+            periodes_autres, periodes_deja_ajoutees, vacances=False
+        ),
         "animateurs": Animateur.objects.filter(actif=True).order_by("nom", "prenom"),
         "destinataire_ids": set(campagne.destinataires.values_list("id", flat=True)),
         "nombre_dates": campagne.dates.count(),

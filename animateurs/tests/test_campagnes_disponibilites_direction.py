@@ -48,10 +48,28 @@ class CampagnesDisponibilitesDirectionTests(TestCase):
         self.assertContains(response, "Paramètres")
         self.assertContains(response, "Rechercher un animateur")
         self.assertContains(response, "Tout sélectionner")
-        self.assertContains(response, "+ Période scolaire")
-        self.assertContains(response, "+ Dates manuelles")
+        self.assertContains(response, "+ Ajouter des périodes scolaires")
+        self.assertContains(response, "+ Ajouter des dates manuellement")
         self.assertContains(response, "Ouvrir la campagne")
         self.assertEqual(campagne.statut, CampagneDisponibilite.BROUILLON)
+
+    def test_recapitulatif_compact_et_destinataires_repliables(self):
+        campagne = self._creer_brouillon()
+        self.client.post(self._url(campagne), {
+            "action": "ajouter_periode", "periode_id": self.hiver.pk,
+        })
+        html = self.client.get(self._url(campagne)).content.decode()
+
+        self.assertIn('class="availability-recipients-details" open', html)
+        self.assertIn("L 8 · Ma 9 · Me 10 · J 11 · V 12 fév.", html)
+        self.assertIn("Modifier", html)
+
+        self.client.post(self._url(campagne), {
+            "action": "enregistrer", "nom": campagne.nom,
+            "animateur_ids": [self.alice.pk],
+        })
+        html = self.client.get(self._url(campagne)).content.decode()
+        self.assertNotIn('class="availability-recipients-details" open', html)
 
     def test_plusieurs_blocs_periodes_et_dates_exactes_persistes(self):
         campagne = self._creer_brouillon()
@@ -80,6 +98,60 @@ class CampagnesDisponibilitesDirectionTests(TestCase):
         self.assertNotIn(datetime.date(2027, 5, 8), dates)
         self.assertNotIn(datetime.date(2027, 5, 9), dates)
         self.assertTrue(all(item.periode_scolaire_source_id == periode.pk for item in campagne.dates.all()))
+
+    def test_selecteur_propose_les_periodes_futures_et_ajoute_plusieurs_semaines(self):
+        ancienne = PeriodeScolaire.objects.create(
+            nom="Ancienne période", annee_scolaire="2019-2020", zone="A",
+            debut=datetime.date(2020, 1, 6), fin=datetime.date(2020, 1, 10), type_accueil=self.hiver.type_accueil,
+        )
+        campagne = self._creer_brouillon()
+
+        response = self.client.get(self._url(campagne))
+        self.assertContains(response, "Hiver")
+        self.assertNotContains(response, f'name="periode_ids" value="{ancienne.pk}"')
+        self.assertContains(response, "Périodes de vacances à inclure")
+        self.assertContains(response, "+ Ajouter des dates manuellement")
+
+        self.client.post(self._url(campagne), {
+            "action": "ajouter_periodes", "periode_ids": [self.hiver.pk, self.printemps.pk],
+            "mode_saisie": "demi_journee",
+        })
+        campagne.refresh_from_db()
+        self.assertEqual(campagne.blocs.count(), 2)
+        self.assertEqual(campagne.dates.count(), 10)
+        self.assertTrue(all(
+            bloc.mode_saisie == "demi_journee" for bloc in campagne.blocs.all()
+        ))
+
+        self.client.post(self._url(campagne), {
+            "action": "ajouter_periodes", "periode_ids": [self.hiver.pk, self.printemps.pk],
+            "mode_saisie": "journee",
+        })
+        campagne.refresh_from_db()
+        self.assertEqual(campagne.blocs.count(), 2)
+        self.assertEqual(campagne.dates.count(), 10)
+        self.assertContains(self.client.get(self._url(campagne)), "Déjà ajoutée")
+
+    def test_selecteur_priorise_vacances_et_place_autres_periodes_en_secondaire(self):
+        periscolaire, _ = TypeAccueil.objects.get_or_create(
+            code=TypeAccueil.PERISCOLAIRE, defaults={"nom": "Périscolaire", "ordre": 2}
+        )
+        scolaire = PeriodeScolaire.objects.create(
+            nom="Rentrée → Toussaint", annee_scolaire="2026-2027", zone="A",
+            debut=datetime.date(2026, 11, 2), fin=datetime.date(2026, 11, 6),
+            type_accueil=periscolaire,
+        )
+        campagne = self._creer_brouillon()
+        response = self.client.get(self._url(campagne))
+        html = response.content.decode()
+
+        self.assertIn("Périodes de vacances à inclure", html)
+        self.assertIn("Inclure une autre période scolaire", html)
+        self.assertIn(scolaire.nom, html)
+        self.assertLess(html.index("Paramètres"), html.index("Périodes et dates"))
+        self.assertLess(html.index("Périodes et dates"), html.index("Récapitulatif des dates"))
+        self.assertLess(html.index("Récapitulatif des dates"), html.index("Animateurs destinataires"))
+        self.assertLess(html.index("Animateurs destinataires"), html.index("Ouvrir la campagne"))
 
     def test_date_peut_etre_retiree_avant_ouverture(self):
         campagne = self._creer_brouillon()
