@@ -2190,6 +2190,328 @@ class Disponibilite(models.Model):
         return f"{self.animateur} disponible du {self.debut:%d/%m/%Y} au {self.fin:%d/%m/%Y}"
 
 
+class CampagneDisponibilite(models.Model):
+    """Campagne regroupant une sélection autonome de dates à renseigner.
+
+    Les dates sont copiées dans :class:`CampagneDisponibiliteDate` afin que la
+    campagne reste lisible même si la bibliothèque des périodes évolue ensuite.
+    Elle n'est donc volontairement pas liée à une seule PeriodeCalendrier.
+    """
+
+    BROUILLON = "brouillon"
+    OUVERTE = "ouverte"
+    CLOTUREE = "cloturee"
+    ANNULEE = "annulee"
+    STATUTS = (
+        (BROUILLON, "Brouillon"),
+        (OUVERTE, "Ouverte"),
+        (CLOTUREE, "Clôturée"),
+        (ANNULEE, "Annulée"),
+    )
+
+    nom = models.CharField(max_length=180)
+    statut = models.CharField(max_length=16, choices=STATUTS, default=BROUILLON, db_index=True)
+    date_limite_reponse = models.DateField(null=True, blank=True)
+    validation_direction_requise = models.BooleanField(default=True)
+    # La sélection reste modifiable tant que la campagne est un brouillon. Les
+    # DemandeDisponibilite ne sont créées qu'à l'ouverture de la campagne.
+    destinataires = models.ManyToManyField(
+        Animateur, related_name="campagnes_disponibilites", blank=True
+    )
+    cree_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="campagnes_disponibilites_creees",
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+    ouverte_le = models.DateTimeField(null=True, blank=True)
+    cloturee_le = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-cree_le", "-id")
+        verbose_name = "campagne de disponibilités"
+        verbose_name_plural = "campagnes de disponibilités"
+
+    def __str__(self):
+        return self.nom
+
+
+class CampagneDisponibiliteBloc(models.Model):
+    """Bloc de présentation d'une campagne, par exemple « Vacances d'hiver »."""
+
+    JOURNEE = "journee"
+    DEMI_JOURNEE = "demi_journee"
+    MODES_SAISIE = (
+        (JOURNEE, "Journée"),
+        (DEMI_JOURNEE, "Demi-journée"),
+    )
+
+    campagne = models.ForeignKey(
+        CampagneDisponibilite, on_delete=models.CASCADE, related_name="blocs"
+    )
+    libelle = models.CharField(max_length=140)
+    ordre = models.PositiveSmallIntegerField(default=0)
+    mode_saisie = models.CharField(max_length=16, choices=MODES_SAISIE, default=JOURNEE)
+
+    class Meta:
+        ordering = ("ordre", "id")
+        verbose_name = "bloc de campagne de disponibilités"
+        verbose_name_plural = "blocs de campagne de disponibilités"
+
+    def __str__(self):
+        return f"{self.campagne} — {self.libelle}"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            precedent = type(self).objects.filter(pk=self.pk).values_list("mode_saisie", flat=True).first()
+            if precedent and precedent != self.mode_saisie and self.campagne.statut != CampagneDisponibilite.BROUILLON:
+                raise ValidationError("Le mode de saisie est figé après l’ouverture de la campagne.")
+        super().save(*args, **kwargs)
+
+
+class CampagneDisponibiliteDate(models.Model):
+    """Date figée d'une campagne, éventuellement issue d'une période source."""
+
+    campagne = models.ForeignKey(
+        CampagneDisponibilite, on_delete=models.CASCADE, related_name="dates"
+    )
+    bloc = models.ForeignKey(
+        CampagneDisponibiliteBloc, on_delete=models.CASCADE, related_name="dates"
+    )
+    date = models.DateField()
+    ordre = models.PositiveSmallIntegerField(default=0)
+    periode_scolaire_source = models.ForeignKey(
+        "PeriodeScolaire", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="dates_campagnes_disponibilites",
+    )
+
+    class Meta:
+        ordering = ("date", "ordre", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("campagne", "date"), name="unique_date_campagne_disponibilite"
+            ),
+        ]
+        verbose_name = "date de campagne de disponibilités"
+        verbose_name_plural = "dates de campagne de disponibilités"
+
+    def clean(self):
+        super().clean()
+        if self.bloc_id and self.campagne_id and self.bloc.campagne_id != self.campagne_id:
+            raise ValidationError({"bloc": "Le bloc doit appartenir à la même campagne."})
+
+    def __str__(self):
+        return f"{self.campagne} — {self.date:%d/%m/%Y}"
+
+
+class DemandeDisponibilite(models.Model):
+    """Réponse de campagne ou demande de modification des disponibilités.
+
+    Une demande envoyée est immuable : une correction ou une nouvelle
+    modification crée une nouvelle demande reliée à la précédente.
+    """
+
+    PREMIERE_SAISIE = "premiere_saisie"
+    MODIFICATION = "modification"
+    NATURES = (
+        (PREMIERE_SAISIE, "Première saisie"),
+        (MODIFICATION, "Modification"),
+    )
+
+    A_RENSEIGNER = "a_renseigner"
+    BROUILLON = "brouillon"
+    ENVOYEE = "envoyee"
+    A_CORRIGER = "a_corriger"
+    VALIDEE = "validee"
+    REFUSEE = "refusee"
+    STATUTS = (
+        (A_RENSEIGNER, "À renseigner"),
+        (BROUILLON, "Brouillon"),
+        (ENVOYEE, "Réponse envoyée"),
+        (A_CORRIGER, "À corriger"),
+        (VALIDEE, "Validée"),
+        (REFUSEE, "Refusée"),
+    )
+    TRANSITIONS = {
+        A_RENSEIGNER: {BROUILLON, ENVOYEE},
+        BROUILLON: {ENVOYEE},
+        ENVOYEE: {A_CORRIGER, VALIDEE, REFUSEE},
+        A_CORRIGER: set(),
+        VALIDEE: set(),
+        REFUSEE: set(),
+    }
+
+    animateur = models.ForeignKey(
+        Animateur, on_delete=models.PROTECT, related_name="demandes_disponibilites"
+    )
+    campagne = models.ForeignKey(
+        CampagneDisponibilite, on_delete=models.PROTECT,
+        related_name="demandes", null=True, blank=True,
+    )
+    demande_precedente = models.ForeignKey(
+        "self", on_delete=models.PROTECT, related_name="versions_suivantes",
+        null=True, blank=True,
+    )
+    nature = models.CharField(max_length=20, choices=NATURES)
+    statut = models.CharField(max_length=16, choices=STATUTS, default=A_RENSEIGNER, db_index=True)
+    commentaire_animateur = models.TextField(blank=True)
+    commentaire_direction = models.TextField(blank=True)
+    cree_le = models.DateTimeField(auto_now_add=True)
+    envoyee_le = models.DateTimeField(null=True, blank=True)
+    traitee_le = models.DateTimeField(null=True, blank=True)
+    traitee_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="demandes_disponibilites_traitees", null=True, blank=True,
+    )
+
+    class Meta:
+        ordering = ("-cree_le", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("campagne", "animateur"),
+                condition=models.Q(campagne__isnull=False),
+                name="unique_destinataire_campagne_dispo",
+            ),
+        ]
+        verbose_name = "demande de disponibilités"
+        verbose_name_plural = "demandes de disponibilités"
+
+    @property
+    def validation_requise(self):
+        # Une modification ultérieure passe toujours par la direction. Seule
+        # une première saisie de campagne peut être appliquée automatiquement.
+        return self.nature == self.MODIFICATION or (
+            self.campagne is None or self.campagne.validation_direction_requise
+        )
+
+    def peut_transiter_vers(self, statut):
+        return statut in self.TRANSITIONS.get(self.statut, set())
+
+    def transition_vers(self, statut):
+        """Applique uniquement une transition métier autorisée et testable."""
+        if (
+            self.campagne_id
+            and self.campagne.statut == CampagneDisponibilite.CLOTUREE
+            and statut in {self.BROUILLON, self.ENVOYEE}
+        ):
+            raise ValidationError("Cette campagne est clôturée et n’accepte plus de réponse.")
+        if not self.peut_transiter_vers(statut):
+            raise ValidationError(
+                {"statut": f"Transition interdite : {self.statut} vers {statut}."}
+            )
+        self.statut = statut
+
+    def save(self, *args, **kwargs):
+        # Les services métier passent par ``transition_vers``. Cette garde
+        # évite qu'une vue future puisse changer un statut par simple save().
+        if self.pk:
+            statut_precedent = type(self).objects.filter(pk=self.pk).values_list("statut", flat=True).first()
+            if statut_precedent and statut_precedent != self.statut and self.statut not in self.TRANSITIONS.get(statut_precedent, set()):
+                raise ValidationError(
+                    {"statut": f"Transition interdite : {statut_precedent} vers {self.statut}."}
+                )
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        if self.nature == self.PREMIERE_SAISIE and not self.campagne_id:
+            raise ValidationError({"campagne": "Une première saisie doit appartenir à une campagne."})
+        if self.nature == self.MODIFICATION and self.campagne_id:
+            raise ValidationError({"campagne": "Une modification ultérieure ne dépend pas d'une campagne."})
+        if self.demande_precedente_id and self.demande_precedente.animateur_id != self.animateur_id:
+            raise ValidationError({"demande_precedente": "La demande précédente doit concerner le même animateur."})
+
+    def __str__(self):
+        return f"{self.get_nature_display()} — {self.animateur}"
+
+
+class PropositionDisponibiliteDate(models.Model):
+    """Proposition d'un animateur pour une date précise.
+
+    ``etait_disponible`` est l'instantané officiel pris à la création. Il est
+    comparé lors de la validation pour empêcher l'écrasement silencieux d'une
+    donnée devenue plus récente.
+    """
+
+    demande = models.ForeignKey(
+        DemandeDisponibilite, on_delete=models.CASCADE, related_name="propositions"
+    )
+    date_campagne = models.ForeignKey(
+        CampagneDisponibiliteDate, on_delete=models.PROTECT,
+        related_name="propositions", null=True, blank=True,
+    )
+    date = models.DateField()
+    NON_RENSEIGNE = "non_renseigne"
+    INDISPONIBLE = "indisponible"
+    JOURNEE = "journee"
+    MATIN = "matin"
+    APRES_MIDI = "apres_midi"
+    CRENEAUX = (
+        (NON_RENSEIGNE, "Non renseigné"),
+        (INDISPONIBLE, "Indisponible"),
+        (JOURNEE, "Journée entière"),
+        (MATIN, "Matin"),
+        (APRES_MIDI, "Après-midi"),
+    )
+
+    creneau = models.CharField(max_length=16, choices=CRENEAUX, default=NON_RENSEIGNE)
+    etait_disponible = models.BooleanField()
+
+    class Meta:
+        ordering = ("date", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("demande", "date"), name="unique_proposition_dispo_demande_date"
+            ),
+        ]
+        verbose_name = "proposition de disponibilité par date"
+        verbose_name_plural = "propositions de disponibilité par date"
+
+    def clean(self):
+        super().clean()
+        if self.date_campagne_id:
+            if self.demande.campagne_id != self.date_campagne.campagne_id:
+                raise ValidationError({"date_campagne": "La date doit appartenir à la campagne de la demande."})
+            if self.date != self.date_campagne.date:
+                raise ValidationError({"date": "La date doit correspondre à la date de campagne."})
+            if (
+                self.date_campagne.bloc.mode_saisie == CampagneDisponibiliteBloc.JOURNEE
+                and self.creneau not in {self.NON_RENSEIGNE, self.INDISPONIBLE, self.JOURNEE}
+            ):
+                raise ValidationError({"creneau": "Ce bloc accepte uniquement une réponse à la journée."})
+        if (
+            self.demande.statut not in {DemandeDisponibilite.A_RENSEIGNER, DemandeDisponibilite.BROUILLON}
+            and self.creneau == self.NON_RENSEIGNE
+        ):
+            raise ValidationError({"creneau": "Une réponse envoyée ne peut pas contenir de date non renseignée."})
+
+    def save(self, *args, **kwargs):
+        if (
+            self.pk and self.demande.campagne_id
+            and self.demande.campagne.statut == CampagneDisponibilite.CLOTUREE
+        ):
+            raise ValidationError("Cette campagne est clôturée et n’accepte plus de modification.")
+        if self.pk and self.demande.statut not in {
+            DemandeDisponibilite.A_RENSEIGNER,
+            DemandeDisponibilite.BROUILLON,
+        }:
+            raise ValidationError("Une proposition envoyée est figée ; crée une nouvelle demande.")
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.demande.campagne_id and self.demande.campagne.statut == CampagneDisponibilite.CLOTUREE:
+            raise ValidationError("Cette campagne est clôturée et n’accepte plus de modification.")
+        if self.demande.statut not in {
+            DemandeDisponibilite.A_RENSEIGNER,
+            DemandeDisponibilite.BROUILLON,
+        }:
+            raise ValidationError("Une proposition envoyée est figée ; crée une nouvelle demande.")
+        return super().delete(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.demande} — {self.date:%d/%m/%Y}"
+
+
 class AffiniteGroupeAnimateur(models.Model):
     """Affinité persistante d'un animateur avec un groupe.
 

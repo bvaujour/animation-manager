@@ -3,6 +3,7 @@
 import copy
 import datetime
 import json
+import re
 from base64 import urlsafe_b64decode
 
 from django.contrib import messages
@@ -15,7 +16,7 @@ from django.core.validators import validate_email
 from django.db import connection, transaction
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -27,13 +28,18 @@ from .models import (
     Animateur,
     AnneeScolaire,
     Centre,
+    CampagneDisponibilite,
+    CampagneDisponibiliteBloc,
+    CampagneDisponibiliteDate,
     DestinatairePublicationAffectation,
     DemandeMateriel,
+    DemandeDisponibilite,
     Evenement,
     InformationAnimateur,
     PeriodeScolaire,
     PeriodeCalendrier,
     PublicationAffectationsPeriode,
+    PropositionDisponibiliteDate,
     ResponsabiliteOperationnelle,
     SignalementAffectationPublication,
     StatutPreparationSemaine,
@@ -48,6 +54,12 @@ from .services.actions_equipe import (
 from .services.comptes import valider_mot_de_passe
 from .services.dashboard import generer_tableau_de_bord
 from .services.planning_exports import generer_planning_excel, generer_planning_pdf, horaires_manquants_export
+from .services.demandes_disponibilites import (
+    DemandeDisponibiliteIncomplete,
+    cloturer_campagne,
+    envoyer_demande,
+    ouvrir_campagne,
+)
 
 
 PORTAIL_ANIMATEUR_SEMAINE_SESSION_KEY = "portail_animateur_semaine"
@@ -400,6 +412,159 @@ def documents_animateur(request):
     return render(request, "documents_animateur.html", _contexte_portail_animateur(request, "documents_animateur"))
 
 
+def _groupes_reponse_disponibilites(demande):
+    """Prépare une lecture mobile : semaines seulement pour les dates continues."""
+    propositions = list(demande.propositions.select_related("date_campagne__bloc").order_by(
+        "date_campagne__bloc__ordre", "date", "id"
+    ))
+    blocs = []
+    par_bloc = {}
+    for proposition in propositions:
+        bloc = proposition.date_campagne.bloc if proposition.date_campagne_id else None
+        if bloc is not None:
+            par_bloc.setdefault(bloc.pk, {"bloc": bloc, "propositions": []})["propositions"].append(proposition)
+
+    for item in par_bloc.values():
+        bloc, lignes = item["bloc"], item["propositions"]
+        groupes = []
+        if bloc.mode_saisie == CampagneDisponibiliteBloc.JOURNEE:
+            semaines = {}
+            for ligne in lignes:
+                lundi = ligne.date - datetime.timedelta(days=ligne.date.weekday())
+                semaines.setdefault(lundi, []).append(ligne)
+            for lundi, lignes_semaine in semaines.items():
+                lignes_semaine.sort(key=lambda ligne: ligne.date)
+                # Un bloc de vacances est condensé seulement lorsque les dates
+                # de la semaine forment réellement une suite continue.
+                continuees = all(
+                    suivante.date == precedente.date + datetime.timedelta(days=1)
+                    for precedente, suivante in zip(lignes_semaine, lignes_semaine[1:])
+                )
+                groupes.append({
+                    "type": "semaine" if len(lignes_semaine) > 1 and continuees else "dates",
+                    "lundi": lundi,
+                    "propositions": lignes_semaine,
+                })
+        else:
+            groupes.append({"type": "dates", "propositions": lignes})
+        blocs.append({"bloc": bloc, "groupes": groupes})
+    return blocs, propositions
+
+
+def _resume_reponse_disponibilites(propositions):
+    total = len(propositions)
+    renseignees = [p for p in propositions if p.creneau != PropositionDisponibiliteDate.NON_RENSEIGNE]
+    return {
+        "total": total,
+        "renseignees": len(renseignees),
+        "restantes": total - len(renseignees),
+        "journees": sum(p.creneau == PropositionDisponibiliteDate.JOURNEE for p in propositions),
+        "matins": sum(p.creneau == PropositionDisponibiliteDate.MATIN for p in propositions),
+        "apres_midis": sum(p.creneau == PropositionDisponibiliteDate.APRES_MIDI for p in propositions),
+        "zero_disponibilite": bool(propositions) and all(
+            p.creneau == PropositionDisponibiliteDate.INDISPONIBLE for p in propositions
+        ),
+    }
+
+
+@transaction.atomic
+def _enregistrer_brouillon_disponibilites(demande, donnees, commentaire):
+    """Conserve chaque choix explicite, y compris les dates non renseignées."""
+    propositions = list(demande.propositions.select_related("date_campagne__bloc").order_by("date", "id"))
+    valeurs_autorisees = set(dict(PropositionDisponibiliteDate.CRENEAUX))
+    for proposition in propositions:
+        valeur = donnees.get(f"creneau_{proposition.pk}", proposition.creneau)
+        bloc = proposition.date_campagne.bloc if proposition.date_campagne_id else None
+        if valeur not in valeurs_autorisees or (
+            bloc is not None
+            and bloc.mode_saisie == CampagneDisponibiliteBloc.JOURNEE
+            and valeur not in {
+                PropositionDisponibiliteDate.NON_RENSEIGNE,
+                PropositionDisponibiliteDate.INDISPONIBLE,
+                PropositionDisponibiliteDate.JOURNEE,
+            }
+        ):
+            raise ValidationError("Une valeur de disponibilité est invalide.")
+        if valeur != proposition.creneau:
+            proposition.creneau = valeur
+            proposition.save(update_fields=["creneau"])
+    demande.commentaire_animateur = commentaire.strip()
+    if demande.statut == DemandeDisponibilite.A_RENSEIGNER:
+        demande.transition_vers(DemandeDisponibilite.BROUILLON)
+    demande.save(update_fields=["commentaire_animateur", "statut"])
+
+
+def demande_disponibilite_repondre(request, demande_id):
+    """Saisie mobile d'une seule réponse, ou aperçu strictement en lecture seule."""
+    if est_direction(request.user) and request.GET.get("apercu_portail") != "1":
+        return redirect("campagnes_disponibilites")
+    animateur, apercu = resoudre_portail_consulte(request)
+    if animateur is None:
+        raise PermissionDenied("Aucun profil animateur n’est associé à ce compte.")
+    demande = get_object_or_404(
+        DemandeDisponibilite.objects.select_related("campagne").prefetch_related(
+            "propositions__date_campagne__bloc"
+        ),
+        pk=demande_id,
+        animateur=animateur,
+    )
+    if demande.campagne_id is None:
+        raise PermissionDenied("Cette page est réservée aux réponses de campagne.")
+    if request.method == "POST":
+        if apercu:
+            raise PermissionDenied("L’aperçu est strictement en lecture seule.")
+        if demande.campagne.statut != CampagneDisponibilite.OUVERTE:
+            messages.error(request, "Cette campagne est clôturée et n’accepte plus de réponse.")
+            return redirect("demande_disponibilite_repondre", demande_id=demande.pk)
+        if demande.statut not in {DemandeDisponibilite.A_RENSEIGNER, DemandeDisponibilite.BROUILLON}:
+            messages.error(request, "Cette réponse a déjà été envoyée et ne peut plus être modifiée.")
+            return redirect("demande_disponibilite_repondre", demande_id=demande.pk)
+        try:
+            _enregistrer_brouillon_disponibilites(
+                demande, request.POST, request.POST.get("commentaire_animateur", "")
+            )
+            demande.refresh_from_db()
+            if request.POST.get("action") == "envoyer":
+                propositions = list(demande.propositions.all())
+                resume = _resume_reponse_disponibilites(propositions)
+                if resume["zero_disponibilite"] and request.POST.get("confirmer_zero") != "1":
+                    raise ValidationError("Confirme l’envoi sans aucune disponibilité.")
+                envoyer_demande(demande)
+                messages.success(request, "Tes disponibilités ont été envoyées.")
+            else:
+                messages.success(request, "Brouillon enregistré.")
+        except (ValidationError, DemandeDisponibiliteIncomplete) as exc:
+            messages.error(request, exc.messages[0] if isinstance(exc, ValidationError) else str(exc))
+        return redirect("demande_disponibilite_repondre", demande_id=demande.pk)
+
+    blocs, propositions = _groupes_reponse_disponibilites(demande)
+    resume = _resume_reponse_disponibilites(propositions)
+    est_cloturee = demande.campagne.statut == CampagneDisponibilite.CLOTUREE
+    est_modifiable = (
+        not apercu
+        and not est_cloturee
+        and demande.statut in {DemandeDisponibilite.A_RENSEIGNER, DemandeDisponibilite.BROUILLON}
+    )
+    retour = _contexte_portail_animateur(request, "disponibilites_reponse")
+    retour.update({
+        "demande": demande,
+        "blocs_reponse": blocs,
+        "resume_reponse": resume,
+        "est_modifiable": est_modifiable,
+        "est_cloturee": est_cloturee,
+        "echeance_depassee": bool(
+            demande.campagne.date_limite_reponse
+            and demande.campagne.date_limite_reponse < timezone.localdate()
+        ),
+        "application_automatique_bloquee": (
+            demande.statut == DemandeDisponibilite.ENVOYEE
+            and not demande.validation_requise
+            and any(p.creneau in {PropositionDisponibiliteDate.MATIN, PropositionDisponibiliteDate.APRES_MIDI} for p in propositions)
+        ),
+    })
+    return render(request, "demande_disponibilite_repondre.html", retour)
+
+
 def _affectations_periode(periode, animateur=None):
     """Lit les affectations existantes d'une période, sans en créer de copie."""
     debut = timezone.make_aware(datetime.datetime.combine(periode.debut, datetime.time.min))
@@ -604,6 +769,179 @@ def actions_equipe(request):
     return render(request, "actions_equipe.html", {
         "active_page": "gestion", "gestion_onglet": "actions-equipe", "masquer_selecteurs_configuration": True,
         "periodes": periodes, "periode": periode, "suivi": suivi,
+    })
+
+
+def campagnes_disponibilites(request):
+    """Liste direction des campagnes et point d'entrée de leur création."""
+    if request.method == "POST":
+        nom = request.POST.get("nom", "").strip()
+        if not nom:
+            messages.error(request, "Le nom de la campagne est obligatoire.")
+        else:
+            campagne = CampagneDisponibilite.objects.create(nom=nom, cree_par=request.user)
+            return redirect("campagne_disponibilite_detail", campagne_id=campagne.pk)
+
+    campagnes = list(CampagneDisponibilite.objects.prefetch_related("destinataires", "demandes").all())
+    for campagne in campagnes:
+        campagne.nombre_destinataires = campagne.destinataires.count()
+        campagne.nombre_reponses = sum(
+            demande.statut in {
+                demande.ENVOYEE, demande.A_CORRIGER, demande.VALIDEE, demande.REFUSEE,
+            }
+            for demande in campagne.demandes.all()
+        )
+    return render(request, "campagnes_disponibilites.html", {
+        "active_page": "gestion", "gestion_onglet": "disponibilites",
+        "campagnes": campagnes,
+    })
+
+
+def _dates_manuelles(valeur):
+    dates = set()
+    for element in re.split(r"[\s,;]+", valeur.strip()):
+        if not element:
+            continue
+        jour = parse_date(element)
+        if jour is None:
+            raise ValidationError("Utilise des dates au format AAAA-MM-JJ.")
+        dates.add(jour)
+    if not dates:
+        raise ValidationError("Ajoute au moins une date.")
+    return sorted(dates)
+
+
+def campagne_disponibilite_detail(request, campagne_id):
+    """Édite un brouillon ; une campagne ouverte reste strictement en lecture seule."""
+    try:
+        campagne = CampagneDisponibilite.objects.prefetch_related(
+            "destinataires", "blocs__dates", "demandes__animateur"
+        ).get(pk=campagne_id)
+    except CampagneDisponibilite.DoesNotExist:
+        messages.error(request, "Cette campagne n’existe plus.")
+        return redirect("campagnes_disponibilites")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "cloturer":
+            try:
+                cloturer_campagne(campagne)
+                messages.success(request, "Campagne clôturée. Les réponses déjà envoyées sont conservées.")
+            except ValidationError as exc:
+                messages.error(request, exc.messages[0])
+            return redirect("campagne_disponibilite_detail", campagne_id=campagne.pk)
+        if campagne.statut != CampagneDisponibilite.BROUILLON:
+            messages.error(request, "Une campagne ouverte ne peut plus être modifiée.")
+            return redirect("campagne_disponibilite_detail", campagne_id=campagne.pk)
+        try:
+            if action == "enregistrer":
+                nom = request.POST.get("nom", "").strip()
+                if not nom:
+                    raise ValidationError("Le nom de la campagne est obligatoire.")
+                date_limite = parse_date(request.POST.get("date_limite_reponse", ""))
+                if request.POST.get("date_limite_reponse") and date_limite is None:
+                    raise ValidationError("L’échéance est invalide.")
+                identifiants = {int(value) for value in request.POST.getlist("animateur_ids")}
+                animateurs = list(Animateur.objects.filter(pk__in=identifiants, actif=True))
+                if len(animateurs) != len(identifiants):
+                    raise ValidationError("Un animateur sélectionné n’est plus disponible.")
+                campagne.nom = nom
+                campagne.date_limite_reponse = date_limite
+                campagne.validation_direction_requise = request.POST.get("validation_direction_requise") == "on"
+                campagne.save(update_fields=["nom", "date_limite_reponse", "validation_direction_requise"])
+                campagne.destinataires.set(animateurs)
+                messages.success(request, "Brouillon enregistré.")
+            elif action == "ajouter_periode":
+                periode = PeriodeScolaire.objects.get(pk=request.POST.get("periode_id"))
+                mode_saisie = request.POST.get("mode_saisie", CampagneDisponibiliteBloc.JOURNEE)
+                if mode_saisie not in dict(CampagneDisponibiliteBloc.MODES_SAISIE):
+                    raise ValidationError("Le mode de saisie est invalide.")
+                bloc = CampagneDisponibiliteBloc.objects.create(
+                    campagne=campagne, libelle=periode.categorie_vacances or periode.nom,
+                    ordre=campagne.blocs.count() + 1, mode_saisie=mode_saisie,
+                )
+                # La période existante reste une provenance ; seuls les jours
+                # ouvrés sont copiés dans la campagne, qui devient autonome.
+                jours = [
+                    periode.debut + datetime.timedelta(days=index)
+                    for index in range((periode.fin - periode.debut).days + 1)
+                    if (periode.debut + datetime.timedelta(days=index)).weekday() < 5
+                ]
+                existantes = set(campagne.dates.values_list("date", flat=True))
+                nouvelles = [jour for jour in jours if jour not in existantes]
+                if not nouvelles:
+                    bloc.delete()
+                    raise ValidationError("Toutes les dates de cette période sont déjà dans la campagne.")
+                CampagneDisponibiliteDate.objects.bulk_create([
+                    CampagneDisponibiliteDate(
+                        campagne=campagne, bloc=bloc, date=jour, ordre=index,
+                        periode_scolaire_source=periode,
+                    ) for index, jour in enumerate(nouvelles, start=1)
+                ])
+                messages.success(request, "Période ajoutée au brouillon.")
+            elif action == "ajouter_dates":
+                libelle = request.POST.get("libelle_bloc", "").strip() or "Dates personnalisées"
+                mode_saisie = request.POST.get("mode_saisie", CampagneDisponibiliteBloc.JOURNEE)
+                if mode_saisie not in dict(CampagneDisponibiliteBloc.MODES_SAISIE):
+                    raise ValidationError("Le mode de saisie est invalide.")
+                jours = _dates_manuelles(request.POST.get("dates_manuelles", ""))
+                existantes = set(campagne.dates.values_list("date", flat=True))
+                nouvelles = [jour for jour in jours if jour not in existantes]
+                if not nouvelles:
+                    raise ValidationError("Toutes ces dates sont déjà dans la campagne.")
+                bloc = CampagneDisponibiliteBloc.objects.create(
+                    campagne=campagne, libelle=libelle, ordre=campagne.blocs.count() + 1,
+                    mode_saisie=mode_saisie,
+                )
+                CampagneDisponibiliteDate.objects.bulk_create([
+                    CampagneDisponibiliteDate(campagne=campagne, bloc=bloc, date=jour, ordre=index)
+                    for index, jour in enumerate(nouvelles, start=1)
+                ])
+                messages.success(request, "Dates personnalisées ajoutées.")
+            elif action == "retirer_date":
+                CampagneDisponibiliteDate.objects.filter(
+                    pk=request.POST.get("date_id"), campagne=campagne
+                ).delete()
+                messages.success(request, "Date retirée du brouillon.")
+            elif action == "supprimer_bloc":
+                CampagneDisponibiliteBloc.objects.filter(
+                    pk=request.POST.get("bloc_id"), campagne=campagne
+                ).delete()
+                messages.success(request, "Bloc retiré du brouillon.")
+            elif action == "modifier_mode_bloc":
+                bloc = CampagneDisponibiliteBloc.objects.get(
+                    pk=request.POST.get("bloc_id"), campagne=campagne
+                )
+                mode_saisie = request.POST.get("mode_saisie")
+                if mode_saisie not in dict(CampagneDisponibiliteBloc.MODES_SAISIE):
+                    raise ValidationError("Le mode de saisie est invalide.")
+                bloc.mode_saisie = mode_saisie
+                bloc.save(update_fields=["mode_saisie"])
+                messages.success(request, "Mode de saisie du bloc enregistré.")
+            elif action == "ouvrir":
+                if not campagne.dates.exists():
+                    raise ValidationError("Ajoute au moins une date avant d’ouvrir la campagne.")
+                ouvrir_campagne(campagne)
+                messages.success(request, "Campagne ouverte : les animateurs peuvent désormais renseigner leurs disponibilités.")
+            else:
+                raise ValidationError("Action inconnue.")
+        except (CampagneDisponibilite.DoesNotExist, PeriodeScolaire.DoesNotExist, TypeError, ValueError, ValidationError) as exc:
+            messages.error(request, exc.messages[0] if isinstance(exc, ValidationError) else "La modification est invalide.")
+        return redirect("campagne_disponibilite_detail", campagne_id=campagne.pk)
+
+    campagne = CampagneDisponibilite.objects.prefetch_related(
+        "destinataires", "blocs__dates", "demandes__animateur"
+    ).get(pk=campagne.pk)
+    blocs = list(campagne.blocs.all())
+    for bloc in blocs:
+        bloc.dates_campagne = list(bloc.dates.all())
+    return render(request, "campagne_disponibilite_detail.html", {
+        "active_page": "gestion", "gestion_onglet": "disponibilites", "campagne": campagne,
+        "blocs": blocs,
+        "periodes": PeriodeScolaire.objects.order_by("debut", "ordre", "id"),
+        "animateurs": Animateur.objects.filter(actif=True).order_by("nom", "prenom"),
+        "destinataire_ids": set(campagne.destinataires.values_list("id", flat=True)),
+        "nombre_dates": campagne.dates.count(),
     })
 
 

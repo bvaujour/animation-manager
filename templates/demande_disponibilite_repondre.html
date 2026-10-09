@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Mes disponibilités{% endblock %}
+{% block body_class %}animator-dashboard-body availability-response-body{% endblock %}
+{% block page_styles %}
+<link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ asset_version }}">
+<link rel="stylesheet" href="{% static 'css/animateur-dashboard.css' %}?v={{ asset_version }}-portal-mobile-v4">
+<link rel="stylesheet" href="{% static 'css/demande-disponibilite.css' %}?v={{ asset_version }}">
+{% endblock %}
+{% block content %}
+<main id="main-content" class="availability-response-page">
+    <header class="availability-response-header">
+        <p class="availability-response-eyebrow">Disponibilités à renseigner</p>
+        <h1>{{ demande.campagne.nom }}</h1>
+        {% if demande.campagne.date_limite_reponse %}
+            {% if echeance_depassee %}
+            <p class="availability-response-deadline is-late">Échéance dépassée · tu peux encore répondre tant que la campagne reste ouverte.</p>
+            {% else %}
+            <p class="availability-response-deadline">Réponse attendue avant le {{ demande.campagne.date_limite_reponse|date:"j F" }}</p>
+            {% endif %}
+        {% endif %}
+        <p class="availability-response-help">Indique les jours où tu peux travailler. Tu peux enregistrer et terminer plus tard.</p>
+        <div class="availability-response-progress" aria-label="Progression de la réponse">
+            <strong>{{ resume_reponse.renseignees }} dates renseignées sur {{ resume_reponse.total }}</strong>
+            {% if resume_reponse.restantes %}<span>{{ resume_reponse.restantes }} à renseigner</span>{% endif %}
+        </div>
+    </header>
+
+    {% if est_cloturee %}
+    <p class="availability-response-notice">Cette campagne est clôturée.</p>
+    {% elif apercu_portail %}
+    <p class="availability-response-notice">Aperçu direction : cette réponse est en lecture seule.</p>
+    {% elif demande.statut == demande.ENVOYEE %}
+        {% if application_automatique_bloquee %}
+        <p class="availability-response-notice">Disponibilités envoyées. Les créneaux matin ou après-midi nécessitent une prise en compte par la direction.</p>
+        {% elif demande.validation_requise %}
+        <p class="availability-response-notice">Disponibilités envoyées · en attente de validation par la direction.</p>
+        {% else %}
+        <p class="availability-response-notice">Disponibilités envoyées et prises en compte.</p>
+        {% endif %}
+    {% endif %}
+
+    {% if not est_modifiable and demande.commentaire_animateur %}
+    <section class="availability-read-comment">
+        <h2>Précision ajoutée</h2>
+        <p>{{ demande.commentaire_animateur|linebreaksbr }}</p>
+    </section>
+    {% endif %}
+
+    {% if est_modifiable %}
+    <form method="post" class="availability-response-form" data-availability-form>
+        {% csrf_token %}
+    {% endif %}
+        {% for item in blocs_reponse %}
+        <section class="availability-block" aria-labelledby="availability-block-{{ item.bloc.pk }}">
+            <div class="availability-block-heading">
+                <h2 id="availability-block-{{ item.bloc.pk }}">{{ item.bloc.libelle }}</h2>
+                {% if item.bloc.mode_saisie == 'demi_journee' %}<span>Demi-journées</span>{% endif %}
+            </div>
+            {% for groupe in item.groupes %}
+                {% if groupe.type == 'semaine' %}
+                <section class="availability-week" data-availability-week>
+                    <div class="availability-week-heading">
+                        <div>
+                            <h3>Semaine du {{ groupe.lundi|date:"j F" }}</h3>
+                            <p data-week-summary>À renseigner</p>
+                        </div>
+                    </div>
+                    {% if est_modifiable %}
+                    <div class="availability-week-actions" aria-label="Choix pour toute la semaine">
+                        <button type="button" class="availability-choice availability-choice--week" data-week-value="journee">Disponible toute la semaine</button>
+                        <button type="button" class="availability-choice availability-choice--week" data-week-value="indisponible">Indisponible toute la semaine</button>
+                    </div>
+                    {% endif %}
+                    <details class="availability-week-details">
+                        <summary>Choisir les jours</summary>
+                        <div class="availability-date-list">
+                            {% for proposition in groupe.propositions %}
+                            <article class="availability-date" data-availability-date>
+                                <h4>{{ proposition.date|date:"l j F" }}</h4>
+                                <div class="availability-options availability-options--journee">
+                                    {% for value, label in proposition.CRENEAUX %}
+                                        {% if value == 'journee' or value == 'indisponible' %}
+                                        <label class="availability-option{% if proposition.creneau == value %} is-selected{% endif %}">
+                                            <input type="radio" name="creneau_{{ proposition.pk }}" value="{{ value }}"{% if proposition.creneau == value %} checked{% endif %}{% if not est_modifiable %} disabled{% endif %}>
+                                            <span>{{ label }}</span>
+                                        </label>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <p class="availability-unset"{% if proposition.creneau != 'non_renseigne' %} hidden{% endif %}>À renseigner</p>
+                            </article>
+                            {% endfor %}
+                        </div>
+                    </details>
+                </section>
+                {% else %}
+                <div class="availability-date-list availability-date-list--direct">
+                    {% for proposition in groupe.propositions %}
+                    <article class="availability-date" data-availability-date>
+                        <h3>{{ proposition.date|date:"l j F" }}</h3>
+                        <div class="availability-options{% if item.bloc.mode_saisie == 'demi_journee' %} availability-options--half{% else %} availability-options--journee{% endif %}">
+                            {% for value, label in proposition.CRENEAUX %}
+                                {% if item.bloc.mode_saisie == 'demi_journee' and value != 'non_renseigne' or item.bloc.mode_saisie == 'journee' and value == 'journee' or item.bloc.mode_saisie == 'journee' and value == 'indisponible' %}
+                                <label class="availability-option{% if proposition.creneau == value %} is-selected{% endif %}">
+                                    <input type="radio" name="creneau_{{ proposition.pk }}" value="{{ value }}"{% if proposition.creneau == value %} checked{% endif %}{% if not est_modifiable %} disabled{% endif %}>
+                                    <span>{{ label }}</span>
+                                </label>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        <p class="availability-unset"{% if proposition.creneau != 'non_renseigne' %} hidden{% endif %}>À renseigner</p>
+                    </article>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% endfor %}
+        </section>
+        {% endfor %}
+
+        {% if est_modifiable %}
+        <section class="availability-comment">
+            <label for="commentaire_animateur">Une précision à ajouter ?</label>
+            <textarea id="commentaire_animateur" name="commentaire_animateur" rows="3" placeholder="Ex. Disponible le mercredi après-midi à partir de 13h30.">{{ demande.commentaire_animateur }}</textarea>
+        </section>
+        <input type="hidden" name="confirmer_zero" value="" data-zero-confirmation>
+        <div class="availability-submit">
+            <button type="submit" class="availability-draft" name="action" value="brouillon">Enregistrer et terminer plus tard</button>
+            <button type="submit" class="availability-send" name="action" value="envoyer" data-send-availability>Envoyer mes disponibilités</button>
+        </div>
+    </form>
+        {% endif %}
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/demande-disponibilite.js' %}?v={{ asset_version }}"></script>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Disponibilités{% endblock %}
+{% block page_styles %}<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={{ asset_version }}">{% endblock %}
+{% block content %}
+<main class="page-shell page-shell--fluid availability-campaign-page">
+  {% include "partials/_direction_section_nav.html" with section="communication" active_item="disponibilites" %}
+  <header class="page-header"><div><p class="page-kicker">Communication équipe</p><h1>Disponibilités</h1></div></header>
+  <section class="ui-card availability-campaign-new"><h2>Nouvelle campagne</h2><form method="post" class="availability-inline-form">{% csrf_token %}<label>Nom de la campagne<input name="nom" maxlength="180" required placeholder="Disponibilités hiver-printemps 2027"></label><button class="btn btn-primary" type="submit">Créer le brouillon</button></form></section>
+  <section class="ui-card availability-campaign-list"><h2>Campagnes</h2>{% for campagne in campagnes %}<article class="availability-campaign-row"><div><strong>{{ campagne.nom }}</strong><span>{% if campagne.date_limite_reponse %}Réponse attendue avant le {{ campagne.date_limite_reponse|date:'d/m/Y' }} · {% endif %}{{ campagne.nombre_destinataires }} destinataire{{ campagne.nombre_destinataires|pluralize }} · {{ campagne.nombre_reponses }} réponse{{ campagne.nombre_reponses|pluralize }}</span></div><div><span class="availability-status availability-status--{{ campagne.statut }}">{{ campagne.get_statut_display }}</span><a class="btn btn-ghost" href="{% url 'campagne_disponibilite_detail' campagne.pk %}">{% if campagne.statut == 'brouillon' %}Préparer{% else %}Consulter{% endif %}</a></div></article>{% empty %}<p class="empty-note">Aucune campagne de disponibilités.</p>{% endfor %}</section>
+</main>
+{% endblock %}
