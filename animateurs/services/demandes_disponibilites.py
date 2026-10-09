@@ -292,6 +292,57 @@ def creer_version_correction(demande, propositions, *, commentaire_animateur="")
 
 
 @transaction.atomic
+def demander_correction_et_creer_version(demande, *, traite_par, commentaire_direction):
+    """Fige l'originale puis prépare une version modifiable préremplie."""
+    demande = DemandeDisponibilite.objects.select_for_update().get(pk=demande.pk)
+    if demande.statut != DemandeDisponibilite.ENVOYEE:
+        raise ValidationError("Seule une réponse envoyée peut faire l’objet d’une correction.")
+    if not commentaire_direction.strip():
+        raise ValidationError("Explique la correction attendue.")
+    propositions = {
+        proposition.date: proposition.creneau
+        for proposition in demande.propositions.select_for_update().all()
+    }
+    originale = demander_correction(
+        demande, traite_par=traite_par, commentaire_direction=commentaire_direction.strip()
+    )
+    return creer_version_correction(originale, propositions)
+
+
+def analyser_application_demande(demande):
+    """Expose l'impact de lecture sans remplacer les contrôles de validation."""
+    propositions = list(demande.propositions.order_by("date", "id"))
+    if not propositions:
+        return {"conflits": (), "ajouts": 0, "retraits": 0, "inchangés": 0, "demi_journees": ()}
+    dates = [proposition.date for proposition in propositions]
+    officielles = list(Disponibilite.objects.filter(
+        animateur=demande.animateur, debut__lte=max(dates), fin__gte=min(dates)
+    ))
+    conflits = tuple(
+        ConflitDisponibiliteDemande(
+            date=proposition.date,
+            etait_disponible=proposition.etait_disponible,
+            est_disponible_actuellement=_est_officiellement_disponible(officielles, proposition.date),
+        )
+        for proposition in propositions
+        if proposition.etait_disponible != _est_officiellement_disponible(officielles, proposition.date)
+    )
+    ajouts = retraits = inchangés = 0
+    for proposition in propositions:
+        actuelle = _est_officiellement_disponible(officielles, proposition.date)
+        if proposition.creneau == PropositionDisponibiliteDate.JOURNEE and not actuelle:
+            ajouts += 1
+        elif proposition.creneau == PropositionDisponibiliteDate.INDISPONIBLE and actuelle:
+            retraits += 1
+        else:
+            inchangés += 1
+    return {
+        "conflits": conflits, "ajouts": ajouts, "retraits": retraits, "inchangés": inchangés,
+        "demi_journees": tuple(p for p in propositions if p.creneau in {p.MATIN, p.APRES_MIDI}),
+    }
+
+
+@transaction.atomic
 def appliquer_demande_validee(demande, *, traite_par, commentaire_direction=""):
     """Applique uniquement les jours d'une demande envoyée aux données officielles.
 

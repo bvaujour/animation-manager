@@ -15,7 +15,7 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.core.validators import validate_email
 from django.db import connection, transaction
 from django.db.models import Q
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -47,7 +47,8 @@ from .models import (
 )
 from .services.animateur_dashboard import generer_tableau_de_bord_animateur
 from .services.actions_equipe import (
-    actions_actives_animateur, affectations_restent_a_confirmer, detail_legacy_indisponible,
+    actions_actives_animateur, actions_disponibilites_a_traiter,
+    affectations_restent_a_confirmer, detail_legacy_indisponible,
     details_affectations_avec_statut, instantane_affectations, instantanes_affectations_equivalents,
     suivi_actions_affectations,
 )
@@ -55,10 +56,16 @@ from .services.comptes import valider_mot_de_passe
 from .services.dashboard import generer_tableau_de_bord
 from .services.planning_exports import generer_planning_excel, generer_planning_pdf, horaires_manquants_export
 from .services.demandes_disponibilites import (
+    ApplicationDemandeDisponibiliteEnConflit,
+    ApplicationDemandeDisponibiliteGranulariteNonSupportee,
     DemandeDisponibiliteIncomplete,
+    analyser_application_demande,
+    appliquer_demande_validee,
     cloturer_campagne,
+    demander_correction_et_creer_version,
     envoyer_demande,
     ouvrir_campagne,
+    refuser_demande,
 )
 
 
@@ -419,10 +426,13 @@ def _groupes_reponse_disponibilites(demande):
     ))
     blocs = []
     par_bloc = {}
+    sans_bloc = []
     for proposition in propositions:
         bloc = proposition.date_campagne.bloc if proposition.date_campagne_id else None
         if bloc is not None:
             par_bloc.setdefault(bloc.pk, {"bloc": bloc, "propositions": []})["propositions"].append(proposition)
+        else:
+            sans_bloc.append(proposition)
 
     for item in par_bloc.values():
         bloc, lignes = item["bloc"], item["propositions"]
@@ -447,7 +457,19 @@ def _groupes_reponse_disponibilites(demande):
                 })
         else:
             groupes.append({"type": "dates", "propositions": lignes})
-        blocs.append({"bloc": bloc, "groupes": groupes})
+        debut, fin = lignes[0].date, lignes[-1].date
+        plage = f"{debut.day} au {fin.day} {fin.strftime('%b.')}" if debut != fin else debut.strftime("%d %b.")
+        blocs.append({
+            "bloc": bloc, "libelle": bloc.libelle, "libelle_direction": f"{bloc.libelle} · {plage}",
+            "mode_saisie": bloc.mode_saisie, "groupes": groupes,
+        })
+    if sans_bloc:
+        blocs.append({
+            "bloc": None,
+            "libelle": "Dates à corriger",
+            "mode_saisie": CampagneDisponibiliteBloc.DEMI_JOURNEE,
+            "groupes": [{"type": "dates", "propositions": sans_bloc}],
+        })
     return blocs, propositions
 
 
@@ -509,12 +531,14 @@ def demande_disponibilite_repondre(request, demande_id):
         pk=demande_id,
         animateur=animateur,
     )
-    if demande.campagne_id is None:
-        raise PermissionDenied("Cette page est réservée aux réponses de campagne.")
+    origine = demande
+    while origine.demande_precedente_id:
+        origine = origine.demande_precedente
+    campagne_affichage = origine.campagne
     if request.method == "POST":
         if apercu:
             raise PermissionDenied("L’aperçu est strictement en lecture seule.")
-        if demande.campagne.statut != CampagneDisponibilite.OUVERTE:
+        if demande.campagne_id and demande.campagne.statut != CampagneDisponibilite.OUVERTE:
             messages.error(request, "Cette campagne est clôturée et n’accepte plus de réponse.")
             return redirect("demande_disponibilite_repondre", demande_id=demande.pk)
         if demande.statut not in {DemandeDisponibilite.A_RENSEIGNER, DemandeDisponibilite.BROUILLON}:
@@ -540,7 +564,7 @@ def demande_disponibilite_repondre(request, demande_id):
 
     blocs, propositions = _groupes_reponse_disponibilites(demande)
     resume = _resume_reponse_disponibilites(propositions)
-    est_cloturee = demande.campagne.statut == CampagneDisponibilite.CLOTUREE
+    est_cloturee = bool(demande.campagne_id and demande.campagne.statut == CampagneDisponibilite.CLOTUREE)
     est_modifiable = (
         not apercu
         and not est_cloturee
@@ -554,7 +578,7 @@ def demande_disponibilite_repondre(request, demande_id):
         "est_modifiable": est_modifiable,
         "est_cloturee": est_cloturee,
         "echeance_depassee": bool(
-            demande.campagne.date_limite_reponse
+            demande.campagne_id and demande.campagne.date_limite_reponse
             and demande.campagne.date_limite_reponse < timezone.localdate()
         ),
         "application_automatique_bloquee": (
@@ -562,6 +586,8 @@ def demande_disponibilite_repondre(request, demande_id):
             and not demande.validation_requise
             and any(p.creneau in {PropositionDisponibiliteDate.MATIN, PropositionDisponibiliteDate.APRES_MIDI} for p in propositions)
         ),
+        "campagne_affichage": campagne_affichage,
+        "demande_precedente": demande.demande_precedente,
     })
     return render(request, "demande_disponibilite_repondre.html", retour)
 
@@ -770,6 +796,7 @@ def actions_equipe(request):
     return render(request, "actions_equipe.html", {
         "active_page": "gestion", "gestion_onglet": "actions-equipe", "masquer_selecteurs_configuration": True,
         "periodes": periodes, "periode": periode, "suivi": suivi,
+        "actions_disponibilites": actions_disponibilites_a_traiter(),
     })
 
 
@@ -1023,16 +1050,13 @@ def campagne_disponibilite_detail(request, campagne_id):
 
 
 def campagne_disponibilite_reponse(request, campagne_id, demande_id):
-    """Lecture direction d'une réponse envoyée, sans aucune action de traitement."""
-    if request.method != "GET":
-        raise PermissionDenied("Cette consultation est strictement en lecture seule.")
+    """Consultation et traitement direction d'une réponse envoyée."""
     campagne = get_object_or_404(CampagneDisponibilite, pk=campagne_id)
     demande = get_object_or_404(
         DemandeDisponibilite.objects.select_related("animateur", "campagne").prefetch_related(
             "propositions__date_campagne__bloc"
         ),
         pk=demande_id,
-        campagne=campagne,
         statut__in=(
             DemandeDisponibilite.ENVOYEE,
             DemandeDisponibilite.A_CORRIGER,
@@ -1040,6 +1064,36 @@ def campagne_disponibilite_reponse(request, campagne_id, demande_id):
             DemandeDisponibilite.REFUSEE,
         ),
     )
+    origine = demande
+    while origine.demande_precedente_id:
+        origine = origine.demande_precedente
+    if origine.campagne_id != campagne.pk:
+        raise Http404("Cette demande n’appartient pas à la campagne.")
+    if request.method == "POST":
+        commentaire = request.POST.get("commentaire_direction", "").strip()
+        try:
+            if request.POST.get("action") == "valider":
+                appliquer_demande_validee(demande, traite_par=request.user, commentaire_direction=commentaire)
+                messages.success(request, "Réponse validée et disponibilités officielles mises à jour.")
+            elif request.POST.get("action") == "correction":
+                demander_correction_et_creer_version(
+                    demande, traite_par=request.user, commentaire_direction=commentaire
+                )
+                messages.success(request, "Correction demandée : une nouvelle version est disponible pour l’animateur.")
+            elif request.POST.get("action") == "refuser":
+                if not commentaire:
+                    raise ValidationError("Explique le refus.")
+                refuser_demande(demande, traite_par=request.user, commentaire_direction=commentaire)
+                messages.success(request, "Réponse refusée.")
+            else:
+                raise ValidationError("Action de traitement invalide.")
+        except ApplicationDemandeDisponibiliteEnConflit as exc:
+            messages.error(request, "Conflit détecté sur : " + ", ".join(item.date.strftime("%d/%m/%Y") for item in exc.conflits))
+        except ApplicationDemandeDisponibiliteGranulariteNonSupportee:
+            messages.error(request, "Cette réponse contient des demi-journées non applicables aux disponibilités officielles.")
+        except (ValidationError, DemandeDisponibiliteIncomplete) as exc:
+            messages.error(request, exc.messages[0] if isinstance(exc, ValidationError) else str(exc))
+        return redirect("campagne_disponibilite_reponse", campagne_id=campagne.pk, demande_id=demande.pk)
     blocs, propositions = _groupes_reponse_disponibilites(demande)
     resume = _resume_reponse_disponibilites(propositions)
     elements_resume = [
@@ -1052,6 +1106,7 @@ def campagne_disponibilite_reponse(request, campagne_id, demande_id):
         f"{nombre} {libelle}{'s' if nombre > 1 and libelle != 'après-midi' else ''}"
         for nombre, libelle in elements_resume if nombre
     ) or "Aucune disponibilité renseignée"
+    impact = analyser_application_demande(demande)
     return render(request, "campagne_disponibilite_reponse_detail.html", {
         "active_page": "gestion",
         "gestion_onglet": "disponibilites",
@@ -1059,6 +1114,8 @@ def campagne_disponibilite_reponse(request, campagne_id, demande_id):
         "demande": demande,
         "blocs_reponse": blocs,
         "resume_reponse": resume,
+        "impact": impact,
+        "peut_traiter": demande.statut == DemandeDisponibilite.ENVOYEE,
     })
 
 

@@ -7,8 +7,9 @@ from django.utils import timezone
 
 from animateurs.models import (
     Animateur, CampagneDisponibilite, CampagneDisponibiliteBloc,
-    CampagneDisponibiliteDate, DemandeDisponibilite, PropositionDisponibiliteDate,
+    CampagneDisponibiliteDate, DemandeDisponibilite, Disponibilite, PropositionDisponibiliteDate,
 )
+from animateurs.services.actions_equipe import actions_actives_animateur, actions_disponibilites_a_traiter
 
 
 class ReponsesDisponibilitesDirectionTests(TestCase):
@@ -120,6 +121,36 @@ class ReponsesDisponibilitesDirectionTests(TestCase):
         self.assertEqual(self.client.get(self._reponse_url()).status_code, 302)
 
         self.client.force_login(self.direction)
-        self.assertEqual(self.client.post(self._reponse_url()).status_code, 403)
+        self.assertEqual(self.client.post(self._reponse_url()).status_code, 302)
         self.envoyee.refresh_from_db()
         self.assertEqual(self.envoyee.statut, DemandeDisponibilite.ENVOYEE)
+
+    def test_correction_cree_version_actionnable_hors_campagne_et_preserve_originale(self):
+        response = self.client.post(self._reponse_url(), {
+            "action": "correction", "commentaire_direction": "Vérifie les mercredis.",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.envoyee.refresh_from_db()
+        correction = DemandeDisponibilite.objects.get(demande_precedente=self.envoyee)
+        self.assertEqual(self.envoyee.statut, DemandeDisponibilite.A_CORRIGER)
+        self.assertEqual(correction.nature, DemandeDisponibilite.MODIFICATION)
+        self.assertEqual(correction.statut, DemandeDisponibilite.BROUILLON)
+        self.assertIsNone(correction.campagne_id)
+        self.assertEqual(
+            list(correction.propositions.values_list("date", "creneau")),
+            list(self.envoyee.propositions.values_list("date", "creneau")),
+        )
+        self.assertEqual(actions_actives_animateur(self.alice)[0]["id"], correction.pk)
+        self.assertEqual(actions_actives_animateur(self.alice)[0]["libelle_action"], "Corriger")
+        self.client.force_login(self.animateur_user)
+        page = self.client.get(reverse("demande_disponibilite_repondre", args=[correction.pk]))
+        self.assertContains(page, "Correction demandée")
+        self.assertContains(page, "Vérifie les mercredis.")
+
+    def test_validation_refus_et_actions_equipe(self):
+        self.assertEqual(actions_disponibilites_a_traiter(), [self.envoyee])
+        self.client.post(self._reponse_url(), {"action": "refuser", "commentaire_direction": "À corriger."})
+        self.envoyee.refresh_from_db()
+        self.assertEqual(self.envoyee.statut, DemandeDisponibilite.REFUSEE)
+        self.assertFalse(actions_disponibilites_a_traiter())
+        self.assertFalse(Disponibilite.objects.filter(animateur=self.alice).exists())

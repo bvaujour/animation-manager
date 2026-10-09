@@ -12,11 +12,12 @@ import json
 from collections import Counter, defaultdict
 
 from django.utils import timezone
+from django.db.models import Q
 
 from animateurs.models import (
     Affectation, CampagneDisponibilite, DemandeDisponibilite,
     DestinatairePublicationAffectation, HoraireAffectationJour,
-    ResponsabiliteOperationnelle,
+    PropositionDisponibiliteDate, ResponsabiliteOperationnelle,
 )
 
 
@@ -195,31 +196,37 @@ def actions_actives_animateur(animateur):
     # Les demandes de disponibilités restent leurs propres objets métier. Elles
     # rejoignent ici le contrat commun du portail, sans créer de modèle Action.
     demandes = DemandeDisponibilite.objects.filter(
-        animateur=animateur,
-        campagne__statut=CampagneDisponibilite.OUVERTE,
-        statut__in=(
-            DemandeDisponibilite.A_RENSEIGNER,
-            DemandeDisponibilite.BROUILLON,
+        Q(
+            campagne__statut=CampagneDisponibilite.OUVERTE,
+            statut__in=(DemandeDisponibilite.A_RENSEIGNER, DemandeDisponibilite.BROUILLON),
+        ) | Q(
+            campagne__isnull=True,
+            nature=DemandeDisponibilite.MODIFICATION,
+            statut=DemandeDisponibilite.BROUILLON,
+            demande_precedente__statut=DemandeDisponibilite.A_CORRIGER,
         ),
-    ).select_related("campagne").order_by("campagne__ouverte_le", "pk")
+        animateur=animateur,
+    ).select_related("campagne", "demande_precedente__campagne").order_by("cree_le", "pk")
     for demande in demandes:
+        est_correction = demande.campagne_id is None
         est_brouillon = demande.statut == DemandeDisponibilite.BROUILLON
         actions.append({
-            "type": "disponibilites_a_terminer" if est_brouillon else "disponibilites_a_renseigner",
+            "type": "disponibilites_a_corriger" if est_correction else ("disponibilites_a_terminer" if est_brouillon else "disponibilites_a_renseigner"),
             "id": demande.pk,
-            "titre": "Disponibilités à terminer" if est_brouillon else "Disponibilités à renseigner",
-            "sous_titre": f"Campagne : {demande.campagne.nom}",
-            "libelle_action": "Continuer" if est_brouillon else "Répondre",
-            "date_action": demande.campagne.ouverte_le or demande.cree_le,
-            "tri_date": demande.campagne.ouverte_le or demande.cree_le,
+            "titre": "Disponibilités à corriger" if est_correction else ("Disponibilités à terminer" if est_brouillon else "Disponibilités à renseigner"),
+            "sous_titre": f"Campagne : {(demande.demande_precedente.campagne.nom if est_correction else demande.campagne.nom)}",
+            "libelle_action": "Corriger" if est_correction else ("Continuer" if est_brouillon else "Répondre"),
+            "date_action": demande.cree_le,
+            "tri_date": demande.cree_le,
             "est_demande_disponibilite": True,
         })
     priorites = {
         "annulation_affectation_a_prendre_en_compte": 0,
         "affectation_modifiee_a_reconfirmer": 1,
         "nouvelle_affectation_a_confirmer": 2,
-        "disponibilites_a_renseigner": 3,
-        "disponibilites_a_terminer": 3,
+        "disponibilites_a_corriger": 3,
+        "disponibilites_a_renseigner": 4,
+        "disponibilites_a_terminer": 4,
     }
     return sorted(
         actions,
@@ -233,6 +240,23 @@ def actions_actives_animateur(animateur):
 
 def nombre_actions_actives(animateur):
     return len(actions_actives_animateur(animateur))
+
+
+def actions_disponibilites_a_traiter():
+    """Réponses envoyées dont la direction doit encore décider."""
+    demandes = DemandeDisponibilite.objects.filter(
+        statut=DemandeDisponibilite.ENVOYEE,
+    ).select_related("animateur", "campagne", "demande_precedente__campagne").prefetch_related("propositions").order_by("envoyee_le", "pk")
+    resultat = []
+    for demande in demandes:
+        demi_journees = any(
+            proposition.creneau in {PropositionDisponibiliteDate.MATIN, PropositionDisponibiliteDate.APRES_MIDI}
+            for proposition in demande.propositions.all()
+        )
+        if demande.validation_requise or demi_journees:
+            demande.campagne_lien = demande.campagne or demande.demande_precedente.campagne
+            resultat.append(demande)
+    return resultat
 
 
 def suivi_actions_affectations(periode):

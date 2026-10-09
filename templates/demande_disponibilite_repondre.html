@@ -11,8 +11,9 @@
 <main id="main-content" class="availability-response-page">
     <header class="availability-response-header">
         <p class="availability-response-eyebrow">Disponibilités à renseigner</p>
-        <h1>{{ demande.campagne.nom }}</h1>
-        {% if demande.campagne.date_limite_reponse %}
+        <h1>{% if campagne_affichage %}{{ campagne_affichage.nom }}{% else %}Disponibilités à corriger{% endif %}</h1>
+        {% if demande.demande_precedente %}<p class="availability-response-notice">Correction demandée{% if demande_precedente.commentaire_direction %} · {{ demande_precedente.commentaire_direction }}{% endif %}</p>{% endif %}
+        {% if demande.campagne_id and demande.campagne.date_limite_reponse %}
             {% if echeance_depassee %}
             <p class="availability-response-deadline is-late">Échéance dépassée · tu peux encore répondre tant que la campagne reste ouverte.</p>
             {% else %}
@@ -54,8 +55,8 @@
         {% for item in blocs_reponse %}
         <section class="availability-block" aria-labelledby="availability-block-{{ item.bloc.pk }}">
             <div class="availability-block-heading">
-                <h2 id="availability-block-{{ item.bloc.pk }}">{{ item.bloc.libelle }}</h2>
-                {% if item.bloc.mode_saisie == 'demi_journee' %}<span>Demi-journées</span>{% endif %}
+                <h2 id="availability-block-{{ item.bloc.pk|default:'correction' }}">{{ item.libelle }}</h2>
+                {% if item.mode_saisie == 'demi_journee' %}<span>Demi-journées</span>{% endif %}
             </div>
             {% for groupe in item.groupes %}
                 {% if groupe.type == 'semaine' %}
@@ -99,9 +100,9 @@
                     {% for proposition in groupe.propositions %}
                     <article class="availability-date" data-availability-date>
                         <h3>{{ proposition.date|date:"l j F" }}</h3>
-                        <div class="availability-options{% if item.bloc.mode_saisie == 'demi_journee' %} availability-options--half{% else %} availability-options--journee{% endif %}">
+                        <div class="availability-options{% if item.mode_saisie == 'demi_journee' %} availability-options--half{% else %} availability-options--journee{% endif %}">
                             {% for value, label in proposition.CRENEAUX %}
-                                {% if item.bloc.mode_saisie == 'demi_journee' and value != 'non_renseigne' or item.bloc.mode_saisie == 'journee' and value == 'journee' or item.bloc.mode_saisie == 'journee' and value == 'indisponible' %}
+                                {% if item.mode_saisie == 'demi_journee' and value != 'non_renseigne' or item.mode_saisie == 'journee' and value == 'journee' or item.mode_saisie == 'journee' and value == 'indisponible' %}
                                 <label class="availability-option{% if proposition.creneau == value %} is-selected{% endif %}">
                                     <input type="radio" name="creneau_{{ proposition.pk }}" value="{{ value }}"{% if proposition.creneau == value %} checked{% endif %}{% if not est_modifiable %} disabled{% endif %}>
                                     <span>{{ label }}</span>
