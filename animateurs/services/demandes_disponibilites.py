@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from animateurs.models import (
@@ -211,6 +212,28 @@ def _fragments_sans_dates(plage, dates_a_retirer):
     return fragments
 
 
+def _plages_generales_a_verrouiller(animateur):
+    """Queryset verrouillable des disponibilités sans type d'accueil.
+
+    Il est volontairement séparé pour empêcher le retour d'un filtre M2M
+    nullable sous ``select_for_update()``.
+    """
+    # ``types_accueil__isnull=True`` crée un LEFT OUTER JOIN. PostgreSQL
+    # refuse alors ``FOR UPDATE`` sur le côté nullable de cette jointure.
+    # NOT EXISTS conserve exactement le sens métier (plage générale) tout en
+    # verrouillant uniquement les lignes Disponibilite nécessaires.
+    types_accueil = Disponibilite.types_accueil.through.objects.filter(
+        disponibilite_id=OuterRef("pk")
+    )
+    return (
+        Disponibilite.objects.select_for_update()
+        .filter(animateur=animateur)
+        .annotate(a_des_types_accueil=Exists(types_accueil))
+        .filter(a_des_types_accueil=False)
+        .order_by("debut", "fin", "id")
+    )
+
+
 def _fusionner_ajouts_generaux(animateur, jours_ajoutes):
     """Fusionne seulement la composante générale touchée par les nouveaux jours.
 
@@ -221,11 +244,7 @@ def _fusionner_ajouts_generaux(animateur, jours_ajoutes):
     if not jours_ajoutes:
         return
     dates_composante = set(jours_ajoutes)
-    plages = list(
-        Disponibilite.objects.select_for_update()
-        .filter(animateur=animateur, types_accueil__isnull=True)
-        .order_by("debut", "fin", "id")
-    )
+    plages = list(_plages_generales_a_verrouiller(animateur))
     selection = set()
     progression = True
     while progression:

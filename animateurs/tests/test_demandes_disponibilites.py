@@ -19,6 +19,7 @@ from animateurs.services.demandes_disponibilites import (
     ApplicationDemandeDisponibiliteEnConflit,
     ApplicationDemandeDisponibiliteGranulariteNonSupportee,
     DemandeDisponibiliteIncomplete,
+    _plages_generales_a_verrouiller,
     appliquer_demande_validee,
     creer_demande_modification,
     creer_version_correction,
@@ -49,6 +50,12 @@ class DemandesDisponibilitesServicesTests(TestCase):
             fin=debut + datetime.timedelta(days=4),
             type_accueil=self.vacances,
         )
+
+    def test_verrouillage_des_plages_generales_n_utilise_pas_de_jointure_externe_nullable(self):
+        """Régression PostgreSQL : FOR UPDATE + M2M isnull créait un LEFT JOIN."""
+        sql = str(_plages_generales_a_verrouiller(self.alice).query).upper()
+        self.assertNotIn("LEFT OUTER JOIN", sql)
+        self.assertIn("EXISTS", sql)
 
     def _campagne_multi_periodes(self):
         hiver = self._periode("Hiver — Semaine 1", datetime.date(2027, 2, 8))
