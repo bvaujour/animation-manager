@@ -51,6 +51,18 @@ class ApplicationDemandeDisponibiliteGranulariteNonSupportee(Exception):
         super().__init__("Une disponibilité matin ou après-midi ne peut pas encore devenir officielle.")
 
 
+def campagne_origine_demande(demande):
+    """Retrouve le contexte de campagne d'une chaîne de versions, sans l'altérer."""
+    courante = demande
+    deja_vues = set()
+    while courante is not None and courante.pk not in deja_vues:
+        deja_vues.add(courante.pk)
+        if courante.campagne_id:
+            return courante.campagne
+        courante = courante.demande_precedente
+    return None
+
+
 def _est_officiellement_disponible(plages, jour):
     return any(plage.debut <= jour <= plage.fin for plage in plages)
 

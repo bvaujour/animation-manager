@@ -66,6 +66,7 @@ from .services.demandes_disponibilites import (
     envoyer_demande,
     ouvrir_campagne,
     refuser_demande,
+    campagne_origine_demande,
 )
 
 
@@ -467,7 +468,9 @@ def _groupes_reponse_disponibilites(demande):
         blocs.append({
             "bloc": None,
             "libelle": "Dates à corriger",
-            "mode_saisie": CampagneDisponibiliteBloc.DEMI_JOURNEE,
+            # Les anciennes corrections sans provenance de bloc ne doivent
+            # jamais élargir les possibilités de saisie par défaut.
+            "mode_saisie": CampagneDisponibiliteBloc.JOURNEE,
             "groupes": [{"type": "dates", "propositions": sans_bloc}],
         })
     return blocs, propositions
@@ -531,10 +534,7 @@ def demande_disponibilite_repondre(request, demande_id):
         pk=demande_id,
         animateur=animateur,
     )
-    origine = demande
-    while origine.demande_precedente_id:
-        origine = origine.demande_precedente
-    campagne_affichage = origine.campagne
+    campagne_affichage = campagne_origine_demande(demande)
     if request.method == "POST":
         if apercu:
             raise PermissionDenied("L’aperçu est strictement en lecture seule.")
@@ -1075,10 +1075,7 @@ def campagne_disponibilite_reponse(request, campagne_id, demande_id):
             DemandeDisponibilite.REFUSEE,
         ),
     )
-    origine = demande
-    while origine.demande_precedente_id:
-        origine = origine.demande_precedente
-    if origine.campagne_id != campagne.pk:
+    if campagne_origine_demande(demande) != campagne:
         raise Http404("Cette demande n’appartient pas à la campagne.")
     if request.method == "POST":
         commentaire = request.POST.get("commentaire_direction", "").strip()

@@ -171,3 +171,21 @@ class ReponseDisponibilitesPortailTests(TestCase):
         self.assertContains(response, "lecture seule")
         response = self.client.post(preview_url, self._post_values(demande, action="brouillon"))
         self.assertEqual(response.status_code, 403)
+
+    def test_correction_historique_sans_bloc_reste_a_la_journee(self):
+        originale = self._demande(with_half=False)
+        correction = DemandeDisponibilite.objects.create(
+            animateur=self.alice, nature=DemandeDisponibilite.MODIFICATION,
+            statut=DemandeDisponibilite.BROUILLON, demande_precedente=originale,
+        )
+        proposition = PropositionDisponibiliteDate.objects.create(
+            demande=correction, date=datetime.date(2027, 2, 8),
+            creneau=PropositionDisponibiliteDate.JOURNEE, etait_disponible=False,
+        )
+        self.client.force_login(self.alice_user)
+        html = self.client.get(self._url(correction)).content.decode()
+        controles = html.split(f'name="creneau_{proposition.pk}"', 1)[1].split("</article>", 1)[0]
+        self.assertIn("Indisponible", controles)
+        self.assertIn("Journée entière", controles)
+        self.assertNotIn("Matin", controles)
+        self.assertNotIn("Après-midi", controles)

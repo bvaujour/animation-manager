@@ -130,3 +130,33 @@ class ActionsDisponibilitesPortailTests(TestCase):
             ).status_code,
             403,
         )
+
+    def test_correction_hors_campagne_retrouve_contexte_ou_utilise_un_fallback(self):
+        originale = self._demande(statut=DemandeDisponibilite.A_CORRIGER)
+        correction = DemandeDisponibilite.objects.create(
+            animateur=self.alice, nature=DemandeDisponibilite.MODIFICATION,
+            statut=DemandeDisponibilite.BROUILLON, demande_precedente=originale,
+        )
+        self.client.force_login(self.alice_user)
+        actions = self.client.get(reverse("actions_a_faire"))
+        self.assertEqual(actions.context["actions_a_faire_count"], 1)
+        self.assertContains(actions, "Campagne : Hiver / Printemps 2027")
+        self.assertContains(actions, reverse("demande_disponibilite_repondre", args=[correction.pk]))
+        self.assertContains(self.client.get(reverse("accueil")), "Disponibilités à corriger")
+        self.client.force_login(self.direction)
+        apercu = self.client.get(
+            reverse("actions_a_faire") + f"?apercu_portail=1&animateur_id={self.alice.pk}"
+        )
+        self.assertEqual(apercu.context["actions_a_faire_count"], 1)
+        self.assertContains(apercu, reverse("demande_disponibilite_repondre", args=[correction.pk]))
+
+        sans_contexte = DemandeDisponibilite.objects.create(
+            animateur=self.bob, nature=DemandeDisponibilite.MODIFICATION,
+            statut=DemandeDisponibilite.A_CORRIGER,
+        )
+        DemandeDisponibilite.objects.create(
+            animateur=self.bob, nature=DemandeDisponibilite.MODIFICATION,
+            statut=DemandeDisponibilite.BROUILLON, demande_precedente=sans_contexte,
+        )
+        actions = actions_actives_animateur(self.bob)
+        self.assertEqual(actions[0]["sous_titre"], "Demande de correction")

@@ -19,6 +19,7 @@ from animateurs.models import (
     DestinatairePublicationAffectation, HoraireAffectationJour,
     PropositionDisponibiliteDate, ResponsabiliteOperationnelle,
 )
+from animateurs.services.demandes_disponibilites import campagne_origine_demande
 
 
 def _normaliser_detail_affectation(detail):
@@ -210,11 +211,12 @@ def actions_actives_animateur(animateur):
     for demande in demandes:
         est_correction = demande.campagne_id is None
         est_brouillon = demande.statut == DemandeDisponibilite.BROUILLON
+        campagne_origine = campagne_origine_demande(demande)
         actions.append({
             "type": "disponibilites_a_corriger" if est_correction else ("disponibilites_a_terminer" if est_brouillon else "disponibilites_a_renseigner"),
             "id": demande.pk,
             "titre": "Disponibilités à corriger" if est_correction else ("Disponibilités à terminer" if est_brouillon else "Disponibilités à renseigner"),
-            "sous_titre": f"Campagne : {(demande.demande_precedente.campagne.nom if est_correction else demande.campagne.nom)}",
+            "sous_titre": f"Campagne : {campagne_origine.nom}" if campagne_origine else "Demande de correction",
             "libelle_action": "Corriger" if est_correction else ("Continuer" if est_brouillon else "Répondre"),
             "date_action": demande.cree_le,
             "tri_date": demande.cree_le,
@@ -254,7 +256,7 @@ def actions_disponibilites_a_traiter():
             for proposition in demande.propositions.all()
         )
         if demande.validation_requise or demi_journees:
-            demande.campagne_lien = demande.campagne or demande.demande_precedente.campagne
+            demande.campagne_lien = campagne_origine_demande(demande)
             resultat.append(demande)
     return resultat
 
