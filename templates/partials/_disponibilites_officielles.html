@@ -11,10 +11,10 @@
     {% if demande_modification_active %}
         {% if demande_modification_active.demande_precedente_id %}
         <p class="animator-readonly-note">Une correction est demandée.</p>
-        <a class="btn btn-primary" href="{% url 'demande_disponibilite_repondre' demande_modification_active.pk %}{% if apercu_query_prefix %}{{ apercu_query_prefix }}{% endif %}">Corriger</a>
+        {% if not apercu_portail %}<a class="btn btn-primary" href="{% url 'demande_disponibilite_repondre' demande_modification_active.pk %}">Corriger</a>{% endif %}
         {% elif demande_modification_active.statut == demande_modification_active.BROUILLON %}
         <p class="animator-readonly-note">Une demande de modification est en cours.</p>
-        <a class="btn btn-primary" href="{% url 'demande_disponibilite_modifier' %}">Continuer</a>
+        {% if not apercu_portail %}<a class="btn btn-primary" href="{% url 'demande_disponibilite_modifier' %}">Continuer</a>{% endif %}
         {% elif demande_modification_active.statut == demande_modification_active.ENVOYEE %}
         <p class="animator-readonly-note">Demande envoyée · en attente de traitement par la direction.</p>
         {% endif %}

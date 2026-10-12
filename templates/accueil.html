@@ -212,7 +212,6 @@
             <a class="animator-home-card-link animator-home-card-link--sorties" href="{% url 'sorties_animateur' %}?semaine={{ semaine.debut|date:'Y-m-d' }}{{ apercu_query_suffix|default:'' }}">Voir {% if infos_sorties_count == 1 %}la sortie{% else %}les sorties{% endif %} <span aria-hidden="true">›</span></a>
         </article>
     </section>
-    {% include "partials/_disponibilites_officielles.html" %}
 {% comment %}Les blocs historiques sont désormais répartis dans les espaces dédiés.{% endcomment %}
     {% if False %}
 

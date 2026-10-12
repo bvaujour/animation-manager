@@ -66,9 +66,12 @@ class DemandesModificationAutonomesTests(TestCase):
     def test_lecture_seule_et_creation_brouillon_avec_differences_et_snapshots(self):
         self.client.force_login(self.alice_user)
         accueil = self.client.get(reverse("accueil"))
-        self.assertContains(accueil, "Mes disponibilités officielles")
-        self.assertContains(accueil, "Demander une modification")
+        self.assertNotContains(accueil, "Mes disponibilités officielles")
+        self.assertNotContains(accueil, "Demander une modification")
         self.assertNotContains(accueil, "enregistrer-disponibilites")
+        profil = self.client.get(reverse("mon_profil"))
+        self.assertContains(profil, "Mes disponibilités officielles")
+        self.assertContains(profil, "Demander une modification")
         self.client.get(self._url())
         response = self._post(ajouter_mardi=True)
         self.assertEqual(response.status_code, 302)
@@ -166,3 +169,27 @@ class DemandesModificationAutonomesTests(TestCase):
         self.assertFalse(creee_bis)
         self.assertEqual(premiere.pk, seconde.pk)
         self.assertEqual(actions_actives_animateur(self.alice)[0]["id"], premiere.pk)
+
+    def test_demande_envoyee_reste_dans_le_profil_sans_action_accueil(self):
+        self.client.force_login(self.alice_user)
+        self.client.get(self._url())
+        self._post(ajouter_mardi=True, action="envoyer")
+
+        accueil = self.client.get(reverse("accueil"))
+        self.assertEqual(accueil.context["actions_a_faire_count"], 0)
+        self.assertNotContains(accueil, "Mes disponibilités officielles")
+        self.assertNotContains(accueil, "Modification de disponibilités à terminer")
+
+        profil = self.client.get(reverse("mon_profil"))
+        self.assertContains(profil, "Mes disponibilités officielles")
+        self.assertContains(profil, "Demande envoyée · en attente de traitement par la direction.")
+
+    def test_brouillon_autonome_reste_action_sur_l_accueil_sans_carte_officielle(self):
+        self.client.force_login(self.alice_user)
+        self.client.get(self._url())
+        self._post(ajouter_mardi=True)
+
+        accueil = self.client.get(reverse("accueil"))
+        self.assertEqual(accueil.context["actions_a_faire_count"], 1)
+        self.assertContains(accueil, "Modification de disponibilités à terminer")
+        self.assertNotContains(accueil, "Mes disponibilités officielles")

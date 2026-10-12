@@ -99,6 +99,26 @@ class ActionsDisponibilitesPortailTests(TestCase):
         self.assertContains(response, 'aria-label="Action prioritaire"')
         self.assertContains(response, "Disponibilités à renseigner")
         self.assertContains(response, reverse("demande_disponibilite_repondre", args=[demande.pk]))
+        self.assertNotContains(response, "Mes disponibilités officielles")
+
+    def test_accueil_sans_action_disponibilite_ne_rend_pas_la_carte_officielle(self):
+        self.client.force_login(self.alice_user)
+
+        response = self.client.get(reverse("accueil"))
+
+        self.assertEqual(response.context["actions_a_faire_count"], 0)
+        self.assertNotContains(response, "Mes disponibilités officielles")
+
+    def test_brouillon_campagne_reste_action_sur_l_accueil_sans_carte_officielle(self):
+        demande = self._demande(statut=DemandeDisponibilite.BROUILLON)
+        self.client.force_login(self.alice_user)
+
+        response = self.client.get(reverse("accueil"))
+
+        self.assertEqual(response.context["actions_a_faire_count"], 1)
+        self.assertContains(response, "Disponibilités à terminer")
+        self.assertContains(response, reverse("demande_disponibilite_repondre", args=[demande.pk]))
+        self.assertNotContains(response, "Mes disponibilités officielles")
 
     def test_demande_d_un_autre_animateur_est_invisible_et_inaccessible(self):
         demande = self._demande(animateur=self.bob)
@@ -114,6 +134,15 @@ class ActionsDisponibilitesPortailTests(TestCase):
         demande = self._demande()
         self.client.force_login(self.direction)
         suffixe = f"?apercu_portail=1&animateur_id={self.alice.pk}"
+
+        accueil = self.client.get(reverse("accueil") + suffixe)
+        self.assertEqual(accueil.context["actions_a_faire_count"], 1)
+        self.assertContains(accueil, "Disponibilités à renseigner")
+        self.assertNotContains(accueil, "Mes disponibilités officielles")
+
+        profil = self.client.get(reverse("mon_profil") + suffixe)
+        self.assertContains(profil, "Mes disponibilités officielles")
+        self.assertContains(profil, "Lecture seule : les demandes ne peuvent pas être créées depuis un aperçu.")
 
         response = self.client.get(reverse("actions_a_faire") + suffixe)
         self.assertEqual(response.context["actions_a_faire_count"], 1)
@@ -142,7 +171,9 @@ class ActionsDisponibilitesPortailTests(TestCase):
         self.assertEqual(actions.context["actions_a_faire_count"], 1)
         self.assertContains(actions, "Campagne : Hiver / Printemps 2027")
         self.assertContains(actions, reverse("demande_disponibilite_repondre", args=[correction.pk]))
-        self.assertContains(self.client.get(reverse("accueil")), "Disponibilités à corriger")
+        accueil = self.client.get(reverse("accueil"))
+        self.assertContains(accueil, "Disponibilités à corriger")
+        self.assertNotContains(accueil, "Mes disponibilités officielles")
         self.client.force_login(self.direction)
         apercu = self.client.get(
             reverse("actions_a_faire") + f"?apercu_portail=1&animateur_id={self.alice.pk}"
